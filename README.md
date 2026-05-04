@@ -8,7 +8,7 @@ Automated non-functional design reviews for software projects.
 
 ```bash
 # Clone and install
-git clone https://github.com/jim-at-jminogy/nfr-review.git
+git clone https://github.com/JimAKennedy/nfr-review.git
 cd nfr-review
 python -m venv .venv
 source .venv/bin/activate
@@ -28,10 +28,12 @@ nfr-review run /path/to/your/repo
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"    # includes pytest, ruff, pytest-cov
+pip install -e .           # core CLI only
+pip install -e ".[llm]"    # adds Anthropic SDK for LLM-assisted rules
+pip install -e ".[dev]"    # includes llm + pytest, ruff, pytest-cov
 ```
 
-The `[dev]` extra is optional — omit it if you only need the CLI and don't plan to run tests.
+The `[llm]` extra adds the Anthropic SDK for LLM-assisted rules (PII detection, ADR drift). Without it, those rules fall back gracefully. The `[dev]` extra includes `[llm]` plus test/lint tooling.
 
 ## Usage
 

@@ -6,7 +6,10 @@ import json
 import logging
 import os
 
-import anthropic
+try:
+    import anthropic
+except ModuleNotFoundError:  # SDK is an optional dependency
+    anthropic = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ class ClaudeClient:
 
     def __init__(self) -> None:
         key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if key:
+        if key and anthropic is not None:
             self._client: anthropic.Anthropic | None = anthropic.Anthropic(api_key=key)
         else:
             self._client = None
