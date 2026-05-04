@@ -33,14 +33,19 @@ class NonRootContainerViolationRule:
         for ev in k8s_resources:
             resource_name = ev.payload.get("name", "")
             file_path = ev.payload.get("file_path", ev.locator)
+            pod_sec_ctx = ev.payload.get("pod_security_context")
+            pod_non_root = (
+                isinstance(pod_sec_ctx, dict)
+                and pod_sec_ctx.get("runAsNonRoot") is True
+            )
             for container in ev.payload.get("containers", []):
                 container_name = container.get("name", "")
                 sec_ctx = container.get("security_context")
-                runs_as_non_root = (
+                container_non_root = (
                     isinstance(sec_ctx, dict)
                     and sec_ctx.get("runAsNonRoot") is True
                 )
-                if not runs_as_non_root:
+                if not pod_non_root and not container_non_root:
                     findings.append(
                         Finding(
                             rule_id=self.id,

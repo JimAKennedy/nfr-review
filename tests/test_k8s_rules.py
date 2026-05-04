@@ -219,6 +219,54 @@ class TestNonRootContainerViolationRule:
         assert result.findings[0].rag == "green"
         assert result.findings[0].pattern_tag == "k8s-non-root"
 
+    def test_pod_level_non_root_inherits_to_containers_green(self) -> None:
+        """Pod-level runAsNonRoot=true should satisfy the check even without container-level setting."""
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="k8s/deployment.yaml:my-deploy",
+            kind="k8s-resource",
+            payload={
+                "file_path": "k8s/deployment.yaml",
+                "kind": "Deployment",
+                "name": "my-deploy",
+                "namespace": "default",
+                "pod_security_context": {"runAsNonRoot": True},
+                "containers": [
+                    {"name": "app", "image": "nginx:latest", "resources": None,
+                     "liveness_probe": None, "readiness_probe": None,
+                     "security_context": {"allowPrivilegeEscalation": False}},
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
+    def test_pod_level_non_root_false_container_none_amber(self) -> None:
+        """Pod-level runAsNonRoot=false should NOT satisfy the check."""
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="k8s/deployment.yaml:my-deploy",
+            kind="k8s-resource",
+            payload={
+                "file_path": "k8s/deployment.yaml",
+                "kind": "Deployment",
+                "name": "my-deploy",
+                "namespace": "default",
+                "pod_security_context": {"runAsNonRoot": False},
+                "containers": [
+                    {"name": "app", "image": "nginx:latest", "resources": None,
+                     "liveness_probe": None, "readiness_probe": None,
+                     "security_context": None},
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert result.findings[0].rag == "amber"
+
     def test_only_summary_evidence_skipped(self) -> None:
         ev = _k8s_summary_evidence()
         result = self.rule.evaluate([ev], None)

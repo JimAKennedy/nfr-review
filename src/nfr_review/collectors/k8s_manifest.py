@@ -44,6 +44,17 @@ _RECOGNISED_KINDS = _WORKLOAD_KINDS | {"NetworkPolicy", "HorizontalPodAutoscaler
 _TEMPLATE_WORKLOADS = frozenset({"Deployment", "StatefulSet", "DaemonSet"})
 
 
+def _extract_pod_security_context(doc: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    if kind in _TEMPLATE_WORKLOADS:
+        pod_spec = doc.get("spec", {}).get("template", {}).get("spec", {})
+    elif kind == "Pod":
+        pod_spec = doc.get("spec", {})
+    else:
+        return None
+    ctx = pod_spec.get("securityContext")
+    return ctx if isinstance(ctx, dict) else None
+
+
 def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     if kind in _TEMPLATE_WORKLOADS:
         containers_raw = (
@@ -127,6 +138,7 @@ class K8sManifestCollector:
                 resource_name = metadata.get("name", "")
                 namespace = metadata.get("namespace") or None
                 containers = _extract_containers(doc, kind)
+                pod_sec_ctx = _extract_pod_security_context(doc, kind)
 
                 evidence.append(
                     Evidence(
@@ -140,6 +152,7 @@ class K8sManifestCollector:
                             "name": resource_name,
                             "namespace": namespace,
                             "containers": containers,
+                            "pod_security_context": pod_sec_ctx,
                         },
                     )
                 )

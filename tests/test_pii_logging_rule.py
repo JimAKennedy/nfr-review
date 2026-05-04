@@ -162,6 +162,7 @@ class TestLlmConfirms:
         assert f.confidence == 0.85
         assert f.rag == "red"
         assert f.severity == "high"
+        assert "SSN value logged" in f.summary
 
     def test_regex_match_llm_denies(self) -> None:
         ev = _make_evidence(log_statements=[
@@ -178,7 +179,7 @@ class TestLlmConfirms:
         f = result.findings[0]
         assert f.confidence == 0.4
         assert f.rag == "amber"
-        assert "false positive" in f.summary
+        assert "not actual PII" in f.summary
 
 
 class TestNoRegexMatch:

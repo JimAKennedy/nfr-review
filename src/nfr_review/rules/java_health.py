@@ -66,6 +66,32 @@ class HealthEndpointMissingRule:
                                 ],
                             )
 
+        actuator_health = self._detect_actuator_health(evidence)
+        if actuator_health:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[
+                    Finding(
+                        rule_id=self.id,
+                        rag="green",
+                        severity="info",
+                        summary=(
+                            "Health endpoint available via Spring Boot"
+                            " Actuator auto-configuration."
+                        ),
+                        recommendation=(
+                            "No action required — Actuator exposes"
+                            " /actuator/health automatically."
+                        ),
+                        evidence_locator=actuator_health,
+                        collector_name="spring-config",
+                        collector_version="0.1.0",
+                        confidence=0.8,
+                        pattern_tag="health-endpoint",
+                    )
+                ],
+            )
+
         return RuleResult(
             rule_id=self.id,
             findings=[
@@ -76,7 +102,8 @@ class HealthEndpointMissingRule:
                     summary=(
                         "No health endpoint (/health or"
                         " /actuator/health) detected in any"
-                        " @RestController."
+                        " @RestController, and no Actuator"
+                        " auto-configuration found."
                     ),
                     recommendation=(
                         "Add a health-check endpoint (e.g. Spring"
@@ -91,6 +118,32 @@ class HealthEndpointMissingRule:
                 )
             ],
         )
+
+    @staticmethod
+    def _detect_actuator_health(evidence: list[Evidence]) -> str | None:
+        """Check spring-config evidence for Actuator health endpoint exposure.
+
+        Spring Boot exposes /actuator/health by default when the actuator
+        starter is on the classpath. Any management.* config implies Actuator
+        is present. Health is available unless explicitly excluded.
+        """
+        for ev in evidence:
+            if ev.collector_name != "spring-config" or ev.kind != "spring-config-file":
+                continue
+            management = ev.payload.get("management", {})
+            if not management:
+                continue
+            actuator = ev.payload.get("actuator", {})
+            exclude = actuator.get("exclude", "")
+            exclude_str = (
+                exclude if isinstance(exclude, str)
+                else ",".join(str(i) for i in exclude) if isinstance(exclude, list)
+                else ""
+            )
+            if "health" in exclude_str:
+                continue
+            return ev.payload.get("file_path", ev.locator)
+        return None
 
 
 def _register() -> None:
