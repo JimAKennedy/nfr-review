@@ -37,6 +37,17 @@ pip install -e ".[dev]"    # includes llm + pytest, ruff, pytest-cov
 
 The `[llm]` extra adds the Anthropic SDK for LLM-assisted rules (PII detection, ADR drift). Without it, those rules fall back gracefully. The `[dev]` extra includes `[llm]` plus test/lint tooling.
 
+## API key (optional)
+
+LLM-assisted rules (PII detection, ADR drift analysis) require an Anthropic API key. Set it as an environment variable:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+nfr-review run /path/to/repo
+```
+
+Without the key, these rules are skipped gracefully and all other rules still run normally.
+
 ## Usage
 
 ### Scan a repository
