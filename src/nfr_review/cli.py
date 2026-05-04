@@ -1,0 +1,192 @@
+"""Click command-line interface for nfr-review.
+
+Wires the four user-facing commands (R010): ``run``, ``list-rules``,
+``explain``, ``version``. The CLI is the only place that translates internal
+exceptions (``ConfigError``, ``EngineError``, ``OutputError``) into exit codes;
+library code never calls ``sys.exit``.
+
+Exit-code matrix:
+
+* ``0`` — success
+* ``1`` — recoverable failure (bad target, ConfigError, EngineError, OutputError,
+  unknown rule for ``explain``)
+* ``2`` — at least one emitted finding has ``severity`` >= ``config.severity_threshold``
+
+The ``run`` summary is printed to *stderr* so machine-readable artifacts (CSV,
+JSONL) can be piped from stdout-equivalent file paths without contamination.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import click
+
+import nfr_review.collectors  # noqa: F401  # side-effect: register built-ins
+import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
+from nfr_review import __version__
+from nfr_review.config import Config, ConfigError, load_config
+from nfr_review.engine import Engine, EngineError, RunResult
+from nfr_review.models import Severity
+from nfr_review.output import OutputError, write_csv, write_jsonl
+from nfr_review.registry import rule_registry
+
+_SEVERITY_ORDER: tuple[Severity, ...] = ("info", "low", "medium", "high", "critical")
+
+
+def _severity_rank(sev: Severity) -> int:
+    return _SEVERITY_ORDER.index(sev)
+
+
+def _exceeds_threshold(run_result: RunResult, threshold: Severity | None) -> bool:
+    if threshold is None:
+        return False
+    cutoff = _severity_rank(threshold)
+    return any(_severity_rank(f.severity) >= cutoff for f in run_result.findings)
+
+
+def _rule_summary(rule: object) -> str:
+    doc = getattr(rule, "__doc__", None) or type(rule).__doc__
+    if not doc:
+        return "(no description)"
+    return doc.strip().splitlines()[0]
+
+
+def _rule_description(rule: object) -> str:
+    doc = getattr(rule, "__doc__", None) or type(rule).__doc__
+    if not doc:
+        return "(no description)"
+    # Dedent: take the docstring and trim leading/trailing blank lines.
+    return "\n".join(line.rstrip() for line in doc.strip().splitlines())
+
+
+@click.group(help="Automated non-functional requirements review.")
+@click.version_option(__version__, prog_name="nfr-review")
+def cli() -> None:
+    """Top-level command group."""
+
+
+@cli.command("run", help="Run an NFR scan against TARGET (a repository directory).")
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+@click.option(
+    "--csv",
+    "csv_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("nfr-review.csv"),
+    show_default=True,
+    help="Output path for the R007 CSV findings file.",
+)
+@click.option(
+    "--jsonl",
+    "jsonl_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("nfr-review.jsonl"),
+    show_default=True,
+    help="Output path for the R018 JSONL run record.",
+)
+def run_cmd(
+    target: Path,
+    config_path: Path | None,
+    csv_path: Path,
+    jsonl_path: Path,
+) -> None:
+    """Run command — load config, run engine, emit CSV+JSONL, print summary."""
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    try:
+        result = Engine().run(target, config)
+    except EngineError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    try:
+        write_csv(result, csv_path)
+        write_jsonl(result, jsonl_path)
+    except OutputError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    metadata = result.run_metadata
+    collectors_run = len(metadata.collector_versions) if metadata is not None else 0
+    rules_run = len(metadata.rules_run) if metadata is not None else 0
+    rules_skipped = len(metadata.rules_skipped) if metadata is not None else 0
+    files_emitted = 2  # csv + jsonl
+
+    click.echo(
+        (
+            f"nfr-review: collectors_run={collectors_run} "
+            f"rules_run={rules_run} rules_skipped={rules_skipped} "
+            f"findings={len(result.findings)} files_emitted={files_emitted} "
+            f"csv={csv_path} jsonl={jsonl_path}"
+        ),
+        err=True,
+    )
+    for warning in result.warnings:
+        click.echo(f"warning: {warning}", err=True)
+
+    if _exceeds_threshold(result, config.severity_threshold):
+        raise click.exceptions.Exit(2)
+
+
+@cli.command("list-rules", help="List every registered rule (id, band, summary).")
+def list_rules_cmd() -> None:
+    """List all registered rules."""
+    rules = rule_registry.all()
+    if not rules:
+        return
+    for rule in rules:
+        click.echo(f"{rule.id}\tband={rule.band}\t{_rule_summary(rule)}")
+
+
+@cli.command("explain", help="Print the full description of a single rule.")
+@click.argument("rule_id")
+def explain_cmd(rule_id: str) -> None:
+    """Print rule description, exit 1 if not found."""
+    if rule_id not in rule_registry:
+        click.echo(f"error: no rule registered with id {rule_id!r}", err=True)
+        raise click.exceptions.Exit(1)
+    rule = rule_registry.get(rule_id)
+    click.echo(f"rule_id: {rule.id}")
+    click.echo(f"band: {rule.band}")
+    click.echo(
+        f"required_collectors: {', '.join(rule.required_collectors) or '(none)'}"
+    )
+    click.echo("")
+    click.echo(_rule_description(rule))
+
+
+@cli.command("version", help="Print the nfr-review version and exit.")
+def version_cmd() -> None:
+    """Print version."""
+    click.echo(__version__)
+
+
+__all__ = ["cli"]
+
+
+if __name__ == "__main__":
+    cli()

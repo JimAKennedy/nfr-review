@@ -27,5 +27,9 @@ target/
 vendor/
 *.log
 coverage/
+.coverage
 .cache/
 tmp/
+*.egg-info/
+nfr-review.csv
+nfr-review.jsonl

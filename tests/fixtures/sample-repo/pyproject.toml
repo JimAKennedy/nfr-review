@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sample-repo"
+version = "0.0.1"
+description = "Tiny fixture project consumed by nfr-review's end-to-end test."
+requires-python = ">=3.11"

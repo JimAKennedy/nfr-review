@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: good-app
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: good-app
+  template:
+    metadata:
+      labels:
+        app: good-app
+    spec:
+      containers:
+        - name: app
+          image: example/good-app:1.0
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true

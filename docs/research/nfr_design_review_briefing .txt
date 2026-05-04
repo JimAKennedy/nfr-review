@@ -1,0 +1,137 @@
+# Non-Functional Design Review Framework: Briefing Note
+
+## Purpose
+
+This framework provides a repeatable approach for reviewing whether an application or service is fit for enterprise operation beyond its functional requirements. It focuses on architecture quality, integration behavior, resilience, performance, capacity, security alignment, operability, testing evidence, and conformance with enterprise standards. The framework uses ISO/IEC 25010 as a quality model reference because it defines system and software quality characteristics for specification, measurement, evaluation, quality assurance, and acceptance criteria ([ISO](https://www.iso.org/standard/35733.html)).
+
+The review is intended to be evidence-led rather than opinion-led. Reviewers should triangulate design documents, codebase access, automated test results, environment configuration, runtime telemetry, production logs, incident history, and operational runbooks before assigning a RAG rating. This avoids superficial checklist compliance and makes findings comparable across applications.
+
+## Review Outcomes
+
+Each review should produce three outputs:
+
+| Output | Purpose | Owner |
+| --- | --- | --- |
+| Findings capture matrix | RAG-rated record of findings by non-functional category, with evidence, risk, recommendation, owner, target date, and read-across fields | Reviewer, application owner |
+| Summary decision note | Executive summary of material risks, accepted deviations, and conditions for release or continued operation | Review chair or architecture governance lead |
+| Remediation backlog | Actionable items linked to delivery backlog, risk register, or technical debt register | Application owner, team lead |
+
+## Review Cadence and Entry Points
+
+The framework should be applied at major lifecycle gates and whenever risk changes materially:
+
+- Architecture inception for new applications, major rewrites, or platform migrations.
+- Pre-build or design authority review before committing to integration and infrastructure patterns.
+- Pre-production readiness review before first live release or major functional expansion.
+- Post-incident or post-capacity-event review where production evidence indicates architectural weakness.
+- Periodic assurance review for tier-0, tier-1, regulated, customer-facing, or high-change systems.
+
+## RAG Rating Model
+
+| Rating | Meaning | Typical Governance Response |
+| --- | --- | --- |
+| Green | Meets enterprise standards and review criteria. Evidence is current, complete, and aligned to production reality. | Proceed; monitor through normal controls. |
+| Amber | Material gap, uncertainty, or partial compliance exists, but risk is manageable with agreed mitigation. | Proceed only with documented owner, target date, and risk acceptance if needed. |
+| Red | Material design, operational, security, resilience, performance, or compliance risk exists. Evidence is missing or contradicts the stated design. | Block release or require senior risk acceptance and funded remediation. |
+| Grey | Not assessed, not applicable, or insufficient evidence to rate. | Clarify applicability or obtain evidence before final decision. |
+
+## Standard Evidence Pack Required
+
+Application owners should provide the evidence pack at least five working days before the review unless the review is an emergency post-incident review. The pack should include:
+
+### Architecture and Design
+
+- Current logical, physical, deployment, and integration architecture diagrams.
+- Context diagram showing upstream and downstream dependencies, user groups, data stores, external providers, and trust boundaries.
+- Architecture decision records for major choices, especially synchronous versus asynchronous integration, data ownership, resiliency trade-offs, and technology exceptions.
+- API specifications, event schemas, topic or queue definitions, message retention policies, dead-letter handling, and versioning approach.
+- Data flow diagrams covering sensitive data, cross-border flows, encryption boundaries, and retention.
+- Security model, identity and access design, secrets management approach, and threat model.
+
+### Codebase and Build Access
+
+- Read access to the source repositories, infrastructure-as-code repositories, pipeline definitions, and dependency manifests.
+- Build instructions, branching strategy, release process, and artifact provenance evidence.
+- Static analysis, dependency scanning, container scanning, and software bill of materials evidence where applicable.
+- Code quality metrics, code ownership model, and technical debt register.
+
+### Test and QA Evidence
+
+- Test strategy covering unit, integration, contract, end-to-end, performance, resilience, security, accessibility, compatibility, and regression testing.
+- Automated test results from the current release candidate.
+- Performance test reports with workload model, environment sizing, response-time percentiles, throughput, concurrency, bottlenecks, and test limitations.
+- Resilience test evidence such as dependency outage tests, timeout behavior, retry behavior, failover drills, backup restoration, chaos testing, and disaster recovery exercises.
+- Defect leakage, flaky test trends, release quality metrics, and known test gaps.
+
+### Runtime and Operational Evidence
+
+- Production and non-production environment inventory, configuration baselines, and capacity limits.
+- Monitoring dashboards, alert rules, service-level indicators, service-level objectives, and recent error-budget or availability data. Google’s SRE guidance recommends defining service-level indicators and service-level objectives to identify which service behaviors matter and how they should be measured ([Google SRE](https://sre.google/sre-book/service-level-objectives/)).
+- Recent production logs, traces, metrics, incident tickets, problem records, and post-incident reviews.
+- Runbooks for deployment, rollback, scaling, failover, backup, restore, incident response, and certificate or secret rotation.
+- Support model, ownership model, on-call arrangements, escalation paths, and supplier dependencies.
+
+### Enterprise Standards and Compliance
+
+- Mapping to enterprise reference architectures, approved technology patterns, integration standards, data classification policies, security controls, and cloud landing-zone controls.
+- Record of standards exceptions, waivers, compensating controls, and expiry dates.
+- Regulatory and policy obligations such as privacy, audit retention, accessibility, operational resilience, data residency, and sector-specific controls.
+
+## Review Method
+
+### Preparation
+
+Reviewers confirm scope, business criticality, service tier, user population, deployment environment, data classification, regulatory exposure, and release timeline. The review chair assigns categories to subject-matter reviewers and confirms required evidence.
+
+### Evidence Review
+
+Each reviewer inspects documentation and production evidence before the review meeting. Where possible, claims should be validated against code, configuration, telemetry, and logs. For example, a stated retry strategy should be checked against client library configuration, timeout values, circuit breaker behavior, production failure logs, and test evidence.
+
+### Review Workshop
+
+The workshop should focus on risk, decisions, and evidence gaps rather than line-by-line walkthroughs of documents. Application owners should be prepared to explain key design decisions, known compromises, dependencies, capacity assumptions, and operational failure modes.
+
+### RAG Rating and Findings Capture
+
+Reviewers record findings using the matrix. Each finding should have one primary category, optional secondary categories, a RAG rating, evidence reference, risk statement, recommendation, target state, accountable owner, due date, and read-across tags. Read-across tags allow recurring issues to be compared across applications, for example “missing timeout policy,” “unbounded retries,” “no contract tests,” or “manual recovery only.”
+
+### Governance Decision
+
+The review chair summarizes material findings and records the outcome as approve, approve with conditions, defer pending evidence, or block pending remediation. Where risk is accepted, the risk acceptance should identify the business owner, expiry date, compensating controls, and trigger for re-review.
+
+## Standard Non-Functional Categories
+
+The findings matrix and full category guide use the following categories:
+
+| Category | Review Focus |
+| --- | --- |
+| Architecture Fitness and Standard Patterns | Alignment to enterprise architecture principles, approved patterns, modularity, coupling, maintainability, and technology choices. |
+| Integration and API Design | Sync versus async choice, blocking behavior, backpressure, contracts, versioning, idempotency, ordering, and data consistency. |
+| Resilience and Dependency Failure | Timeouts, retries, circuit breakers, bulkheads, fallback, failover, graceful degradation, backup, restore, and DR. |
+| Performance and Latency | Response time, throughput, tail latency, resource efficiency, caching, query behavior, and performance budgets. |
+| Capacity and Scalability | Workload model, growth assumptions, limits, horizontal and vertical scaling, queue depth, autoscaling, and saturation. |
+| Security and Privacy | Threat model, secure design, identity, access control, encryption, secrets, secure SDLC, vulnerability management, and privacy. |
+| Data Management and Integrity | Data ownership, consistency, schema evolution, retention, lineage, auditability, recovery point, and data quality. |
+| Operability and Observability | Logs, metrics, traces, dashboards, alerting, SLOs, runbooks, support model, incident response, and change operations. |
+| Testing and QA Standards | Test strategy, automation, environments, non-functional testing, release evidence, defect trends, and quality gates. |
+| Compliance with Enterprise Standards | Standards conformance, cloud/platform guardrails, exceptions, auditability, regulatory obligations, and service acceptance. |
+| Maintainability and Evolvability | Codebase health, modularity, dependency hygiene, documentation, upgrade strategy, ownership, and technical debt. |
+| Cost, Sustainability, and Resource Efficiency | Cost controls, unit economics, right-sizing, capacity waste, lifecycle policies, and resource efficiency. |
+
+## Minimum Review Questions
+
+At a minimum, every review should answer:
+
+- Is the design fit for the business criticality, service tier, data classification, and user journey risk?
+- Are integration choices explicit, justified, and aligned to expected latency, consistency, failure, and operational characteristics?
+- What happens when each critical dependency is slow, unavailable, throttling, returning partial failures, or returning corrupt data?
+- Are performance and capacity assumptions based on measured evidence rather than unsupported forecasts?
+- Can the team detect, diagnose, mitigate, and recover production issues within agreed service objectives?
+- Are non-functional tests representative of production scale, failure modes, data volumes, and traffic patterns?
+- Are standards exceptions documented, risk-accepted, time-bound, and backed by compensating controls?
+
+## Using the Findings Matrix
+
+Use one row per discrete finding. Avoid bundling several risks into one row because it weakens ownership and remediation tracking. The application owner should update action status weekly until all Red and Amber findings are closed, risk-accepted, or re-rated with evidence.
+
+For portfolio read-across, keep category names, RAG values, risk themes, pattern tags, and severity labels consistent across reviews. This makes it possible to identify systemic weaknesses such as repeated lack of contract testing, inconsistent timeout policies, weak queue monitoring, or missing runbook evidence across multiple applications.

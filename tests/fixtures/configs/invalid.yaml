@@ -1,0 +1,10 @@
+version: 1
+tech:
+  kafka: false
+rules:
+  skip:
+    - rule-a
+   - rule-b
+  include_only: [
+collectors:
+  skip: []

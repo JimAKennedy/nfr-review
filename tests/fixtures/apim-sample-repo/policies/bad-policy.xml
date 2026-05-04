@@ -1,0 +1,11 @@
+<policies>
+    <inbound>
+        <base />
+    </inbound>
+    <backend>
+        <set-backend-service base-url="https://api.example.com/v1" />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+</policies>

@@ -1,0 +1,16 @@
+version: 1
+tech:
+  kafka: false
+  apim: true
+  spring_boot: true
+rules:
+  skip:
+    - rule-needs-llm
+    - rule-needs-kafka
+  include_only:
+    - sample-readme-exists
+    - sample-pom-exists
+collectors:
+  skip:
+    - llm_summarizer
+severity_threshold: high

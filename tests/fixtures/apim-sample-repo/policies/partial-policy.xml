@@ -1,0 +1,12 @@
+<policies>
+    <inbound>
+        <rate-limit-by-key calls="50" renewal-period="30" counter-key="@(context.Request.IpAddress)" />
+        <base />
+    </inbound>
+    <backend>
+        <set-backend-service base-url="{{api-backend}}" />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+</policies>

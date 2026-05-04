@@ -1,0 +1,8 @@
+# Schema violation: an unknown top-level key is rejected by extra='forbid'.
+# (Despite the filename, every field has a default; the realistic schema
+# violation we test here is "unknown top-level key", which is the most common
+# class of nfr-review.yaml typo we want to catch loudly.)
+version: 1
+unknown_top_level_key: oops
+rules:
+  skip: []

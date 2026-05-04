@@ -1,0 +1,18 @@
+management:
+  server:
+    port: 9090
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+
+server:
+  ssl:
+    enabled: true
