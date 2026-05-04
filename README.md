@@ -7,11 +7,12 @@ Automated non-functional design reviews for software projects.
 ## Quick start
 
 ```bash
-# Clone and install
+# Clone and install (requires Python 3.11+)
 git clone https://github.com/JimAKennedy/nfr-review.git
 cd nfr-review
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
 pip install -e ".[dev]"
 
 # Run against a target repository
@@ -20,14 +21,15 @@ nfr-review run /path/to/your/repo
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.11+ (`python3.11`, `python3.12`, etc. — macOS ships 3.9 as `python3` which is too old)
 - Dependencies are installed automatically via `pip install -e .`
 
 ## Installation
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
+pip install --upgrade pip
 pip install -e .           # core CLI only
 pip install -e ".[llm]"    # adds Anthropic SDK for LLM-assisted rules
 pip install -e ".[dev]"    # includes llm + pytest, ruff, pytest-cov
