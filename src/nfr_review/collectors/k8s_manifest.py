@@ -83,6 +83,45 @@ def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     return result
 
 
+def _discover_kustomize_patches(repo_path: Path, yaml_loader: YAML) -> set[Path]:
+    """Scan for kustomization.yaml files and return absolute paths of patch files.
+
+    Kustomize patches are fragments (not complete resources) and should be
+    skipped during evidence collection to avoid false positives.
+    """
+    patch_paths: set[Path] = set()
+
+    for kust_file in sorted(repo_path.rglob("kustomization.y*ml")):
+        if kust_file.suffix not in (".yaml", ".yml"):
+            continue
+        rel = kust_file.relative_to(repo_path)
+        if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
+            continue
+
+        try:
+            content = kust_file.read_bytes()
+            doc = yaml_loader.load(content)
+        except (OSError, YAMLError):
+            continue
+
+        if not isinstance(doc, dict):
+            continue
+
+        kust_dir = kust_file.parent
+
+        # patchesStrategicMerge: list of file path strings
+        for patch_ref in doc.get("patchesStrategicMerge", []) or []:
+            if isinstance(patch_ref, str):
+                patch_paths.add((kust_dir / patch_ref).resolve())
+
+        # patches: list of objects with optional 'path' key
+        for patch_entry in doc.get("patches", []) or []:
+            if isinstance(patch_entry, dict) and "path" in patch_entry:
+                patch_paths.add((kust_dir / patch_entry["path"]).resolve())
+
+    return patch_paths
+
+
 class K8sManifestCollector:
     name = "k8s-manifest"
     version = "0.1.0"
@@ -93,14 +132,19 @@ class K8sManifestCollector:
         has_network_policy = False
         files_parsed = 0
         files_failed = 0
+        patches_skipped = 0
 
         yaml = YAML(typ="safe")
+        kustomize_patches = _discover_kustomize_patches(repo_path, yaml)
 
         for yaml_file in sorted(repo_path.rglob("*.y*ml")):
             rel = yaml_file.relative_to(repo_path)
             if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
                 continue
             if yaml_file.suffix not in (".yaml", ".yml"):
+                continue
+            if yaml_file.resolve() in kustomize_patches:
+                patches_skipped += 1
                 continue
 
             try:
@@ -171,6 +215,7 @@ class K8sManifestCollector:
                     "has_network_policy": has_network_policy,
                     "files_parsed": files_parsed,
                     "files_failed": files_failed,
+                    "patches_skipped": patches_skipped,
                 },
             )
         )
