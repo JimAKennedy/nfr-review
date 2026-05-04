@@ -89,31 +89,19 @@ def _full_registries(
 
     rregistry.register("sample-readme-exists", ReadmeExistsRule())
     rregistry.register("health-endpoint-missing", HealthEndpointMissingRule())
-    rregistry.register(
-        "exception-handling-antipattern", ExceptionHandlingAntipatternRule()
-    )
-    rregistry.register(
-        "resilience-annotation-missing", ResilienceAnnotationMissingRule()
-    )
-    rregistry.register(
-        "thread-pool-misconfiguration", ThreadPoolMisconfigurationRule()
-    )
+    rregistry.register("exception-handling-antipattern", ExceptionHandlingAntipatternRule())
+    rregistry.register("resilience-annotation-missing", ResilienceAnnotationMissingRule())
+    rregistry.register("thread-pool-misconfiguration", ThreadPoolMisconfigurationRule())
     rregistry.register("resource-limits-missing", ResourceLimitsMissingRule())
     rregistry.register("probes-missing", ProbesMissingRule())
-    rregistry.register(
-        "non-root-container-violation", NonRootContainerViolationRule()
-    )
+    rregistry.register("non-root-container-violation", NonRootContainerViolationRule())
     rregistry.register("network-policy-missing", NetworkPolicyMissingRule())
     rregistry.register("actuator-exposure-risk", ActuatorExposureRiskRule())
     rregistry.register("logging-config-missing", LoggingConfigMissingRule())
-    rregistry.register(
-        "spring-profile-misconfiguration", SpringProfileMisconfigurationRule()
-    )
+    rregistry.register("spring-profile-misconfiguration", SpringProfileMisconfigurationRule())
     rregistry.register("apim-rate-limit-missing", ApimRateLimitMissingRule())
     rregistry.register("apim-auth-policy-missing", ApimAuthPolicyMissingRule())
-    rregistry.register(
-        "apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule()
-    )
+    rregistry.register("apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule())
     rregistry.register("adr-lifecycle-gap", AdrLifecycleGapRule())
     rregistry.register("ci-security-scan-missing", CiSecurityScanMissingRule())
     rregistry.register("ci-test-stage-missing", CiTestStageMissingRule())
@@ -168,7 +156,7 @@ class TestTwentyRulesRegistered:
     def test_band2_ids_in_registry(self) -> None:
         self._ensure_all_registered()
         registered = set(rule_registry.ids())
-        assert BAND2_RULE_IDS <= registered
+        assert registered >= BAND2_RULE_IDS
 
 
 class TestListRulesShowsTwenty:
@@ -180,10 +168,7 @@ class TestListRulesShowsTwenty:
             text=True,
         )
         assert result.returncode == 0
-        lines = [
-            line for line in result.stdout.strip().splitlines()
-            if line.strip()
-        ]
+        lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
         assert len(lines) == 20
 
 
@@ -199,7 +184,7 @@ class TestBand2SkipWithoutApiKey:
 
     def test_both_band2_rules_in_skipped(self, result: RunResult) -> None:
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
-        assert BAND2_RULE_IDS <= skipped_ids
+        assert skipped_ids >= BAND2_RULE_IDS
 
     def test_band2_skip_reasons_informative(self, result: RunResult) -> None:
         skipped = {
@@ -251,15 +236,11 @@ class TestBand2PiiRuleWithMock:
         return engine.run(target=pii_fixture, config=cfg)
 
     def test_pii_findings_produced(self, result: RunResult) -> None:
-        pii_findings = [
-            f for f in result.findings if f.rule_id == "pii-in-log-statements"
-        ]
+        pii_findings = [f for f in result.findings if f.rule_id == "pii-in-log-statements"]
         assert len(pii_findings) >= 1
 
     def test_pii_finding_has_high_confidence(self, result: RunResult) -> None:
-        pii_findings = [
-            f for f in result.findings if f.rule_id == "pii-in-log-statements"
-        ]
+        pii_findings = [f for f in result.findings if f.rule_id == "pii-in-log-statements"]
         assert any(f.confidence == 0.85 for f in pii_findings)
 
 
@@ -269,11 +250,13 @@ class TestBand2AdrDriftRuleWithMock:
     @pytest.fixture()
     def result(self) -> RunResult:
         adr_drift_llm = _confirming_adr_client(
-            drifts=[{
-                "adr_title": "Use Spring Boot",
-                "violation": "Non-Spring framework detected",
-                "severity": "high",
-            }],
+            drifts=[
+                {
+                    "adr_title": "Use Spring Boot",
+                    "violation": "Non-Spring framework detected",
+                    "severity": "high",
+                }
+            ],
             summary="Drift detected",
         )
         cregistry: Registry = Registry("collector")
@@ -313,15 +296,13 @@ class TestBand2AdrDriftRuleWithMock:
 
     def test_drift_findings_produced(self, result: RunResult) -> None:
         drift_findings = [
-            f for f in result.findings
-            if f.rule_id == "architectural-drift-from-adr"
+            f for f in result.findings if f.rule_id == "architectural-drift-from-adr"
         ]
         assert len(drift_findings) >= 1
 
     def test_drift_finding_is_red(self, result: RunResult) -> None:
         drift_findings = [
-            f for f in result.findings
-            if f.rule_id == "architectural-drift-from-adr"
+            f for f in result.findings if f.rule_id == "architectural-drift-from-adr"
         ]
         assert any(f.rag == "red" for f in drift_findings)
 
@@ -355,18 +336,13 @@ class TestEngineFaultIsolationLlmError:
         )
         src_dir = combined / "src" / "main" / "java" / "com" / "example"
         src_dir.mkdir(parents=True, exist_ok=True)
-        (src_dir / "App.java").write_text(
-            "package com.example;\npublic class App {}\n"
-        )
+        (src_dir / "App.java").write_text("package com.example;\npublic class App {}\n")
 
         engine = Engine(collectors=cregistry, rules=rregistry)
         cfg = Config(tech={})
         result = engine.run(target=combined, config=cfg)
 
-        skipped_ids = {
-            e["rule_id"]
-            for e in result.run_metadata.rules_skipped
-        }
+        skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
         assert "architectural-drift-from-adr" in skipped_ids
 
         run_set = set(result.run_metadata.rules_run)
@@ -383,9 +359,7 @@ class TestRunMetadataBand2SkipReasons:
         result = engine.run(target=JAVA_REPO, config=cfg)
 
         band2_skips = [
-            e
-            for e in result.run_metadata.rules_skipped
-            if e["rule_id"] in BAND2_RULE_IDS
+            e for e in result.run_metadata.rules_skipped if e["rule_id"] in BAND2_RULE_IDS
         ]
         assert len(band2_skips) == 2
         reasons = {e["reason"] for e in band2_skips}

@@ -13,12 +13,14 @@ from nfr_review.registry import rule_registry
 
 _HTTP_CLIENT_PATTERNS = frozenset({"RestTemplate", "WebClient", "FeignClient"})
 
-_RESILIENCE_ANNOTATIONS = frozenset({
-    "CircuitBreaker",
-    "Retry",
-    "Bulkhead",
-    "RateLimiter",
-})
+_RESILIENCE_ANNOTATIONS = frozenset(
+    {
+        "CircuitBreaker",
+        "Retry",
+        "Bulkhead",
+        "RateLimiter",
+    }
+)
 
 _TEST_PATH_SEGMENTS = ("/src/test/", "/test/", "Test.java", "Tests.java", "IT.java")
 
@@ -32,9 +34,7 @@ class ResilienceAnnotationMissingRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         java_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
         ]
         if not java_evidence:
             return RuleResult(
@@ -50,8 +50,7 @@ class ResilienceAnnotationMissingRule:
                 continue
             imports = ev.payload.get("imports", [])
             uses_http_client = any(
-                any(pattern in imp for imp in imports)
-                for pattern in _HTTP_CLIENT_PATTERNS
+                any(pattern in imp for imp in imports) for pattern in _HTTP_CLIENT_PATTERNS
             )
             if not uses_http_client:
                 continue
@@ -81,9 +80,7 @@ class ResilienceAnnotationMissingRule:
                                 " @Bulkhead to service methods making"
                                 " external calls."
                             ),
-                            evidence_locator=(
-                                f"{file_path}:{cls['name']}"
-                            ),
+                            evidence_locator=(f"{file_path}:{cls['name']}"),
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.8,

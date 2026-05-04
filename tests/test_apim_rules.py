@@ -35,15 +35,17 @@ class TestApimRateLimitMissingRule:
         assert result.skip_reason == "no apim-policy evidence available"
 
     def test_missing_rate_limit_red(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/bad-policy.xml",
-            "has_rate_limit": False,
-            "has_auth_policy": False,
-            "backend_urls": ["https://api.example.com/v1"],
-            "uses_named_values": False,
-            "inbound_policies": ["base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/bad-policy.xml",
+                "has_rate_limit": False,
+                "has_auth_policy": False,
+                "backend_urls": ["https://api.example.com/v1"],
+                "uses_named_values": False,
+                "inbound_policies": ["base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -52,15 +54,17 @@ class TestApimRateLimitMissingRule:
         assert result.findings[0].pattern_tag == "apim-rate-limit"
 
     def test_rate_limit_present_green(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/good-policy.xml",
-            "has_rate_limit": True,
-            "has_auth_policy": True,
-            "backend_urls": ["{{backend-url}}"],
-            "uses_named_values": True,
-            "inbound_policies": ["rate-limit", "validate-jwt", "base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/good-policy.xml",
+                "has_rate_limit": True,
+                "has_auth_policy": True,
+                "backend_urls": ["{{backend-url}}"],
+                "uses_named_values": True,
+                "inbound_policies": ["rate-limit", "validate-jwt", "base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -82,15 +86,17 @@ class TestApimAuthPolicyMissingRule:
         assert result.skip_reason == "no apim-policy evidence available"
 
     def test_missing_auth_red(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/bad-policy.xml",
-            "has_rate_limit": False,
-            "has_auth_policy": False,
-            "backend_urls": ["https://api.example.com/v1"],
-            "uses_named_values": False,
-            "inbound_policies": ["base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/bad-policy.xml",
+                "has_rate_limit": False,
+                "has_auth_policy": False,
+                "backend_urls": ["https://api.example.com/v1"],
+                "uses_named_values": False,
+                "inbound_policies": ["base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -99,15 +105,17 @@ class TestApimAuthPolicyMissingRule:
         assert result.findings[0].pattern_tag == "apim-auth-policy"
 
     def test_auth_present_green(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/good-policy.xml",
-            "has_rate_limit": True,
-            "has_auth_policy": True,
-            "backend_urls": ["{{backend-url}}"],
-            "uses_named_values": True,
-            "inbound_policies": ["rate-limit", "validate-jwt", "base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/good-policy.xml",
+                "has_rate_limit": True,
+                "has_auth_policy": True,
+                "backend_urls": ["{{backend-url}}"],
+                "uses_named_values": True,
+                "inbound_policies": ["rate-limit", "validate-jwt", "base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -129,15 +137,17 @@ class TestApimHardcodedBackendUrlRule:
         assert result.skip_reason == "no apim-policy evidence available"
 
     def test_hardcoded_url_amber(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/bad-policy.xml",
-            "has_rate_limit": False,
-            "has_auth_policy": False,
-            "backend_urls": ["https://api.example.com/v1"],
-            "uses_named_values": False,
-            "inbound_policies": ["base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/bad-policy.xml",
+                "has_rate_limit": False,
+                "has_auth_policy": False,
+                "backend_urls": ["https://api.example.com/v1"],
+                "uses_named_values": False,
+                "inbound_policies": ["base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -147,30 +157,34 @@ class TestApimHardcodedBackendUrlRule:
         assert "https://api.example.com/v1" in result.findings[0].summary
 
     def test_named_value_url_green(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/good-policy.xml",
-            "has_rate_limit": True,
-            "has_auth_policy": True,
-            "backend_urls": ["{{backend-url}}"],
-            "uses_named_values": True,
-            "inbound_policies": ["rate-limit", "validate-jwt", "base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/good-policy.xml",
+                "has_rate_limit": True,
+                "has_auth_policy": True,
+                "backend_urls": ["{{backend-url}}"],
+                "uses_named_values": True,
+                "inbound_policies": ["rate-limit", "validate-jwt", "base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_no_backend_urls_green(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/minimal.xml",
-            "has_rate_limit": False,
-            "has_auth_policy": False,
-            "backend_urls": [],
-            "uses_named_values": False,
-            "inbound_policies": ["base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/minimal.xml",
+                "has_rate_limit": False,
+                "has_auth_policy": False,
+                "backend_urls": [],
+                "uses_named_values": False,
+                "inbound_policies": ["base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         # No backend URLs means nothing to flag
@@ -178,15 +192,17 @@ class TestApimHardcodedBackendUrlRule:
         assert result.findings[0].rag == "green"
 
     def test_mixed_urls_amber(self) -> None:
-        ev = _apim_evidence({
-            "file_path": "policies/mixed.xml",
-            "has_rate_limit": True,
-            "has_auth_policy": True,
-            "backend_urls": ["{{backend-url}}", "https://hardcoded.example.com"],
-            "uses_named_values": True,
-            "inbound_policies": ["rate-limit", "validate-jwt", "base"],
-            "outbound_policies": ["base"],
-        })
+        ev = _apim_evidence(
+            {
+                "file_path": "policies/mixed.xml",
+                "has_rate_limit": True,
+                "has_auth_policy": True,
+                "backend_urls": ["{{backend-url}}", "https://hardcoded.example.com"],
+                "uses_named_values": True,
+                "inbound_policies": ["rate-limit", "validate-jwt", "base"],
+                "outbound_policies": ["base"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -230,15 +246,17 @@ def test_rule_protocol_compliance(rule_class: type) -> None:
 )
 def test_finding_has_all_r007_fields(rule_class: type) -> None:
     """Verify that when a rule fires, findings have all 10 R007 fields."""
-    ev = _apim_evidence({
-        "file_path": "policies/test.xml",
-        "has_rate_limit": False,
-        "has_auth_policy": False,
-        "backend_urls": ["https://api.example.com/v1"],
-        "uses_named_values": False,
-        "inbound_policies": ["base"],
-        "outbound_policies": ["base"],
-    })
+    ev = _apim_evidence(
+        {
+            "file_path": "policies/test.xml",
+            "has_rate_limit": False,
+            "has_auth_policy": False,
+            "backend_urls": ["https://api.example.com/v1"],
+            "uses_named_values": False,
+            "inbound_policies": ["base"],
+            "outbound_policies": ["base"],
+        }
+    )
     rule = rule_class()
     result = rule.evaluate([ev], None)
     assert not result.skipped

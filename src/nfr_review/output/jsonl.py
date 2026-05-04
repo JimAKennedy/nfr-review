@@ -42,9 +42,7 @@ def write_jsonl(run_result: RunResult, path: Path) -> None:
     consuming findings.
     """
     if run_result.run_metadata is None:
-        raise OutputError(
-            f"cannot write JSONL to {path}: run_result.run_metadata is None"
-        )
+        raise OutputError(f"cannot write JSONL to {path}: run_result.run_metadata is None")
 
     metadata_record: dict[str, Any] = {
         "record_type": "run_metadata",
@@ -57,9 +55,7 @@ def write_jsonl(run_result: RunResult, path: Path) -> None:
             fh.write(json.dumps(metadata_record, ensure_ascii=False))
             fh.write("\n")
             for finding in run_result.findings:
-                fh.write(
-                    json.dumps(_finding_record(finding), ensure_ascii=False)
-                )
+                fh.write(json.dumps(_finding_record(finding), ensure_ascii=False))
                 fh.write("\n")
             for rule_result in run_result.rule_results:
                 if rule_result.skipped:

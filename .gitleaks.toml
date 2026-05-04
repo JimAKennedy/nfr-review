@@ -1,0 +1,6 @@
+[allowlist]
+paths = [
+    '''tests/fixtures/''',
+    '''\.gsd/''',
+    '''skills-lock\.json''',
+]

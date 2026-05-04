@@ -20,9 +20,7 @@ class HealthEndpointMissingRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         java_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
         ]
         if not java_evidence:
             return RuleResult(
@@ -38,9 +36,7 @@ class HealthEndpointMissingRule:
                 for method in cls.get("methods", []):
                     for path in method.get("mapping_paths", []):
                         if path in _HEALTH_PATHS:
-                            file_ref = ev.payload.get(
-                                "file_path", ev.locator
-                            )
+                            file_ref = ev.payload.get("file_path", ev.locator)
                             locator = f"{file_ref}:{cls['name']}"
                             return RuleResult(
                                 rule_id=self.id,
@@ -50,12 +46,10 @@ class HealthEndpointMissingRule:
                                         rag="green",
                                         severity="info",
                                         summary=(
-                                            f"Health endpoint found:"
-                                            f" {path} in {cls['name']}"
+                                            f"Health endpoint found: {path} in {cls['name']}"
                                         ),
                                         recommendation=(
-                                            "No action required"
-                                            " — health endpoint is present."
+                                            "No action required — health endpoint is present."
                                         ),
                                         evidence_locator=locator,
                                         collector_name=ev.collector_name,
@@ -136,13 +130,15 @@ class HealthEndpointMissingRule:
             actuator = ev.payload.get("actuator", {})
             exclude = actuator.get("exclude", "")
             exclude_str = (
-                exclude if isinstance(exclude, str)
-                else ",".join(str(i) for i in exclude) if isinstance(exclude, list)
+                exclude
+                if isinstance(exclude, str)
+                else ",".join(str(i) for i in exclude)
+                if isinstance(exclude, list)
                 else ""
             )
             if "health" in exclude_str:
                 continue
-            return ev.payload.get("file_path", ev.locator)
+            return str(ev.payload.get("file_path", ev.locator))
         return None
 
 

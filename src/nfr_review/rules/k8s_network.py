@@ -21,8 +21,7 @@ class NetworkPolicyMissingRule:
             (
                 e
                 for e in evidence
-                if e.collector_name == "k8s-manifest"
-                and e.kind == "k8s-manifest-summary"
+                if e.collector_name == "k8s-manifest" and e.kind == "k8s-manifest-summary"
             ),
             None,
         )

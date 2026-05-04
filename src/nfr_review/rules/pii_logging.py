@@ -19,9 +19,12 @@ PII_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("email", re.compile(r"(?i)\bemail|e-mail\b")),
     ("credit_card", re.compile(r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b")),
     ("phone", re.compile(r"(?i)\bphone|phoneNumber|phone_number\b")),
-    ("secret_variable", re.compile(
-        r"(?i)\bpassword|secret|token|apiKey|api_key|credential\b",
-    )),
+    (
+        "secret_variable",
+        re.compile(
+            r"(?i)\bpassword|secret|token|apiKey|api_key|credential\b",
+        ),
+    ),
 ]
 
 _LLM_PROMPT = (
@@ -69,15 +72,17 @@ class PiiInLogStatementsRule:
                     if pattern_re.search(stmt["arguments_text"]):
                         matched_patterns.append(pattern_name)
                 if matched_patterns:
-                    regex_hits.append({
-                        "file_path": file_path,
-                        "method": stmt["method"],
-                        "arguments_text": stmt["arguments_text"],
-                        "line": stmt["line"],
-                        "matched_patterns": matched_patterns,
-                        "collector_name": ev.collector_name,
-                        "collector_version": ev.collector_version,
-                    })
+                    regex_hits.append(
+                        {
+                            "file_path": file_path,
+                            "method": stmt["method"],
+                            "arguments_text": stmt["arguments_text"],
+                            "line": stmt["line"],
+                            "matched_patterns": matched_patterns,
+                            "collector_name": ev.collector_name,
+                            "collector_version": ev.collector_version,
+                        }
+                    )
 
         if not regex_hits:
             return RuleResult(
@@ -101,9 +106,7 @@ class PiiInLogStatementsRule:
         llm_verdicts = self._try_llm_confirmation(regex_hits)
         return self._build_result(regex_hits, llm_verdicts)
 
-    def _try_llm_confirmation(
-        self, hits: list[dict[str, Any]]
-    ) -> list[dict[str, Any]] | None:
+    def _try_llm_confirmation(self, hits: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
         if not self._llm.available:
             logger.warning("ANTHROPIC_API_KEY missing; skipping LLM confirmation for PII rule")
             return None
@@ -128,7 +131,7 @@ class PiiInLogStatementsRule:
         except LlmUnavailableError:
             logger.warning("LLM unavailable for PII confirmation; falling back to regex-only")
             return None
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("LLM PII confirmation failed: %s", exc)
             return None
 
@@ -175,7 +178,11 @@ class PiiInLogStatementsRule:
                 else:
                     confidence = 0.4
                     rag = "amber"
-                    note = f" (LLM: {llm_reason})" if llm_reason else " (LLM assessed as likely false positive)"
+                    note = (
+                        f" (LLM: {llm_reason})"
+                        if llm_reason
+                        else " (LLM assessed as likely false positive)"
+                    )
             else:
                 confidence = 0.6
                 rag = "amber"

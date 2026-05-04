@@ -35,16 +35,18 @@ class TestActuatorExposureRiskRule:
         assert result.skip_reason == "no spring-config evidence available"
 
     def test_wildcard_include_amber(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {"endpoints": {"web": {"exposure": {"include": "*"}}}},
-            "logging": {},
-            "server": {},
-            "spring_security": {},
-            "actuator": {"include": "*"},
-            "raw_keys": ["management"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {"endpoints": {"web": {"exposure": {"include": "*"}}}},
+                "logging": {},
+                "server": {},
+                "spring_security": {},
+                "actuator": {"include": "*"},
+                "raw_keys": ["management"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         amber_or_red = [f for f in result.findings if f.rag in ("amber", "red")]
@@ -53,19 +55,21 @@ class TestActuatorExposureRiskRule:
         assert amber_or_red[0].pattern_tag == "actuator-exposure"
 
     def test_wildcard_include_prod_profile_red(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application-prod.yaml",
-            "profile": "prod",
-            "management": {
-                "endpoints": {"web": {"exposure": {"include": "*"}}},
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application-prod.yaml",
+                "profile": "prod",
+                "management": {
+                    "endpoints": {"web": {"exposure": {"include": "*"}}},
+                    "server": {"port": "8080"},
+                },
+                "logging": {},
                 "server": {"port": "8080"},
-            },
-            "logging": {},
-            "server": {"port": "8080"},
-            "spring_security": {},
-            "actuator": {"include": "*"},
-            "raw_keys": ["management", "server"],
-        })
+                "spring_security": {},
+                "actuator": {"include": "*"},
+                "raw_keys": ["management", "server"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         red_findings = [f for f in result.findings if f.rag == "red"]
@@ -73,60 +77,66 @@ class TestActuatorExposureRiskRule:
         assert red_findings[0].severity == "high"
 
     def test_restricted_include_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {
-                "endpoints": {"web": {"exposure": {"include": "health,info"}}},
-            },
-            "logging": {},
-            "server": {},
-            "spring_security": {},
-            "actuator": {"include": "health,info"},
-            "raw_keys": ["management"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {
+                    "endpoints": {"web": {"exposure": {"include": "health,info"}}},
+                },
+                "logging": {},
+                "server": {},
+                "spring_security": {},
+                "actuator": {"include": "health,info"},
+                "raw_keys": ["management"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_no_actuator_config_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {},
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": [],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {},
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": [],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_wildcard_with_exclude_covers_sensitive(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {
-                "endpoints": {
-                    "web": {
-                        "exposure": {
-                            "include": "*",
-                            "exclude": "env,configprops,beans,heapdump,threaddump,mappings",
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {
+                    "endpoints": {
+                        "web": {
+                            "exposure": {
+                                "include": "*",
+                                "exclude": "env,configprops,beans,heapdump,threaddump,mappings",
+                            }
                         }
-                    }
+                    },
                 },
-            },
-            "logging": {},
-            "server": {},
-            "spring_security": {},
-            "actuator": {
-                "include": "*",
-                "exclude": "env,configprops,beans,heapdump,threaddump,mappings",
-            },
-            "raw_keys": ["management"],
-        })
+                "logging": {},
+                "server": {},
+                "spring_security": {},
+                "actuator": {
+                    "include": "*",
+                    "exclude": "env,configprops,beans,heapdump,threaddump,mappings",
+                },
+                "raw_keys": ["management"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
@@ -147,16 +157,18 @@ class TestLoggingConfigMissingRule:
         assert result.skip_reason == "no spring-config evidence available"
 
     def test_no_structured_logging_amber(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {"level": {"root": "INFO"}},
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": ["logging"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {"level": {"root": "INFO"}},
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": ["logging"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -165,49 +177,55 @@ class TestLoggingConfigMissingRule:
         assert result.findings[0].pattern_tag == "logging-config"
 
     def test_json_encoder_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {
-                "pattern": {"console": "%d{yyyy-MM-dd} JSON %msg%n"},
-            },
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": ["logging"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {
+                    "pattern": {"console": "%d{yyyy-MM-dd} JSON %msg%n"},
+                },
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": ["logging"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_logback_reference_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {"config": "classpath:logback-spring.xml"},
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": ["logging"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {"config": "classpath:logback-spring.xml"},
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": ["logging"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "green"
 
     def test_logstash_encoder_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {
-                "appender": {"encoder": "logstash"},
-            },
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": ["logging"],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {
+                    "appender": {"encoder": "logstash"},
+                },
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": ["logging"],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "green"
 
@@ -311,31 +329,35 @@ class TestSpringProfileMisconfigurationRule:
         assert result.findings[0].rag == "green"
 
     def test_no_prod_profile_green(self) -> None:
-        ev = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {},
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": [],
-        })
+        ev = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {},
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": [],
+            }
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_base_debug_not_overridden_amber(self) -> None:
-        base = _spring_evidence({
-            "file_path": "src/main/resources/application.yaml",
-            "profile": None,
-            "management": {},
-            "logging": {"level": {"root": "DEBUG"}},
-            "server": {},
-            "spring_security": {},
-            "actuator": {},
-            "raw_keys": ["logging"],
-        })
+        base = _spring_evidence(
+            {
+                "file_path": "src/main/resources/application.yaml",
+                "profile": None,
+                "management": {},
+                "logging": {"level": {"root": "DEBUG"}},
+                "server": {},
+                "spring_security": {},
+                "actuator": {},
+                "raw_keys": ["logging"],
+            }
+        )
         prod = _spring_evidence(
             {
                 "file_path": "src/main/resources/application-prod.yaml",
@@ -393,16 +415,18 @@ def test_rule_protocol_compliance(rule_class: type) -> None:
 )
 def test_finding_has_all_r007_fields(rule_class: type) -> None:
     """Verify that when a rule fires, findings have all 10 R007 fields."""
-    ev = _spring_evidence({
-        "file_path": "src/main/resources/application.yaml",
-        "profile": None,
-        "management": {},
-        "logging": {"level": {"root": "INFO"}},
-        "server": {},
-        "spring_security": {},
-        "actuator": {},
-        "raw_keys": ["logging"],
-    })
+    ev = _spring_evidence(
+        {
+            "file_path": "src/main/resources/application.yaml",
+            "profile": None,
+            "management": {},
+            "logging": {"level": {"root": "INFO"}},
+            "server": {},
+            "spring_security": {},
+            "actuator": {},
+            "raw_keys": ["logging"],
+        }
+    )
     rule = rule_class()
     result = rule.evaluate([ev], None)
     assert not result.skipped

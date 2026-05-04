@@ -26,10 +26,7 @@ class RepoStructureCollector:
         for entry in sorted(repo_path.iterdir(), key=lambda p: p.name):
             if entry.is_file():
                 top_files.append(entry.name)
-                if (
-                    readme_name is None
-                    and entry.name.lower().startswith(_README_PREFIX)
-                ):
+                if readme_name is None and entry.name.lower().startswith(_README_PREFIX):
                     readme_name = entry.name
             elif entry.is_dir():
                 top_dirs.append(entry.name)

@@ -38,10 +38,21 @@ _TEST_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-_SECURITY_KEYWORDS = frozenset({
-    "snyk", "trivy", "codeql", "sonarqube", "dependency-check",
-    "owasp", "sast", "dast", "semgrep", "bandit", "safety",
-})
+_SECURITY_KEYWORDS = frozenset(
+    {
+        "snyk",
+        "trivy",
+        "codeql",
+        "sonarqube",
+        "dependency-check",
+        "owasp",
+        "sast",
+        "dast",
+        "semgrep",
+        "bandit",
+        "safety",
+    }
+)
 
 _CI_FILES: list[tuple[str, str]] = [
     (".gitlab-ci.yml", "gitlab-ci"),
@@ -110,10 +121,20 @@ def _parse_gitlab_ci(yaml_data: dict[str, Any]) -> dict[str, Any]:
     has_test = False
     has_security = False
 
-    reserved = frozenset({
-        "stages", "variables", "image", "before_script",
-        "after_script", "cache", "services", "include", "default", "workflow",
-    })
+    reserved = frozenset(
+        {
+            "stages",
+            "variables",
+            "image",
+            "before_script",
+            "after_script",
+            "cache",
+            "services",
+            "include",
+            "default",
+            "workflow",
+        }
+    )
 
     for key, value in yaml_data.items():
         if key.startswith(".") or key in reserved:
@@ -197,7 +218,7 @@ class CiArtifactCollector:
             rel = ci_file.relative_to(repo_path)
             try:
                 payload = self._parse_ci_file(ci_file, ci_system, repo_path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Error parsing %s: %s", rel, exc)
                 continue
 

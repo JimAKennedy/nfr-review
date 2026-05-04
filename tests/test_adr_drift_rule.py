@@ -114,16 +114,18 @@ class TestDriftDetected:
         java_ev = _make_java_evidence(
             imports=["com.mongodb.client.MongoClient"],
         )
-        response = json.dumps({
-            "drifts": [
-                {
-                    "adr_title": "ADR-002: Use PostgreSQL",
-                    "violation": "Code uses MongoDB instead of PostgreSQL",
-                    "severity": "medium",
-                }
-            ],
-            "summary": "Database choice drifted from ADR.",
-        })
+        response = json.dumps(
+            {
+                "drifts": [
+                    {
+                        "adr_title": "ADR-002: Use PostgreSQL",
+                        "violation": "Code uses MongoDB instead of PostgreSQL",
+                        "severity": "medium",
+                    }
+                ],
+                "summary": "Database choice drifted from ADR.",
+            }
+        )
         rule = ArchitecturalDriftFromAdrRule(llm_client=_mock_client(response))
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert not result.skipped
@@ -138,16 +140,18 @@ class TestDriftDetected:
     def test_high_severity_drift_is_red(self) -> None:
         adr_ev = _make_adr_evidence(title="ADR-003: No direct DB access from controllers")
         java_ev = _make_java_evidence()
-        response = json.dumps({
-            "drifts": [
-                {
-                    "adr_title": "ADR-003: No direct DB access from controllers",
-                    "violation": "Controller directly instantiates JDBC connection",
-                    "severity": "high",
-                }
-            ],
-            "summary": "Layering violation found.",
-        })
+        response = json.dumps(
+            {
+                "drifts": [
+                    {
+                        "adr_title": "ADR-003: No direct DB access from controllers",
+                        "violation": "Controller directly instantiates JDBC connection",
+                        "severity": "high",
+                    }
+                ],
+                "summary": "Layering violation found.",
+            }
+        )
         rule = ArchitecturalDriftFromAdrRule(llm_client=_mock_client(response))
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert len(result.findings) == 1
@@ -159,13 +163,15 @@ class TestDriftDetected:
     def test_multiple_drifts(self) -> None:
         adr_ev = _make_adr_evidence()
         java_ev = _make_java_evidence()
-        response = json.dumps({
-            "drifts": [
-                {"adr_title": "ADR-1", "violation": "v1", "severity": "medium"},
-                {"adr_title": "ADR-2", "violation": "v2", "severity": "high"},
-            ],
-            "summary": "Multiple drifts.",
-        })
+        response = json.dumps(
+            {
+                "drifts": [
+                    {"adr_title": "ADR-1", "violation": "v1", "severity": "medium"},
+                    {"adr_title": "ADR-2", "violation": "v2", "severity": "high"},
+                ],
+                "summary": "Multiple drifts.",
+            }
+        )
         rule = ArchitecturalDriftFromAdrRule(llm_client=_mock_client(response))
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert len(result.findings) == 2
@@ -178,10 +184,12 @@ class TestNoDrift:
     def test_no_drift_green(self) -> None:
         adr_ev = _make_adr_evidence()
         java_ev = _make_java_evidence()
-        response = json.dumps({
-            "drifts": [],
-            "summary": "No architectural drift detected.",
-        })
+        response = json.dumps(
+            {
+                "drifts": [],
+                "summary": "No architectural drift detected.",
+            }
+        )
         rule = ArchitecturalDriftFromAdrRule(llm_client=_mock_client(response))
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert not result.skipped
@@ -247,9 +255,9 @@ class TestLlmErrors:
         adr_ev = _make_adr_evidence()
         java_ev = _make_java_evidence()
         wrapped = (
-            'Here is my analysis:\n\n'
+            "Here is my analysis:\n\n"
             + json.dumps({"drifts": [], "summary": "All good."})
-            + '\n\nHope that helps!'
+            + "\n\nHope that helps!"
         )
         rule = ArchitecturalDriftFromAdrRule(llm_client=_mock_client(wrapped))
         result = rule.evaluate([adr_ev, java_ev], context=None)
@@ -278,6 +286,6 @@ class TestAdrsWithoutTitles:
         rule = ArchitecturalDriftFromAdrRule(llm_client=_unavailable_client())
         bundle = rule._build_evidence_bundle([adr_with_title, adr_no_title], [java_ev])
         parsed = json.loads(bundle)
-        adr_section = [s for s in parsed if s["section"] == "adrs"][0]
+        adr_section = next(s for s in parsed if s["section"] == "adrs")
         assert len(adr_section["items"]) == 1
         assert adr_section["items"][0]["title"] == "ADR-001: Real Decision"

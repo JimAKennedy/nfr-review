@@ -28,9 +28,7 @@ logger = logging.getLogger("nfr_review.collectors.spring_config")
 
 _HIDDEN_DIRS = frozenset({".git", ".svn", ".hg", ".idea", ".vscode", "node_modules"})
 
-_SPRING_CONFIG_PATTERN = re.compile(
-    r"^(application|bootstrap)(-[\w]+)?\.(ya?ml|properties)$"
-)
+_SPRING_CONFIG_PATTERN = re.compile(r"^(application|bootstrap)(-[\w]+)?\.(ya?ml|properties)$")
 
 _PROFILE_PATTERN = re.compile(r"^application-(.+)\.(ya?ml|properties)$")
 
@@ -82,7 +80,9 @@ def _set_nested(d: dict[str, Any], keys: list[str], value: Any) -> None:
 
 
 def _extract_payload(
-    data: dict[str, Any], rel_path: str, profile: str | None,
+    data: dict[str, Any],
+    rel_path: str,
+    profile: str | None,
 ) -> dict[str, Any]:
     """Build the evidence payload from parsed config data."""
     management = data.get("management", {}) or {}
@@ -163,7 +163,7 @@ class SpringConfigCollector:
                             type(data).__name__,
                         )
                         continue
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Parse error in %s: %s", rel, exc)
                 continue
 

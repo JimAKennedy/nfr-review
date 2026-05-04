@@ -35,15 +35,13 @@ class NonRootContainerViolationRule:
             file_path = ev.payload.get("file_path", ev.locator)
             pod_sec_ctx = ev.payload.get("pod_security_context")
             pod_non_root = (
-                isinstance(pod_sec_ctx, dict)
-                and pod_sec_ctx.get("runAsNonRoot") is True
+                isinstance(pod_sec_ctx, dict) and pod_sec_ctx.get("runAsNonRoot") is True
             )
             for container in ev.payload.get("containers", []):
                 container_name = container.get("name", "")
                 sec_ctx = container.get("security_context")
                 container_non_root = (
-                    isinstance(sec_ctx, dict)
-                    and sec_ctx.get("runAsNonRoot") is True
+                    isinstance(sec_ctx, dict) and sec_ctx.get("runAsNonRoot") is True
                 )
                 if not pod_non_root and not container_non_root:
                     findings.append(
@@ -61,9 +59,7 @@ class NonRootContainerViolationRule:
                                 " prevent the container from running as the"
                                 " root user, reducing attack surface."
                             ),
-                            evidence_locator=(
-                                f"{file_path}:{resource_name}:{container_name}"
-                            ),
+                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.9,
@@ -93,9 +89,7 @@ class NonRootContainerViolationRule:
 
 def _register() -> None:
     if "non-root-container-violation" not in rule_registry:
-        rule_registry.register(
-            "non-root-container-violation", NonRootContainerViolationRule()
-        )
+        rule_registry.register("non-root-container-violation", NonRootContainerViolationRule())
 
 
 _register()

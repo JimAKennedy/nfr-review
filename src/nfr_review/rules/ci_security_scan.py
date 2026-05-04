@@ -18,7 +18,8 @@ class CiSecurityScanMissingRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         ci_pipelines = [
-            e for e in evidence
+            e
+            for e in evidence
             if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
         ]
         if not ci_pipelines:
@@ -28,9 +29,7 @@ class CiSecurityScanMissingRule:
                 skip_reason="no CI pipeline evidence available",
             )
 
-        any_security = any(
-            e.payload.get("has_security_scan") for e in ci_pipelines
-        )
+        any_security = any(e.payload.get("has_security_scan") for e in ci_pipelines)
 
         if any_security:
             pipelines_with = [
@@ -58,9 +57,7 @@ class CiSecurityScanMissingRule:
                 ],
             )
 
-        pipeline_files = [
-            e.payload.get("file_path", e.locator) for e in ci_pipelines
-        ]
+        pipeline_files = [e.payload.get("file_path", e.locator) for e in ci_pipelines]
         return RuleResult(
             rule_id=self.id,
             findings=[
@@ -88,9 +85,7 @@ class CiSecurityScanMissingRule:
 
 def _register() -> None:
     if "ci-security-scan-missing" not in rule_registry:
-        rule_registry.register(
-            "ci-security-scan-missing", CiSecurityScanMissingRule()
-        )
+        rule_registry.register("ci-security-scan-missing", CiSecurityScanMissingRule())
 
 
 _register()

@@ -58,10 +58,7 @@ def _extract_pod_security_context(doc: dict[str, Any], kind: str) -> dict[str, A
 def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     if kind in _TEMPLATE_WORKLOADS:
         containers_raw = (
-            doc.get("spec", {})
-            .get("template", {})
-            .get("spec", {})
-            .get("containers", [])
+            doc.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
         )
     elif kind == "Pod":
         containers_raw = doc.get("spec", {}).get("containers", [])
@@ -72,14 +69,16 @@ def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     for c in containers_raw:
         if not isinstance(c, dict):
             continue
-        result.append({
-            "name": c.get("name", ""),
-            "image": c.get("image", ""),
-            "resources": c.get("resources") or None,
-            "liveness_probe": c.get("livenessProbe") or None,
-            "readiness_probe": c.get("readinessProbe") or None,
-            "security_context": c.get("securityContext") or None,
-        })
+        result.append(
+            {
+                "name": c.get("name", ""),
+                "image": c.get("image", ""),
+                "resources": c.get("resources") or None,
+                "liveness_probe": c.get("livenessProbe") or None,
+                "readiness_probe": c.get("readinessProbe") or None,
+                "security_context": c.get("securityContext") or None,
+            }
+        )
     return result
 
 

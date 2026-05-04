@@ -8,9 +8,14 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
-_JSON_INDICATORS = frozenset({
-    "json", "logstash", "jsonlayout", "structuredlogprovider",
-})
+_JSON_INDICATORS = frozenset(
+    {
+        "json",
+        "logstash",
+        "jsonlayout",
+        "structuredlogprovider",
+    }
+)
 
 
 class LoggingConfigMissingRule:
@@ -49,8 +54,7 @@ class LoggingConfigMissingRule:
                             rag="green",
                             severity="info",
                             summary=(
-                                f"Structured logging configuration detected"
-                                f" in {file_path}."
+                                f"Structured logging configuration detected in {file_path}."
                             ),
                             recommendation="No action required.",
                             evidence_locator=file_path,
@@ -62,9 +66,7 @@ class LoggingConfigMissingRule:
                     ],
                 )
 
-        file_path = spring_evidence[0].payload.get(
-            "file_path", spring_evidence[0].locator
-        )
+        file_path = spring_evidence[0].payload.get("file_path", spring_evidence[0].locator)
         return RuleResult(
             rule_id=self.id,
             findings=[
@@ -93,17 +95,15 @@ class LoggingConfigMissingRule:
 
 
 def _has_structured_logging(
-    logging_section: dict[str, Any], raw_keys: list[str],
+    logging_section: dict[str, Any],
+    raw_keys: list[str],
 ) -> bool:
     values_str = _flatten_values(logging_section).lower()
     if any(indicator in values_str for indicator in _JSON_INDICATORS):
         return True
     if "logback" in values_str:
         return True
-    for key in raw_keys:
-        if "logback" in str(key).lower():
-            return True
-    return False
+    return any("logback" in str(key).lower() for key in raw_keys)
 
 
 def _flatten_values(d: dict[str, Any]) -> str:

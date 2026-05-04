@@ -36,10 +36,7 @@ class ResourceLimitsMissingRule:
             for container in ev.payload.get("containers", []):
                 container_name = container.get("name", "")
                 resources = container.get("resources")
-                has_limits = (
-                    isinstance(resources, dict)
-                    and bool(resources.get("limits"))
-                )
+                has_limits = isinstance(resources, dict) and bool(resources.get("limits"))
                 if not has_limits:
                     findings.append(
                         Finding(
@@ -55,9 +52,7 @@ class ResourceLimitsMissingRule:
                                 " to prevent unbounded resource consumption"
                                 " and ensure fair scheduling."
                             ),
-                            evidence_locator=(
-                                f"{file_path}:{resource_name}:{container_name}"
-                            ),
+                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.95,

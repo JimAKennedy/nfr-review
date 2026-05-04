@@ -171,9 +171,7 @@ def test_rule_exception_does_not_abort_run(tmp_path: Path) -> None:
     still = next(r for r in result.rule_results if r.rule_id == "still-runs")
     assert still.skipped is False
     assert len(still.findings) == 1
-    assert "raises-rule" in {
-        entry["rule_id"] for entry in result.run_metadata.rules_skipped
-    }
+    assert "raises-rule" in {entry["rule_id"] for entry in result.run_metadata.rules_skipped}
 
 
 def test_config_rules_skip_excludes_rule(tmp_path: Path) -> None:
@@ -348,9 +346,7 @@ def test_sample_collector_and_rule_autoregistered() -> None:
     from nfr_review.rules import sample as _sample
 
     if "repo-structure" not in collector_registry:
-        collector_registry.register(
-            "repo-structure", _rs.RepoStructureCollector()
-        )
+        collector_registry.register("repo-structure", _rs.RepoStructureCollector())
     if "sample-readme-exists" not in rule_registry:
         rule_registry.register("sample-readme-exists", _sample.ReadmeExistsRule())
 

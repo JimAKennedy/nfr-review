@@ -31,6 +31,9 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",
+    "mypy>=1.11",
+    "bandit[toml]>=1.7",
+    "pre-commit>=3.7",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -55,14 +58,20 @@ select = [
     "RUF",  # ruff-specific rules
 ]
 ignore = [
-    "E501",  # line length (handled by formatter)
+    "E501",   # line length (handled by formatter)
+    "TC001",  # move import into TYPE_CHECKING (too aggressive for this codebase)
+    "TC002",  # move third-party import into TYPE_CHECKING
+    "TC003",  # move stdlib import into TYPE_CHECKING
+    "N812",   # lowercase imported as non-lowercase (false positive on __version__)
+    "SIM108", # ternary suggestions often reduce readability
 ]
 
 [tool.ruff.lint.isort]
 known-first-party = ["nfr_review"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["N802", "N803"]
+"tests/**/*.py" = ["N802", "N803", "RUF012"]
+"src/nfr_review/rules/**/*.py" = ["RUF012"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -79,3 +88,23 @@ branch = true
 show_missing = true
 skip_covered = false
 fail_under = 70
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["tree_sitter.*", "tree_sitter_java.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["nfr_review.llm_client"]
+disable_error_code = ["union-attr"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]

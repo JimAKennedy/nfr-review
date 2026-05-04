@@ -28,8 +28,7 @@ class TestK8sFixtures:
     ) -> None:
         evidence = collector.collect(FIXTURES, config=None)
         good = next(
-            e for e in evidence
-            if e.kind == "k8s-resource" and e.payload["name"] == "good-app"
+            e for e in evidence if e.kind == "k8s-resource" and e.payload["name"] == "good-app"
         )
         container = good.payload["containers"][0]
         assert container["liveness_probe"] is not None
@@ -43,8 +42,7 @@ class TestK8sFixtures:
     ) -> None:
         evidence = collector.collect(FIXTURES, config=None)
         bare = next(
-            e for e in evidence
-            if e.kind == "k8s-resource" and e.payload["name"] == "bare-app"
+            e for e in evidence if e.kind == "k8s-resource" and e.payload["name"] == "bare-app"
         )
         container = bare.payload["containers"][0]
         assert container["liveness_probe"] is None
@@ -52,9 +50,7 @@ class TestK8sFixtures:
         assert container["resources"] is None
         assert container["security_context"] is None
 
-    def test_summary_has_network_policy(
-        self, collector: K8sManifestCollector
-    ) -> None:
+    def test_summary_has_network_policy(self, collector: K8sManifestCollector) -> None:
         evidence = collector.collect(FIXTURES, config=None)
         summary = next(e for e in evidence if e.kind == "k8s-manifest-summary")
         assert summary.payload["has_network_policy"] is True
@@ -65,8 +61,7 @@ class TestK8sFixtures:
     def test_evidence_fields(self, collector: K8sManifestCollector) -> None:
         evidence = collector.collect(FIXTURES, config=None)
         good = next(
-            e for e in evidence
-            if e.kind == "k8s-resource" and e.payload["name"] == "good-app"
+            e for e in evidence if e.kind == "k8s-resource" and e.payload["name"] == "good-app"
         )
         assert good.collector_name == "k8s-manifest"
         assert good.collector_version == "0.1.0"
@@ -78,9 +73,7 @@ class TestNonK8sYaml:
     def test_non_k8s_yaml_silently_skipped(
         self, collector: K8sManifestCollector, tmp_path: Path
     ) -> None:
-        (tmp_path / "docker-compose.yaml").write_text(
-            "services:\n  web:\n    image: nginx\n"
-        )
+        (tmp_path / "docker-compose.yaml").write_text("services:\n  web:\n    image: nginx\n")
         evidence = collector.collect(tmp_path, config=None)
         assert len(evidence) == 1  # only the summary
         summary = evidence[0]
@@ -226,9 +219,7 @@ class TestKustomizePatches:
         self, collector: K8sManifestCollector, tmp_path: Path
     ) -> None:
         self._write_base(tmp_path / "k8s" / "base")
-        self._write_overlay(
-            tmp_path / "k8s" / "overlays" / "test", use_patches_field=True
-        )
+        self._write_overlay(tmp_path / "k8s" / "overlays" / "test", use_patches_field=True)
         evidence = collector.collect(tmp_path, config=None)
         resource_ev = [e for e in evidence if e.kind == "k8s-resource"]
         assert len(resource_ev) == 1
@@ -251,9 +242,7 @@ class TestKustomizePatches:
     ) -> None:
         self._write_base(tmp_path / "k8s" / "base")
         self._write_overlay(tmp_path / "k8s" / "overlays" / "dev")
-        self._write_overlay(
-            tmp_path / "k8s" / "overlays" / "test", use_patches_field=True
-        )
+        self._write_overlay(tmp_path / "k8s" / "overlays" / "test", use_patches_field=True)
         evidence = collector.collect(tmp_path, config=None)
         resource_ev = [e for e in evidence if e.kind == "k8s-resource"]
         assert len(resource_ev) == 1

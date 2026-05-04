@@ -41,12 +41,10 @@ class ArchitecturalDriftFromAdrRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         adr_evidence = [
-            e for e in evidence
-            if e.collector_name == "adr" and e.kind == "adr-document"
+            e for e in evidence if e.collector_name == "adr" and e.kind == "adr-document"
         ]
         java_evidence = [
-            e for e in evidence
-            if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
         ]
 
         if not adr_evidence:
@@ -66,15 +64,12 @@ class ArchitecturalDriftFromAdrRule:
         bundle = self._build_evidence_bundle(adr_evidence, java_evidence)
 
         if not self._llm.available:
-            logger.warning(
-                "ANTHROPIC_API_KEY missing; skipping architectural drift analysis"
-            )
+            logger.warning("ANTHROPIC_API_KEY missing; skipping architectural drift analysis")
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
                 skip_reason=(
-                    "LLM unavailable — architectural drift analysis"
-                    " requires Claude API"
+                    "LLM unavailable — architectural drift analysis requires Claude API"
                 ),
             )
 
@@ -90,28 +85,32 @@ class ArchitecturalDriftFromAdrRule:
             payload = ev.payload
             if not payload.get("title"):
                 continue
-            adr_items.append({
-                "title": payload.get("title"),
-                "status": payload.get("status"),
-                "date": payload.get("date"),
-                "file": payload.get("file_path", ev.locator),
-            })
+            adr_items.append(
+                {
+                    "title": payload.get("title"),
+                    "status": payload.get("status"),
+                    "date": payload.get("date"),
+                    "file": payload.get("file_path", ev.locator),
+                }
+            )
 
         java_items: list[dict[str, Any]] = []
         for ev in java_evidence:
             payload = ev.payload
             classes = payload.get("classes", [])
-            java_items.append({
-                "file": payload.get("file_path", ev.locator),
-                "classes": [
-                    {
-                        "name": c.get("name"),
-                        "annotations": c.get("annotations", []),
-                    }
-                    for c in classes
-                ],
-                "imports": payload.get("imports", []),
-            })
+            java_items.append(
+                {
+                    "file": payload.get("file_path", ev.locator),
+                    "classes": [
+                        {
+                            "name": c.get("name"),
+                            "annotations": c.get("annotations", []),
+                        }
+                        for c in classes
+                    ],
+                    "imports": payload.get("imports", []),
+                }
+            )
 
         bundle_items: list[dict[str, Any]] = [
             {"section": "adrs", "items": adr_items},
@@ -137,11 +136,10 @@ class ArchitecturalDriftFromAdrRule:
                 rule_id=self.id,
                 skipped=True,
                 skip_reason=(
-                    "LLM unavailable — architectural drift analysis"
-                    " requires Claude API"
+                    "LLM unavailable — architectural drift analysis requires Claude API"
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("LLM architectural drift analysis failed: %s", exc)
             return RuleResult(
                 rule_id=self.id,

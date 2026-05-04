@@ -8,10 +8,16 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
-_SENSITIVE_ENDPOINTS = frozenset({
-    "env", "configprops", "beans",
-    "heapdump", "threaddump", "mappings",
-})
+_SENSITIVE_ENDPOINTS = frozenset(
+    {
+        "env",
+        "configprops",
+        "beans",
+        "heapdump",
+        "threaddump",
+        "mappings",
+    }
+)
 _PROD_PROFILES = frozenset({"prod", "production", "prd"})
 
 
@@ -108,7 +114,7 @@ class ActuatorExposureRiskRule:
                     continue
 
             exposed = _parse_endpoint_set(include_str)
-            exposed_sensitive = exposed & _SENSITIVE_ENDPOINTS
+            exposed_sensitive = frozenset(exposed & _SENSITIVE_ENDPOINTS)
             if exposed_sensitive:
                 severity = "high" if is_prod else "medium"
                 findings.append(

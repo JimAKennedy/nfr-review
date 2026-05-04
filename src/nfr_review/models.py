@@ -72,9 +72,9 @@ class RunMetadata(BaseModel):
 
 __all__ = [
     "RAG",
-    "Severity",
     "Evidence",
     "Finding",
     "RuleResult",
     "RunMetadata",
+    "Severity",
 ]

@@ -75,31 +75,19 @@ def _full_registries() -> tuple[Registry, Registry]:
 
     rregistry.register("sample-readme-exists", ReadmeExistsRule())
     rregistry.register("health-endpoint-missing", HealthEndpointMissingRule())
-    rregistry.register(
-        "exception-handling-antipattern", ExceptionHandlingAntipatternRule()
-    )
-    rregistry.register(
-        "resilience-annotation-missing", ResilienceAnnotationMissingRule()
-    )
-    rregistry.register(
-        "thread-pool-misconfiguration", ThreadPoolMisconfigurationRule()
-    )
+    rregistry.register("exception-handling-antipattern", ExceptionHandlingAntipatternRule())
+    rregistry.register("resilience-annotation-missing", ResilienceAnnotationMissingRule())
+    rregistry.register("thread-pool-misconfiguration", ThreadPoolMisconfigurationRule())
     rregistry.register("resource-limits-missing", ResourceLimitsMissingRule())
     rregistry.register("probes-missing", ProbesMissingRule())
-    rregistry.register(
-        "non-root-container-violation", NonRootContainerViolationRule()
-    )
+    rregistry.register("non-root-container-violation", NonRootContainerViolationRule())
     rregistry.register("network-policy-missing", NetworkPolicyMissingRule())
     rregistry.register("actuator-exposure-risk", ActuatorExposureRiskRule())
     rregistry.register("logging-config-missing", LoggingConfigMissingRule())
-    rregistry.register(
-        "spring-profile-misconfiguration", SpringProfileMisconfigurationRule()
-    )
+    rregistry.register("spring-profile-misconfiguration", SpringProfileMisconfigurationRule())
     rregistry.register("apim-rate-limit-missing", ApimRateLimitMissingRule())
     rregistry.register("apim-auth-policy-missing", ApimAuthPolicyMissingRule())
-    rregistry.register(
-        "apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule()
-    )
+    rregistry.register("apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule())
     rregistry.register("adr-lifecycle-gap", AdrLifecycleGapRule())
     rregistry.register("ci-security-scan-missing", CiSecurityScanMissingRule())
     rregistry.register("ci-test-stage-missing", CiTestStageMissingRule())
@@ -119,12 +107,10 @@ class TestSpringTechFiltering:
 
     def test_spring_rules_fire(self, result: RunResult) -> None:
         finding_rule_ids = {f.rule_id for f in result.findings}
-        assert SPRING_RULE_IDS <= finding_rule_ids
+        assert finding_rule_ids >= SPRING_RULE_IDS
 
     def test_apim_rules_skipped_with_reason(self, result: RunResult) -> None:
-        skipped = {
-            e["rule_id"]: e["reason"] for e in result.run_metadata.rules_skipped
-        }
+        skipped = {e["rule_id"]: e["reason"] for e in result.run_metadata.rules_skipped}
         for rule_id in APIM_RULE_IDS:
             assert rule_id in skipped
             assert "tech not declared: apim" in skipped[rule_id]
@@ -151,11 +137,11 @@ class TestApimTechFiltering:
 
     def test_apim_rules_fire(self, result: RunResult) -> None:
         finding_rule_ids = {f.rule_id for f in result.findings}
-        assert APIM_RULE_IDS <= finding_rule_ids
+        assert finding_rule_ids >= APIM_RULE_IDS
 
     def test_spring_rules_skipped(self, result: RunResult) -> None:
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
-        assert SPRING_RULE_IDS <= skipped_ids
+        assert skipped_ids >= SPRING_RULE_IDS
 
 
 class TestEmptyTechSkipsAll:
@@ -215,7 +201,7 @@ class TestRuleRegistryCount:
 
     def test_all_s03_rule_ids_registered(self) -> None:
         registered = set(rule_registry.ids())
-        assert ALL_S03_RULE_IDS <= registered
+        assert registered >= ALL_S03_RULE_IDS
 
 
 class TestTechSkipReasonsInMetadata:
@@ -228,8 +214,7 @@ class TestTechSkipReasonsInMetadata:
         result = engine.run(target=JAVA_REPO, config=cfg)
 
         apim_skipped = [
-            e for e in result.run_metadata.rules_skipped
-            if e["rule_id"] in APIM_RULE_IDS
+            e for e in result.run_metadata.rules_skipped if e["rule_id"] in APIM_RULE_IDS
         ]
         assert len(apim_skipped) == 3
         for entry in apim_skipped:

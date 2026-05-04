@@ -74,9 +74,7 @@ def test_e2e_run_produces_csv_and_jsonl_with_full_provenance(
         ],
     )
 
-    assert result.exit_code == 0, (
-        f"stdout={result.stdout!r} stderr={result.stderr!r}"
-    )
+    assert result.exit_code == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
     assert csv_path.exists()
     assert jsonl_path.exists()
 
@@ -108,8 +106,7 @@ def test_e2e_run_produces_csv_and_jsonl_with_full_provenance(
     # Subsequent JSONL lines: at least one finding for sample-readme-exists.
     finding_records = [json.loads(line) for line in lines[1:]]
     assert any(
-        rec.get("record_type") == "finding"
-        and rec.get("rule_id") == "sample-readme-exists"
+        rec.get("record_type") == "finding" and rec.get("rule_id") == "sample-readme-exists"
         for rec in finding_records
     )
 

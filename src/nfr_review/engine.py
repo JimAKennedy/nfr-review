@@ -38,9 +38,7 @@ class RunResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _select_collectors(
-    registry: Registry[Collector], skip: list[str]
-) -> list[Collector]:
+def _select_collectors(registry: Registry[Collector], skip: list[str]) -> list[Collector]:
     skip_set = set(skip)
     return [c for c in registry.all() if c.name not in skip_set]
 
@@ -73,9 +71,7 @@ class Engine:
         self._collectors: Registry[Collector] = (
             collectors if collectors is not None else _default_collector_registry
         )
-        self._rules: Registry[Rule] = (
-            rules if rules is not None else _default_rule_registry
-        )
+        self._rules: Registry[Rule] = rules if rules is not None else _default_rule_registry
 
     def run(self, target: Path, config: Config) -> RunResult:
         if not target.exists():
@@ -83,9 +79,7 @@ class Engine:
         if not target.is_dir():
             raise EngineError(f"target is not a directory: {target}")
 
-        active_collectors = _select_collectors(
-            self._collectors, config.collectors.skip
-        )
+        active_collectors = _select_collectors(self._collectors, config.collectors.skip)
 
         evidence: list[Evidence] = []
         warnings: list[str] = []
@@ -95,9 +89,7 @@ class Engine:
             try:
                 produced = collector.collect(target, config)
             except Exception as exc:  # R012: never abort the run
-                logger.warning(
-                    "collector %s failed: %s", collector.name, exc, exc_info=False
-                )
+                logger.warning("collector %s failed: %s", collector.name, exc, exc_info=False)
                 warnings.append(f"collector {collector.name} failed: {exc}")
                 continue
             evidence.extend(produced)
@@ -130,9 +122,7 @@ class Engine:
                 rules_skipped.append({"rule_id": rule.id, "reason": reason})
                 continue
 
-            missing = [
-                c for c in rule.required_collectors if c not in succeeded_collectors
-            ]
+            missing = [c for c in rule.required_collectors if c not in succeeded_collectors]
             if missing:
                 reason = f"missing required collectors: {', '.join(missing)}"
                 rule_results.append(
@@ -164,9 +154,7 @@ class Engine:
                 rules_run.append(rule.id)
                 findings.extend(result.findings)
 
-        run_metadata = build_run_metadata(
-            target, active_collectors, rules_run, rules_skipped
-        )
+        run_metadata = build_run_metadata(target, active_collectors, rules_run, rules_skipped)
 
         return RunResult(
             findings=findings,

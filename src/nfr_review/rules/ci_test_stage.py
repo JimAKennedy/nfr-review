@@ -18,7 +18,8 @@ class CiTestStageMissingRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         ci_pipelines = [
-            e for e in evidence
+            e
+            for e in evidence
             if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
         ]
         if not ci_pipelines:
@@ -28,9 +29,7 @@ class CiTestStageMissingRule:
                 skip_reason="no CI pipeline evidence available",
             )
 
-        any_test = any(
-            e.payload.get("has_test_step") for e in ci_pipelines
-        )
+        any_test = any(e.payload.get("has_test_step") for e in ci_pipelines)
 
         if any_test:
             pipelines_with = [
@@ -45,9 +44,7 @@ class CiTestStageMissingRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=(
-                            f"Test step found in: {', '.join(pipelines_with[:3])}"
-                        ),
+                        summary=(f"Test step found in: {', '.join(pipelines_with[:3])}"),
                         recommendation="No action required — test step is present.",
                         evidence_locator=pipelines_with[0],
                         collector_name="ci-artifact",
@@ -58,9 +55,7 @@ class CiTestStageMissingRule:
                 ],
             )
 
-        pipeline_files = [
-            e.payload.get("file_path", e.locator) for e in ci_pipelines
-        ]
+        pipeline_files = [e.payload.get("file_path", e.locator) for e in ci_pipelines]
         return RuleResult(
             rule_id=self.id,
             findings=[

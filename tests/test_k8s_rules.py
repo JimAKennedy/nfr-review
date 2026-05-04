@@ -62,10 +62,18 @@ class TestResourceLimitsMissingRule:
         assert result.skip_reason == "no k8s-manifest evidence available"
 
     def test_container_without_limits_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -75,34 +83,60 @@ class TestResourceLimitsMissingRule:
         assert "app" in result.findings[0].evidence_locator
 
     def test_container_with_empty_limits_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest",
-             "resources": {"requests": {"cpu": "100m"}},
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": {"requests": {"cpu": "100m"}},
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "amber"
 
     def test_container_with_limits_green(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest",
-             "resources": {"limits": {"cpu": "500m", "memory": "256Mi"}},
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": {"limits": {"cpu": "500m", "memory": "256Mi"}},
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_multiple_containers_mixed(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest",
-             "resources": {"limits": {"cpu": "500m"}},
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-            {"name": "sidecar", "image": "envoy:latest",
-             "resources": None,
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": {"limits": {"cpu": "500m"}},
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+                {
+                    "name": "sidecar",
+                    "image": "envoy:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
@@ -129,10 +163,18 @@ class TestProbesMissingRule:
         assert result.skip_reason == "no k8s-manifest evidence available"
 
     def test_container_without_probes_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -142,24 +184,36 @@ class TestProbesMissingRule:
         assert "readinessProbe" in result.findings[0].summary
 
     def test_container_missing_only_liveness_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None,
-             "readiness_probe": {"httpGet": {"path": "/ready", "port": 8080}},
-             "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": {"httpGet": {"path": "/ready", "port": 8080}},
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "amber"
         assert "livenessProbe" in result.findings[0].summary
         assert "readinessProbe" not in result.findings[0].summary
 
     def test_container_with_both_probes_green(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": {"httpGet": {"path": "/health", "port": 8080}},
-             "readiness_probe": {"httpGet": {"path": "/ready", "port": 8080}},
-             "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": {"httpGet": {"path": "/health", "port": 8080}},
+                    "readiness_probe": {"httpGet": {"path": "/ready", "port": 8080}},
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -187,10 +241,18 @@ class TestNonRootContainerViolationRule:
         assert result.skip_reason == "no k8s-manifest evidence available"
 
     def test_container_without_security_context_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None, "readiness_probe": None, "security_context": None},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": None,
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -199,20 +261,34 @@ class TestNonRootContainerViolationRule:
         assert "runAsNonRoot" in result.findings[0].summary
 
     def test_container_with_run_as_non_root_false_amber(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None, "readiness_probe": None,
-             "security_context": {"runAsNonRoot": False}},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": {"runAsNonRoot": False},
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "amber"
 
     def test_container_with_run_as_non_root_true_green(self) -> None:
-        ev = _k8s_resource_evidence(containers=[
-            {"name": "app", "image": "nginx:latest", "resources": None,
-             "liveness_probe": None, "readiness_probe": None,
-             "security_context": {"runAsNonRoot": True}},
-        ])
+        ev = _k8s_resource_evidence(
+            containers=[
+                {
+                    "name": "app",
+                    "image": "nginx:latest",
+                    "resources": None,
+                    "liveness_probe": None,
+                    "readiness_probe": None,
+                    "security_context": {"runAsNonRoot": True},
+                },
+            ]
+        )
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
@@ -233,9 +309,14 @@ class TestNonRootContainerViolationRule:
                 "namespace": "default",
                 "pod_security_context": {"runAsNonRoot": True},
                 "containers": [
-                    {"name": "app", "image": "nginx:latest", "resources": None,
-                     "liveness_probe": None, "readiness_probe": None,
-                     "security_context": {"allowPrivilegeEscalation": False}},
+                    {
+                        "name": "app",
+                        "image": "nginx:latest",
+                        "resources": None,
+                        "liveness_probe": None,
+                        "readiness_probe": None,
+                        "security_context": {"allowPrivilegeEscalation": False},
+                    },
                 ],
             },
         )
@@ -258,9 +339,14 @@ class TestNonRootContainerViolationRule:
                 "namespace": "default",
                 "pod_security_context": {"runAsNonRoot": False},
                 "containers": [
-                    {"name": "app", "image": "nginx:latest", "resources": None,
-                     "liveness_probe": None, "readiness_probe": None,
-                     "security_context": None},
+                    {
+                        "name": "app",
+                        "image": "nginx:latest",
+                        "resources": None,
+                        "liveness_probe": None,
+                        "readiness_probe": None,
+                        "security_context": None,
+                    },
                 ],
             },
         )

@@ -219,9 +219,8 @@ def test_csv_wraps_filesystem_error_in_output_error(tmp_path: Path) -> None:
             raise OSError("disk full")
         return real_open(self, *args, **kwargs)
 
-    with patch.object(Path, "open", explode):
-        with pytest.raises(OutputError) as exc:
-            write_csv(_make_run(findings=[_make_finding()]), out)
+    with patch.object(Path, "open", explode), pytest.raises(OutputError) as exc:
+        write_csv(_make_run(findings=[_make_finding()]), out)
     assert str(out) in str(exc.value)
 
 
@@ -229,11 +228,7 @@ def test_csv_wraps_filesystem_error_in_output_error(tmp_path: Path) -> None:
 
 
 def _read_jsonl(path: Path) -> list[dict[str, object]]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
 def test_jsonl_first_line_is_run_metadata(tmp_path: Path) -> None:
@@ -366,9 +361,8 @@ def test_jsonl_wraps_filesystem_error_in_output_error(tmp_path: Path) -> None:
             raise OSError("disk full")
         return real_open(self, *args, **kwargs)
 
-    with patch.object(Path, "open", explode):
-        with pytest.raises(OutputError) as exc:
-            write_jsonl(_make_run(findings=[_make_finding()]), out)
+    with patch.object(Path, "open", explode), pytest.raises(OutputError) as exc:
+        write_jsonl(_make_run(findings=[_make_finding()]), out)
     assert str(out) in str(exc.value)
 
 

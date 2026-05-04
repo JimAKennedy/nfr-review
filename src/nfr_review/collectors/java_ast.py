@@ -44,39 +44,47 @@ logger = logging.getLogger("nfr_review.collectors.java_ast")
 
 _LANG = Language(tsjava.language())
 
-_MAPPING_ANNOTATIONS = frozenset({
-    "GetMapping",
-    "PostMapping",
-    "RequestMapping",
-    "PutMapping",
-    "DeleteMapping",
-    "PatchMapping",
-})
+_MAPPING_ANNOTATIONS = frozenset(
+    {
+        "GetMapping",
+        "PostMapping",
+        "RequestMapping",
+        "PutMapping",
+        "DeleteMapping",
+        "PatchMapping",
+    }
+)
 
 _HIDDEN_DIRS = frozenset({".git", ".svn", ".hg", ".idea", ".vscode", "node_modules"})
 
-_THREAD_POOL_CLASSES = frozenset({
-    "ThreadPoolExecutor",
-    "ThreadPoolTaskExecutor",
-    "ScheduledThreadPoolExecutor",
-})
+_THREAD_POOL_CLASSES = frozenset(
+    {
+        "ThreadPoolExecutor",
+        "ThreadPoolTaskExecutor",
+        "ScheduledThreadPoolExecutor",
+    }
+)
 
-_BOUNDED_QUEUE_TYPES = frozenset({
-    "ArrayBlockingQueue",
-    "LinkedBlockingQueue",
-    "SynchronousQueue",
-})
+_BOUNDED_QUEUE_TYPES = frozenset(
+    {
+        "ArrayBlockingQueue",
+        "LinkedBlockingQueue",
+        "SynchronousQueue",
+    }
+)
 
-_REJECTION_POLICY_TYPES = frozenset({
-    "CallerRunsPolicy",
-    "AbortPolicy",
-    "DiscardPolicy",
-    "DiscardOldestPolicy",
-})
+_REJECTION_POLICY_TYPES = frozenset(
+    {
+        "CallerRunsPolicy",
+        "AbortPolicy",
+        "DiscardPolicy",
+        "DiscardOldestPolicy",
+    }
+)
 
 
 def _text(node: Any, source: bytes) -> str:
-    return source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
 
 
 def _find_nodes(node: Any, target_type: str) -> list[Any]:
@@ -124,9 +132,7 @@ def _extract_mapping_paths(modifiers_node: Any, source: bytes) -> list[str]:
                                 elif ev.type == "element_value_array_initializer":
                                     for arr_child in ev.children:
                                         if arr_child.type == "string_literal":
-                                            path_val = _text(
-                                                arr_child, source
-                                            ).strip('"')
+                                            path_val = _text(arr_child, source).strip('"')
                                             paths.append(path_val)
     return paths
 
@@ -146,9 +152,7 @@ def _extract_return_type(method_node: Any, source: bytes) -> str:
     return "void"
 
 
-def _extract_methods(
-    class_body_node: Any, source: bytes
-) -> list[dict[str, Any]]:
+def _extract_methods(class_body_node: Any, source: bytes) -> list[dict[str, Any]]:
     methods: list[dict[str, Any]] = []
     for child in class_body_node.children:
         if child.type == "method_declaration":
@@ -162,12 +166,14 @@ def _extract_methods(
                     annotations = _extract_annotations(sub, source)
                     mapping_paths = _extract_mapping_paths(sub, source)
             return_type = _extract_return_type(child, source)
-            methods.append({
-                "name": name,
-                "annotations": annotations,
-                "return_type": return_type,
-                "mapping_paths": mapping_paths,
-            })
+            methods.append(
+                {
+                    "name": name,
+                    "annotations": annotations,
+                    "return_type": return_type,
+                    "mapping_paths": mapping_paths,
+                }
+            )
     return methods
 
 
@@ -184,11 +190,13 @@ def _extract_catch_blocks(root: Any, source: bytes) -> list[dict[str, Any]]:
             break
         rethrows = len(_find_nodes(catch_node, "throw_statement")) > 0
         line = catch_node.start_point[0] + 1
-        blocks.append({
-            "caught_type": caught_type,
-            "rethrows": rethrows,
-            "line": line,
-        })
+        blocks.append(
+            {
+                "caught_type": caught_type,
+                "rethrows": rethrows,
+                "line": line,
+            }
+        )
     return blocks
 
 
@@ -224,10 +232,10 @@ def _has_bounded_queue(args_node: Any, source: bytes) -> bool:
                     break
             if type_name == "SynchronousQueue":
                 return True
-            if arg_list and len([
-                c for c in arg_list.children
-                if c.type not in ("(", ")", ",")
-            ]) > 0:
+            if (
+                arg_list
+                and len([c for c in arg_list.children if c.type not in ("(", ")", ",")]) > 0
+            ):
                 return True
     return False
 
@@ -252,16 +260,18 @@ def _extract_thread_pools(root: Any, source: bytes) -> list[dict[str, Any]]:
             if child.type == "argument_list":
                 arg_list = child
                 break
-        pools.append({
-            "class_name": type_name,
-            "line": oce.start_point[0] + 1,
-            "has_bounded_queue": _has_bounded_queue(arg_list, source)
-            if arg_list
-            else False,
-            "has_rejection_policy": _has_rejection_policy(arg_list, source)
-            if arg_list
-            else False,
-        })
+        pools.append(
+            {
+                "class_name": type_name,
+                "line": oce.start_point[0] + 1,
+                "has_bounded_queue": _has_bounded_queue(arg_list, source)
+                if arg_list
+                else False,
+                "has_rejection_policy": _has_rejection_policy(arg_list, source)
+                if arg_list
+                else False,
+            }
+        )
     return pools
 
 
@@ -286,11 +296,13 @@ def _extract_log_statements(root: Any, source: bytes) -> list[dict[str, Any]]:
                 arg_list = c
                 break
         arguments_text = _text(arg_list, source) if arg_list else ""
-        statements.append({
-            "method": f"{obj_name}.{method_name}",
-            "arguments_text": arguments_text,
-            "line": mi.start_point[0] + 1,
-        })
+        statements.append(
+            {
+                "method": f"{obj_name}.{method_name}",
+                "arguments_text": arguments_text,
+                "line": mi.start_point[0] + 1,
+            }
+        )
     return statements
 
 
@@ -319,11 +331,13 @@ def _parse_file(parser: Parser, source: bytes) -> dict[str, Any]:
             if child.type == "class_body":
                 methods = _extract_methods(child, source)
                 break
-        classes.append({
-            "name": class_name,
-            "annotations": class_annotations,
-            "methods": methods,
-        })
+        classes.append(
+            {
+                "name": class_name,
+                "annotations": class_annotations,
+                "methods": methods,
+            }
+        )
         all_methods.extend(methods)
 
     return {
@@ -356,7 +370,7 @@ class JavaAstCollector:
                 continue
             try:
                 payload = _parse_file(self._parser, source)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Parse error in %s: %s", rel, exc)
                 continue
             payload["file_path"] = str(rel)

@@ -18,9 +18,7 @@ def collector() -> CiArtifactCollector:
 
 
 class TestFileDiscovery:
-    def test_finds_github_actions_workflows(
-        self, collector: CiArtifactCollector
-    ) -> None:
+    def test_finds_github_actions_workflows(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         pipelines = [e for e in results if e.kind == "ci-pipeline"]
         assert len(pipelines) == 2
@@ -33,12 +31,8 @@ class TestFileDiscovery:
         results = collector.collect(tmp_path, config=None)
         assert results == []
 
-    def test_detects_gitlab_ci(
-        self, collector: CiArtifactCollector, tmp_path: Path
-    ) -> None:
-        (tmp_path / ".gitlab-ci.yml").write_text(
-            "test:\n  script:\n    - pytest\n"
-        )
+    def test_detects_gitlab_ci(self, collector: CiArtifactCollector, tmp_path: Path) -> None:
+        (tmp_path / ".gitlab-ci.yml").write_text("test:\n  script:\n    - pytest\n")
         results = collector.collect(tmp_path, config=None)
         pipelines = [e for e in results if e.kind == "ci-pipeline"]
         assert len(pipelines) == 1
@@ -47,9 +41,7 @@ class TestFileDiscovery:
     def test_detects_jenkinsfile_presence_only(
         self, collector: CiArtifactCollector, tmp_path: Path
     ) -> None:
-        (tmp_path / "Jenkinsfile").write_text(
-            "pipeline {\n  agent any\n  stages { }\n}\n"
-        )
+        (tmp_path / "Jenkinsfile").write_text("pipeline {\n  agent any\n  stages { }\n}\n")
         results = collector.collect(tmp_path, config=None)
         pipelines = [e for e in results if e.kind == "ci-pipeline"]
         assert len(pipelines) == 1
@@ -60,17 +52,13 @@ class TestFileDiscovery:
 class TestTestStepDetection:
     def test_detects_mvn_test(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
-        ci_yml = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "ci.yml" in e.locator
-        )
+        ci_yml = next(e for e in results if e.kind == "ci-pipeline" and "ci.yml" in e.locator)
         assert ci_yml.payload["has_test_step"] is True
 
     def test_deploy_lacks_test_step(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         deploy = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "deploy.yml" in e.locator
+            e for e in results if e.kind == "ci-pipeline" and "deploy.yml" in e.locator
         )
         assert deploy.payload["has_test_step"] is False
 
@@ -92,19 +80,13 @@ class TestTestStepDetection:
 class TestSecurityScanDetection:
     def test_detects_codeql(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
-        ci_yml = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "ci.yml" in e.locator
-        )
+        ci_yml = next(e for e in results if e.kind == "ci-pipeline" and "ci.yml" in e.locator)
         assert ci_yml.payload["has_security_scan"] is True
 
-    def test_deploy_lacks_security_scan(
-        self, collector: CiArtifactCollector
-    ) -> None:
+    def test_deploy_lacks_security_scan(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         deploy = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "deploy.yml" in e.locator
+            e for e in results if e.kind == "ci-pipeline" and "deploy.yml" in e.locator
         )
         assert deploy.payload["has_security_scan"] is False
 
@@ -126,26 +108,18 @@ class TestSecurityScanDetection:
 class TestJobAndStepExtraction:
     def test_extracts_job_names(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
-        ci_yml = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "ci.yml" in e.locator
-        )
+        ci_yml = next(e for e in results if e.kind == "ci-pipeline" and "ci.yml" in e.locator)
         assert "test" in ci_yml.payload["job_names"]
 
     def test_extracts_step_names(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
-        ci_yml = next(
-            e for e in results
-            if e.kind == "ci-pipeline" and "ci.yml" in e.locator
-        )
+        ci_yml = next(e for e in results if e.kind == "ci-pipeline" and "ci.yml" in e.locator)
         assert "Run tests" in ci_yml.payload["step_names"]
         assert "Security scan" in ci_yml.payload["step_names"]
 
 
 class TestSummaryEvidence:
-    def test_emits_summary_with_counts(
-        self, collector: CiArtifactCollector
-    ) -> None:
+    def test_emits_summary_with_counts(self, collector: CiArtifactCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         summary = next(e for e in results if e.kind == "ci-summary")
         assert summary.payload["total_pipelines"] == 2

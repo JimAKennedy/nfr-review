@@ -42,10 +42,7 @@ class ApimHardcodedBackendUrlRule:
                 # No backend URLs to check -- skip this file
                 continue
 
-            hardcoded = [
-                url for url in backend_urls
-                if not _NAMED_VALUE_RE.search(url)
-            ]
+            hardcoded = [url for url in backend_urls if not _NAMED_VALUE_RE.search(url)]
 
             if hardcoded:
                 findings.append(
@@ -76,9 +73,7 @@ class ApimHardcodedBackendUrlRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=(
-                            f"All backend URLs in {file_path} use named values."
-                        ),
+                        summary=(f"All backend URLs in {file_path} use named values."),
                         recommendation="No action required -- named values are used.",
                         evidence_locator=file_path,
                         collector_name=ev.collector_name,
@@ -110,9 +105,7 @@ class ApimHardcodedBackendUrlRule:
 
 def _register() -> None:
     if "apim-hardcoded-backend-url" not in rule_registry:
-        rule_registry.register(
-            "apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule()
-        )
+        rule_registry.register("apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule())
 
 
 _register()

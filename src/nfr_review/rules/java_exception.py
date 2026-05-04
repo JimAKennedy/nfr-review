@@ -20,9 +20,7 @@ class ExceptionHandlingAntipatternRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         java_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
         ]
         if not java_evidence:
             return RuleResult(
@@ -51,9 +49,7 @@ class ExceptionHandlingAntipatternRule:
                                 " rethrow to preserve stack trace"
                                 " visibility."
                             ),
-                            evidence_locator=(
-                                f"{file_path}:{block['line']}"
-                            ),
+                            evidence_locator=(f"{file_path}:{block['line']}"),
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.85,

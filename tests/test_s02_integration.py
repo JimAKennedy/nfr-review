@@ -51,20 +51,12 @@ def _fresh_registries() -> tuple[Registry, Registry]:
 
     rregistry.register("sample-readme-exists", ReadmeExistsRule())
     rregistry.register("health-endpoint-missing", HealthEndpointMissingRule())
-    rregistry.register(
-        "exception-handling-antipattern", ExceptionHandlingAntipatternRule()
-    )
-    rregistry.register(
-        "resilience-annotation-missing", ResilienceAnnotationMissingRule()
-    )
-    rregistry.register(
-        "thread-pool-misconfiguration", ThreadPoolMisconfigurationRule()
-    )
+    rregistry.register("exception-handling-antipattern", ExceptionHandlingAntipatternRule())
+    rregistry.register("resilience-annotation-missing", ResilienceAnnotationMissingRule())
+    rregistry.register("thread-pool-misconfiguration", ThreadPoolMisconfigurationRule())
     rregistry.register("resource-limits-missing", ResourceLimitsMissingRule())
     rregistry.register("probes-missing", ProbesMissingRule())
-    rregistry.register(
-        "non-root-container-violation", NonRootContainerViolationRule()
-    )
+    rregistry.register("non-root-container-violation", NonRootContainerViolationRule())
     rregistry.register("network-policy-missing", NetworkPolicyMissingRule())
 
     return cregistry, rregistry
@@ -84,7 +76,7 @@ class TestEngineIntegration:
 
     def test_evidence_from_all_collectors(self, result: RunResult) -> None:
         collector_names = {e.collector_name for e in self._all_evidence(result)}
-        assert ALL_COLLECTOR_NAMES <= collector_names
+        assert collector_names >= ALL_COLLECTOR_NAMES
 
     def test_java_rule_findings_present(self, result: RunResult) -> None:
         java_rule_ids = {
@@ -162,9 +154,7 @@ class TestFaultIsolation:
             band = 1
             required_collectors = ["failing-collector"]
 
-            def evaluate(
-                self, evidence: list[Evidence], context: Any
-            ) -> RuleResult:
+            def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
                 return RuleResult(rule_id=self.id)
 
         rregistry.register("needs-failing", _NeedsFailingRule())
@@ -192,7 +182,7 @@ class TestAutoRegistration:
         importlib.reload(nfr_review.collectors.k8s_manifest)
 
         assert len(collector_registry) >= 3
-        assert ALL_COLLECTOR_NAMES <= set(collector_registry.ids())
+        assert set(collector_registry.ids()) >= ALL_COLLECTOR_NAMES
 
     def test_rule_registry_has_9_entries(self) -> None:
         import importlib
@@ -210,4 +200,4 @@ class TestAutoRegistration:
         importlib.reload(nfr_review.rules.k8s_network)
 
         assert len(rule_registry) >= 9
-        assert ALL_RULE_IDS <= set(rule_registry.ids())
+        assert set(rule_registry.ids()) >= ALL_RULE_IDS

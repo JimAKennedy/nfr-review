@@ -18,8 +18,7 @@ class AdrLifecycleGapRule:
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         adr_docs = [
-            e for e in evidence
-            if e.collector_name == "adr" and e.kind == "adr-document"
+            e for e in evidence if e.collector_name == "adr" and e.kind == "adr-document"
         ]
         if not adr_docs:
             return RuleResult(
@@ -40,8 +39,7 @@ class AdrLifecycleGapRule:
                         rag="red",
                         severity="medium",
                         summary=(
-                            f"{len(adr_docs)} ADR(s) found but none have"
-                            " status tracking."
+                            f"{len(adr_docs)} ADR(s) found but none have status tracking."
                         ),
                         recommendation=(
                             "Add a status field (accepted/deprecated/superseded)"
@@ -91,9 +89,7 @@ class AdrLifecycleGapRule:
                     rule_id=self.id,
                     rag="green",
                     severity="info",
-                    summary=(
-                        f"All {len(adr_docs)} ADR(s) have status tracking."
-                    ),
+                    summary=(f"All {len(adr_docs)} ADR(s) have status tracking."),
                     recommendation="No action required — ADR lifecycle is well-managed.",
                     evidence_locator="adr-summary",
                     collector_name="adr",

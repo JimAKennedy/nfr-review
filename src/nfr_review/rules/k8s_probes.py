@@ -59,9 +59,7 @@ class ProbesMissingRule:
                                 " to enable Kubernetes health management and"
                                 " zero-downtime deployments."
                             ),
-                            evidence_locator=(
-                                f"{file_path}:{resource_name}:{container_name}"
-                            ),
+                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.95,

@@ -30,9 +30,7 @@ class TestApimFixtures:
 
     def test_good_policy_parsed_correctly(self, collector: ApimPolicyCollector) -> None:
         evidence = collector.collect(FIXTURES, config=None)
-        good = next(
-            e for e in evidence if "good-policy" in e.payload["file_path"]
-        )
+        good = next(e for e in evidence if "good-policy" in e.payload["file_path"])
         assert good.payload["has_rate_limit"] is True
         assert good.payload["has_auth_policy"] is True
         assert good.payload["backend_urls"] == ["{{backend-url}}"]
@@ -43,21 +41,15 @@ class TestApimFixtures:
 
     def test_bad_policy_parsed_correctly(self, collector: ApimPolicyCollector) -> None:
         evidence = collector.collect(FIXTURES, config=None)
-        bad = next(
-            e for e in evidence if "bad-policy" in e.payload["file_path"]
-        )
+        bad = next(e for e in evidence if "bad-policy" in e.payload["file_path"])
         assert bad.payload["has_rate_limit"] is False
         assert bad.payload["has_auth_policy"] is False
         assert bad.payload["backend_urls"] == ["https://api.example.com/v1"]
         assert bad.payload["uses_named_values"] is False
 
-    def test_partial_policy_parsed_correctly(
-        self, collector: ApimPolicyCollector
-    ) -> None:
+    def test_partial_policy_parsed_correctly(self, collector: ApimPolicyCollector) -> None:
         evidence = collector.collect(FIXTURES, config=None)
-        partial = next(
-            e for e in evidence if "partial-policy" in e.payload["file_path"]
-        )
+        partial = next(e for e in evidence if "partial-policy" in e.payload["file_path"])
         assert partial.payload["has_rate_limit"] is True
         assert partial.payload["has_auth_policy"] is False
         assert partial.payload["backend_urls"] == ["{{api-backend}}"]
@@ -105,11 +97,13 @@ class TestApimEdgeCases:
         policies_dir = tmp_path / "policies"
         policies_dir.mkdir()
         non_apim = policies_dir / "config.xml"
-        non_apim.write_text(textwrap.dedent("""\
+        non_apim.write_text(
+            textwrap.dedent("""\
             <configuration>
                 <setting name="debug" value="true" />
             </configuration>
-        """))
+        """)
+        )
 
         with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.apim_policy"):
             evidence = collector.collect(tmp_path, config=None)
@@ -123,13 +117,15 @@ class TestApimEdgeCases:
         policies_dir = tmp_path / "policies"
         policies_dir.mkdir()
         policy = policies_dir / "test.xml"
-        policy.write_text(textwrap.dedent("""\
+        policy.write_text(
+            textwrap.dedent("""\
             <policies>
                 <inbound><base /></inbound>
                 <backend />
                 <outbound><base /></outbound>
             </policies>
-        """))
+        """)
+        )
 
         evidence = collector.collect(tmp_path, config=None)
         assert len(evidence) == 1
@@ -142,13 +138,15 @@ class TestApimEdgeCases:
         subdir = tmp_path / "config"
         subdir.mkdir()
         policy = subdir / "my-api-policy.xml"
-        policy.write_text(textwrap.dedent("""\
+        policy.write_text(
+            textwrap.dedent("""\
             <policies>
                 <inbound><base /></inbound>
                 <backend />
                 <outbound><base /></outbound>
             </policies>
-        """))
+        """)
+        )
 
         evidence = collector.collect(tmp_path, config=None)
         assert len(evidence) == 1
@@ -161,13 +159,15 @@ class TestApimEdgeCases:
         policies_dir = tmp_path / "policies"
         policies_dir.mkdir()
         policy = policies_dir / "my-policy.xml"
-        policy.write_text(textwrap.dedent("""\
+        policy.write_text(
+            textwrap.dedent("""\
             <policies>
                 <inbound><base /></inbound>
                 <backend />
                 <outbound><base /></outbound>
             </policies>
-        """))
+        """)
+        )
 
         evidence = collector.collect(tmp_path, config=None)
         assert len(evidence) == 1

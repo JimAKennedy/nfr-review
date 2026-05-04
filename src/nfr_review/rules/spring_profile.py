@@ -35,13 +35,11 @@ class SpringProfileMisconfigurationRule:
             )
 
         prod_evidence = [
-            e for e in spring_evidence
+            e
+            for e in spring_evidence
             if e.payload.get("profile") and e.payload["profile"].lower() in _PROD_PROFILES
         ]
-        base_evidence = [
-            e for e in spring_evidence
-            if not e.payload.get("profile")
-        ]
+        base_evidence = [e for e in spring_evidence if not e.payload.get("profile")]
 
         if not prod_evidence:
             return RuleResult(
@@ -91,9 +89,7 @@ class SpringProfileMisconfigurationRule:
                 )
 
         if not findings:
-            file_path = prod_evidence[0].payload.get(
-                "file_path", prod_evidence[0].locator
-            )
+            file_path = prod_evidence[0].payload.get("file_path", prod_evidence[0].locator)
             return RuleResult(
                 rule_id=self.id,
                 findings=[
@@ -120,15 +116,17 @@ def _check_prod_issues(payload: dict[str, Any]) -> list[dict[str, str]]:
     logging_section = payload.get("logging", {}) or {}
 
     if _has_debug_logging(logging_section):
-        issues.append({
-            "rag": "amber",
-            "severity": "medium",
-            "summary": "Production profile has debug-level logging",
-            "recommendation": (
-                "Set logging level to INFO or WARN for production."
-                " Debug logging degrades performance and may leak sensitive data."
-            ),
-        })
+        issues.append(
+            {
+                "rag": "amber",
+                "severity": "medium",
+                "summary": "Production profile has debug-level logging",
+                "recommendation": (
+                    "Set logging level to INFO or WARN for production."
+                    " Debug logging degrades performance and may leak sensitive data."
+                ),
+            }
+        )
 
     _check_datasource(payload, issues)
     _check_show_sql(payload, issues)
@@ -145,23 +143,23 @@ def _has_debug_logging(logging_section: dict[str, Any]) -> bool:
     elif isinstance(level, str) and level.lower() in _DEBUG_LEVELS:
         return True
     root_level = logging_section.get("root")
-    if isinstance(root_level, str) and root_level.lower() in _DEBUG_LEVELS:
-        return True
-    return False
+    return isinstance(root_level, str) and root_level.lower() in _DEBUG_LEVELS
 
 
 def _check_datasource(payload: dict[str, Any], issues: list[dict[str, str]]) -> None:
     raw_values = _flatten_values(payload).lower()
     if any(marker in raw_values for marker in _INMEMORY_DB_MARKERS):
-        issues.append({
-            "rag": "red",
-            "severity": "high",
-            "summary": "Production profile uses in-memory database",
-            "recommendation": (
-                "Replace H2/HSQLDB/Derby in-memory database"
-                " with a persistent database for production."
-            ),
-        })
+        issues.append(
+            {
+                "rag": "red",
+                "severity": "high",
+                "summary": "Production profile uses in-memory database",
+                "recommendation": (
+                    "Replace H2/HSQLDB/Derby in-memory database"
+                    " with a persistent database for production."
+                ),
+            }
+        )
 
 
 def _check_show_sql(payload: dict[str, Any], issues: list[dict[str, str]]) -> None:
@@ -173,20 +171,23 @@ def _check_show_sql(payload: dict[str, Any], issues: list[dict[str, str]]) -> No
         return
     show_sql = jpa.get("show-sql", jpa.get("show_sql"))
     if show_sql is not None and str(show_sql).lower() == "true":
-        issues.append({
-            "rag": "amber",
-            "severity": "medium",
-            "summary": "Production profile has show-sql enabled",
-            "recommendation": (
-                "Disable spring.jpa.show-sql in production."
-                " SQL logging degrades performance and may"
-                " leak query details."
-            ),
-        })
+        issues.append(
+            {
+                "rag": "amber",
+                "severity": "medium",
+                "summary": "Production profile has show-sql enabled",
+                "recommendation": (
+                    "Disable spring.jpa.show-sql in production."
+                    " SQL logging degrades performance and may"
+                    " leak query details."
+                ),
+            }
+        )
 
 
 def _check_inherited_issues(
-    base_payload: dict[str, Any], prod_payload: dict[str, Any],
+    base_payload: dict[str, Any],
+    prod_payload: dict[str, Any],
 ) -> list[dict[str, str]]:
     """Check if base config has debug settings not overridden by prod."""
     issues: list[dict[str, str]] = []
@@ -194,15 +195,17 @@ def _check_inherited_issues(
     prod_logging = prod_payload.get("logging", {}) or {}
 
     if _has_debug_logging(base_logging) and not prod_logging:
-        issues.append({
-            "rag": "amber",
-            "severity": "medium",
-            "summary": "Base config has debug logging not overridden by production profile",
-            "recommendation": (
-                "Override logging levels in the production profile"
-                " to avoid inheriting debug-level logging."
-            ),
-        })
+        issues.append(
+            {
+                "rag": "amber",
+                "severity": "medium",
+                "summary": "Base config has debug logging not overridden by production profile",
+                "recommendation": (
+                    "Override logging levels in the production profile"
+                    " to avoid inheriting debug-level logging."
+                ),
+            }
+        )
 
     return issues
 

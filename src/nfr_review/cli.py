@@ -22,7 +22,7 @@ from pathlib import Path
 
 import click
 
-import nfr_review.collectors  # noqa: F401  # side-effect: register built-ins
+import nfr_review.collectors  # side-effect: register built-ins
 import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
 from nfr_review import __version__
 from nfr_review.config import Config, ConfigError, load_config
@@ -172,9 +172,7 @@ def explain_cmd(rule_id: str) -> None:
     rule = rule_registry.get(rule_id)
     click.echo(f"rule_id: {rule.id}")
     click.echo(f"band: {rule.band}")
-    click.echo(
-        f"required_collectors: {', '.join(rule.required_collectors) or '(none)'}"
-    )
+    click.echo(f"required_collectors: {', '.join(rule.required_collectors) or '(none)'}")
     click.echo("")
     click.echo(_rule_description(rule))
 

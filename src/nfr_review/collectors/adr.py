@@ -33,9 +33,7 @@ _ADR_DIRS = ("docs/adr", "doc/adr", "adr", "docs/decisions", "decisions")
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.+?)\n---\s*\n", re.DOTALL)
 _STATUS_HEADING_RE = re.compile(r"^##\s+Status\s*$", re.MULTILINE)
-_SUPERSEDED_BODY_RE = re.compile(
-    r"[Ss]uperseded\s+by\s+\[?ADR[- ]?(\d+)\]?", re.IGNORECASE
-)
+_SUPERSEDED_BODY_RE = re.compile(r"[Ss]uperseded\s+by\s+\[?ADR[- ]?(\d+)\]?", re.IGNORECASE)
 _TITLE_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 
 
@@ -61,7 +59,7 @@ def _extract_status_from_section(text: str) -> str | None:
     match = _STATUS_HEADING_RE.search(text)
     if not match:
         return None
-    after = text[match.end():]
+    after = text[match.end() :]
     for line in after.splitlines():
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
@@ -126,7 +124,7 @@ class AdrCollector:
             rel = md_file.relative_to(repo_path)
             try:
                 payload = _parse_adr(md_file, repo_path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Error parsing %s: %s", rel, exc)
                 continue
 

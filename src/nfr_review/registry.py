@@ -19,18 +19,14 @@ class Registry(Generic[T]):
 
     def register(self, key: str, item: T) -> None:
         if key in self._items:
-            raise ValueError(
-                f"{self._kind} with id {key!r} is already registered"
-            )
+            raise ValueError(f"{self._kind} with id {key!r} is already registered")
         self._items[key] = item
 
     def get(self, key: str) -> T:
         try:
             return self._items[key]
         except KeyError as exc:
-            raise KeyError(
-                f"no {self._kind} registered with id {key!r}"
-            ) from exc
+            raise KeyError(f"no {self._kind} registered with id {key!r}") from exc
 
     def all(self) -> list[T]:
         return list(self._items.values())
@@ -38,7 +34,7 @@ class Registry(Generic[T]):
     def list(self) -> list[T]:
         return self.all()
 
-    def ids(self) -> list[str]:
+    def ids(self) -> list[str]:  # type: ignore[valid-type]
         return list(self._items.keys())
 
     def __contains__(self, key: object) -> bool:
@@ -65,8 +61,8 @@ def list_collectors() -> list[Collector]:
 
 __all__ = [
     "Registry",
-    "rule_registry",
     "collector_registry",
-    "list_rules",
     "list_collectors",
+    "list_rules",
+    "rule_registry",
 ]

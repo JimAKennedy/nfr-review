@@ -19,9 +19,7 @@ def collector() -> SpringConfigCollector:
 
 
 class TestFileDiscovery:
-    def test_finds_all_application_yaml_files(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_finds_all_application_yaml_files(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         locators = {e.locator for e in results}
         assert any("application.yaml" in loc for loc in locators)
@@ -43,70 +41,79 @@ class TestFileDiscovery:
 
 
 class TestYamlParsing:
-    def test_extracts_management_section(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_extracts_management_section(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         management = base.payload["management"]
         assert management["endpoints"]["web"]["exposure"]["include"] == "health,info,metrics"
         assert management["endpoint"]["health"]["show-details"] == "when-authorized"
 
-    def test_extracts_logging_section(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_extracts_logging_section(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         logging_section = base.payload["logging"]
         assert logging_section["level"]["root"] == "INFO"
         assert logging_section["level"]["com.example"] == "DEBUG"
 
-    def test_extracts_server_section(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_extracts_server_section(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         server = base.payload["server"]
         assert server["port"] == 8080
 
-    def test_extracts_spring_security_section(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_extracts_spring_security_section(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         spring_sec = base.payload["spring_security"]
-        assert spring_sec["oauth2"]["resourceserver"]["jwt"]["issuer-uri"] == "https://auth.example.com"
+        assert (
+            spring_sec["oauth2"]["resourceserver"]["jwt"]["issuer-uri"]
+            == "https://auth.example.com"
+        )
 
-    def test_extracts_actuator_exposure(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_extracts_actuator_exposure(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         actuator = base.payload["actuator"]
         assert actuator["include"] == "health,info,metrics"
 
-    def test_raw_keys_lists_top_level_keys(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_raw_keys_lists_top_level_keys(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         raw_keys = base.payload["raw_keys"]
         assert "server" in raw_keys
@@ -116,27 +123,24 @@ class TestYamlParsing:
 
 
 class TestProfileExtraction:
-    def test_prod_profile_extracted(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_prod_profile_extracted(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         prod = next(e for e in results if "application-prod.yaml" in e.locator)
         assert prod.payload["profile"] == "prod"
 
-    def test_dev_profile_extracted(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_dev_profile_extracted(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         dev = next(e for e in results if "application-dev.yaml" in e.locator)
         assert dev.payload["profile"] == "dev"
 
-    def test_base_config_has_no_profile(
-        self, collector: SpringConfigCollector
-    ) -> None:
+    def test_base_config_has_no_profile(self, collector: SpringConfigCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         base = next(
-            e for e in results if e.locator.endswith("application.yaml")
-            and "prod" not in e.locator and "dev" not in e.locator
+            e
+            for e in results
+            if e.locator.endswith("application.yaml")
+            and "prod" not in e.locator
+            and "dev" not in e.locator
         )
         assert base.payload["profile"] is None
 
@@ -156,7 +160,9 @@ class TestEvidenceFields:
 
 class TestFaultIsolation:
     def test_malformed_yaml_skipped_with_warning(
-        self, collector: SpringConfigCollector, tmp_path: Path,
+        self,
+        collector: SpringConfigCollector,
+        tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         resources = tmp_path / "src" / "main" / "resources"
@@ -170,12 +176,13 @@ class TestFaultIsolation:
         assert len(results) == 1
         assert "application.yaml" in results[0].locator
         assert any(
-            "Parse error" in rec.message or "broken" in rec.message
-            for rec in caplog.records
+            "Parse error" in rec.message or "broken" in rec.message for rec in caplog.records
         )
 
     def test_binary_yaml_file_handled_gracefully(
-        self, collector: SpringConfigCollector, tmp_path: Path,
+        self,
+        collector: SpringConfigCollector,
+        tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         resources = tmp_path / "src" / "main" / "resources"

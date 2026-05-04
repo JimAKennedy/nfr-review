@@ -48,8 +48,11 @@ class ClaudeClient:
                 "ANTHROPIC_API_KEY is not set; cannot perform LLM analysis"
             )
 
-        logger.info("LLM call: sending %d-char prompt + %d-char bundle",
-                     len(prompt), len(evidence_bundle))
+        logger.info(
+            "LLM call: sending %d-char prompt + %d-char bundle",
+            len(prompt),
+            len(evidence_bundle),
+        )
 
         response = self._client.messages.create(
             model="claude-sonnet-4-20250514",

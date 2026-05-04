@@ -191,9 +191,7 @@ def test_run_metadata_full_round_trip() -> None:
         "timestamp": "2026-05-03T12:00:00Z",
         "collector_versions": {"repo_structure": "0.1.0"},
         "rules_run": ["sample-readme-exists"],
-        "rules_skipped": [
-            {"rule_id": "needs-llm", "reason": "ANTHROPIC_API_KEY unset"}
-        ],
+        "rules_skipped": [{"rule_id": "needs-llm", "reason": "ANTHROPIC_API_KEY unset"}],
     }
     m = RunMetadata(**payload)
     assert m.model_dump() == payload

@@ -12,4 +12,4 @@ from nfr_review.output._errors import OutputError
 from nfr_review.output.csv import CSV_HEADER, write_csv
 from nfr_review.output.jsonl import write_jsonl
 
-__all__ = ["OutputError", "CSV_HEADER", "write_csv", "write_jsonl"]
+__all__ = ["CSV_HEADER", "OutputError", "write_csv", "write_jsonl"]

@@ -105,9 +105,7 @@ def test_read_git_info_handles_missing_git_binary(
     def _raise_fnf(*args: object, **kwargs: object) -> None:
         raise FileNotFoundError("git not on PATH")
 
-    monkeypatch.setattr(
-        "nfr_review.auditability.subprocess.run", _raise_fnf
-    )
+    monkeypatch.setattr("nfr_review.auditability.subprocess.run", _raise_fnf)
 
     info = read_git_info(tmp_path)
 
@@ -123,9 +121,7 @@ def test_read_git_info_handles_timeout(
     def _raise_timeout(*args: object, **kwargs: object) -> None:
         raise subprocess.TimeoutExpired(cmd="git", timeout=5)
 
-    monkeypatch.setattr(
-        "nfr_review.auditability.subprocess.run", _raise_timeout
-    )
+    monkeypatch.setattr("nfr_review.auditability.subprocess.run", _raise_timeout)
 
     info = read_git_info(tmp_path)
 
@@ -192,9 +188,7 @@ def test_build_run_metadata_collector_versions(tmp_path: Path) -> None:
         "dependency_audit": "0.2.3",
     }
     assert meta.rules_run == ["sample-readme-exists"]
-    assert meta.rules_skipped == [
-        {"rule_id": "needs-llm", "reason": "no API key"}
-    ]
+    assert meta.rules_skipped == [{"rule_id": "needs-llm", "reason": "no API key"}]
 
 
 def test_build_run_metadata_propagates_git_error_for_non_repo(

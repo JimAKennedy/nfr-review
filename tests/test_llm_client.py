@@ -17,6 +17,7 @@ from nfr_review.llm_client import (
 # ClaudeClient availability
 # ---------------------------------------------------------------------------
 
+
 class TestClaudeClientAvailability:
     def test_unavailable_when_no_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -46,6 +47,7 @@ class TestClaudeClientAvailability:
 # ---------------------------------------------------------------------------
 # ClaudeClient.analyze
 # ---------------------------------------------------------------------------
+
 
 class TestClaudeClientAnalyze:
     def test_raises_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,6 +90,7 @@ class TestClaudeClientAnalyze:
 # ---------------------------------------------------------------------------
 # serialize_evidence_bundle
 # ---------------------------------------------------------------------------
+
 
 class TestSerializeEvidenceBundle:
     def test_under_limit(self) -> None:

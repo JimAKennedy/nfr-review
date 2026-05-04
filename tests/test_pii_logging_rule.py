@@ -87,13 +87,15 @@ class TestNoLogStatements:
 
 class TestRegexMatchNoLlm:
     def test_regex_match_no_llm_available(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("User SSN: 123-45-6789", userId)',
-                "line": 10,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("User SSN: 123-45-6789", userId)',
+                    "line": 10,
+                }
+            ]
+        )
         rule = PiiInLogStatementsRule(llm_client=_unavailable_client())
         result = rule.evaluate([ev], context=None)
         assert not result.skipped
@@ -105,39 +107,45 @@ class TestRegexMatchNoLlm:
         assert "LLM confirmation unavailable" in f.summary
 
     def test_email_pattern_detected(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("User email: {}", email)',
-                "line": 5,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("User email: {}", email)',
+                    "line": 5,
+                }
+            ]
+        )
         rule = PiiInLogStatementsRule(llm_client=_unavailable_client())
         result = rule.evaluate([ev], context=None)
         assert len(result.findings) == 1
         assert result.findings[0].confidence == 0.6
 
     def test_credit_card_pattern_detected(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.warn",
-                "arguments_text": '("Card: 4111-1111-1111-1111")',
-                "line": 7,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.warn",
+                    "arguments_text": '("Card: 4111-1111-1111-1111")',
+                    "line": 7,
+                }
+            ]
+        )
         rule = PiiInLogStatementsRule(llm_client=_unavailable_client())
         result = rule.evaluate([ev], context=None)
         assert len(result.findings) == 1
         assert "credit_card" in result.findings[0].summary
 
     def test_secret_variable_detected(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.debug",
-                "arguments_text": '("Auth token: {}", token)',
-                "line": 12,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.debug",
+                    "arguments_text": '("Auth token: {}", token)',
+                    "line": 12,
+                }
+            ]
+        )
         rule = PiiInLogStatementsRule(llm_client=_unavailable_client())
         result = rule.evaluate([ev], context=None)
         assert len(result.findings) == 1
@@ -146,13 +154,15 @@ class TestRegexMatchNoLlm:
 
 class TestLlmConfirms:
     def test_regex_match_llm_confirms(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("User SSN: 123-45-6789", ssn)',
-                "line": 10,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("User SSN: 123-45-6789", ssn)',
+                    "line": 10,
+                }
+            ]
+        )
         llm = _confirming_client([{"index": 0, "is_pii": True, "reason": "SSN value logged"}])
         rule = PiiInLogStatementsRule(llm_client=llm)
         result = rule.evaluate([ev], context=None)
@@ -165,13 +175,15 @@ class TestLlmConfirms:
         assert "SSN value logged" in f.summary
 
     def test_regex_match_llm_denies(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("Processing email notification")',
-                "line": 15,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("Processing email notification")',
+                    "line": 15,
+                }
+            ]
+        )
         llm = _confirming_client([{"index": 0, "is_pii": False, "reason": "not actual PII"}])
         rule = PiiInLogStatementsRule(llm_client=llm)
         result = rule.evaluate([ev], context=None)
@@ -184,13 +196,15 @@ class TestLlmConfirms:
 
 class TestNoRegexMatch:
     def test_no_regex_match_green(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("Order processed successfully")',
-                "line": 20,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("Order processed successfully")',
+                    "line": 20,
+                }
+            ]
+        )
         rule = PiiInLogStatementsRule(llm_client=_unavailable_client())
         result = rule.evaluate([ev], context=None)
         assert not result.skipped
@@ -232,13 +246,15 @@ class TestMultipleFiles:
 
 class TestLlmErrorFallback:
     def test_llm_api_error_falls_back_to_regex(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("User SSN: 123-45-6789")',
-                "line": 10,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("User SSN: 123-45-6789")',
+                    "line": 10,
+                }
+            ]
+        )
         llm = MagicMock(spec=ClaudeClient)
         llm.available = True
         llm.analyze.side_effect = RuntimeError("API timeout")
@@ -248,13 +264,15 @@ class TestLlmErrorFallback:
         assert result.findings[0].confidence == 0.6
 
     def test_llm_malformed_response_falls_back(self) -> None:
-        ev = _make_evidence(log_statements=[
-            {
-                "method": "logger.info",
-                "arguments_text": '("User SSN: 123-45-6789")',
-                "line": 10,
-            }
-        ])
+        ev = _make_evidence(
+            log_statements=[
+                {
+                    "method": "logger.info",
+                    "arguments_text": '("User SSN: 123-45-6789")',
+                    "line": 10,
+                }
+            ]
+        )
         llm = MagicMock(spec=ClaudeClient)
         llm.available = True
         llm.analyze.return_value = "Sorry, I cannot help with that."
