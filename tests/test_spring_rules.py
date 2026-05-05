@@ -122,7 +122,8 @@ class TestActuatorExposureRiskRule:
                         "web": {
                             "exposure": {
                                 "include": "*",
-                                "exclude": "env,configprops,beans,heapdump,threaddump,mappings",
+                                "exclude": "env,configprops,beans,"
+                                "heapdump,threaddump,mappings",
                             }
                         }
                     },
