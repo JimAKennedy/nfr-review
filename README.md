@@ -1,5 +1,10 @@
 # nfr-review
 
+[![CI](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml/badge.svg)](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml)
+[![mypy](https://img.shields.io/badge/mypy-strict-blue)](https://github.com/JimAKennedy/nfr-review/blob/main/pyproject.toml)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Automated non-functional design reviews for software projects.
 
 `nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, ADRs, Java source, APIM policies) and evaluates 20 rules covering resilience, observability, security, and operational readiness. Findings are emitted as CSV and JSONL for integration into review workflows.

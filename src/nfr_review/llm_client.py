@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 try:
     import anthropic
@@ -65,7 +66,7 @@ class ClaudeClient:
 
 
 def serialize_evidence_bundle(
-    evidence_items: list[dict],
+    evidence_items: list[dict[str, Any]],
     max_bytes: int = 8192,
 ) -> str:
     """Serialize evidence dicts to JSON, truncating to fit *max_bytes*.
