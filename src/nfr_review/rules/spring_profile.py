@@ -202,7 +202,7 @@ def _check_inherited_issues(
                 "rag": "amber",
                 "severity": "medium",
                 "summary": (
-                    "Base config has debug logging not overridden" " by production profile"
+                    "Base config has debug logging not overridden by production profile"
                 ),
                 "recommendation": (
                     "Override logging levels in the production profile"
