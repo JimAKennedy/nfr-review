@@ -115,9 +115,9 @@ def test_pilot_exercises_multiple_collectors(tmp_path: Path) -> None:
         for row in rows[1:]
         if row[1] != "skipped" and row[collector_col_idx]
     }
-    assert (
-        len(collector_names) >= 3
-    ), f"expected findings from >=3 collectors, got {collector_names}"
+    assert len(collector_names) >= 3, (
+        f"expected findings from >=3 collectors, got {collector_names}"
+    )
 
 
 @_skip_unless_pilot
@@ -142,9 +142,9 @@ def test_pilot_all_rules_accounted(tmp_path: Path) -> None:
     )
 
     for skipped_id in config_skipped:
-        assert (
-            skipped_id in rules_skipped_ids
-        ), f"config-skipped rule {skipped_id!r} not in rules_skipped"
+        assert skipped_id in rules_skipped_ids, (
+            f"config-skipped rule {skipped_id!r} not in rules_skipped"
+        )
 
 
 @_skip_unless_pilot
@@ -171,10 +171,10 @@ def test_pilot_band2_graceful_degradation(
             skip_entry = next(s for s in rules_skipped if s["rule_id"] == rule_id)
             assert skip_entry["reason"], f"Band 2 rule {rule_id!r} skipped with empty reason"
         else:
-            assert (
-                rule_id in rules_run
-            ), f"Band 2 rule {rule_id!r} neither in rules_run nor rules_skipped"
+            assert rule_id in rules_run, (
+                f"Band 2 rule {rule_id!r} neither in rules_run nor rules_skipped"
+            )
 
-    assert (
-        band2_rules & (set(skipped_ids) | set(rules_run)) == band2_rules
-    ), "all Band 2 rules must be accounted for"
+    assert band2_rules & (set(skipped_ids) | set(rules_run)) == band2_rules, (
+        "all Band 2 rules must be accounted for"
+    )
