@@ -218,7 +218,7 @@ class CiArtifactCollector:
             rel = ci_file.relative_to(repo_path)
             try:
                 payload = self._parse_ci_file(ci_file, ci_system, repo_path)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Error parsing %s: %s", rel, exc)
                 continue
 

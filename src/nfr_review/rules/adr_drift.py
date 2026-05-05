@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, cast
 
 from nfr_review.llm_client import ClaudeClient, LlmUnavailableError, serialize_evidence_bundle
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -139,7 +139,7 @@ class ArchitecturalDriftFromAdrRule:
                     "LLM unavailable — architectural drift analysis requires Claude API"
                 ),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("LLM architectural drift analysis failed: %s", exc)
             return RuleResult(
                 rule_id=self.id,
@@ -196,14 +196,14 @@ class ArchitecturalDriftFromAdrRule:
             adr_title = drift.get("adr_title", "Unknown ADR")
             violation = drift.get("violation", "Architectural drift detected")
             sev = drift.get("severity", "medium")
-            rag = "red" if sev == "high" else "amber"
-            severity = "high" if sev == "high" else "medium"
+            rag_val = cast(RAG, "red" if sev == "high" else "amber")
+            sev_val = cast(Severity, "high" if sev == "high" else "medium")
 
             findings.append(
                 Finding(
                     rule_id=self.id,
-                    rag=rag,
-                    severity=severity,
+                    rag=rag_val,
+                    severity=sev_val,
                     summary=f"Drift from ADR '{adr_title}': {violation}",
                     recommendation=(
                         "Review the ADR decision and either update the code to align "

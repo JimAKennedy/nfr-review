@@ -22,8 +22,6 @@ _RESILIENCE_ANNOTATIONS = frozenset(
     }
 )
 
-_TEST_PATH_SEGMENTS = ("/src/test/", "/test/", "Test.java", "Tests.java", "IT.java")
-
 
 class ResilienceAnnotationMissingRule:
     """Flag classes that import HTTP clients but lack resilience annotations."""
@@ -46,8 +44,6 @@ class ResilienceAnnotationMissingRule:
         findings: list[Finding] = []
         for ev in java_evidence:
             file_path = ev.payload.get("file_path", ev.locator)
-            if any(seg in file_path for seg in _TEST_PATH_SEGMENTS):
-                continue
             imports = ev.payload.get("imports", [])
             uses_http_client = any(
                 any(pattern in imp for imp in imports) for pattern in _HTTP_CLIENT_PATTERNS

@@ -122,97 +122,6 @@ class TestHealthEndpointMissingRule:
         assert result.findings[0].rag == "amber"
         assert result.findings[0].severity == "medium"
 
-    def test_actuator_config_detected_green(self) -> None:
-        """Spring Boot Actuator auto-config should satisfy the health check."""
-        java_ev = _java_evidence(
-            {
-                "file_path": "src/UserController.java",
-                "classes": [
-                    {
-                        "name": "UserController",
-                        "annotations": ["RestController"],
-                        "methods": [
-                            {
-                                "name": "getUsers",
-                                "annotations": ["GetMapping"],
-                                "return_type": "List",
-                                "mapping_paths": ["/users"],
-                            }
-                        ],
-                    }
-                ],
-                "methods": [],
-                "catch_blocks": [],
-                "imports": [],
-                "thread_pool_constructions": [],
-            }
-        )
-        spring_ev = Evidence(
-            collector_name="spring-config",
-            collector_version="0.1.0",
-            locator="src/main/resources/application.yaml",
-            kind="spring-config-file",
-            payload={
-                "file_path": "src/main/resources/application.yaml",
-                "profile": None,
-                "management": {"endpoints": {"web": {"exposure": {"include": "*"}}}},
-                "logging": {},
-                "server": {},
-                "spring_security": {},
-                "actuator": {"include": "*"},
-                "raw_keys": ["management"],
-            },
-        )
-        result = self.rule.evaluate([java_ev, spring_ev], None)
-        assert not result.skipped
-        assert len(result.findings) == 1
-        assert result.findings[0].rag == "green"
-        assert "Actuator" in result.findings[0].summary
-
-    def test_actuator_health_excluded_amber(self) -> None:
-        """If health is explicitly excluded from Actuator, should still flag."""
-        java_ev = _java_evidence(
-            {
-                "file_path": "src/UserController.java",
-                "classes": [
-                    {
-                        "name": "UserController",
-                        "annotations": ["RestController"],
-                        "methods": [
-                            {
-                                "name": "getUsers",
-                                "annotations": ["GetMapping"],
-                                "return_type": "List",
-                                "mapping_paths": ["/users"],
-                            }
-                        ],
-                    }
-                ],
-                "methods": [],
-                "catch_blocks": [],
-                "imports": [],
-                "thread_pool_constructions": [],
-            }
-        )
-        spring_ev = Evidence(
-            collector_name="spring-config",
-            collector_version="0.1.0",
-            locator="src/main/resources/application.yaml",
-            kind="spring-config-file",
-            payload={
-                "file_path": "src/main/resources/application.yaml",
-                "profile": None,
-                "management": {"endpoints": {"web": {"exposure": {"exclude": "health"}}}},
-                "logging": {},
-                "server": {},
-                "spring_security": {},
-                "actuator": {"exclude": "health"},
-                "raw_keys": ["management"],
-            },
-        )
-        result = self.rule.evaluate([java_ev, spring_ev], None)
-        assert result.findings[0].rag == "amber"
-
     def test_non_controller_class_amber(self) -> None:
         ev = _java_evidence(
             {
@@ -467,35 +376,6 @@ class TestResilienceAnnotationMissingRule:
         result = self.rule.evaluate([ev], None)
         amber = [f for f in result.findings if f.rag == "amber"]
         assert len(amber) == 1
-
-    def test_test_classes_excluded(self) -> None:
-        """Test files should not be flagged for missing resilience annotations."""
-        ev = _java_evidence(
-            {
-                "file_path": "src/test/java/com/example/RestTemplateConfigTest.java",
-                "classes": [
-                    {
-                        "name": "RestTemplateConfigTest",
-                        "annotations": ["SpringBootTest"],
-                        "methods": [
-                            {
-                                "name": "testConfig",
-                                "annotations": ["Test"],
-                                "return_type": "void",
-                                "mapping_paths": [],
-                            }
-                        ],
-                    }
-                ],
-                "methods": [],
-                "catch_blocks": [],
-                "imports": ["org.springframework.web.client.RestTemplate"],
-                "thread_pool_constructions": [],
-            }
-        )
-        result = self.rule.evaluate([ev], None)
-        green = [f for f in result.findings if f.rag == "green"]
-        assert len(green) == 1
 
     def test_class_level_retry_counts_green(self) -> None:
         ev = _java_evidence(

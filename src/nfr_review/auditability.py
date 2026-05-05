@@ -8,7 +8,7 @@ captured as a ``GitInfo`` with the relevant fields set to ``None`` and an
 
 from __future__ import annotations
 
-import subprocess  # nosec B404 — git invocation with hardcoded commands only
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,7 +37,7 @@ class GitInfo:
 
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Invoke ``git`` with list args, never shell=True, with a 5s timeout."""
-    return subprocess.run(  # nosec B603 B607
+    return subprocess.run(  # noqa: S603 — list args only, never shell=True
         ["git", "-C", str(cwd), *args],
         capture_output=True,
         text=True,

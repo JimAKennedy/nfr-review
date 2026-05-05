@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -76,8 +76,8 @@ class SpringProfileMisconfigurationRule:
                 findings.append(
                     Finding(
                         rule_id=self.id,
-                        rag=issue["rag"],
-                        severity=issue["severity"],
+                        rag=cast(RAG, issue["rag"]),
+                        severity=cast(Severity, issue["severity"]),
                         summary=f"{issue['summary']} in {file_path}",
                         recommendation=issue["recommendation"],
                         evidence_locator=file_path,
@@ -143,7 +143,9 @@ def _has_debug_logging(logging_section: dict[str, Any]) -> bool:
     elif isinstance(level, str) and level.lower() in _DEBUG_LEVELS:
         return True
     root_level = logging_section.get("root")
-    return isinstance(root_level, str) and root_level.lower() in _DEBUG_LEVELS
+    if isinstance(root_level, str) and root_level.lower() in _DEBUG_LEVELS:
+        return True
+    return False
 
 
 def _check_datasource(payload: dict[str, Any], issues: list[dict[str, str]]) -> None:
@@ -199,7 +201,9 @@ def _check_inherited_issues(
             {
                 "rag": "amber",
                 "severity": "medium",
-                "summary": "Base config has debug logging not overridden by production profile",
+                "summary": (
+                    "Base config has debug logging not overridden" " by production profile"
+                ),
                 "recommendation": (
                     "Override logging levels in the production profile"
                     " to avoid inheriting debug-level logging."

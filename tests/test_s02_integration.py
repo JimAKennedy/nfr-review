@@ -76,7 +76,7 @@ class TestEngineIntegration:
 
     def test_evidence_from_all_collectors(self, result: RunResult) -> None:
         collector_names = {e.collector_name for e in self._all_evidence(result)}
-        assert collector_names >= ALL_COLLECTOR_NAMES
+        assert ALL_COLLECTOR_NAMES <= collector_names
 
     def test_java_rule_findings_present(self, result: RunResult) -> None:
         java_rule_ids = {
@@ -182,7 +182,7 @@ class TestAutoRegistration:
         importlib.reload(nfr_review.collectors.k8s_manifest)
 
         assert len(collector_registry) >= 3
-        assert set(collector_registry.ids()) >= ALL_COLLECTOR_NAMES
+        assert ALL_COLLECTOR_NAMES <= set(collector_registry.ids())
 
     def test_rule_registry_has_9_entries(self) -> None:
         import importlib
@@ -200,4 +200,4 @@ class TestAutoRegistration:
         importlib.reload(nfr_review.rules.k8s_network)
 
         assert len(rule_registry) >= 9
-        assert set(rule_registry.ids()) >= ALL_RULE_IDS
+        assert ALL_RULE_IDS <= set(rule_registry.ids())

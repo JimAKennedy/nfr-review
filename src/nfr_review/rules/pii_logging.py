@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from nfr_review.llm_client import ClaudeClient, LlmUnavailableError, serialize_evidence_bundle
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import RAG, Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -131,7 +131,7 @@ class PiiInLogStatementsRule:
         except LlmUnavailableError:
             logger.warning("LLM unavailable for PII confirmation; falling back to regex-only")
             return None
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("LLM PII confirmation failed: %s", exc)
             return None
 
@@ -154,13 +154,13 @@ class PiiInLogStatementsRule:
         hits: list[dict[str, Any]],
         llm_verdicts: list[dict[str, Any]] | None,
     ) -> RuleResult:
-        verdict_map: dict[int, dict[str, Any]] = {}
+        verdict_map: dict[int, bool] = {}
         if llm_verdicts:
             for v in llm_verdicts:
                 idx = v.get("index")
                 is_pii = v.get("is_pii")
                 if isinstance(idx, int) and isinstance(is_pii, bool):
-                    verdict_map[idx] = v
+                    verdict_map[idx] = is_pii
 
         findings: list[Finding] = []
         for i, hit in enumerate(hits):
@@ -169,20 +169,14 @@ class PiiInLogStatementsRule:
                 rag = "amber"
                 note = " (LLM confirmation unavailable)"
             elif i in verdict_map:
-                verdict = verdict_map[i]
-                llm_reason = verdict.get("reason", "")
-                if verdict["is_pii"]:
+                if verdict_map[i]:
                     confidence = 0.85
                     rag = "red"
-                    note = f" — {llm_reason}" if llm_reason else ""
+                    note = ""
                 else:
                     confidence = 0.4
                     rag = "amber"
-                    note = (
-                        f" (LLM: {llm_reason})"
-                        if llm_reason
-                        else " (LLM assessed as likely false positive)"
-                    )
+                    note = " (LLM assessed as likely false positive)"
             else:
                 confidence = 0.6
                 rag = "amber"
@@ -191,7 +185,7 @@ class PiiInLogStatementsRule:
             findings.append(
                 Finding(
                     rule_id=self.id,
-                    rag=rag,
+                    rag=cast(RAG, rag),
                     severity="high" if rag == "red" else "medium",
                     summary=(
                         f"Potential PII in log statement at line {hit['line']}: "

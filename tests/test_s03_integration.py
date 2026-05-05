@@ -107,7 +107,7 @@ class TestSpringTechFiltering:
 
     def test_spring_rules_fire(self, result: RunResult) -> None:
         finding_rule_ids = {f.rule_id for f in result.findings}
-        assert finding_rule_ids >= SPRING_RULE_IDS
+        assert SPRING_RULE_IDS <= finding_rule_ids
 
     def test_apim_rules_skipped_with_reason(self, result: RunResult) -> None:
         skipped = {e["rule_id"]: e["reason"] for e in result.run_metadata.rules_skipped}
@@ -137,11 +137,11 @@ class TestApimTechFiltering:
 
     def test_apim_rules_fire(self, result: RunResult) -> None:
         finding_rule_ids = {f.rule_id for f in result.findings}
-        assert finding_rule_ids >= APIM_RULE_IDS
+        assert APIM_RULE_IDS <= finding_rule_ids
 
     def test_spring_rules_skipped(self, result: RunResult) -> None:
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
-        assert skipped_ids >= SPRING_RULE_IDS
+        assert SPRING_RULE_IDS <= skipped_ids
 
 
 class TestEmptyTechSkipsAll:
@@ -201,7 +201,7 @@ class TestRuleRegistryCount:
 
     def test_all_s03_rule_ids_registered(self) -> None:
         registered = set(rule_registry.ids())
-        assert registered >= ALL_S03_RULE_IDS
+        assert ALL_S03_RULE_IDS <= registered
 
 
 class TestTechSkipReasonsInMetadata:

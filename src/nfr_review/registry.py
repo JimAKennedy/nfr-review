@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from typing import Generic, TypeVar
 
 from nfr_review.protocols import Collector, Rule
@@ -34,8 +35,8 @@ class Registry(Generic[T]):
     def list(self) -> list[T]:
         return self.all()
 
-    def ids(self) -> list[str]:  # type: ignore[valid-type]
-        return list(self._items.keys())
+    def ids(self) -> builtins.list[str]:
+        return builtins.list(self._items.keys())
 
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and key in self._items
@@ -61,8 +62,8 @@ def list_collectors() -> list[Collector]:
 
 __all__ = [
     "Registry",
-    "collector_registry",
-    "list_collectors",
-    "list_rules",
     "rule_registry",
+    "collector_registry",
+    "list_rules",
+    "list_collectors",
 ]

@@ -370,7 +370,7 @@ class JavaAstCollector:
                 continue
             try:
                 payload = _parse_file(self._parser, source)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Parse error in %s: %s", rel, exc)
                 continue
             payload["file_path"] = str(rel)

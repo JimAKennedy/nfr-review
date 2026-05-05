@@ -2,26 +2,26 @@
 
 from __future__ import annotations
 
-from nfr_review.rules import adr_drift as adr_drift
-from nfr_review.rules import adr_lifecycle as adr_lifecycle
-from nfr_review.rules import apim_auth as apim_auth
-from nfr_review.rules import apim_backend_url as apim_backend_url
-from nfr_review.rules import apim_rate_limit as apim_rate_limit
-from nfr_review.rules import ci_security_scan as ci_security_scan
-from nfr_review.rules import ci_test_stage as ci_test_stage
-from nfr_review.rules import java_exception as java_exception
-from nfr_review.rules import java_health as java_health
-from nfr_review.rules import java_resilience as java_resilience
-from nfr_review.rules import java_thread_pool as java_thread_pool
-from nfr_review.rules import k8s_network as k8s_network
-from nfr_review.rules import k8s_probes as k8s_probes
-from nfr_review.rules import k8s_resources as k8s_resources
-from nfr_review.rules import k8s_security as k8s_security
-from nfr_review.rules import pii_logging as pii_logging
-from nfr_review.rules import sample as sample
-from nfr_review.rules import spring_actuator as spring_actuator
-from nfr_review.rules import spring_logging as spring_logging
-from nfr_review.rules import spring_profile as spring_profile
+from nfr_review.rules import adr_drift as adr_drift  # noqa: F401
+from nfr_review.rules import adr_lifecycle as adr_lifecycle  # noqa: F401
+from nfr_review.rules import apim_auth as apim_auth  # noqa: F401
+from nfr_review.rules import apim_backend_url as apim_backend_url  # noqa: F401
+from nfr_review.rules import apim_rate_limit as apim_rate_limit  # noqa: F401
+from nfr_review.rules import ci_security_scan as ci_security_scan  # noqa: F401
+from nfr_review.rules import ci_test_stage as ci_test_stage  # noqa: F401
+from nfr_review.rules import java_exception as java_exception  # noqa: F401
+from nfr_review.rules import java_health as java_health  # noqa: F401
+from nfr_review.rules import java_resilience as java_resilience  # noqa: F401
+from nfr_review.rules import java_thread_pool as java_thread_pool  # noqa: F401
+from nfr_review.rules import k8s_network as k8s_network  # noqa: F401
+from nfr_review.rules import k8s_probes as k8s_probes  # noqa: F401
+from nfr_review.rules import k8s_resources as k8s_resources  # noqa: F401
+from nfr_review.rules import k8s_security as k8s_security  # noqa: F401
+from nfr_review.rules import pii_logging as pii_logging  # noqa: F401
+from nfr_review.rules import sample as sample  # noqa: F401
+from nfr_review.rules import spring_actuator as spring_actuator  # noqa: F401
+from nfr_review.rules import spring_logging as spring_logging  # noqa: F401
+from nfr_review.rules import spring_profile as spring_profile  # noqa: F401
 
 __all__ = [
     "adr_drift",

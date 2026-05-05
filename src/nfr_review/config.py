@@ -129,9 +129,9 @@ def load_config(path: Path | None) -> Config:
 
 
 __all__ = [
-    "CollectorsConfig",
     "Config",
     "ConfigError",
+    "CollectorsConfig",
     "RulesConfig",
     "load_config",
 ]

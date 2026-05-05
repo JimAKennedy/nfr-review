@@ -5,12 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any
 
-try:
-    import anthropic
-except ModuleNotFoundError:  # SDK is an optional dependency
-    anthropic = None  # type: ignore[assignment]
+import anthropic
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +25,7 @@ class ClaudeClient:
 
     def __init__(self) -> None:
         key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-        if key and anthropic is not None:
+        if key:
             self._client: anthropic.Anthropic | None = anthropic.Anthropic(api_key=key)
         else:
             self._client = None
@@ -62,11 +58,14 @@ class ClaudeClient:
                 {"role": "user", "content": prompt + "\n\n" + evidence_bundle},
             ],
         )
-        return response.content[0].text
+        block = response.content[0]
+        if not hasattr(block, "text"):
+            raise TypeError(f"Expected TextBlock, got {type(block).__name__}")
+        return block.text
 
 
 def serialize_evidence_bundle(
-    evidence_items: list[dict[str, Any]],
+    evidence_items: list[dict],
     max_bytes: int = 8192,
 ) -> str:
     """Serialize evidence dicts to JSON, truncating to fit *max_bytes*.

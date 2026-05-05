@@ -103,7 +103,10 @@ def _has_structured_logging(
         return True
     if "logback" in values_str:
         return True
-    return any("logback" in str(key).lower() for key in raw_keys)
+    for key in raw_keys:
+        if "logback" in str(key).lower():
+            return True
+    return False
 
 
 def _flatten_values(d: dict[str, Any]) -> str:

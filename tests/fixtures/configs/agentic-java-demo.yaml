@@ -1,0 +1,7 @@
+version: 1
+tech:
+  spring_boot: true
+  kubernetes: true
+rules:
+  skip:
+    - health-endpoint-missing

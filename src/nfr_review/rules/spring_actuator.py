@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -67,12 +67,12 @@ class ActuatorExposureRiskRule:
             if include_str == "*":
                 exposed_sensitive = _SENSITIVE_ENDPOINTS - _parse_endpoint_set(exclude_str)
                 if exposed_sensitive:
-                    severity = "high" if is_prod else "medium"
+                    sev = cast(Severity, "high" if is_prod else "medium")
                     findings.append(
                         Finding(
                             rule_id=self.id,
                             rag="red" if is_prod else "amber",
-                            severity=severity,
+                            severity=sev,
                             summary=(
                                 f"Actuator wildcard include exposes sensitive"
                                 f" endpoints ({', '.join(sorted(exposed_sensitive))})"
@@ -114,17 +114,17 @@ class ActuatorExposureRiskRule:
                     continue
 
             exposed = _parse_endpoint_set(include_str)
-            exposed_sensitive = frozenset(exposed & _SENSITIVE_ENDPOINTS)
-            if exposed_sensitive:
-                severity = "high" if is_prod else "medium"
+            exposed_sensitive_set = exposed & _SENSITIVE_ENDPOINTS
+            if exposed_sensitive_set:
+                sev2 = cast(Severity, "high" if is_prod else "medium")
                 findings.append(
                     Finding(
                         rule_id=self.id,
                         rag="red" if is_prod else "amber",
-                        severity=severity,
+                        severity=sev2,
                         summary=(
                             f"Sensitive actuator endpoints explicitly exposed"
-                            f" ({', '.join(sorted(exposed_sensitive))})"
+                            f" ({', '.join(sorted(exposed_sensitive_set))})"
                             f" in {file_path}"
                         ),
                         recommendation=(

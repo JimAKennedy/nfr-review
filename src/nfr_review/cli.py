@@ -22,7 +22,7 @@ from pathlib import Path
 
 import click
 
-import nfr_review.collectors  # side-effect: register built-ins
+import nfr_review.collectors  # noqa: F401  # side-effect: register built-ins
 import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
 from nfr_review import __version__
 from nfr_review.config import Config, ConfigError, load_config

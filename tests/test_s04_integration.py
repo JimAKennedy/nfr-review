@@ -156,7 +156,7 @@ class TestTwentyRulesRegistered:
     def test_band2_ids_in_registry(self) -> None:
         self._ensure_all_registered()
         registered = set(rule_registry.ids())
-        assert registered >= BAND2_RULE_IDS
+        assert BAND2_RULE_IDS <= registered
 
 
 class TestListRulesShowsTwenty:
@@ -184,7 +184,7 @@ class TestBand2SkipWithoutApiKey:
 
     def test_both_band2_rules_in_skipped(self, result: RunResult) -> None:
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
-        assert skipped_ids >= BAND2_RULE_IDS
+        assert BAND2_RULE_IDS <= skipped_ids
 
     def test_band2_skip_reasons_informative(self, result: RunResult) -> None:
         skipped = {

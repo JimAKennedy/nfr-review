@@ -286,6 +286,6 @@ class TestAdrsWithoutTitles:
         rule = ArchitecturalDriftFromAdrRule(llm_client=_unavailable_client())
         bundle = rule._build_evidence_bundle([adr_with_title, adr_no_title], [java_ev])
         parsed = json.loads(bundle)
-        adr_section = next(s for s in parsed if s["section"] == "adrs")
+        adr_section = [s for s in parsed if s["section"] == "adrs"][0]
         assert len(adr_section["items"]) == 1
         assert adr_section["items"][0]["title"] == "ADR-001: Real Decision"

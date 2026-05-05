@@ -163,7 +163,7 @@ class SpringConfigCollector:
                             type(data).__name__,
                         )
                         continue
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Parse error in %s: %s", rel, exc)
                 continue
 

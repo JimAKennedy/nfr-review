@@ -124,7 +124,7 @@ class AdrCollector:
             rel = md_file.relative_to(repo_path)
             try:
                 payload = _parse_adr(md_file, repo_path)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Error parsing %s: %s", rel, exc)
                 continue
 
