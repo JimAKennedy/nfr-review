@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  COVERAGE_GIST_ID: ${{ vars.COVERAGE_GIST_ID }}
+
 jobs:
   lint:
     name: Lint & Format
@@ -106,13 +109,36 @@ jobs:
           path: coverage.xml
           retention-days: 14
 
+      - name: Extract coverage percentage
+        id: cov
+        if: matrix.python-version == '3.12'
+        run: |
+          COV_PCT=$(coverage report --format=total)
+          echo "pct=${COV_PCT}" >> "$GITHUB_OUTPUT"
+          echo "Coverage: ${COV_PCT}%"
+
+      - name: Update coverage badge
+        if: matrix.python-version == '3.12' && github.ref == 'refs/heads/main' && env.COVERAGE_GIST_ID != ''
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ env.COVERAGE_GIST_ID }}
+          filename: nfr-review-coverage.json
+          label: coverage
+          message: "${{ steps.cov.outputs.pct }}%"
+          valColorRange: ${{ steps.cov.outputs.pct }}
+          minColorRange: 50
+          maxColorRange: 90
+          namedLogo: pytest
+
       - name: Test summary
         if: always()
         run: |
           echo "## Test Results (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f coverage.xml ]; then
-            echo "Coverage report uploaded." >> $GITHUB_STEP_SUMMARY
+            COV_PCT="${{ steps.cov.outputs.pct }}"
+            echo "Coverage: ${COV_PCT:-unknown}%" >> $GITHUB_STEP_SUMMARY
           fi
 
   secrets-scan:

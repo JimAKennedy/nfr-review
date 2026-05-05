@@ -1,7 +1,7 @@
 # nfr-review
 
 [![CI](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml/badge.svg)](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-91%25-brightgreen)](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/JimAKennedy/af34283def743414fcf7c3ade1155881/raw/nfr-review-coverage.json)](https://github.com/JimAKennedy/nfr-review/actions/workflows/ci.yml)
 [![mypy](https://img.shields.io/badge/mypy-strict-blue)](https://github.com/JimAKennedy/nfr-review/blob/main/pyproject.toml)
 [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
