@@ -161,15 +161,14 @@ class TestTwentyRulesRegistered:
 
 class TestListRulesShowsTwenty:
     def test_list_rules_shows_twenty(self) -> None:
-        venv_bin = Path(sys.executable).parent
         result = subprocess.run(
-            [str(venv_bin / "nfr-review"), "list-rules"],
+            [sys.executable, "-m", "nfr_review.cli", "list-rules"],
             capture_output=True,
             text=True,
         )
         assert result.returncode == 0
         lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
-        assert len(lines) == 20
+        assert len(lines) == 27
 
 
 class TestBand2SkipWithoutApiKey:

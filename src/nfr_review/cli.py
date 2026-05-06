@@ -26,6 +26,7 @@ import nfr_review.collectors  # noqa: F401  # side-effect: register built-ins
 import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
 from nfr_review import __version__
 from nfr_review.config import Config, ConfigError, load_config
+from nfr_review.detect import detect_technologies
 from nfr_review.engine import Engine, EngineError, RunResult
 from nfr_review.models import Severity
 from nfr_review.output import OutputError, write_csv, write_jsonl
@@ -118,6 +119,14 @@ def run_cmd(
         raise click.exceptions.Exit(1) from exc
 
     try:
+        detected = detect_technologies(target)
+    except Exception:
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    config = config.model_copy(update={"tech": merged_tech})
+    tech_detected = sum(1 for v in detected.values() if v)
+
+    try:
         result = Engine().run(target, config)
     except EngineError as exc:
         click.echo(f"error: {exc}", err=True)
@@ -138,7 +147,8 @@ def run_cmd(
 
     click.echo(
         (
-            f"nfr-review: collectors_run={collectors_run} "
+            f"nfr-review: tech_detected={tech_detected} "
+            f"collectors_run={collectors_run} "
             f"rules_run={rules_run} rules_skipped={rules_skipped} "
             f"findings={len(result.findings)} files_emitted={files_emitted} "
             f"csv={csv_path} jsonl={jsonl_path}"

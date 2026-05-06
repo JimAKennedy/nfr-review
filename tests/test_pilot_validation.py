@@ -131,7 +131,7 @@ def test_pilot_all_rules_accounted(tmp_path: Path) -> None:
     rules_run = metadata["rules_run"]
     rules_skipped_ids = [s["rule_id"] for s in metadata["rules_skipped"]]
 
-    total_registered = 20
+    total_registered = 27
     config_skipped = ["health-endpoint-missing"]
     accounted = len(rules_run) + len(rules_skipped_ids)
     assert accounted == total_registered, (

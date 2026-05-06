@@ -32,17 +32,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import tree_sitter_java as tsjava
-from tree_sitter import Language, Parser
+from tree_sitter_language_pack import get_parser
+
+if TYPE_CHECKING:
+    from tree_sitter import Parser
 
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.java_ast")
-
-_LANG = Language(tsjava.language())
 
 _MAPPING_ANNOTATIONS = frozenset(
     {
@@ -355,7 +355,7 @@ class JavaAstCollector:
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self._parser = Parser(_LANG)
+        self._parser = get_parser("java")
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         evidence: list[Evidence] = []

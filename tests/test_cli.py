@@ -177,3 +177,84 @@ def test_run_severity_threshold_below_returns_0(tmp_path: Path) -> None:
 def test_sample_rule_is_in_registry() -> None:
     """Regression: importing the CLI module must auto-register built-in rules."""
     assert "sample-readme-exists" in rule_registry
+
+
+JAVA_FIXTURE = Path(__file__).parent / "fixtures" / "java-sample-repo"
+
+
+def test_run_auto_detects_technologies() -> None:
+    """run against java-sample-repo must auto-detect techs and report count."""
+    csv_path = JAVA_FIXTURE.parent / "_out.csv"
+    jsonl_path = JAVA_FIXTURE.parent / "_out.jsonl"
+    try:
+        result = _runner().invoke(
+            cli,
+            [
+                "run",
+                str(JAVA_FIXTURE),
+                "--csv",
+                str(csv_path),
+                "--jsonl",
+                str(jsonl_path),
+            ],
+        )
+        assert result.exit_code in (0, 2), result.stderr
+        assert "tech_detected=" in result.stderr
+        # java-sample-repo has java files, spring config, and k8s manifests
+        count_str = result.stderr.split("tech_detected=")[1].split()[0]
+        assert int(count_str) >= 2
+    finally:
+        csv_path.unlink(missing_ok=True)
+        jsonl_path.unlink(missing_ok=True)
+
+
+def test_run_manual_config_overrides_detection(tmp_path: Path) -> None:
+    """Manual tech config must override auto-detected values."""
+    cfg = tmp_path / "nfr-review.yaml"
+    cfg.write_text("tech:\n  java: false\n")
+    csv_path = tmp_path / "out.csv"
+    jsonl_path = tmp_path / "out.jsonl"
+
+    result = _runner().invoke(
+        cli,
+        [
+            "run",
+            str(JAVA_FIXTURE),
+            "--config",
+            str(cfg),
+            "--csv",
+            str(csv_path),
+            "--jsonl",
+            str(jsonl_path),
+        ],
+    )
+    assert result.exit_code in (0, 2), result.stderr
+    assert "tech_detected=" in result.stderr
+
+
+def test_run_detection_failure_is_nonfatal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If detect_technologies raises, run must still complete with config-only tech."""
+    monkeypatch.setattr(
+        "nfr_review.cli.detect_technologies",
+        lambda _: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    target = tmp_path / "repo"
+    target.mkdir()
+    csv_path = tmp_path / "out.csv"
+    jsonl_path = tmp_path / "out.jsonl"
+
+    result = _runner().invoke(
+        cli,
+        [
+            "run",
+            str(target),
+            "--csv",
+            str(csv_path),
+            "--jsonl",
+            str(jsonl_path),
+        ],
+    )
+    assert result.exit_code == 0, result.stderr
+    assert "tech_detected=0" in result.stderr

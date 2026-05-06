@@ -24,7 +24,7 @@ dependencies = [
     "ruamel.yaml>=0.18",
     "anthropic>=0.40",
     "tree-sitter>=0.23",
-    "tree-sitter-java>=0.23",
+    "tree-sitter-language-pack>=0.9",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +54,16 @@ select = ["E", "F", "W", "I", "B", "UP"]
 [tool.bandit]
 skips = ["B101"]
 
+[tool.mypy]
+packages = ["nfr_review"]
+
+[[tool.mypy.overrides]]
+module = ["ruamel.*", "tree_sitter_language_pack.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "regression: clones public repos and diffs output against snapshot baselines (requires network)",
+]

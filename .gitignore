@@ -33,3 +33,4 @@ tmp/
 *.egg-info/
 nfr-review.csv
 nfr-review.jsonl
+.regression-repos/
