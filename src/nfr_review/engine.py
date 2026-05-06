@@ -105,7 +105,7 @@ class Engine:
                 rule, config.rules.skip, config.rules.include_only
             )
             if cfg_skip:
-                assert cfg_reason is not None  # nosec B101
+                assert cfg_reason is not None
                 rule_results.append(
                     RuleResult(rule_id=rule.id, skipped=True, skip_reason=cfg_reason)
                 )

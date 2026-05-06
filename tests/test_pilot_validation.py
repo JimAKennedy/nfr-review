@@ -55,10 +55,9 @@ def test_pilot_completes_under_120_seconds(tmp_path: Path) -> None:
     csv_path, jsonl_path, result = _run_pilot(tmp_path)
     elapsed = time.perf_counter() - start
 
-    assert result.exit_code in (
-        0,
-        2,
-    ), f"exit_code={result.exit_code} stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert result.exit_code in (0, 2), (
+        f"exit_code={result.exit_code} stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
     assert csv_path.exists()
     assert jsonl_path.exists()
     assert elapsed < 120, f"pilot scan took {elapsed:.1f}s, exceeds 120s budget"

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-import xml.etree.ElementTree as ET  # nosec B405
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +65,7 @@ def _parse_policy(xml_path: Path, repo_path: Path) -> dict[str, Any] | None:
 
     Returns None if the file is not a valid APIM policy (no <policies> root).
     """
-    tree = ET.parse(xml_path)  # noqa: S314  # nosec B314
+    tree = ET.parse(xml_path)  # noqa: S314
     root = tree.getroot()
 
     if root.tag != "policies":
