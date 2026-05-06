@@ -150,7 +150,7 @@ class K8sManifestCollector:
             Evidence(
                 collector_name=self.name,
                 collector_version=self.version,
-                locator=str(repo_path),
+                locator=".",
                 kind="k8s-manifest-summary",
                 payload={
                     "resource_counts": resource_counts,

@@ -103,6 +103,9 @@ def normalize_findings(jsonl_path: Path) -> list[dict]:
         if record.get("rag") == "skipped":
             continue
         record.pop("record_type", None)
+        loc = record.get("evidence_locator", "")
+        if loc.startswith("/"):
+            record["evidence_locator"] = "."
         findings.append(record)
     findings.sort(
         key=lambda r: (

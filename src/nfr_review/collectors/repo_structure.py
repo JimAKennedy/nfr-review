@@ -44,7 +44,7 @@ class RepoStructureCollector:
             Evidence(
                 collector_name=self.name,
                 collector_version=self.version,
-                locator=str(repo_path),
+                locator=".",
                 kind="repo-structure-summary",
                 payload=payload,
             )
