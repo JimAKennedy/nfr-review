@@ -51,6 +51,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 
+[tool.bandit]
+skips = ["B101"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
