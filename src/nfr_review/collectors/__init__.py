@@ -6,6 +6,7 @@ from nfr_review.collectors import adr as adr  # noqa: F401
 from nfr_review.collectors import apim_policy as apim_policy  # noqa: F401
 from nfr_review.collectors import ci_artifact as ci_artifact  # noqa: F401
 from nfr_review.collectors import dockerfile as dockerfile  # noqa: F401
+from nfr_review.collectors import go_ast as go_ast  # noqa: F401
 from nfr_review.collectors import helm as helm  # noqa: F401
 from nfr_review.collectors import istio as istio  # noqa: F401
 from nfr_review.collectors import java_ast as java_ast  # noqa: F401
@@ -23,6 +24,7 @@ __all__ = [
     "apim_policy",
     "ci_artifact",
     "dockerfile",
+    "go_ast",
     "helm",
     "istio",
     "java_ast",
