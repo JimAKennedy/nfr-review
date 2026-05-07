@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
@@ -136,7 +136,7 @@ class HelmCollector:
 
     def _render_chart(self, chart_dir: Path, rel_chart: str) -> list[dict[str, Any]]:
         try:
-            result = subprocess.run(  # noqa: S603
+            result = subprocess.run(  # noqa: S603  # nosec B603 B607
                 ["helm", "template", "."],
                 cwd=chart_dir,
                 capture_output=True,

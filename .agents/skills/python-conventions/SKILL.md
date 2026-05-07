@@ -117,6 +117,25 @@ known-first-party = ["nfr_review"]
 
 When adding rules, prefer enabling project-wide over scattering `# noqa`.
 
+## Bandit (security linter)
+
+Bandit runs in CI via `bandit -r src/ -c pyproject.toml`. Configuration lives in `[tool.bandit]` in pyproject.toml.
+
+**Critical:** Ruff's `# noqa: S603` does NOT suppress Bandit — it only suppresses ruff's S-rules. To suppress Bandit findings, use `# nosec BXXX`. When both tools flag the same line, you need both annotations:
+
+```python
+import subprocess  # nosec B404
+result = subprocess.run(cmd, ...)  # noqa: S603  # nosec B603 B607
+```
+
+Common Bandit codes in this project:
+- **B404** — `import subprocess` (suppress at the import)
+- **B603** — `subprocess.run()` without `shell=True` (suppress at the call site)
+- **B607** — partial executable path in subprocess call (suppress at the call site)
+- **B101** — `assert` statements (globally skipped in pyproject.toml)
+
+Only add `# nosec` when the usage is genuinely safe and you understand why Bandit flags it.
+
 ## pytest layout
 
 ```toml
@@ -190,7 +209,8 @@ Before claiming Python work is done:
 ```bash
 ruff check .
 ruff format --check .
+bandit -r src/ -c pyproject.toml
 pytest
 ```
 
-All three must pass. If any fails, fix root cause — do not add `# noqa` or skip tests.
+All four must pass. If any fails, fix root cause — do not add `# noqa` or skip tests. Bandit is also in pre-commit hooks, so `pre-commit run --all-files` covers everything except pytest.
