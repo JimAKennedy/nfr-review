@@ -277,6 +277,7 @@ def _extract_thread_pools(root: Any, source: bytes) -> list[dict[str, Any]]:
 
 _LOG_OBJECT_NAMES = frozenset({"log", "logger", "LOG", "LOGGER"})
 _LOG_LEVEL_METHODS = frozenset({"info", "warn", "error", "debug", "trace"})
+_STDOUT_OBJECTS = frozenset({"System.out", "System.err"})
 
 
 def _extract_log_statements(root: Any, source: bytes) -> list[dict[str, Any]]:
@@ -284,25 +285,45 @@ def _extract_log_statements(root: Any, source: bytes) -> list[dict[str, Any]]:
     for mi in _find_nodes(root, "method_invocation"):
         children = mi.children
         identifiers = [c for c in children if c.type == "identifier"]
-        if len(identifiers) < 2:
-            continue
-        obj_name = _text(identifiers[0], source)
-        method_name = _text(identifiers[1], source)
-        if obj_name.lower() not in {"log", "logger"} or method_name not in _LOG_LEVEL_METHODS:
-            continue
-        arg_list = None
-        for c in children:
-            if c.type == "argument_list":
-                arg_list = c
-                break
-        arguments_text = _text(arg_list, source) if arg_list else ""
-        statements.append(
-            {
-                "method": f"{obj_name}.{method_name}",
-                "arguments_text": arguments_text,
-                "line": mi.start_point[0] + 1,
-            }
-        )
+
+        if len(identifiers) >= 2:
+            obj_name = _text(identifiers[0], source)
+            method_name = _text(identifiers[1], source)
+            if obj_name.lower() in {"log", "logger"} and method_name in _LOG_LEVEL_METHODS:
+                arg_list = None
+                for c in children:
+                    if c.type == "argument_list":
+                        arg_list = c
+                        break
+                arguments_text = _text(arg_list, source) if arg_list else ""
+                statements.append(
+                    {
+                        "method": f"{obj_name}.{method_name}",
+                        "arguments_text": arguments_text,
+                        "line": mi.start_point[0] + 1,
+                    }
+                )
+                continue
+
+        if children and children[0].type == "field_access":
+            obj_text = _text(children[0], source)
+            if obj_text in _STDOUT_OBJECTS:
+                method_ids = [c for c in children if c.type == "identifier"]
+                if method_ids:
+                    method_name = _text(method_ids[0], source)
+                    arg_list = None
+                    for c in children:
+                        if c.type == "argument_list":
+                            arg_list = c
+                            break
+                    statements.append(
+                        {
+                            "method": f"{obj_text}.{method_name}",
+                            "arguments_text": _text(arg_list, source) if arg_list else "",
+                            "line": mi.start_point[0] + 1,
+                        }
+                    )
+
     return statements
 
 

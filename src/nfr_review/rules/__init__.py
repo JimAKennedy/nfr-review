@@ -7,6 +7,8 @@ from nfr_review.rules import adr_lifecycle as adr_lifecycle  # noqa: F401
 from nfr_review.rules import apim_auth as apim_auth  # noqa: F401
 from nfr_review.rules import apim_backend_url as apim_backend_url  # noqa: F401
 from nfr_review.rules import apim_rate_limit as apim_rate_limit  # noqa: F401
+from nfr_review.rules import ast_bare_except as ast_bare_except  # noqa: F401
+from nfr_review.rules import ast_logging_stdout as ast_logging_stdout  # noqa: F401
 from nfr_review.rules import ci_security_scan as ci_security_scan  # noqa: F401
 from nfr_review.rules import ci_test_stage as ci_test_stage  # noqa: F401
 from nfr_review.rules import (
@@ -58,6 +60,18 @@ from nfr_review.rules import (
 from nfr_review.rules import (
     proto_service_versioning as proto_service_versioning,  # noqa: F401
 )
+from nfr_review.rules import (
+    python_async_fire_forget as python_async_fire_forget,  # noqa: F401
+)
+from nfr_review.rules import (
+    python_broad_except_silent as python_broad_except_silent,  # noqa: F401
+)
+from nfr_review.rules import (
+    python_mutable_default as python_mutable_default,  # noqa: F401
+)
+from nfr_review.rules import (
+    python_star_import as python_star_import,  # noqa: F401
+)
 from nfr_review.rules import sample as sample  # noqa: F401
 from nfr_review.rules import (
     skaffold_build as skaffold_build,  # noqa: F401
@@ -76,6 +90,8 @@ from nfr_review.rules import (
 )
 
 __all__ = [
+    "ast_bare_except",
+    "ast_logging_stdout",
     "adr_drift",
     "adr_lifecycle",
     "apim_auth",
@@ -108,6 +124,10 @@ __all__ = [
     "proto_field_numbering",
     "proto_method_comments",
     "proto_service_versioning",
+    "python_async_fire_forget",
+    "python_broad_except_silent",
+    "python_mutable_default",
+    "python_star_import",
     "sample",
     "skaffold_build",
     "spring_actuator",
