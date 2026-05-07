@@ -9,6 +9,46 @@ The domain this project automates: **non-functional reviews of other projects**.
 
 When in doubt about whether something is an NFR concern, refer here.
 
+Before adding or modifying collectors, rules, output formats, or config options, read `ARCHITECTURE.md` in the project root. It defines where each type of logic belongs and the contracts between modules.
+
+## Architecture Review Gate
+
+ARCHITECTURE.md is the authoritative reference for module responsibilities, data flow, contracts, and extension patterns. It must stay current. Two mandatory checkpoints enforce this:
+
+### At slice planning (before execution begins)
+
+After writing or reviewing the slice plan, ask:
+
+1. Does any task introduce a **new module**, **new data flow path**, or **new registration pattern**?
+2. Does any task **change an existing contract** (Evidence payload shape, Finding fields, protocol signatures, engine filtering pipeline)?
+3. Does any task **add a new entry** to the Decision Guide table (new "You want to..." row)?
+
+If **yes to any**: draft the specific ARCHITECTURE.md edits needed and present them for user approval before starting execution. Do not proceed until approved or the user says the change isn't architecturally significant.
+
+If **no to all**: note "No ARCHITECTURE.md impact" in the plan and proceed.
+
+### At slice completion (before marking done)
+
+Review decisions made during execution:
+
+1. Were any architectural decisions made that aren't reflected in ARCHITECTURE.md?
+2. Did the implementation deviate from ARCHITECTURE.md in a way that the doc should now capture?
+3. Were any new conventions established that future agents need to follow?
+
+If **yes to any**: propose ARCHITECTURE.md edits for user approval as part of the slice completion. The slice is not done until the doc is current.
+
+### What counts as architecturally significant
+
+- New or removed modules in the module responsibility map
+- Changes to the data flow diagram (new phases, new types between stages)
+- Changes to the engine filtering pipeline (new gates, reordering)
+- New contracts (new protocol, new Evidence kind convention)
+- Changes to existing contracts (field additions/removals, behavioral changes)
+- New entries in the Decision Guide
+- New fault tolerance patterns
+
+What does NOT require an update: new collectors/rules that follow existing patterns, bug fixes, test changes, config value additions within existing schema.
+
 ## What is an NFR review?
 
 A review of a codebase for **how well it does things**, not **whether it does the right things**. Functional bugs ("login button broken") are out of scope. Non-functional concerns ("login flow has no rate limit, no audit log, no observable failure mode") are in scope.
