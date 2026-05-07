@@ -1,0 +1,32 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: my-app
+build:
+  artifacts:
+    - image: my-app
+      docker:
+        dockerfile: Dockerfile
+  tagPolicy:
+    sha256: {}
+deploy:
+  kubectl:
+    manifests:
+      - k8s/*.yaml
+profiles:
+  - name: dev
+    build:
+      tagPolicy:
+        dateTime: {}
+    deploy:
+      kubectl:
+        manifests:
+          - k8s/dev/*.yaml
+  - name: prod
+    build:
+      tagPolicy:
+        sha256: {}
+    deploy:
+      kubectl:
+        manifests:
+          - k8s/prod/*.yaml

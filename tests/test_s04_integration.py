@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import nfr_review.rules  # noqa: F401 — trigger auto-registration of all rules
 from nfr_review.collectors.adr import AdrCollector
 from nfr_review.collectors.apim_policy import ApimPolicyCollector
 from nfr_review.collectors.ci_artifact import CiArtifactCollector
@@ -120,38 +121,20 @@ def _full_registries(
 
 
 class TestTwentyRulesRegistered:
-    """Verify all 20 rules (18 Band 1 + 2 Band 2) are registered."""
+    """Verify all rules are registered."""
 
     def _ensure_all_registered(self) -> None:
         import importlib
+        import sys
 
-        import nfr_review.rules.adr_drift
-        import nfr_review.rules.adr_lifecycle
-        import nfr_review.rules.apim_auth
-        import nfr_review.rules.apim_backend_url
-        import nfr_review.rules.apim_rate_limit
-        import nfr_review.rules.ci_security_scan
-        import nfr_review.rules.ci_test_stage
-        import nfr_review.rules.pii_logging
-        import nfr_review.rules.spring_actuator
-        import nfr_review.rules.spring_logging
-        import nfr_review.rules.spring_profile
-
-        importlib.reload(nfr_review.rules.adr_drift)
-        importlib.reload(nfr_review.rules.adr_lifecycle)
-        importlib.reload(nfr_review.rules.apim_auth)
-        importlib.reload(nfr_review.rules.apim_backend_url)
-        importlib.reload(nfr_review.rules.apim_rate_limit)
-        importlib.reload(nfr_review.rules.ci_security_scan)
-        importlib.reload(nfr_review.rules.ci_test_stage)
-        importlib.reload(nfr_review.rules.pii_logging)
-        importlib.reload(nfr_review.rules.spring_actuator)
-        importlib.reload(nfr_review.rules.spring_logging)
-        importlib.reload(nfr_review.rules.spring_profile)
+        for name in nfr_review.rules.__all__:
+            mod_name = f"nfr_review.rules.{name}"
+            if mod_name in sys.modules:
+                importlib.reload(sys.modules[mod_name])
 
     def test_registry_has_20_rules(self) -> None:
         self._ensure_all_registered()
-        assert len(rule_registry) >= 20
+        assert len(rule_registry) >= 30
 
     def test_band2_ids_in_registry(self) -> None:
         self._ensure_all_registered()
@@ -168,7 +151,7 @@ class TestListRulesShowsTwenty:
         )
         assert result.returncode == 0
         lines = [line for line in result.stdout.strip().splitlines() if line.strip()]
-        assert len(lines) == 27
+        assert len(lines) == len(rule_registry)
 
 
 class TestBand2SkipWithoutApiKey:

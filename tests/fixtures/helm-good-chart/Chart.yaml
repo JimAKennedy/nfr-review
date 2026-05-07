@@ -1,0 +1,9 @@
+apiVersion: v2
+name: good-app
+version: 1.2.3
+appVersion: "2.0.0"
+description: A well-structured Helm chart with no NFR issues
+type: application
+maintainers:
+  - name: Platform Team
+    email: platform@example.com

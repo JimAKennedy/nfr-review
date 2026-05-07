@@ -1,0 +1,8 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+metadata:
+  name: mixed-tech-app
+deploy:
+  kubectl:
+    manifests:
+      - k8s/*.yaml

@@ -20,6 +20,9 @@ ALL_TECH_KEYS: list[str] = [
     "csharp",
     "istio",
     "otel",
+    "helm",
+    "terraform",
+    "skaffold",
 ]
 
 _K8S_RESOURCE_TYPES = {
@@ -208,7 +211,23 @@ def _detect_otel(repo: Path) -> bool:
         content = _safe_read_text(repo / name)
         if content and "opentelemetry" in content:
             return True
+    for pattern in ("*otel*collector*config*", "*otelcol*"):
+        for f in _safe_rglob(repo, pattern):
+            if f.suffix in (".yaml", ".yml"):
+                return True
     return False
+
+
+def _detect_helm(repo: Path) -> bool:
+    return bool(_safe_rglob(repo, "Chart.yaml"))
+
+
+def _detect_terraform(repo: Path) -> bool:
+    return bool(_safe_rglob(repo, "*.tf"))
+
+
+def _detect_skaffold(repo: Path) -> bool:
+    return bool(_safe_rglob(repo, "skaffold.yaml"))
 
 
 _DETECTORS: dict[str, Callable[..., bool]] = {
@@ -226,6 +245,9 @@ _DETECTORS: dict[str, Callable[..., bool]] = {
     "csharp": _detect_csharp,
     "istio": _detect_istio,
     "otel": _detect_otel,
+    "helm": _detect_helm,
+    "terraform": _detect_terraform,
+    "skaffold": _detect_skaffold,
 }
 
 
@@ -233,7 +255,7 @@ def detect_technologies(repo_path: Path) -> dict[str, bool]:
     """Detect which technologies are present in a repository.
 
     Scans file structure and dependency manifests to identify technologies.
-    Returns a dict with all 14 technology keys, each mapped to True/False.
+    Returns a dict with all technology keys, each mapped to True/False.
     Detection failures for individual technologies are silently skipped.
     """
     result: dict[str, bool] = {}

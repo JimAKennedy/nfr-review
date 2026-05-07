@@ -16,8 +16,10 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+import nfr_review.rules  # noqa: F401 — trigger auto-registration
 from nfr_review.cli import cli
 from nfr_review.output.csv import CSV_HEADER
+from nfr_review.registry import rule_registry
 
 PILOT_TARGET = Path("/Users/jim/dev/agentic-java-demo")
 PILOT_CONFIG = Path(__file__).parent / "fixtures" / "configs" / "agentic-java-demo.yaml"
@@ -131,7 +133,7 @@ def test_pilot_all_rules_accounted(tmp_path: Path) -> None:
     rules_run = metadata["rules_run"]
     rules_skipped_ids = [s["rule_id"] for s in metadata["rules_skipped"]]
 
-    total_registered = 27
+    total_registered = len(rule_registry)
     config_skipped = ["health-endpoint-missing"]
     accounted = len(rules_run) + len(rules_skipped_ids)
     assert accounted == total_registered, (

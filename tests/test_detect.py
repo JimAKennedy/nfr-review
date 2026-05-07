@@ -37,9 +37,9 @@ class TestDetectTechnologiesWholeFunction:
         assert _has_all_keys(result)
         assert _all_false(result)
 
-    def test_always_returns_all_14_keys(self, tmp_path: Path) -> None:
+    def test_always_returns_all_17_keys(self, tmp_path: Path) -> None:
         result = detect_technologies(tmp_path)
-        assert len(result) == 14
+        assert len(result) == 17
         assert set(result.keys()) == set(ALL_TECH_KEYS)
 
     def test_polyglot_repo(self, tmp_path: Path) -> None:
@@ -332,6 +332,36 @@ class TestDetectOtel:
 
     def test_negative(self, tmp_path: Path) -> None:
         assert detect_technologies(tmp_path)["otel"] is False
+
+
+class TestDetectHelm:
+    def test_chart_yaml_at_root(self, tmp_path: Path) -> None:
+        (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: myapp\n")
+        assert detect_technologies(tmp_path)["helm"] is True
+
+    def test_chart_yaml_nested(self, tmp_path: Path) -> None:
+        charts = tmp_path / "charts" / "myapp"
+        charts.mkdir(parents=True)
+        (charts / "Chart.yaml").write_text("apiVersion: v2\nname: myapp\n")
+        assert detect_technologies(tmp_path)["helm"] is True
+
+    def test_negative(self, tmp_path: Path) -> None:
+        assert detect_technologies(tmp_path)["helm"] is False
+
+
+class TestDetectSkaffold:
+    def test_skaffold_yaml_at_root(self, tmp_path: Path) -> None:
+        (tmp_path / "skaffold.yaml").write_text("apiVersion: skaffold/v4beta6\n")
+        assert detect_technologies(tmp_path)["skaffold"] is True
+
+    def test_skaffold_yaml_nested(self, tmp_path: Path) -> None:
+        sub = tmp_path / "deploy"
+        sub.mkdir()
+        (sub / "skaffold.yaml").write_text("apiVersion: skaffold/v4beta6\n")
+        assert detect_technologies(tmp_path)["skaffold"] is True
+
+    def test_negative(self, tmp_path: Path) -> None:
+        assert detect_technologies(tmp_path)["skaffold"] is False
 
 
 # ---------------------------------------------------------------------------

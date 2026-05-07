@@ -7,7 +7,11 @@ repos:
       - dockerfile
       - proto
       - ci
-    description: Polyglot microservices app with K8s, Dockerfile, proto/gRPC, CI
+      - helm
+      - istio
+      - terraform
+      - skaffold
+    description: Polyglot microservices app with K8s, Dockerfile, proto/gRPC, CI, Helm, Istio, Terraform, Skaffold
 
   - name: spring-petclinic
     url: https://github.com/spring-projects/spring-petclinic
@@ -37,3 +41,14 @@ repos:
     expected_techs:
       - proto
     description: Buf CLI tutorial repo with proto/gRPC definitions
+
+  - name: opentelemetry-demo
+    url: https://github.com/open-telemetry/opentelemetry-demo
+    commit_sha: 52a8a76cf8626734fded41d178edf0f2e3eb823a
+    expected_techs:
+      - otel
+      - kubernetes
+      - dockerfile
+      - helm
+      - proto
+    description: OTel demo app with Collector configs, K8s manifests, Helm charts, Dockerfiles

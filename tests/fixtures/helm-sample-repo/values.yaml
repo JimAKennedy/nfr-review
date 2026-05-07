@@ -1,0 +1,23 @@
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: "1.25"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+# Bad pattern: plaintext database password
+database:
+  host: postgres.default.svc.cluster.local
+  port: 5432
+  username: admin
+  password: supersecretpassword123
+
+# Bad pattern: missing resource limits
+resources: {}
+
+# Bad pattern: API key in values
+apiKey: sk-1234567890abcdef
