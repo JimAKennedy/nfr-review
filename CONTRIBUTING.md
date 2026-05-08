@@ -18,6 +18,18 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+## Git Identity
+
+Before committing, configure your Git email to a public address (not a local
+hostname). GitHub provides a private noreply address you can use:
+
+```bash
+git config user.email "YOUR_USERNAME@users.noreply.github.com"
+```
+
+Find your noreply address at
+<https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-personal-account-on-github/managing-email-preferences/setting-your-commit-email-address>.
+
 ## Running Tests
 
 ```bash
