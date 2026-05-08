@@ -34,3 +34,14 @@ tmp/
 nfr-review.csv
 nfr-review.jsonl
 .regression-repos/
+
+# ── Vendored skills (installed via skills-lock.json, not tracked) ──
+.agents/skills/docx/
+.agents/skills/pdf/
+.agents/skills/pptx/
+.agents/skills/xlsx/
+.agents/skills/code-review-excellence/
+.agents/skills/error-handling-patterns/
+.agents/skills/git-advanced-workflows/
+.agents/skills/find-skills/
+.agents/skills/skill-creator/
