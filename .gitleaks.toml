@@ -1,6 +1,8 @@
 [allowlist]
 paths = [
-    '''tests/fixtures/''',
+    '''tests/fixtures/helm-sample-repo/values\.yaml''',
+    '''tests/fixtures/helm-sample-repo/templates/secret\.yaml''',
+    '''tests/fixtures/helm-sample-repo/templates/deployment\.yaml''',
     '''\.gsd/''',
     '''skills-lock\.json''',
 ]

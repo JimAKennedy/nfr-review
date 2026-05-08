@@ -53,6 +53,24 @@ ruff format src/ tests/
 mypy src/
 ```
 
+## Dependency Lockfiles
+
+Pinned dependency lockfiles ensure reproducible installs in CI and development.
+Regenerate them after changing `[project.dependencies]` or
+`[project.optional-dependencies]` in `pyproject.toml`:
+
+```bash
+pip-compile --strip-extras --annotation-style=line --output-file=requirements.txt pyproject.toml
+pip-compile --strip-extras --extra=dev --annotation-style=line --output-file=requirements-dev.txt pyproject.toml
+```
+
+To install from lockfiles instead of the loose specifiers:
+
+```bash
+pip install -r requirements-dev.txt
+pip install -e . --no-deps
+```
+
 ## Pre-commit Hooks
 
 The repository includes a `.pre-commit-config.yaml` that runs Ruff, mypy,

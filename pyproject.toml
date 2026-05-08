@@ -52,6 +52,10 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.bandit]
+# B101 flags `assert` statements. Production code uses 3 defensive asserts for
+# invariants that indicate programming errors (engine.py, ast_bare_except.py,
+# ast_logging_stdout.py). Removing these would reduce safety. The test suite
+# uses assert extensively (65+ files). Skip is intentional.
 skips = ["B101"]
 
 [tool.mypy]
