@@ -11,12 +11,15 @@ repos:
       - istio
       - terraform
       - skaffold
-    description: Polyglot microservices app with K8s, Dockerfile, proto/gRPC, CI, Helm, Istio, Terraform, Skaffold
+      - go
+      - python
+    description: Polyglot microservices app with K8s, Dockerfile, proto/gRPC, CI, Helm, Istio, Terraform, Skaffold, Go, Python
 
   - name: spring-petclinic
     url: https://github.com/spring-projects/spring-petclinic
     commit_sha: c7ee170434ec3e369fdc9201290ba2ea4c92b557
     expected_techs:
+      - java
       - spring_boot
       - ci
     description: Java Spring Boot reference application with CI
@@ -51,4 +54,8 @@ repos:
       - dockerfile
       - helm
       - proto
-    description: OTel demo app with Collector configs, K8s manifests, Helm charts, Dockerfiles
+      - go
+      - python
+      - nodejs
+      - csharp
+    description: OTel demo app with Collector configs, K8s manifests, Helm charts, Dockerfiles, Go, Python, Node.js, C#

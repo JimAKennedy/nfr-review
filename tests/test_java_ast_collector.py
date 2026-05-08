@@ -210,7 +210,8 @@ class TestLogStatementExtraction:
         )
         results = collector.collect(tmp_path, config=None)
         stmts = results[0].payload["log_statements"]
-        assert len(stmts) == 0
+        assert len(stmts) == 1
+        assert stmts[0]["method"] == "System.out.println"
 
     def test_trace_level_captured(self, collector: JavaAstCollector, tmp_path: Path) -> None:
         java = tmp_path / "Trace.java"
