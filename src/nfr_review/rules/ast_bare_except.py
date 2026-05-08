@@ -22,6 +22,8 @@ _BROAD_TYPES: dict[str, frozenset[str]] = {
     "java": frozenset({"Exception", "Throwable"}),
     "python": frozenset({"Exception", "BaseException"}),
     "go": frozenset(),
+    "csharp": frozenset({"Exception", "SystemException"}),
+    "nodejs": frozenset(),
 }
 
 

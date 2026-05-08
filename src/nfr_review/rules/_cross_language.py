@@ -18,7 +18,9 @@ class LanguageRuleConfig:
 JAVA = LanguageRuleConfig("java", "java-ast", "java-ast-file", "java")
 PYTHON = LanguageRuleConfig("python", "python-ast", "python-ast-file", "python")
 GO = LanguageRuleConfig("go", "go-ast", "go-ast-file", "go")
+CSHARP = LanguageRuleConfig("csharp", "csharp-ast", "csharp-ast-file", "csharp")
+NODEJS = LanguageRuleConfig("nodejs", "nodejs-ast", "nodejs-ast-file", "nodejs")
 
-ALL_LANGUAGES: list[LanguageRuleConfig] = [JAVA, PYTHON, GO]
+ALL_LANGUAGES: list[LanguageRuleConfig] = [JAVA, PYTHON, GO, CSHARP, NODEJS]
 
-__all__ = ["LanguageRuleConfig", "JAVA", "PYTHON", "GO", "ALL_LANGUAGES"]
+__all__ = ["LanguageRuleConfig", "JAVA", "PYTHON", "GO", "CSHARP", "NODEJS", "ALL_LANGUAGES"]

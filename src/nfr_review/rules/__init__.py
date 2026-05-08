@@ -12,6 +12,18 @@ from nfr_review.rules import ast_logging_stdout as ast_logging_stdout  # noqa: F
 from nfr_review.rules import ci_security_scan as ci_security_scan  # noqa: F401
 from nfr_review.rules import ci_test_stage as ci_test_stage  # noqa: F401
 from nfr_review.rules import (
+    csharp_async_void as csharp_async_void,  # noqa: F401
+)
+from nfr_review.rules import (
+    csharp_blocking_async as csharp_blocking_async,  # noqa: F401
+)
+from nfr_review.rules import (
+    csharp_configure_await as csharp_configure_await,  # noqa: F401
+)
+from nfr_review.rules import (
+    csharp_disposable_no_using as csharp_disposable_no_using,  # noqa: F401
+)
+from nfr_review.rules import (
     dockerfile_base_pinning as dockerfile_base_pinning,  # noqa: F401
 )
 from nfr_review.rules import dockerfile_multistage as dockerfile_multistage  # noqa: F401
@@ -59,6 +71,18 @@ from nfr_review.rules import k8s_network as k8s_network  # noqa: F401
 from nfr_review.rules import k8s_probes as k8s_probes  # noqa: F401
 from nfr_review.rules import k8s_resources as k8s_resources  # noqa: F401
 from nfr_review.rules import k8s_security as k8s_security  # noqa: F401
+from nfr_review.rules import (
+    nodejs_callback_error_ignored as nodejs_callback_error_ignored,  # noqa: F401
+)
+from nfr_review.rules import (
+    nodejs_floating_promise as nodejs_floating_promise,  # noqa: F401
+)
+from nfr_review.rules import (
+    nodejs_promise_no_catch as nodejs_promise_no_catch,  # noqa: F401
+)
+from nfr_review.rules import (
+    nodejs_sync_fs_api as nodejs_sync_fs_api,  # noqa: F401
+)
 from nfr_review.rules import otel_exporter as otel_exporter  # noqa: F401
 from nfr_review.rules import otel_pipeline as otel_pipeline  # noqa: F401
 from nfr_review.rules import otel_sampling as otel_sampling  # noqa: F401
@@ -111,6 +135,10 @@ __all__ = [
     "apim_rate_limit",
     "ci_security_scan",
     "ci_test_stage",
+    "csharp_async_void",
+    "csharp_blocking_async",
+    "csharp_configure_await",
+    "csharp_disposable_no_using",
     "go_defer_in_loop",
     "go_error_ignored",
     "go_goroutine_leak",
@@ -129,6 +157,10 @@ __all__ = [
     "java_health",
     "java_resilience",
     "java_thread_pool",
+    "nodejs_callback_error_ignored",
+    "nodejs_floating_promise",
+    "nodejs_promise_no_catch",
+    "nodejs_sync_fs_api",
     "k8s_network",
     "k8s_probes",
     "k8s_resources",

@@ -29,6 +29,23 @@ _STDOUT_METHODS: dict[str, frozenset[str]] = {
         }
     ),
     "go": frozenset({"fmt.Print", "fmt.Println", "fmt.Printf"}),
+    "csharp": frozenset(
+        {
+            "Console.WriteLine",
+            "Console.Write",
+            "Debug.WriteLine",
+        }
+    ),
+    "nodejs": frozenset(
+        {
+            "console.log",
+            "console.warn",
+            "console.error",
+            "console.info",
+            "process.stdout.write",
+            "process.stderr.write",
+        }
+    ),
 }
 
 
