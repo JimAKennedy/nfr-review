@@ -207,6 +207,115 @@ class TestBareExceptCatchAllRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    # --- C# evidence ---
+
+    def test_csharp_broad_exception_red(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [{"caught_type": "Exception", "rethrows": False, "line": 10}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "red"
+        assert f.severity == "high"
+        assert "Exception" in f.summary
+        assert f.collector_name == "csharp-ast"
+
+    def test_csharp_system_exception_red(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [
+                    {"caught_type": "SystemException", "rethrows": False, "line": 15}
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "red"
+
+    def test_csharp_bare_catch_amber(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 20}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert f.severity == "medium"
+        assert "Bare except" in f.summary
+
+    def test_csharp_rethrow_green(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [{"caught_type": "Exception", "rethrows": True, "line": 25}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
+    def test_csharp_specific_exception_green(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [
+                    {"caught_type": "ArgumentException", "rethrows": False, "line": 30}
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
+    # --- Node.js evidence ---
+
+    def test_nodejs_bare_catch_amber(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 5}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert f.severity == "medium"
+        assert f.collector_name == "nodejs-ast"
+
+    def test_nodejs_rethrow_green(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "catch_blocks": [{"caught_type": "", "rethrows": True, "line": 10}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
     # --- Cross-language / mixed ---
 
     def test_mixed_evidence_findings_from_all(self) -> None:
@@ -234,10 +343,26 @@ class TestBareExceptCatchAllRule:
                 "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 15}],
             },
         )
-        result = self.rule.evaluate([py_ev, java_ev, go_ev], None)
-        assert len(result.findings) == 3
+        cs_ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [{"caught_type": "Exception", "rethrows": False, "line": 8}],
+            },
+        )
+        js_ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 3}],
+            },
+        )
+        result = self.rule.evaluate([py_ev, java_ev, go_ev, cs_ev, js_ev], None)
+        assert len(result.findings) == 5
         collectors = {f.collector_name for f in result.findings}
-        assert collectors == {"python-ast", "java-ast", "go-ast"}
+        assert collectors == {"python-ast", "java-ast", "go-ast", "csharp-ast", "nodejs-ast"}
 
     def test_no_evidence_skipped(self) -> None:
         ev = _make_evidence("terraform", "tf-file", {"resources": []})
@@ -460,6 +585,120 @@ class TestLoggingToStdoutRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    # --- C# evidence ---
+
+    def test_csharp_console_writeline_amber(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "log_statements": [{"method": "Console.WriteLine", "line": 6}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert "Console.WriteLine()" in f.summary
+        assert f.collector_name == "csharp-ast"
+
+    def test_csharp_console_write_amber(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "log_statements": [{"method": "Console.Write", "line": 8}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+
+    def test_csharp_debug_writeline_amber(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "log_statements": [{"method": "Debug.WriteLine", "line": 10}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+
+    def test_csharp_logger_not_flagged(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "log_statements": [{"method": "logger.Information", "line": 3}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
+    # --- Node.js evidence ---
+
+    def test_nodejs_console_log_amber(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "log_statements": [{"method": "console.log", "line": 5}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert "console.log()" in f.summary
+        assert f.collector_name == "nodejs-ast"
+
+    def test_nodejs_console_warn_amber(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "log_statements": [{"method": "console.warn", "line": 8}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+
+    def test_nodejs_process_stdout_amber(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "log_statements": [{"method": "process.stdout.write", "line": 12}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+
+    def test_nodejs_logger_not_flagged(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "log_statements": [{"method": "logger.info", "line": 3}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
     # --- Cross-language / mixed ---
 
     def test_mixed_evidence_findings_from_all(self) -> None:
@@ -489,10 +728,26 @@ class TestLoggingToStdoutRule:
                 "log_statements": [{"method": "fmt.Println", "line": 15}],
             },
         )
-        result = self.rule.evaluate([py_ev, java_ev, go_ev], None)
-        assert len(result.findings) == 3
+        cs_ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "log_statements": [{"method": "Console.WriteLine", "line": 6}],
+            },
+        )
+        js_ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "log_statements": [{"method": "console.log", "line": 5}],
+            },
+        )
+        result = self.rule.evaluate([py_ev, java_ev, go_ev, cs_ev, js_ev], None)
+        assert len(result.findings) == 5
         collectors = {f.collector_name for f in result.findings}
-        assert collectors == {"python-ast", "java-ast", "go-ast"}
+        assert collectors == {"python-ast", "java-ast", "go-ast", "csharp-ast", "nodejs-ast"}
 
     def test_no_evidence_skipped(self) -> None:
         ev = _make_evidence("terraform", "tf-file", {"resources": []})
