@@ -1,3 +1,5 @@
+const fs = require('fs');
+
 function processData(items) {
     try {
         JSON.parse(items);
@@ -10,4 +12,12 @@ function logToConsole(message) {
     console.log("DEBUG: " + message);
 }
 
-module.exports = { processData, logToConsole };
+function loadConfig() {
+    fetch('/api/config').then(r => r.json());
+}
+
+function readSync() {
+    return fs.readFileSync('/etc/config.json', 'utf-8');
+}
+
+module.exports = { processData, logToConsole, loadConfig, readSync };

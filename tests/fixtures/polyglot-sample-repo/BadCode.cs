@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace PolyglotFixture
 {
@@ -19,6 +20,17 @@ namespace PolyglotFixture
         public void LogToConsole(string message)
         {
             Console.WriteLine("DEBUG: " + message);
+        }
+
+        public async void FireAndForget()
+        {
+            await Task.Delay(100);
+        }
+
+        public string BlockOnAsync()
+        {
+            var result = Task.Run(() => "hello").Result;
+            return result;
         }
     }
 }

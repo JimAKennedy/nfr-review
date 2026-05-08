@@ -6,8 +6,10 @@ from pathlib import Path
 
 import pytest
 
+from nfr_review.collectors.csharp_ast import CSharpAstCollector
 from nfr_review.collectors.go_ast import GoAstCollector
 from nfr_review.collectors.java_ast import JavaAstCollector
+from nfr_review.collectors.nodejs_ast import NodejsAstCollector
 from nfr_review.collectors.python_ast import PythonAstCollector
 from nfr_review.collectors.repo_structure import RepoStructureCollector
 from nfr_review.config import Config
@@ -16,20 +18,24 @@ from nfr_review.engine import Engine, RunResult
 from nfr_review.registry import Registry
 from nfr_review.rules.ast_bare_except import BareExceptCatchAllRule
 from nfr_review.rules.ast_logging_stdout import LoggingToStdoutRule
+from nfr_review.rules.csharp_async_void import CSharpAsyncVoidRule
+from nfr_review.rules.csharp_blocking_async import CSharpBlockingAsyncRule
 from nfr_review.rules.go_defer_in_loop import GoDeferInLoopRule
 from nfr_review.rules.go_error_ignored import GoErrorIgnoredRule
 from nfr_review.rules.java_exception import ExceptionHandlingAntipatternRule
+from nfr_review.rules.nodejs_floating_promise import NodejsFloatingPromiseRule
+from nfr_review.rules.nodejs_sync_fs_api import NodejsSyncFsApiRule
 from nfr_review.rules.python_broad_except_silent import PythonBroadExceptSilentRule
 from nfr_review.rules.python_mutable_default import PythonMutableDefaultRule
 
 FIXTURES = Path(__file__).parent / "fixtures"
 POLYGLOT = FIXTURES / "polyglot-sample-repo"
 
-AST_COLLECTOR_NAMES = {"java-ast", "python-ast", "go-ast"}
+AST_COLLECTOR_NAMES = {"java-ast", "python-ast", "go-ast", "csharp-ast", "nodejs-ast"}
 
 
 def _polyglot_registries() -> tuple[Registry, Registry]:
-    """Build registries with all 3 AST collectors, cross-language + language-specific rules."""
+    """Build registries with all 5 AST collectors, cross-language + language-specific rules."""
     cregistry: Registry = Registry("collector")
     rregistry: Registry = Registry("rule")
 
@@ -37,6 +43,8 @@ def _polyglot_registries() -> tuple[Registry, Registry]:
     cregistry.register("java-ast", JavaAstCollector())
     cregistry.register("python-ast", PythonAstCollector())
     cregistry.register("go-ast", GoAstCollector())
+    cregistry.register("csharp-ast", CSharpAstCollector())
+    cregistry.register("nodejs-ast", NodejsAstCollector())
 
     rregistry.register("bare-except-catch-all", BareExceptCatchAllRule())
     rregistry.register("logging-to-stdout", LoggingToStdoutRule())
@@ -45,6 +53,10 @@ def _polyglot_registries() -> tuple[Registry, Registry]:
     rregistry.register("python-mutable-default", PythonMutableDefaultRule())
     rregistry.register("go-error-ignored", GoErrorIgnoredRule())
     rregistry.register("go-defer-in-loop", GoDeferInLoopRule())
+    rregistry.register("csharp-async-void", CSharpAsyncVoidRule())
+    rregistry.register("csharp-blocking-async", CSharpBlockingAsyncRule())
+    rregistry.register("nodejs-floating-promise", NodejsFloatingPromiseRule())
+    rregistry.register("nodejs-sync-fs-api", NodejsSyncFsApiRule())
 
     return cregistry, rregistry
 
@@ -105,7 +117,15 @@ class TestPolyglotEngineRun:
         go_findings = [f for f in result.findings if f.collector_name == "go-ast"]
         assert len(go_findings) >= 1
 
-    def test_all_three_ast_collectors_produce_findings(self, result: RunResult) -> None:
+    def test_csharp_ast_produces_findings(self, result: RunResult) -> None:
+        csharp_findings = [f for f in result.findings if f.collector_name == "csharp-ast"]
+        assert len(csharp_findings) >= 1
+
+    def test_nodejs_ast_produces_findings(self, result: RunResult) -> None:
+        nodejs_findings = [f for f in result.findings if f.collector_name == "nodejs-ast"]
+        assert len(nodejs_findings) >= 1
+
+    def test_all_five_ast_collectors_produce_findings(self, result: RunResult) -> None:
         collector_names = {f.collector_name for f in result.findings}
         assert AST_COLLECTOR_NAMES <= collector_names
 
@@ -186,6 +206,20 @@ class TestNoCrossContamination:
                     f"Go file finding used collector {f.collector_name}"
                 )
 
+    def test_csharp_findings_use_csharp_collector(self, result: RunResult) -> None:
+        for f in result.findings:
+            if f.evidence_locator and f.evidence_locator.endswith(".cs"):
+                assert f.collector_name == "csharp-ast", (
+                    f"C# file finding used collector {f.collector_name}"
+                )
+
+    def test_nodejs_findings_use_nodejs_collector(self, result: RunResult) -> None:
+        for f in result.findings:
+            if f.evidence_locator and f.evidence_locator.endswith(".js"):
+                assert f.collector_name == "nodejs-ast", (
+                    f"Node.js file finding used collector {f.collector_name}"
+                )
+
 
 class TestLanguageSpecificRules:
     """Language-specific rules fire for their respective languages."""
@@ -220,6 +254,26 @@ class TestLanguageSpecificRules:
         findings = [f for f in result.findings if f.rule_id == "go-defer-in-loop"]
         assert len(findings) >= 1
 
+    def test_csharp_async_void_fires(self, result: RunResult) -> None:
+        findings = [f for f in result.findings if f.rule_id == "csharp-async-void"]
+        non_green = [f for f in findings if f.rag != "green"]
+        assert len(non_green) >= 1
+
+    def test_csharp_blocking_async_fires(self, result: RunResult) -> None:
+        findings = [f for f in result.findings if f.rule_id == "csharp-blocking-async"]
+        non_green = [f for f in findings if f.rag != "green"]
+        assert len(non_green) >= 1
+
+    def test_nodejs_floating_promise_fires(self, result: RunResult) -> None:
+        findings = [f for f in result.findings if f.rule_id == "nodejs-floating-promise"]
+        non_green = [f for f in findings if f.rag != "green"]
+        assert len(non_green) >= 1
+
+    def test_nodejs_sync_fs_fires(self, result: RunResult) -> None:
+        findings = [f for f in result.findings if f.rule_id == "nodejs-sync-fs-api"]
+        non_green = [f for f in findings if f.rag != "green"]
+        assert len(non_green) >= 1
+
     def test_language_specific_rules_only_reference_their_collector(
         self, result: RunResult
     ) -> None:
@@ -230,6 +284,10 @@ class TestLanguageSpecificRules:
                 assert f.collector_name == "python-ast"
             elif f.rule_id in ("go-error-ignored", "go-defer-in-loop"):
                 assert f.collector_name == "go-ast"
+            elif f.rule_id in ("csharp-async-void", "csharp-blocking-async"):
+                assert f.collector_name == "csharp-ast"
+            elif f.rule_id in ("nodejs-floating-promise", "nodejs-sync-fs-api"):
+                assert f.collector_name == "nodejs-ast"
 
 
 class TestGoodCodeGreen:
@@ -268,3 +326,19 @@ class TestGoodCodeGreen:
             if f.evidence_locator and "good_code.go" in f.evidence_locator and f.rag != "green"
         ]
         assert len(bad) == 0, f"good_code.go has non-green findings: {bad}"
+
+    def test_good_csharp_no_non_green(self, result: RunResult) -> None:
+        bad = [
+            f
+            for f in result.findings
+            if f.evidence_locator and "GoodCode.cs" in f.evidence_locator and f.rag != "green"
+        ]
+        assert len(bad) == 0, f"GoodCode.cs has non-green findings: {bad}"
+
+    def test_good_js_no_non_green(self, result: RunResult) -> None:
+        bad = [
+            f
+            for f in result.findings
+            if f.evidence_locator and "good_code.js" in f.evidence_locator and f.rag != "green"
+        ]
+        assert len(bad) == 0, f"good_code.js has non-green findings: {bad}"
