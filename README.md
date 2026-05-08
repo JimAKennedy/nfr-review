@@ -213,6 +213,14 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 ```
 
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+
 ## Development Transparency
 
 This project was developed with AI assistance using Claude by Anthropic. AI tools were used for code generation, test writing, documentation, and code review during development. All AI-generated output was reviewed, tested, and validated by human maintainers before inclusion.
