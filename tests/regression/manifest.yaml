@@ -2,6 +2,7 @@ repos:
   - name: microservices-demo
     url: https://github.com/GoogleCloudPlatform/microservices-demo
     commit_sha: 5096a85b2f3bf41bef53363cfe5478d5b86ac701
+    license: Apache-2.0
     expected_techs:
       - kubernetes
       - dockerfile
@@ -18,6 +19,7 @@ repos:
   - name: spring-petclinic
     url: https://github.com/spring-projects/spring-petclinic
     commit_sha: c7ee170434ec3e369fdc9201290ba2ea4c92b557
+    license: Apache-2.0
     expected_techs:
       - java
       - spring_boot
@@ -27,6 +29,7 @@ repos:
   - name: awesome-compose
     url: https://github.com/docker/awesome-compose
     commit_sha: 18f59bdb09ecf520dd5758fbf90dec314baec545
+    license: CC0-1.0
     expected_techs:
       - dockerfile
     description: Collection of Docker Compose examples with Dockerfile variety
@@ -34,6 +37,7 @@ repos:
   - name: architecture-decision-record
     url: https://github.com/joelparkerhenderson/architecture-decision-record
     commit_sha: 8ada7402aa1c01ffcb2ee280d0d2d7e7cf060924
+    license: CC-BY-NC-SA-4.0
     expected_techs:
       - adr
     description: ADR templates and examples
@@ -41,6 +45,7 @@ repos:
   - name: buf-tour
     url: https://github.com/bufbuild/buf-tour
     commit_sha: 03ba24d426115a6334494c17db43aaa1a8c7fc79
+    license: NOASSERTION
     expected_techs:
       - proto
     description: Buf CLI tutorial repo with proto/gRPC definitions
@@ -48,6 +53,7 @@ repos:
   - name: opentelemetry-demo
     url: https://github.com/open-telemetry/opentelemetry-demo
     commit_sha: 52a8a76cf8626734fded41d178edf0f2e3eb823a
+    license: Apache-2.0
     expected_techs:
       - otel
       - kubernetes

@@ -213,6 +213,10 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 ```
 
+## Development Transparency
+
+This project was developed with AI assistance using Claude by Anthropic. AI tools were used for code generation, test writing, documentation, and code review during development. All AI-generated output was reviewed, tested, and validated by human maintainers before inclusion.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE) for details.
