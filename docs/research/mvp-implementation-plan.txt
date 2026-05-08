@@ -1,3 +1,10 @@
+# ---
+# Origin: Internal design document
+# Author: Jim Kennedy
+# Date: 2026-05-04
+# AI-status: AI-assisted
+# ---
+
 # NFR Review Automation — Design and MVP Spec
 
 *Companion to the NFR Design Review Framework and the Stack-Specific Reviewer Addendum. This document is the design starting point for the standalone automation tool. It contains the framework-to-band mapping, the MVP scope, the architecture, the rule and collector contracts, and an implementation plan ready to hand to Claude Code.*

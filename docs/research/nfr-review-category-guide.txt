@@ -1,3 +1,10 @@
+# ---
+# Origin: Internal design document
+# Author: Jim Kennedy
+# Date: 2026-05-04
+# AI-status: AI-assisted
+# ---
+
 # Non-Functional Design Review Category Guide
 
 ## How to Use This Guide
