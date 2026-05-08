@@ -18,6 +18,34 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+## Installing Agent Skills
+
+This project uses third-party agent skills (for Claude Code / GSD) that are
+**not tracked in git** due to their licensing terms. After cloning, install them
+from `skills-lock.json`:
+
+```bash
+python scripts/install_skills.py
+```
+
+This downloads skill directories from their source GitHub repositories into
+`.agents/skills/`. The three project-authored skills (`nfr-review-domain`,
+`pydantic-v2`, `python-conventions`) are tracked in git and require no extra
+setup.
+
+Other useful commands:
+
+```bash
+python scripts/install_skills.py --check        # verify installed skills
+python scripts/install_skills.py --force        # reinstall all skills
+python scripts/install_skills.py --update-lock  # update lock hashes after upstream changes
+```
+
+> **Important:** Never commit third-party skill files to git. They are excluded
+> via `.gitignore`. Only project-authored skills under `.agents/skills/` should
+> be tracked. See `skills-lock.json` for the canonical list of vendored skills
+> and their sources.
+
 ## Git Identity
 
 Before committing, configure your Git email to a public address (not a local
