@@ -21,6 +21,7 @@ from nfr_review.rules._cross_language import ALL_LANGUAGES
 _BROAD_TYPES: dict[str, frozenset[str]] = {
     "java": frozenset({"Exception", "Throwable"}),
     "python": frozenset({"Exception", "BaseException"}),
+    "go": frozenset(),
 }
 
 

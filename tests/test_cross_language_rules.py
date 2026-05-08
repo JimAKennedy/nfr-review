@@ -174,9 +174,42 @@ class TestBareExceptCatchAllRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    # --- Go evidence ---
+
+    def test_go_recover_bare_catch_amber(self) -> None:
+        ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "handler.go",
+                "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 12}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert f.severity == "medium"
+        assert f.collector_name == "go-ast"
+        assert f.evidence_locator == "handler.go:12"
+
+    def test_go_recover_rethrow_no_finding(self) -> None:
+        ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "handler.go",
+                "catch_blocks": [{"caught_type": "", "rethrows": True, "line": 20}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
     # --- Cross-language / mixed ---
 
-    def test_mixed_evidence_findings_from_both(self) -> None:
+    def test_mixed_evidence_findings_from_all(self) -> None:
         py_ev = _make_evidence(
             "python-ast",
             "python-ast-file",
@@ -193,12 +226,18 @@ class TestBareExceptCatchAllRule:
                 "catch_blocks": [{"caught_type": "Throwable", "rethrows": False, "line": 10}],
             },
         )
-        result = self.rule.evaluate([py_ev, java_ev], None)
-        assert len(result.findings) == 2
-        rags = {f.rag for f in result.findings}
-        assert rags == {"amber", "red"}
+        go_ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "main.go",
+                "catch_blocks": [{"caught_type": "", "rethrows": False, "line": 15}],
+            },
+        )
+        result = self.rule.evaluate([py_ev, java_ev, go_ev], None)
+        assert len(result.findings) == 3
         collectors = {f.collector_name for f in result.findings}
-        assert collectors == {"python-ast", "java-ast"}
+        assert collectors == {"python-ast", "java-ast", "go-ast"}
 
     def test_no_evidence_skipped(self) -> None:
         ev = _make_evidence("terraform", "tf-file", {"resources": []})
@@ -373,9 +412,57 @@ class TestLoggingToStdoutRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    # --- Go evidence ---
+
+    def test_go_fmt_println_amber(self) -> None:
+        ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "server.go",
+                "log_statements": [{"method": "fmt.Println", "line": 8}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        f = result.findings[0]
+        assert f.rag == "amber"
+        assert f.severity == "medium"
+        assert "fmt.Println()" in f.summary
+        assert f.collector_name == "go-ast"
+        assert f.evidence_locator == "server.go:8"
+
+    def test_go_fmt_printf_amber(self) -> None:
+        ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "server.go",
+                "log_statements": [{"method": "fmt.Printf", "line": 12}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+        assert "fmt.Printf()" in result.findings[0].summary
+
+    def test_go_log_not_flagged(self) -> None:
+        ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "server.go",
+                "log_statements": [{"method": "log.Println", "line": 5}],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
     # --- Cross-language / mixed ---
 
-    def test_mixed_evidence_findings_from_both(self) -> None:
+    def test_mixed_evidence_findings_from_all(self) -> None:
         py_ev = _make_evidence(
             "python-ast",
             "python-ast-file",
@@ -394,10 +481,18 @@ class TestLoggingToStdoutRule:
                 ],
             },
         )
-        result = self.rule.evaluate([py_ev, java_ev], None)
-        assert len(result.findings) == 2
+        go_ev = _make_evidence(
+            "go-ast",
+            "go-ast-file",
+            {
+                "file_path": "main.go",
+                "log_statements": [{"method": "fmt.Println", "line": 15}],
+            },
+        )
+        result = self.rule.evaluate([py_ev, java_ev, go_ev], None)
+        assert len(result.findings) == 3
         collectors = {f.collector_name for f in result.findings}
-        assert collectors == {"python-ast", "java-ast"}
+        assert collectors == {"python-ast", "java-ast", "go-ast"}
 
     def test_no_evidence_skipped(self) -> None:
         ev = _make_evidence("terraform", "tf-file", {"resources": []})

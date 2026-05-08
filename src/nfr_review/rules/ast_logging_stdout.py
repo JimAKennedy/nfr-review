@@ -28,6 +28,7 @@ _STDOUT_METHODS: dict[str, frozenset[str]] = {
             "System.err.printf",
         }
     ),
+    "go": frozenset({"fmt.Print", "fmt.Println", "fmt.Printf"}),
 }
 
 

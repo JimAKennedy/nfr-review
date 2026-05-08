@@ -22,6 +22,18 @@ from nfr_review.rules import (
     dockerfile_user_directive as dockerfile_user_directive,  # noqa: F401
 )
 from nfr_review.rules import (
+    go_defer_in_loop as go_defer_in_loop,  # noqa: F401
+)
+from nfr_review.rules import (
+    go_error_ignored as go_error_ignored,  # noqa: F401
+)
+from nfr_review.rules import (
+    go_goroutine_leak as go_goroutine_leak,  # noqa: F401
+)
+from nfr_review.rules import (
+    go_http_no_timeout as go_http_no_timeout,  # noqa: F401
+)
+from nfr_review.rules import (
     helm_chart_metadata as helm_chart_metadata,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -99,6 +111,10 @@ __all__ = [
     "apim_rate_limit",
     "ci_security_scan",
     "ci_test_stage",
+    "go_defer_in_loop",
+    "go_error_ignored",
+    "go_goroutine_leak",
+    "go_http_no_timeout",
     "dockerfile_base_pinning",
     "dockerfile_multistage",
     "dockerfile_secret_leakage",

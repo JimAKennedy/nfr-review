@@ -17,7 +17,8 @@ class LanguageRuleConfig:
 
 JAVA = LanguageRuleConfig("java", "java-ast", "java-ast-file", "java")
 PYTHON = LanguageRuleConfig("python", "python-ast", "python-ast-file", "python")
+GO = LanguageRuleConfig("go", "go-ast", "go-ast-file", "go")
 
-ALL_LANGUAGES: list[LanguageRuleConfig] = [JAVA, PYTHON]
+ALL_LANGUAGES: list[LanguageRuleConfig] = [JAVA, PYTHON, GO]
 
-__all__ = ["LanguageRuleConfig", "JAVA", "PYTHON", "ALL_LANGUAGES"]
+__all__ = ["LanguageRuleConfig", "JAVA", "PYTHON", "GO", "ALL_LANGUAGES"]
