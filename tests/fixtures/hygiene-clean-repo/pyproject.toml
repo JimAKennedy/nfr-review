@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clean-example"
+version = "1.0.0"
+description = "A well-maintained example project for hygiene testing."
+license = "MIT"
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/example/clean-example"
+Documentation = "https://clean-example.readthedocs.io"
+
+[project.scripts]
+clean-example = "clean_example:main"

@@ -23,14 +23,17 @@ from pathlib import Path
 import click
 
 import nfr_review.collectors  # noqa: F401  # side-effect: register built-ins
+import nfr_review.hygiene.collectors  # noqa: F401  # side-effect: register hygiene collectors
+import nfr_review.hygiene.rules  # noqa: F401  # side-effect: register hygiene rules
 import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
 from nfr_review import __version__
 from nfr_review.config import Config, ConfigError, load_config
 from nfr_review.detect import detect_technologies
 from nfr_review.engine import Engine, EngineError, RunResult
+from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
 from nfr_review.models import Severity
 from nfr_review.output import OutputError, write_csv, write_jsonl
-from nfr_review.registry import rule_registry
+from nfr_review.registry import Registry, rule_registry
 
 _SEVERITY_ORDER: tuple[Severity, ...] = ("info", "low", "medium", "high", "critical")
 
@@ -185,6 +188,150 @@ def explain_cmd(rule_id: str) -> None:
     click.echo(f"required_collectors: {', '.join(rule.required_collectors) or '(none)'}")
     click.echo("")
     click.echo(_rule_description(rule))
+
+
+@cli.command("hygiene", help="Run a repository hygiene audit against TARGET.")
+@click.argument(
+    "target",
+    required=False,
+    default=None,
+    type=click.Path(file_okay=False, path_type=Path),
+)
+@click.option("--list-checks", is_flag=True, help="List registered hygiene checks and exit.")
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("."),
+    show_default=True,
+    help="Directory where CSV and JSONL files are written.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["csv", "jsonl", "both"]),
+    default="both",
+    show_default=True,
+    help="Output format(s) to produce.",
+)
+@click.option(
+    "--severity-threshold",
+    type=click.Choice(["info", "low", "medium", "high", "critical"]),
+    default=None,
+    help="Exit 2 if any finding meets or exceeds this severity.",
+)
+@click.option(
+    "--category",
+    default=None,
+    help="Comma-separated category names to filter rules.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+def hygiene_cmd(
+    target: Path | None,
+    list_checks: bool,
+    output_dir: Path,
+    output_format: str,
+    severity_threshold: str | None,
+    category: str | None,
+    config_path: Path | None,
+) -> None:
+    """Hygiene command — run hygiene collectors and rules, emit output."""
+    if list_checks:
+        for rule in hygiene_rule_registry.all():
+            cat = getattr(rule, "category", "uncategorized")
+            click.echo(f"{rule.id}\tcategory={cat}\tband={rule.band}\t{_rule_summary(rule)}")
+        return
+
+    if target is None:
+        click.echo("error: TARGET is required (unless --list-checks is set)", err=True)
+        raise click.exceptions.Exit(1)
+
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    from nfr_review.protocols import Rule as RuleProtocol
+
+    if category is not None:
+        requested = {c.strip() for c in category.split(",")}
+        filtered: Registry[RuleProtocol] = Registry("hygiene-rule")
+        for rule in hygiene_rule_registry.all():
+            if getattr(rule, "category", None) in requested:
+                filtered.register(rule.id, rule)
+        effective_rules: Registry[RuleProtocol] = filtered
+    else:
+        effective_rules = hygiene_rule_registry
+
+    try:
+        result: RunResult = Engine(
+            collectors=hygiene_collector_registry,
+            rules=effective_rules,
+        ).run(target, config)
+    except EngineError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    try:
+        if output_format in ("csv", "both"):
+            write_csv(result, output_dir / "hygiene-report.csv")
+        if output_format in ("jsonl", "both"):
+            write_jsonl(result, output_dir / "hygiene-report.jsonl")
+    except OutputError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    metadata = result.run_metadata
+    collectors_run = len(metadata.collector_versions) if metadata is not None else 0
+    rules_run = len(metadata.rules_run) if metadata is not None else 0
+    rules_skipped = len(metadata.rules_skipped) if metadata is not None else 0
+    files_emitted = sum(
+        [
+            1 if output_format in ("csv", "both") else 0,
+            1 if output_format in ("jsonl", "both") else 0,
+        ]
+    )
+    output_paths: list[str] = []
+    if output_format in ("csv", "both"):
+        output_paths.append(str(output_dir / "hygiene-report.csv"))
+    if output_format in ("jsonl", "both"):
+        output_paths.append(str(output_dir / "hygiene-report.jsonl"))
+
+    click.echo(
+        (
+            f"nfr-review hygiene: collectors_run={collectors_run} "
+            f"rules_run={rules_run} rules_skipped={rules_skipped} "
+            f"findings={len(result.findings)} files_emitted={files_emitted} "
+            f"output={', '.join(output_paths)}"
+        ),
+        err=True,
+    )
+    for warning in result.warnings:
+        click.echo(f"warning: {warning}", err=True)
+
+    if severity_threshold is not None:
+        threshold: Severity = severity_threshold  # type: ignore[assignment]
+        if _exceeds_threshold(result, threshold):
+            raise click.exceptions.Exit(2)
 
 
 @cli.command("version", help="Print the nfr-review version and exit.")
