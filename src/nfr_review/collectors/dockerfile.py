@@ -225,7 +225,7 @@ class DockerfileCollector:
                 logger.warning("Cannot read %s: %s", rel, exc)
                 continue
             try:
-                payload = _parse_dockerfile(self._parser, source)
+                payload = _parse_dockerfile(self._parser, source)  # type: ignore[arg-type]
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Parse error in %s: %s", rel, exc)
                 continue

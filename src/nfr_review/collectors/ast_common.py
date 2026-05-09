@@ -61,7 +61,7 @@ class BaseASTCollector(ABC):
     evidence_kind: str
 
     def __init__(self) -> None:
-        self._parser: Parser = get_parser(cast(Any, self.language))
+        self._parser: Parser = get_parser(cast(Any, self.language))  # type: ignore[assignment]
 
     @abstractmethod
     def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:

@@ -7,7 +7,7 @@
 
 Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, ADRs, Java source, APIM policies) and evaluates 20 rules covering resilience, observability, security, and operational readiness. Findings are emitted as CSV and JSONL for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python source, APIM policies, and more) and evaluates 50+ rules covering resilience, observability, security, and operational readiness. Findings are emitted as CSV and JSONL for integration into review workflows.
 
 ## Quick start
 
@@ -26,8 +26,18 @@ nfr-review run /path/to/your/repo
 
 ## Requirements
 
-- Python 3.11+ (`python3.11`, `python3.12`, etc. — macOS ships 3.9 as `python3` which is too old)
-- Dependencies are installed automatically via `pip install -e .`
+- **Python 3.11+** (`python3.11`, `python3.12`, etc. — macOS ships 3.9 as `python3` which is too old)
+- Python dependencies are installed automatically via `pip install -e .`
+
+### Optional external tools
+
+These are **not** Python packages — they are standalone binaries that some collectors call at runtime. The tool degrades gracefully when they are absent (skips the relevant analysis with an informative message), but for full coverage they should be installed:
+
+| Tool | Used by | Install |
+|------|---------|---------|
+| [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
+
+Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped.
 
 ## Installation
 
@@ -62,7 +72,7 @@ nfr-review run /path/to/target/repo
 ```
 
 This will:
-1. Collect evidence from the target repo (Spring configs, K8s manifests, CI workflows, Java source, ADRs, APIM policies)
+1. Collect evidence from the target repo (Spring configs, K8s manifests, CI workflows, Dockerfiles, Helm charts, Terraform, Istio, source code, ADRs, APIM policies, and more)
 2. Evaluate all applicable rules against the collected evidence
 3. Write findings to `nfr-review.csv` and `nfr-review.jsonl` in the current directory
 4. Print a summary to stderr
@@ -134,7 +144,7 @@ severity_threshold: high
 
 ## Rules
 
-nfr-review ships with 20 rules across several domains:
+nfr-review ships with 50+ rules across several domains. A selection:
 
 | Rule ID | Domain | Description |
 |---------|--------|-------------|

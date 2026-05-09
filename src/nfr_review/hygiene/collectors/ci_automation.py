@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
@@ -23,10 +23,13 @@ _CI_GLOBS: list[tuple[str, str]] = [
 ]
 
 
+_yaml = YAML(typ="safe")
+
+
 def _parse_github_actions(content: str) -> dict[str, Any]:
     try:
-        doc = yaml.safe_load(content)
-    except yaml.YAMLError:
+        doc = _yaml.load(content)
+    except YAMLError:
         return {"parse_error": True, "jobs": [], "steps": []}
 
     if not isinstance(doc, dict):
@@ -106,11 +109,11 @@ class CiAutomationCollector:
                     # For non-GHA, try to extract step-like content from YAML
                     if provider in ("gitlab-ci", "circleci", "azure-devops"):
                         try:
-                            doc = yaml.safe_load(raw)
+                            doc = _yaml.load(raw)
                             if isinstance(doc, dict):
                                 entry["raw_keys"] = list(doc.keys())
                                 _extract_script_steps(doc, entry)
-                        except yaml.YAMLError:
+                        except YAMLError:
                             logger.warning("Malformed YAML in %s — skipping parse", rel_path)
 
                 configs.append(entry)
