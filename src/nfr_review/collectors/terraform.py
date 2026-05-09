@@ -39,11 +39,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from tree_sitter_language_pack import get_parser
-
 if TYPE_CHECKING:
     from tree_sitter import Node, Parser
 
+from nfr_review.collectors.ast_common import make_parser
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -394,7 +393,7 @@ class TerraformCollector:
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self._parser = get_parser("hcl")
+        self._parser = make_parser("hcl")
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         evidence: list[Evidence] = []

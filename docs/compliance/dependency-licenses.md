@@ -21,8 +21,14 @@ These packages are listed under `[project.dependencies]` in `pyproject.toml`.
 | pydantic | 2.13.3 | MIT | https://github.com/pydantic/pydantic |
 | ruamel.yaml | 0.19.1 | MIT | https://sourceforge.net/p/ruamel-yaml/code/ci/default/tree/ |
 | anthropic | 0.97.0 | MIT | https://github.com/anthropics/anthropic-sdk-python |
-| tree-sitter | 0.23.2 | MIT | https://github.com/tree-sitter/py-tree-sitter |
-| tree-sitter-language-pack | 0.9.1 | MIT OR Apache-2.0 | https://github.com/Goldziher/tree-sitter-language-pack |
+| tree-sitter | 0.25.2 | MIT | https://github.com/tree-sitter/py-tree-sitter |
+| tree-sitter-java | 0.23.5 | MIT | https://github.com/tree-sitter/tree-sitter-java |
+| tree-sitter-python | 0.25.0 | MIT | https://github.com/tree-sitter/tree-sitter-python |
+| tree-sitter-go | 0.25.0 | MIT | https://github.com/tree-sitter/tree-sitter-go |
+| tree-sitter-hcl | 1.2.0 | Apache-2.0 | https://github.com/tree-sitter-grammars/tree-sitter-hcl |
+| tree-sitter-dockerfile | 0.2.0 | MIT | https://github.com/camdencheek/tree-sitter-dockerfile |
+| tree-sitter-c-sharp | 0.23.5 | MIT | https://github.com/tree-sitter/tree-sitter-c-sharp |
+| tree-sitter-typescript | 0.23.2 | MIT | https://github.com/tree-sitter/tree-sitter-typescript |
 
 All runtime dependencies use permissive licenses (MIT, BSD-3-Clause, or
 Apache-2.0) that are compatible with the project's Apache-2.0 license.
@@ -47,37 +53,12 @@ time. Its license (MIT) is documented from its PyPI metadata.
 
 ## Tree-Sitter Grammar Licenses
 
-The `tree-sitter-language-pack` package (v0.9.1) bundles pre-compiled grammar
-binaries for 160+ programming languages as shared objects (`.abi3.so` files). The
-package itself is dual-licensed under **MIT OR Apache-2.0** (SPDX expression).
+Individual tree-sitter grammar packages are used instead of a bundled language
+pack. Each package provides pre-compiled parser binaries for a single language.
 
-### Package-level license
-
-The package's `LICENSE` file contains two license grants:
-
-1. **MIT License** -- Copyright 2024-2025 Na'aman Hirschfeld (the package author)
-2. **Apache License 2.0** -- Copyright 2022 Grant Jenks (original
-   `tree-sitter-languages` project that this package forked from)
-
-### Bundled grammar parsers
-
-Each upstream tree-sitter grammar repository carries its own license. The vast
-majority of tree-sitter grammars use the **MIT** license. A small number use
-**Apache-2.0** or are dual-licensed MIT/Apache-2.0. The compiled `.abi3.so`
-binaries in the package do not embed separate license files.
-
-The grammars used by nfr-review's AST collectors are:
-
-| Grammar | Upstream Repository | License (SPDX) |
-|---------|-------------------|----------------|
-| java | https://github.com/tree-sitter/tree-sitter-java | MIT |
-| python | https://github.com/tree-sitter/tree-sitter-python | MIT |
-| go | https://github.com/tree-sitter/tree-sitter-go | MIT |
-| c_sharp | https://github.com/tree-sitter/tree-sitter-c-sharp | MIT |
-| javascript / typescript | https://github.com/tree-sitter/tree-sitter-javascript / tree-sitter-typescript | MIT |
-
-All grammars consumed by this project use permissive licenses compatible with
-Apache-2.0.
+All grammar packages consumed by this project use permissive licenses (MIT or
+Apache-2.0) compatible with the project's Apache-2.0 license. See the Runtime
+Dependencies table above for specific versions and source URLs.
 
 ---
 
@@ -99,9 +80,9 @@ license metadata manually, which is how this inventory was originally produced.
 
 | License | Count | Compatible with Apache-2.0? |
 |---------|-------|-----------------------------|
-| MIT | 8 | Yes |
+| MIT | 13 | Yes |
 | BSD-3-Clause | 1 | Yes |
-| Apache-2.0 | 1 (dual) | Yes |
+| Apache-2.0 | 1 | Yes |
 
 No copyleft (GPL, LGPL, AGPL) or proprietary licenses are present in the direct
 dependency tree. All licenses are permissive and compatible with the project's
