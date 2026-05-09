@@ -34,6 +34,9 @@ tmp/
 nfr-review.csv
 nfr-review.jsonl
 .regression-repos/
+package.json
+package-lock.json
+reports/
 
 # ── Vendored skills (installed via skills-lock.json, not tracked) ──
 .agents/skills/docx/
