@@ -334,6 +334,129 @@ def hygiene_cmd(
             raise click.exceptions.Exit(2)
 
 
+@cli.command("report", help="Run NFR + hygiene scans and produce a timestamped report.")
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("reports"),
+    show_default=True,
+    help="Directory where report files are written.",
+)
+@click.option(
+    "--no-tests",
+    is_flag=True,
+    default=False,
+    help="Skip pytest execution.",
+)
+def report_cmd(
+    target: Path,
+    config_path: Path | None,
+    output_dir: Path,
+    no_tests: bool,
+) -> None:
+    """Report command — run NFR + hygiene scans, optional pytest, emit report."""
+    from datetime import UTC, datetime
+
+    from nfr_review.output.markdown import render_markdown_report
+    from nfr_review.output.pytest_runner import run_pytest
+
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    try:
+        detected = detect_technologies(target)
+    except Exception:
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    config = config.model_copy(update={"tech": merged_tech})
+
+    # NFR scan
+    try:
+        nfr_result: RunResult = Engine().run(target, config)
+    except EngineError as exc:
+        click.echo(f"error: NFR scan failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    # Hygiene scan
+    try:
+        hygiene_result: RunResult = Engine(
+            collectors=hygiene_collector_registry,
+            rules=hygiene_rule_registry,
+        ).run(target, config)
+    except EngineError as exc:
+        click.echo(f"error: hygiene scan failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    # Pytest execution
+    pytest_result = None
+    if not no_tests:
+        pytest_result = run_pytest(target)
+
+    # Generate report
+    md_content = render_markdown_report(
+        nfr_result=nfr_result,
+        hygiene_result=hygiene_result,
+        pytest_result=pytest_result,
+    )
+
+    # Write output files
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+    stem = f"nfr-review-{timestamp}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    md_path = output_dir / f"{stem}.md"
+    csv_path = output_dir / f"{stem}.csv"
+    jsonl_path = output_dir / f"{stem}.jsonl"
+
+    try:
+        md_path.write_text(md_content, encoding="utf-8")
+
+        combined_result = RunResult(
+            findings=list(nfr_result.findings) + list(hygiene_result.findings),
+            rule_results=(list(nfr_result.rule_results) + list(hygiene_result.rule_results)),
+            run_metadata=nfr_result.run_metadata,
+            warnings=list(nfr_result.warnings) + list(hygiene_result.warnings),
+        )
+        write_csv(combined_result, csv_path)
+        write_jsonl(combined_result, jsonl_path)
+    except (OSError, OutputError) as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    total = len(nfr_result.findings) + len(hygiene_result.findings)
+    click.echo(
+        (
+            f"nfr-review report: findings={total} "
+            f"output={md_path} csv={csv_path} jsonl={jsonl_path}"
+        ),
+        err=True,
+    )
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""
