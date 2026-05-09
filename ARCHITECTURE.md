@@ -31,13 +31,30 @@ RunResult(findings, rule_results, run_metadata, warnings)
   |
   v
 Exit code: 0 (clean), 1 (error), 2 (severity threshold exceeded)
+
+report command (nfr-review report <target>):
+
+  NFR Engine.run()     -->  RunResult (nfr_result)
+  Hygiene Engine.run() -->  RunResult (hygiene_result)
+  run_pytest()         -->  PytestResult (optional, --no-tests to skip)
+        |
+        v
+  partition_findings()  -->  (source_findings, test_findings)
+        |
+        v
+  render_markdown_report()  -->  Markdown report
+        |
+        +-- write_csv()   (combined findings)
+        +-- write_jsonl() (combined findings)
+        v
+  Timestamped files in reports/: nfr-review-{timestamp}.{md,csv,jsonl}
 ```
 
 ## Module Responsibility Map
 
 | Module | Owns | Does NOT own |
 |--------|------|-------------|
-| `cli.py` | Argument parsing, config loading, orchestration, exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
+| `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `list-rules`, `explain`, `version`), exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
 | `config.py` | YAML loading, Pydantic validation, `Config`/`RulesConfig`/`CollectorsConfig` models | Tech detection, defaults beyond schema defaults |
 | `detect.py` | File-system probing for 17 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
@@ -49,6 +66,9 @@ Exit code: 0 (clean), 1 (error), 2 (severity threshold exceeded)
 | `collectors/*` | Evidence gathering from target repo files | Evaluating findings, accessing config.rules |
 | `rules/*` | Evaluating evidence into findings with RAG/severity/recommendation | Gathering evidence, file I/O on target repo |
 | `output/*` | CSV and JSONL serialization, `OutputError` | Finding logic, metadata assembly |
+| `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
+| `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results | Data collection, engine orchestration |
+| `output/pytest_runner.py` | Subprocess pytest execution, summary line parsing, `PytestResult` | Test framework logic, assertions |
 
 ## Key Types
 
@@ -80,6 +100,13 @@ RunResult
   rule_results: list[RuleResult]
   run_metadata: RunMetadata
   warnings: list[str]
+
+PytestResult (output/pytest_runner.py)
+  passed, failed, skipped, errors: int
+  duration_seconds: float
+  warnings: list[str]
+  raw_output: str
+  exit_code: int               # -1 = pytest not found / timed out
 ```
 
 ## Engine Filtering Pipeline
@@ -120,6 +147,8 @@ triggering registration. The CLI imports these packages at startup.
 | Add a new tech detection | `detect.py` -- add key to `ALL_TECH_KEYS` + detector function | Config docs if users need to override it |
 | Add a new config option | `config.py` Pydantic model | CLI if it needs a flag, docs |
 | Add a new output format | `output/<format>.py` | `cli.py` (new flag + writer call) |
+| Add a new report section | `output/markdown.py` (new `_section()` helper) | Nothing -- renderer is self-contained |
+| Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |
 
