@@ -9,7 +9,16 @@ they create missing parent directories and surface filesystem errors as
 from __future__ import annotations
 
 from nfr_review.output._errors import OutputError
+from nfr_review.output.classify import Region, classify_region, partition_findings
 from nfr_review.output.csv import CSV_HEADER, write_csv
 from nfr_review.output.jsonl import write_jsonl
 
-__all__ = ["OutputError", "CSV_HEADER", "write_csv", "write_jsonl"]
+__all__ = [
+    "OutputError",
+    "Region",
+    "classify_region",
+    "partition_findings",
+    "CSV_HEADER",
+    "write_csv",
+    "write_jsonl",
+]
