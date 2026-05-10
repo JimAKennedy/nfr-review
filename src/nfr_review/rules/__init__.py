@@ -23,6 +23,8 @@ from nfr_review.rules import (
 from nfr_review.rules import (
     csharp_disposable_no_using as csharp_disposable_no_using,  # noqa: F401
 )
+from nfr_review.rules import dep_freshness as dep_freshness  # noqa: F401
+from nfr_review.rules import dep_upgrade_path as dep_upgrade_path  # noqa: F401
 from nfr_review.rules import (
     dockerfile_base_pinning as dockerfile_base_pinning,  # noqa: F401
 )
@@ -143,6 +145,8 @@ __all__ = [
     "go_error_ignored",
     "go_goroutine_leak",
     "go_http_no_timeout",
+    "dep_freshness",
+    "dep_upgrade_path",
     "dockerfile_base_pinning",
     "dockerfile_multistage",
     "dockerfile_secret_leakage",

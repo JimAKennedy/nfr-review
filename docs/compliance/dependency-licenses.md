@@ -1,6 +1,6 @@
 # Dependency License Inventory
 
-**Generated:** 2026-05-08
+**Generated:** 2026-05-10
 **Project:** nfr-review v0.1.0
 **License:** Apache-2.0
 
@@ -29,9 +29,11 @@ These packages are listed under `[project.dependencies]` in `pyproject.toml`.
 | tree-sitter-dockerfile | 0.2.0 | MIT | https://github.com/camdencheek/tree-sitter-dockerfile |
 | tree-sitter-c-sharp | 0.23.5 | MIT | https://github.com/tree-sitter/tree-sitter-c-sharp |
 | tree-sitter-typescript | 0.23.2 | MIT | https://github.com/tree-sitter/tree-sitter-typescript |
+| packaging | 26.2 | Apache-2.0 OR BSD-2-Clause | https://github.com/pypa/packaging |
+| resolvelib | 1.2.1 | ISC | https://github.com/sarugaku/resolvelib |
 
-All runtime dependencies use permissive licenses (MIT, BSD-3-Clause, or
-Apache-2.0) that are compatible with the project's Apache-2.0 license.
+All runtime dependencies use permissive licenses (MIT, BSD-3-Clause, Apache-2.0,
+ISC, and BSD-2-Clause) that are compatible with the project's Apache-2.0 license.
 
 ---
 
@@ -83,6 +85,8 @@ license metadata manually, which is how this inventory was originally produced.
 | MIT | 13 | Yes |
 | BSD-3-Clause | 1 | Yes |
 | Apache-2.0 | 1 | Yes |
+| Apache-2.0 OR BSD-2-Clause | 1 | Yes |
+| ISC | 1 | Yes |
 
 No copyleft (GPL, LGPL, AGPL) or proprietary licenses are present in the direct
 dependency tree. All licenses are permissive and compatible with the project's

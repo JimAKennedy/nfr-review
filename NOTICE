@@ -9,3 +9,7 @@ You may obtain a copy of the License at
 
 Third-party dependency licenses are documented in
 docs/compliance/dependency-licenses.md.
+
+This product includes software developed by:
+- packaging (https://github.com/pypa/packaging) — Apache-2.0 OR BSD-2-Clause
+- resolvelib (https://github.com/sarugaku/resolvelib) — ISC License

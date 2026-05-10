@@ -1,0 +1,12 @@
+[project]
+name = "sample-project"
+version = "1.0.0"
+dependencies = [
+    "boto3>=1.28",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
