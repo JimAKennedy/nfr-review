@@ -105,7 +105,7 @@ class TestMalformedYaml:
         (tmp_path / "good.yaml").write_text(
             "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ok\ndata: {}\n"
         )
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.k8s_manifest"):
             evidence = collector.collect(tmp_path, config=None)
         assert any("YAML parse error" in r.message for r in caplog.records)
         summary = next(e for e in evidence if e.kind == "k8s-manifest-summary")

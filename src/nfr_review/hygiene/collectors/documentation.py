@@ -50,13 +50,13 @@ def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
         try:
             import tomli as tomllib  # type: ignore[no-redef,import-not-found]
         except ModuleNotFoundError:
-            logger.warning("Neither tomllib nor tomli available — skipping pyproject.toml")
+            logger.debug("Neither tomllib nor tomli available — skipping pyproject.toml")
             return None
 
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        logger.warning("Failed to parse %s", path)
+        logger.debug("Failed to parse %s", path)
         return None
 
     project = data.get("project")
@@ -86,7 +86,7 @@ def _parse_package_json(repo_path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        logger.warning("Failed to parse %s", path)
+        logger.debug("Failed to parse %s", path)
         return None
 
     if not isinstance(data, dict):

@@ -76,7 +76,7 @@ def _parse_csproj(path: Path) -> list[tuple[str, str]] | None:
     try:
         tree = ET.parse(path)  # nosec B314
     except (ET.ParseError, OSError):
-        logger.warning("Failed to parse %s", path)
+        logger.debug("Failed to parse %s", path)
         return None
 
     root = tree.getroot()

@@ -87,7 +87,7 @@ class CiAutomationCollector:
                 try:
                     raw = match_path.read_text(encoding="utf-8", errors="replace")
                 except OSError:
-                    logger.warning("Could not read CI config: %s", rel_path)
+                    logger.debug("Could not read CI config: %s", rel_path)
                     continue
 
                 entry: dict[str, Any] = {
@@ -101,7 +101,7 @@ class CiAutomationCollector:
                     entry["jobs"] = parsed["jobs"]
                     entry["steps"] = parsed["steps"]
                     if parsed.get("parse_error"):
-                        logger.warning("Malformed YAML in %s — skipping parse", rel_path)
+                        logger.debug("Malformed YAML in %s — skipping parse", rel_path)
                 else:
                     entry["jobs"] = []
                     entry["steps"] = []
@@ -114,7 +114,7 @@ class CiAutomationCollector:
                                 entry["raw_keys"] = list(doc.keys())
                                 _extract_script_steps(doc, entry)
                         except YAMLError:
-                            logger.warning("Malformed YAML in %s — skipping parse", rel_path)
+                            logger.debug("Malformed YAML in %s — skipping parse", rel_path)
 
                 configs.append(entry)
 

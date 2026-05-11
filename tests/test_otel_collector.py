@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -159,7 +160,8 @@ class TestEdgeCases:
         self, collector: OTelCollector, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         (tmp_path / "otel-collector-config.yaml").write_text("{{invalid yaml: [unclosed\n")
-        results = collector.collect(tmp_path, config=None)
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.otel"):
+            results = collector.collect(tmp_path, config=None)
         assert results == []
         assert "YAML parse error" in caplog.text
 
@@ -235,7 +237,8 @@ class TestEdgeCases:
         )
         f.chmod(0o000)
         try:
-            results = collector.collect(tmp_path, config=None)
+            with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.otel"):
+                results = collector.collect(tmp_path, config=None)
             assert results == []
             assert "Cannot read" in caplog.text
         finally:

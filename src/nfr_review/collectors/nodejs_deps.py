@@ -70,11 +70,11 @@ def _parse_package_json(path: Path) -> list[tuple[str, str]] | None:
     try:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
-        logger.warning("Failed to parse %s", path)
+        logger.debug("Failed to parse %s", path)
         return None
 
     if not isinstance(data, dict):
-        logger.warning("Unexpected format in %s", path)
+        logger.debug("Unexpected format in %s", path)
         return None
 
     deps: list[tuple[str, str]] = []

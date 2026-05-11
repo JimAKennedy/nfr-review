@@ -75,12 +75,12 @@ def _parse_requirements_txt(path: Path) -> list[Requirement]:
         if not stripped or stripped.startswith("#"):
             continue
         if stripped.startswith("-r ") or stripped.startswith("-r\t"):
-            logger.warning("Skipping -r include in %s: %s", path, stripped)
+            logger.debug("Skipping -r include in %s: %s", path, stripped)
             continue
         try:
             reqs.append(Requirement(stripped))
         except InvalidRequirement:
-            logger.warning("Skipping unparseable line in %s: %s", path, stripped)
+            logger.debug("Skipping unparseable line in %s: %s", path, stripped)
     return reqs
 
 
@@ -89,7 +89,7 @@ def _parse_pyproject_toml(path: Path) -> list[Requirement]:
     try:
         data = tomllib.loads(path.read_text())
     except Exception:  # noqa: BLE001
-        logger.warning("Failed to parse %s", path)
+        logger.debug("Failed to parse %s", path)
         return reqs
 
     project = data.get("project", {})
@@ -102,7 +102,7 @@ def _parse_pyproject_toml(path: Path) -> list[Requirement]:
         try:
             reqs.append(Requirement(entry))
         except InvalidRequirement:
-            logger.warning("Skipping unparseable dependency in %s: %s", path, entry)
+            logger.debug("Skipping unparseable dependency in %s: %s", path, entry)
     return reqs
 
 

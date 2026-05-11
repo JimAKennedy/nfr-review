@@ -49,13 +49,13 @@ class IstioCollector:
             try:
                 content = yaml_file.read_bytes()
             except OSError as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 continue
 
             try:
                 docs = list(yaml.load_all(content))
             except YAMLError as exc:
-                logger.warning("YAML parse error in %s: %s", rel, exc)
+                logger.debug("YAML parse error in %s: %s", rel, exc)
                 continue
 
             resources: list[dict[str, Any]] = []

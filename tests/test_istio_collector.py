@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -261,7 +262,8 @@ class TestEdgeCases:
             "  mtls:\n"
             "    mode: STRICT\n"
         )
-        results = collector.collect(tmp_path, config=None)
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.istio"):
+            results = collector.collect(tmp_path, config=None)
         assert len(results) == 1
         assert results[0].payload["resources"][0]["name"] == "test"
         assert "YAML parse error" in caplog.text
@@ -324,7 +326,8 @@ class TestEdgeCases:
         )
         f.chmod(0o000)
         try:
-            results = collector.collect(tmp_path, config=None)
+            with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.istio"):
+                results = collector.collect(tmp_path, config=None)
             assert results == []
             assert "Cannot read" in caplog.text
         finally:

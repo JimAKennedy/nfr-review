@@ -223,7 +223,7 @@ class TestLogging:
             hdrs={},
             fp=io.BytesIO(b""),
         )
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("DEBUG", logger="nfr_review.deps_dev_client"):
             client.get_package_versions("pypi", "requests")
         assert "deps.dev lookup failed" in caplog.text
         assert "503" in caplog.text
@@ -231,7 +231,7 @@ class TestLogging:
     @patch("nfr_review.deps_dev_client.urllib.request.urlopen")
     def test_warning_logged_on_timeout(self, mock_urlopen, client, caplog):
         mock_urlopen.side_effect = urllib.error.URLError("timed out")
-        with caplog.at_level("WARNING"):
+        with caplog.at_level("DEBUG", logger="nfr_review.deps_dev_client"):
             client.get_package_versions("pypi", "requests")
         assert "deps.dev lookup failed" in caplog.text
         assert "timed out" in caplog.text

@@ -239,12 +239,12 @@ class ProtoCollector:
             try:
                 source = proto_file.read_text(encoding="utf-8", errors="replace")
             except OSError as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 continue
             try:
                 payload = _parse_proto(source)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Parse error in %s: %s", rel, exc)
+                logger.debug("Parse error in %s: %s", rel, exc)
                 continue
             payload["file_path"] = str(rel)
             evidence.append(

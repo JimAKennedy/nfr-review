@@ -18,6 +18,8 @@ JSONL) can be piped from stdout-equivalent file paths without contamination.
 
 from __future__ import annotations
 
+import logging
+import sys
 from pathlib import Path
 
 import click
@@ -64,6 +66,69 @@ def _rule_description(rule: object) -> str:
     return "\n".join(line.rstrip() for line in doc.strip().splitlines())
 
 
+class _DedupFilter(logging.Filter):
+    """Suppress duplicate log messages within a single run."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen: set[str] = set()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if msg in self._seen:
+            return False
+        self._seen.add(msg)
+        return True
+
+    def reset(self) -> None:
+        self._seen.clear()
+
+
+def _configure_logging(verbose: int, quiet: bool, log_file: Path | None) -> None:
+    """Configure the ``nfr_review`` logger hierarchy.
+
+    Parameters
+    ----------
+    verbose:
+        0 = WARNING (default), 1 = INFO, >=2 = DEBUG.
+    quiet:
+        If *True*, force ERROR level (overrides *verbose*).
+    log_file:
+        If set, write diagnostics to this file instead of stderr.
+    """
+    if quiet:
+        level = logging.ERROR
+    elif verbose >= 2:
+        level = logging.DEBUG
+    elif verbose == 1:
+        level = logging.INFO
+    else:
+        level = logging.WARNING
+
+    logger = logging.getLogger("nfr_review")
+    logger.handlers.clear()
+    logger.setLevel(level)
+
+    formatter = logging.Formatter("%(levelname)s: %(name)s: %(message)s")
+
+    if log_file is not None:
+        try:
+            handler: logging.Handler = logging.FileHandler(log_file)
+        except OSError:
+            click.echo(
+                f"warning: cannot open log file {log_file}, falling back to stderr",
+                err=True,
+            )
+            handler = logging.StreamHandler(sys.stderr)
+    else:
+        handler = logging.StreamHandler(sys.stderr)
+
+    handler.setFormatter(formatter)
+    handler.addFilter(_DedupFilter())
+    logger.addHandler(handler)
+    logger.propagate = False
+
+
 @click.group(help="Automated non-functional requirements review.")
 @click.version_option(__version__, prog_name="nfr-review")
 def cli() -> None:
@@ -72,6 +137,24 @@ def cli() -> None:
 
 @cli.command("run", help="Run an NFR scan against TARGET (a repository directory).")
 @click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
 @click.option(
     "--config",
     "config_path",
@@ -97,11 +180,17 @@ def cli() -> None:
 )
 def run_cmd(
     target: Path,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
     config_path: Path | None,
     csv_path: Path,
     jsonl_path: Path,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
     if not target.exists():
         click.echo(f"error: target does not exist: {target}", err=True)
         raise click.exceptions.Exit(1)
@@ -197,6 +286,24 @@ def explain_cmd(rule_id: str) -> None:
     default=None,
     type=click.Path(file_okay=False, path_type=Path),
 )
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
 @click.option("--list-checks", is_flag=True, help="List registered hygiene checks and exit.")
 @click.option(
     "--output-dir",
@@ -233,6 +340,9 @@ def explain_cmd(rule_id: str) -> None:
 )
 def hygiene_cmd(
     target: Path | None,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
     list_checks: bool,
     output_dir: Path,
     output_format: str,
@@ -246,6 +356,10 @@ def hygiene_cmd(
             cat = getattr(rule, "category", "uncategorized")
             click.echo(f"{rule.id}\tcategory={cat}\tband={rule.band}\t{_rule_summary(rule)}")
         return
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
 
     if target is None:
         click.echo("error: TARGET is required (unless --list-checks is set)", err=True)
@@ -337,6 +451,24 @@ def hygiene_cmd(
 @cli.command("report", help="Run NFR + hygiene scans and produce a timestamped report.")
 @click.argument("target", type=click.Path(file_okay=False, path_type=Path))
 @click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
     "--config",
     "config_path",
     type=click.Path(dir_okay=False, path_type=Path),
@@ -358,6 +490,9 @@ def hygiene_cmd(
 )
 def report_cmd(
     target: Path,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
     config_path: Path | None,
     output_dir: Path,
     no_tests: bool,
@@ -367,6 +502,10 @@ def report_cmd(
 
     from nfr_review.output.markdown import render_markdown_report
     from nfr_review.output.pytest_runner import run_pytest
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
 
     if not target.exists():
         click.echo(f"error: target does not exist: {target}", err=True)
@@ -463,7 +602,7 @@ def version_cmd() -> None:
     click.echo(__version__)
 
 
-__all__ = ["cli"]
+__all__ = ["_DedupFilter", "_configure_logging", "cli"]
 
 
 if __name__ == "__main__":

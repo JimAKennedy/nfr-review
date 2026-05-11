@@ -171,7 +171,7 @@ class TestFaultIsolation:
         good.write_text("server:\n  port: 8080\n")
         bad = resources / "application-broken.yaml"
         bad.write_text(":\n  - [\ninvalid: {yaml: [}\n")
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.spring_config"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.spring_config"):
             results = collector.collect(tmp_path, config=None)
         assert len(results) == 1
         assert "application.yaml" in results[0].locator
@@ -189,7 +189,7 @@ class TestFaultIsolation:
         resources.mkdir(parents=True)
         binary_file = resources / "application.yaml"
         binary_file.write_bytes(b"\x00\x01\x02\xff\xfe\x80binary garbage")
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.spring_config"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.spring_config"):
             results = collector.collect(tmp_path, config=None)
         # Either skipped or produced an error — should not crash
         assert isinstance(results, list)

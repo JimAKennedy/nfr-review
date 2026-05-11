@@ -85,7 +85,7 @@ class TestApimEdgeCases:
         bad_xml = policies_dir / "broken.xml"
         bad_xml.write_text("<<< this is not valid xml >>>")
 
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.apim_policy"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.apim_policy"):
             evidence = collector.collect(tmp_path, config=None)
 
         assert evidence == []
@@ -105,7 +105,7 @@ class TestApimEdgeCases:
         """)
         )
 
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.apim_policy"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.apim_policy"):
             evidence = collector.collect(tmp_path, config=None)
 
         assert evidence == []

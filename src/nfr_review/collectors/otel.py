@@ -61,13 +61,13 @@ class OTelCollector:
             try:
                 content = yaml_file.read_bytes()
             except OSError as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 continue
 
             try:
                 doc = yaml.load(content)
             except YAMLError as exc:
-                logger.warning("YAML parse error in %s: %s", rel, exc)
+                logger.debug("YAML parse error in %s: %s", rel, exc)
                 continue
 
             if not isinstance(doc, dict):

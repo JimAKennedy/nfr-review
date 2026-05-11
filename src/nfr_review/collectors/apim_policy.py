@@ -131,11 +131,11 @@ class ApimPolicyCollector:
             try:
                 payload = _parse_policy(xml_file, repo_path)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Error parsing %s: %s", rel, exc)
+                logger.debug("Error parsing %s: %s", rel, exc)
                 continue
 
             if payload is None:
-                logger.warning(
+                logger.debug(
                     "Skipping %s: not an APIM policy file (no <policies> root)",
                     rel,
                 )

@@ -122,7 +122,7 @@ class TestFaultIsolation:
         good.write_text("public class Good { }")
         bad = tmp_path / "Bad.java"
         bad.write_bytes(b"\xff\xfe" + b"not valid java {{{{")
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.java_ast"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.java_ast"):
             results = collector.collect(tmp_path, config=None)
         # tree-sitter is lenient — it parses even malformed code into error nodes
         # Both files should produce evidence (tree-sitter doesn't throw on bad syntax)

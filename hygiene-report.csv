@@ -1,23 +1,21 @@
 rule_id,rag,severity,summary,recommendation,evidence_locator,collector_name,collector_version,confidence,pattern_tag
-HYG-BLD-001,green,info,Build system configured via pyproject.toml (backend: setuptools.build_meta).,No action required.,pyproject.toml,build-readiness,0.1.0,1.0,build-system-presence
+HYG-BLD-001,green,info,Build system configured via pyproject.toml (backend: hatchling.build).,No action required.,pyproject.toml,build-readiness,0.1.0,1.0,build-system-presence
 HYG-BLD-003,green,info,1 entry point(s) configured.,No action required.,pyproject.toml,build-readiness,0.1.0,1.0,entry-points
-HYG-BLD-002,green,info,Version 0.1.0 declared in pyproject.toml.,No action required.,pyproject.toml,build-readiness,0.1.0,1.0,version-strategy
+HYG-BLD-002,green,info,Version 1.0.0 declared in pyproject.toml.,No action required.,pyproject.toml,build-readiness,0.1.0,1.0,version-strategy
 HYG-CI-001,green,info,CI/CD detected: github-actions.,No action required.,.,ci-automation,0.1.0,1.0,ci-presence
 HYG-CI-003,green,info,Lint/format step detected in CI.,No action required.,.,ci-automation,0.1.0,0.8,ci-has-lint
 HYG-CI-004,green,info,SAST/security scanning step detected in CI.,No action required.,.,ci-automation,0.1.0,0.8,ci-has-sast
 HYG-CI-002,green,info,Test steps found in 1 CI configuration(s).,No action required.,.,ci-automation,0.1.0,0.8,ci-has-tests
-HYG-CI-005,amber,medium,14 of 18 action reference(s) use tag versions instead of SHA pins.,Pin actions to full commit SHAs for supply-chain safety (e.g. actions/checkout@<sha> instead of @v4).,.,ci-automation,0.1.0,0.9,ci-pin-actions
+HYG-CI-005,green,info,All 6 action reference(s) are SHA-pinned.,No action required.,.,ci-automation,0.1.0,0.9,ci-pin-actions
 HYG-COM-005,green,info,Changelog found at CHANGELOG.md.,No action required.,CHANGELOG.md,community,0.1.0,1.0,changelog-presence
 HYG-COM-003,green,info,CODE_OF_CONDUCT.md found.,No action required.,CODE_OF_CONDUCT.md,community,0.1.0,1.0,code-of-conduct-presence
-HYG-COM-006,amber,medium,No CODEOWNERS file found.,Add a CODEOWNERS file to enforce review ownership for critical paths.,.,community,0.1.0,1.0,codeowners-presence
+HYG-COM-006,green,info,CODEOWNERS found at CODEOWNERS.,No action required.,CODEOWNERS,community,0.1.0,1.0,codeowners-presence
 HYG-COM-002,green,info,CONTRIBUTING.md found.,No action required.,CONTRIBUTING.md,community,0.1.0,1.0,contributing-presence
-HYG-COM-001,green,info,README found (9226 bytes).,No action required.,README.md,community,0.1.0,1.0,readme-presence
+HYG-COM-001,green,info,README found (383 bytes).,No action required.,README.md,community,0.1.0,1.0,readme-presence
 HYG-COM-004,green,info,Security policy found at SECURITY.md.,No action required.,SECURITY.md,community,0.1.0,1.0,security-policy-presence
 HYG-DOC-003,green,info,Top-level __init__.py has a module docstring.,No action required.,.,documentation,0.1.0,0.8,api-docs-hint
 HYG-DOC-002,green,info,Documentation infrastructure found: docs/ directory present.,No action required.,.,documentation,0.1.0,1.0,docs-infrastructure
-HYG-DOC-001,green,info,pyproject.toml: 1 non-critical field(s) missing (urls).,No urgent action required.,pyproject.toml,documentation,0.1.0,1.0,pkg-metadata-completeness
-HYG-DOC-001,amber,medium,"package.json: missing 3 key fields (description, license, homepage).",Add missing fields to package.json.,package.json,documentation,0.1.0,1.0,pkg-metadata-completeness
-HYG-PRV-002,amber,medium,"Found 276 internal reference(s) (internal_domain, internal_ip) in source files.",Remove or replace internal domain names and IP addresses with configurable values or environment variables.,.regression-repos/awesome-compose/elasticsearch-logstash-kibana/logstash/nginx.log,privacy,0.1.0,0.8,internal-refs-found
-HYG-PRV-001,red,high,"Found 28 high-risk PII pattern(s) (credit_card, ssn) in source files.",Remove or externalize sensitive data. Never commit SSNs or credit card numbers.,.regression-repos/opentelemetry-demo/src/frontend/components/CheckoutForm/CheckoutForm.tsx,privacy,0.1.0,0.7,pii-high-risk
-HYG-PRV-001,amber,medium,"Found 252 medium-risk PII pattern(s) (email, phone) in source files.",Review flagged patterns. Move real PII to secure storage or environment variables.,.agents/skills/docx/scripts/office/schemas/ISO-IEC29500-4_2016/pml.xsd,privacy,0.1.0,0.7,pii-medium-risk
-HYG-PRV-003,amber,medium,"Found 6 hardcoded tracking/analytics ID(s) (facebook_pixel, google_analytics, mixpanel_token, segment_write_key) in source files.",Load tracking and analytics IDs from environment variables or configuration files rather than hardcoding them.,tests/fixtures/hygiene-dirty-repo/src/app.py,privacy,0.1.0,0.9,tracking-ids-found
+HYG-DOC-001,green,info,pyproject.toml: all key metadata fields present.,No action required.,pyproject.toml,documentation,0.1.0,1.0,pkg-metadata-completeness
+HYG-PRV-002,green,info,No internal organization references detected.,No action required.,.,privacy,0.1.0,0.8,internal-refs-clean
+HYG-PRV-001,green,info,No PII patterns detected in source files.,No action required.,.,privacy,0.1.0,0.7,pii-clean
+HYG-PRV-003,green,info,No hardcoded tracking or analytics IDs detected.,No action required.,.,privacy,0.1.0,0.9,tracking-ids-clean

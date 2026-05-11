@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+
+supports_color() {
+  [[ -t 1 ]] && [[ "${TERM:-}" != "dumb" ]]
+}
+
+info()    { echo "==> $*"; }
+success() { if supports_color; then echo -e "\033[32m==> $*\033[0m"; else echo "==> $*"; fi; }
+warn()    { if supports_color; then echo -e "\033[33m==> WARNING: $*\033[0m"; else echo "==> WARNING: $*"; fi; }
+error()   { echo "==> ERROR: $*" >&2; }
+
+find_python() {
+  for candidate in python3.13 python3.12 python3.11 python3; do
+    if command -v "$candidate" &>/dev/null; then
+      local ver
+      ver="$("$candidate" -c 'import sys; print(sys.version_info[:2] >= (3, 11))' 2>/dev/null)" || continue
+      if [[ "$ver" == "True" ]]; then
+        echo "$candidate"
+        return
+      fi
+    fi
+  done
+  error "Python 3.11+ is required but not found. Install it and retry."
+  exit 1
+}
+
+PYTHON="$(find_python)"
+VENV_DIR="$PROJECT_ROOT/.venv"
+
+# --- Venv creation / reuse ---
+if [[ -d "$VENV_DIR" ]]; then
+  info "Reusing existing venv at $VENV_DIR"
+else
+  info "Creating venv at $VENV_DIR (using $PYTHON)"
+  "$PYTHON" -m venv "$VENV_DIR"
+fi
+
+# shellcheck disable=SC1091
+source "$VENV_DIR/bin/activate"
+
+# --- Upgrade pip ---
+info "Upgrading pip"
+pip install --upgrade pip --quiet
+
+# --- Editable install with dev deps ---
+info "Installing nfr-review in editable mode with dev dependencies"
+pip install -e "$PROJECT_ROOT[dev]" --quiet
+
+# --- Source validation ---
+info "Validating install"
+
+NFR_BIN="$(which nfr-review)"
+if [[ "$NFR_BIN" != "$VENV_DIR"/* ]]; then
+  error "nfr-review binary resolved to $NFR_BIN (expected under $VENV_DIR/)"
+  exit 1
+fi
+
+NFR_PKG="$(python -c "import nfr_review; print(nfr_review.__file__)")"
+EXPECTED_PKG="$PROJECT_ROOT/src/nfr_review/__init__.py"
+if [[ "$NFR_PKG" != "$EXPECTED_PKG" ]]; then
+  error "nfr_review package resolved to $NFR_PKG (expected $EXPECTED_PKG)"
+  exit 1
+fi
+
+# --- Stale worktree detection ---
+if [[ "$NFR_BIN" == *".gsd/worktrees/"* ]] || [[ "$NFR_PKG" == *".gsd/worktrees/"* ]]; then
+  warn "Install points at a GSD worktree path."
+  warn "This may cause unexpected behavior. Consider reinstalling from the main project root."
+fi
+
+# --- API key prompt ---
+ENV_FILE="$PROJECT_ROOT/.env"
+API_KEY_SET=false
+
+if [[ -f "$ENV_FILE" ]] && grep -q '^ANTHROPIC_API_KEY=' "$ENV_FILE"; then
+  info "ANTHROPIC_API_KEY already configured in .env"
+  API_KEY_SET=true
+else
+  echo ""
+  info "nfr-review can use an Anthropic API key for LLM-powered rules."
+  info "Leave blank to skip (LLM rules will be disabled)."
+  echo ""
+  if [[ -t 0 ]]; then
+    read -rp "ANTHROPIC_API_KEY (or Enter to skip): " api_key
+  else
+    api_key=""
+  fi
+  if [[ -n "$api_key" ]]; then
+    echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
+    info "API key written to .env"
+    API_KEY_SET=true
+  else
+    info "Skipped — LLM-powered rules will not run without an API key."
+  fi
+fi
+
+# --- Skills install ---
+SKILLS_SCRIPT="$PROJECT_ROOT/scripts/install_skills.py"
+if [[ -f "$SKILLS_SCRIPT" ]]; then
+  info "Installing agent skills"
+  python "$SKILLS_SCRIPT"
+fi
+
+# --- Final validation ---
+info "Running final validation"
+NFR_VERSION="$(nfr-review version 2>&1)" || true
+
+# --- Summary ---
+echo ""
+success "Setup complete!"
+echo "  Venv:    $VENV_DIR"
+echo "  Version: $NFR_VERSION"
+if $API_KEY_SET; then
+  echo "  API key: configured"
+else
+  echo "  API key: not set (LLM rules will be skipped)"
+fi
+echo ""
+echo "For future sessions, activate the venv with:"
+echo "  source $VENV_DIR/bin/activate"

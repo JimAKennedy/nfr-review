@@ -81,7 +81,7 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         if identifier not in self._versions_cache:
             data = self._client.get_package_versions(self._ecosystem, identifier)
             if data is None:
-                logger.warning("deps.dev returned None for package versions: %s", identifier)
+                logger.debug("deps.dev returned None for package versions: %s", identifier)
                 self._versions_cache[identifier] = []
             else:
                 self._versions_cache[identifier] = data.get("versions", [])
@@ -105,7 +105,7 @@ class DepsDevProvider(resolvelib.AbstractProvider):
                 try:
                     combined &= SpecifierSet(req.specifier)
                 except InvalidSpecifier:
-                    logger.warning(
+                    logger.debug(
                         "Invalid specifier %r for %s — treating as unconstrained",
                         req.specifier,
                         identifier,
@@ -138,7 +138,7 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         try:
             spec = SpecifierSet(requirement.specifier)
         except InvalidSpecifier:
-            logger.warning(
+            logger.debug(
                 "Invalid specifier %r for %s — returning unsatisfied",
                 requirement.specifier,
                 requirement.name,
@@ -155,7 +155,7 @@ class DepsDevProvider(resolvelib.AbstractProvider):
             self._ecosystem, candidate.name, candidate.version
         )
         if data is None:
-            logger.warning(
+            logger.debug(
                 "deps.dev returned None for dependency graph: %s==%s",
                 candidate.name,
                 candidate.version,

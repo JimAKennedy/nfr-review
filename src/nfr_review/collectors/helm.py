@@ -54,7 +54,7 @@ def _parse_yaml_file(path: Path) -> dict[str, Any] | None:
         data = yaml.load(path)
         return dict(data) if data else {}
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Cannot parse %s: %s", path, exc)
+        logger.debug("Cannot parse %s: %s", path, exc)
         return None
 
 
@@ -67,7 +67,7 @@ def _parse_yaml_docs(text: str) -> list[dict[str, Any]]:
             if isinstance(doc, dict):
                 docs.append(dict(doc))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to parse rendered YAML: %s", exc)
+        logger.debug("Failed to parse rendered YAML: %s", exc)
     return docs
 
 
@@ -102,7 +102,7 @@ class HelmCollector:
 
             chart_meta = _parse_yaml_file(chart_dir / "Chart.yaml")
             if chart_meta is None:
-                logger.warning("Cannot read Chart.yaml in %s, skipping chart", rel_chart)
+                logger.debug("Cannot read Chart.yaml in %s, skipping chart", rel_chart)
                 continue
 
             values = _parse_yaml_file(chart_dir / "values.yaml") or {}
@@ -146,20 +146,20 @@ class HelmCollector:
             result.check_returncode()
             return _parse_yaml_docs(result.stdout)
         except subprocess.CalledProcessError as exc:
-            logger.warning(
+            logger.debug(
                 "helm template failed for %s (exit %d): %s",
                 rel_chart,
                 exc.returncode,
                 exc.stderr[:200] if exc.stderr else "",
             )
         except subprocess.TimeoutExpired:
-            logger.warning(
+            logger.debug(
                 "helm template timed out for %s after %ds",
                 rel_chart,
                 _HELM_TEMPLATE_TIMEOUT,
             )
         except FileNotFoundError:
-            logger.warning("helm binary disappeared while rendering %s", rel_chart)
+            logger.debug("helm binary disappeared while rendering %s", rel_chart)
         return []
 
 

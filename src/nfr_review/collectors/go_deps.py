@@ -69,7 +69,7 @@ def _parse_go_mod(path: Path) -> list[tuple[str, str, bool]] | None:
     try:
         content = path.read_text()
     except OSError:
-        logger.warning("Failed to read %s", path)
+        logger.debug("Failed to read %s", path)
         return None
 
     deps: list[tuple[str, str, bool]] = []
@@ -110,7 +110,7 @@ def _parse_go_mod(path: Path) -> list[tuple[str, str, bool]] | None:
                 indirect = "// indirect" in stripped
                 deps.append((match.group(1), match.group(2), indirect))
             else:
-                logger.warning("Malformed require line in %s: %s", path, stripped)
+                logger.debug("Malformed require line in %s: %s", path, stripped)
             continue
 
         if in_require_block:
@@ -119,7 +119,7 @@ def _parse_go_mod(path: Path) -> list[tuple[str, str, bool]] | None:
                 indirect = "// indirect" in stripped
                 deps.append((match.group(1), match.group(2), indirect))
             else:
-                logger.warning("Malformed require line in %s: %s", path, stripped)
+                logger.debug("Malformed require line in %s: %s", path, stripped)
 
     return deps
 

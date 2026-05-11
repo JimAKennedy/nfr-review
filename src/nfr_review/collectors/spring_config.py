@@ -146,7 +146,7 @@ class SpringConfigCollector:
             try:
                 raw = config_file.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 continue
 
             try:
@@ -157,14 +157,14 @@ class SpringConfigCollector:
                     if data is None:
                         data = {}
                     if not isinstance(data, dict):
-                        logger.warning(
+                        logger.debug(
                             "Skipping %s: YAML root is not a mapping (got %s)",
                             rel,
                             type(data).__name__,
                         )
                         continue
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Parse error in %s: %s", rel, exc)
+                logger.debug("Parse error in %s: %s", rel, exc)
                 continue
 
             payload = _extract_payload(data, str(rel), profile)

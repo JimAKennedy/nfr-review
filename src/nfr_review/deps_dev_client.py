@@ -33,17 +33,17 @@ class DepsDevClient:
                 body = resp.read()
             return json.loads(body)
         except urllib.error.HTTPError as exc:
-            logger.warning("deps.dev lookup failed for %s: HTTP %d", path, exc.code)
+            logger.debug("deps.dev lookup failed for %s: HTTP %d", path, exc.code)
         except urllib.error.URLError as exc:
-            logger.warning("deps.dev lookup failed for %s: %s", path, exc.reason)
+            logger.debug("deps.dev lookup failed for %s: %s", path, exc.reason)
         except json.JSONDecodeError as exc:
-            logger.warning(
+            logger.debug(
                 "deps.dev lookup failed for %s: malformed JSON — %s",
                 path,
                 exc,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("deps.dev lookup failed for %s: %s", path, exc)
+            logger.debug("deps.dev lookup failed for %s: %s", path, exc)
         return None
 
     def get_package_versions(self, ecosystem: str, package_name: str) -> dict | None:

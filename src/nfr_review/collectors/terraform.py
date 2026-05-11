@@ -402,12 +402,12 @@ class TerraformCollector:
             try:
                 source = tf_file.read_bytes()
             except OSError as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 continue
             try:
                 payload = _parse_tf_file(self._parser, source)  # type: ignore[arg-type]
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Parse error in %s: %s", rel, exc)
+                logger.debug("Parse error in %s: %s", rel, exc)
                 continue
             payload["file_path"] = str(rel)
             evidence.append(
