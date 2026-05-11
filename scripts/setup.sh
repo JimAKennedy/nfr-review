@@ -97,6 +97,33 @@ else
   fi
 fi
 
+# --- Inject .env loader into venv activate script ---
+ACTIVATE_SCRIPT="$VENV_DIR/bin/activate"
+MARKER="# nfr-review: auto-load .env"
+if ! grep -q "$MARKER" "$ACTIVATE_SCRIPT" 2>/dev/null; then
+  info "Adding .env loader to venv activate script"
+  cat >> "$ACTIVATE_SCRIPT" << 'ENVLOADER'
+
+# nfr-review: auto-load .env
+if [ -f "${VIRTUAL_ENV}/../.env" ]; then
+  _nfr_env_file="${VIRTUAL_ENV}/../.env"
+elif [ -f "$(cd "${VIRTUAL_ENV}/.." && pwd -P)/.env" ]; then
+  _nfr_env_file="$(cd "${VIRTUAL_ENV}/.." && pwd -P)/.env"
+else
+  _nfr_env_file=""
+fi
+if [ -n "$_nfr_env_file" ]; then
+  while IFS= read -r _nfr_line || [ -n "$_nfr_line" ]; do
+    case "$_nfr_line" in
+      \#*|"") continue ;;
+    esac
+    export "$_nfr_line"
+  done < "$_nfr_env_file"
+fi
+unset _nfr_env_file _nfr_line
+ENVLOADER
+fi
+
 # --- Skills install ---
 SKILLS_SCRIPT="$PROJECT_ROOT/scripts/install_skills.py"
 if [[ -f "$SKILLS_SCRIPT" ]]; then
