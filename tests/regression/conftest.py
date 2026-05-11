@@ -7,6 +7,7 @@ and the --update-snapshots CLI flag for baseline regeneration.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -92,6 +93,40 @@ def clone_repo(
     return clone_dir
 
 
+_DEP_FRESHNESS_MONTHS_RE = re.compile(r"no release in \d+ months")
+_DEP_FRESHNESS_LATEST_SUMMARY_RE = re.compile(r"but latest is \S+ \(")
+_DEP_FRESHNESS_DRIFT_RE = re.compile(r"\((major|minor|patch) drift\)")
+_DEP_FRESHNESS_LATEST_REC_RE = re.compile(r"to \S+ to pick up")
+
+_DRIFT_STABLE_FIELDS = {
+    "rag": "<rag>",
+    "severity": "<severity>",
+    "pattern_tag": "<tag>",
+}
+
+
+def _normalize_dep_freshness(record: dict) -> dict:
+    """Stabilize time-varying fields in dep-freshness findings.
+
+    Month counts, upstream latest versions, and drift classifications all
+    change independently of our code, so we replace them with placeholders
+    before snapshot comparison.
+    """
+    record = dict(record)
+    s = record.get("summary", "")
+    s = _DEP_FRESHNESS_MONTHS_RE.sub("no release in N months", s)
+    s = _DEP_FRESHNESS_LATEST_SUMMARY_RE.sub("but latest is <latest> (", s)
+    s = _DEP_FRESHNESS_DRIFT_RE.sub("(<drift> drift)", s)
+    record["summary"] = s
+    r = record.get("recommendation", "")
+    r = _DEP_FRESHNESS_LATEST_REC_RE.sub("to <latest> to pick up", r)
+    record["recommendation"] = r
+    if record.get("pattern_tag", "").startswith("stale-dep-"):
+        for field, placeholder in _DRIFT_STABLE_FIELDS.items():
+            record[field] = placeholder
+    return record
+
+
 def normalize_findings(jsonl_path: Path) -> list[dict]:
     findings: list[dict] = []
     for line in jsonl_path.read_text(encoding="utf-8").splitlines():
@@ -106,6 +141,8 @@ def normalize_findings(jsonl_path: Path) -> list[dict]:
         loc = record.get("evidence_locator", "")
         if loc.startswith("/"):
             record["evidence_locator"] = "."
+        if record.get("rule_id") == "dep-freshness":
+            record = _normalize_dep_freshness(record)
         findings.append(record)
     findings.sort(
         key=lambda r: (

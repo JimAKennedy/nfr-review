@@ -14,7 +14,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.regression.conftest import clone_repo, load_manifest, normalize_findings
+from tests.regression.conftest import (
+    _normalize_dep_freshness,
+    clone_repo,
+    load_manifest,
+    normalize_findings,
+)
 
 _MANIFEST = load_manifest()
 _REPO_NAMES = [entry["name"] for entry in _MANIFEST]
@@ -84,7 +89,10 @@ def test_regression_snapshot(
     baseline: list[dict] = []
     for line in snapshot_file.read_text(encoding="utf-8").splitlines():
         if line.strip():
-            baseline.append(json.loads(line))
+            record = json.loads(line)
+            if record.get("rule_id") == "dep-freshness":
+                record = _normalize_dep_freshness(record)
+            baseline.append(record)
 
     if normalized != baseline:
         added = [f for f in normalized if f not in baseline]
