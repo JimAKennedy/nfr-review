@@ -86,7 +86,7 @@ class DepUpgradePathRule:
             latest_lookup = {d["name"]: d["latest_version"] for d in filtered}
 
             solver_input = [
-                {"name": d["name"], "version_constraint": d.get("declared_version", "")}
+                {"name": d["name"], "version_constraint": d.get("version_constraint", "")}
                 for d in filtered
             ]
 
