@@ -8,6 +8,7 @@ which inter-package constraints make the set unsolvable.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,71 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 logger = logging.getLogger(__name__)
+
+_MAVEN_PRE_RE = re.compile(
+    r"^(\d+(?:\.\d+)*)[.-](RC|CR|alpha|beta|M)(\d+)$",
+    re.IGNORECASE,
+)
+_MAVEN_SUFFIX_RE = re.compile(
+    r"^(\d+(?:\.\d+)*)[.-](?:RELEASE|Final|GA)$",
+    re.IGNORECASE,
+)
+_PEP440_PRE_MAP: dict[str, str] = {
+    "rc": "rc",
+    "cr": "rc",
+    "alpha": "a",
+    "beta": "b",
+    "m": "rc",
+}
+_GO_V_RE = re.compile(r"^v(\d+(?:\.\d+)*)(.*)$")
+
+
+def _normalize_ecosystem_version(raw: str, ecosystem: str) -> str:
+    """Normalize an ecosystem-specific version string to PEP 440."""
+    if not raw:
+        return ""
+    if ecosystem == "maven":
+        if raw.upper().endswith("-SNAPSHOT"):
+            return ""
+        result = raw
+        m = _MAVEN_SUFFIX_RE.match(result)
+        if m:
+            result = m.group(1)
+        m = _MAVEN_PRE_RE.match(result)
+        if m:
+            base, qualifier, num = m.groups()
+            tag = _PEP440_PRE_MAP.get(qualifier.lower(), "rc")
+            result = f"{base}{tag}{num}"
+        try:
+            Version(result)
+            return result
+        except InvalidVersion:
+            return ""
+    if ecosystem == "go":
+        m = _GO_V_RE.match(raw)
+        if m:
+            result = f"{m.group(1)}{m.group(2)}"
+            try:
+                Version(result)
+                return result
+            except InvalidVersion:
+                return ""
+    return raw
+
+
+def _normalize_ecosystem_specifier(raw: str, ecosystem: str) -> str:
+    """Normalize an ecosystem-specific specifier to PEP 440."""
+    if not raw:
+        return ""
+    try:
+        SpecifierSet(raw)
+        return raw
+    except InvalidSpecifier:
+        pass
+    normalized = _normalize_ecosystem_version(raw, ecosystem)
+    if not normalized:
+        return ""
+    return f">={normalized}"
 
 
 @dataclass(frozen=True)
@@ -58,6 +124,7 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         self._ecosystem = ecosystem
         self._versions_cache: dict[str, list[dict]] = {}
         self._deps_cache: dict[tuple[str, str], list[DepsDevRequirement]] = {}
+        self._raw_versions: dict[tuple[str, str], str] = {}
 
     def identify(self, requirement_or_candidate: DepsDevRequirement | DepsDevCandidate) -> str:
         return requirement_or_candidate.name
@@ -93,8 +160,12 @@ class DepsDevProvider(resolvelib.AbstractProvider):
             v_str = v_entry.get("versionKey", {}).get("version", "")
             if not v_str:
                 continue
+            normalized = _normalize_ecosystem_version(v_str, self._ecosystem)
+            target = normalized or v_str
             try:
-                parsed.append((Version(v_str), v_str))
+                parsed.append((Version(target), target))
+                if target != v_str:
+                    self._raw_versions[(identifier, target)] = v_str
             except InvalidVersion:
                 continue
 
@@ -151,9 +222,10 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         if cache_key in self._deps_cache:
             return self._deps_cache[cache_key]
 
-        data = self._client.get_dependency_graph(
-            self._ecosystem, candidate.name, candidate.version
+        raw_ver = self._raw_versions.get(
+            (candidate.name, candidate.version), candidate.version
         )
+        data = self._client.get_dependency_graph(self._ecosystem, candidate.name, raw_ver)
         if data is None:
             logger.debug(
                 "deps.dev returned None for dependency graph: %s==%s",
@@ -181,7 +253,8 @@ class DepsDevProvider(resolvelib.AbstractProvider):
             if not dep_name:
                 continue
             req_str = edge.get("requirement", "")
-            deps.append(DepsDevRequirement(name=dep_name, specifier=req_str))
+            spec = _normalize_ecosystem_specifier(req_str, self._ecosystem)
+            deps.append(DepsDevRequirement(name=dep_name, specifier=spec))
 
         self._deps_cache[cache_key] = deps
         return deps

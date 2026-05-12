@@ -16,6 +16,8 @@ from nfr_review.dep_solver import (
     DepsDevProvider,
     DepsDevRequirement,
     ResolveResult,
+    _normalize_ecosystem_specifier,
+    _normalize_ecosystem_version,
     resolve_dependencies,
 )
 from nfr_review.deps_dev_client import DepsDevClient
@@ -421,3 +423,151 @@ class TestNegativeAndEdgeCases:
             [{"name": "broken", "version_constraint": ">=1.0"}], client, "pypi"
         )
         assert result.unsolvable is True
+
+
+# ── Ecosystem version normalization ─────────────────────────────────────
+
+
+class TestNormalizeEcosystemVersion:
+    def test_maven_rc(self) -> None:
+        assert _normalize_ecosystem_version("4.1.0-RC1", "maven") == "4.1.0rc1"
+
+    def test_maven_alpha(self) -> None:
+        assert _normalize_ecosystem_version("2.0.0-alpha2", "maven") == "2.0.0a2"
+
+    def test_maven_beta(self) -> None:
+        assert _normalize_ecosystem_version("3.0.0-beta1", "maven") == "3.0.0b1"
+
+    def test_maven_milestone(self) -> None:
+        assert _normalize_ecosystem_version("5.0.0-M3", "maven") == "5.0.0rc3"
+
+    def test_maven_snapshot_skipped(self) -> None:
+        assert _normalize_ecosystem_version("4.1.0-SNAPSHOT", "maven") == ""
+
+    def test_maven_release_suffix(self) -> None:
+        assert _normalize_ecosystem_version("3.0.0.RELEASE", "maven") == "3.0.0"
+
+    def test_maven_final_suffix(self) -> None:
+        assert _normalize_ecosystem_version("3.0.0.Final", "maven") == "3.0.0"
+
+    def test_maven_bare_version(self) -> None:
+        assert _normalize_ecosystem_version("2.11.0", "maven") == "2.11.0"
+
+    def test_go_v_prefix(self) -> None:
+        assert _normalize_ecosystem_version("v1.5.2", "go") == "1.5.2"
+
+    def test_go_pseudo_version_skipped(self) -> None:
+        assert _normalize_ecosystem_version("v0.0.0-20220722155255-886fb9371eb4", "go") == ""
+
+    def test_pypi_passthrough(self) -> None:
+        assert _normalize_ecosystem_version("2.31.0", "pypi") == "2.31.0"
+
+    def test_empty_string(self) -> None:
+        assert _normalize_ecosystem_version("", "maven") == ""
+
+
+class TestNormalizeEcosystemSpecifier:
+    def test_valid_pep440_passthrough(self) -> None:
+        assert _normalize_ecosystem_specifier(">=2.0", "maven") == ">=2.0"
+
+    def test_maven_bare_rc(self) -> None:
+        assert _normalize_ecosystem_specifier("4.1.0-RC1", "maven") == ">=4.1.0rc1"
+
+    def test_go_bare_v_prefix(self) -> None:
+        assert _normalize_ecosystem_specifier("v1.5.1", "go") == ">=1.5.1"
+
+    def test_empty_returns_empty(self) -> None:
+        assert _normalize_ecosystem_specifier("", "maven") == ""
+
+    def test_snapshot_returns_empty(self) -> None:
+        assert _normalize_ecosystem_specifier("4.1.0-SNAPSHOT", "maven") == ""
+
+
+# ── Maven version normalization in solver integration ───────────────────
+
+
+class TestMavenSolverIntegration:
+    def test_maven_rc_versions_resolved(self) -> None:
+        """Maven RC versions from deps.dev should be normalized and resolvable."""
+        client = MockDepsDevClient(
+            versions={
+                "org.example:lib": _mock_versions_response(["4.0.0", "4.1.0-RC1", "4.1.0"]),
+            },
+            graphs={
+                ("org.example:lib", "4.1.0-RC1"): _mock_dep_graph_response([]),
+                ("org.example:lib", "4.1.0"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "org.example:lib", "version_constraint": ">=4.1.0rc1"}],
+            client,
+            "maven",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["org.example:lib"] == "4.1.0"
+
+    def test_maven_transitive_rc_requirement(self) -> None:
+        """Transitive deps from deps.dev with Maven RC specifiers should resolve."""
+        graph_with_rc_dep = _mock_dep_graph_response([("org.example:child", "4.1.0-RC1")])
+        client = MockDepsDevClient(
+            versions={
+                "org.example:parent": _mock_versions_response(["1.0.0"]),
+                "org.example:child": _mock_versions_response(["4.0.0", "4.1.0-RC1", "4.1.0"]),
+            },
+            graphs={
+                ("org.example:parent", "1.0.0"): graph_with_rc_dep,
+                ("org.example:child", "4.1.0-RC1"): _mock_dep_graph_response([]),
+                ("org.example:child", "4.1.0"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "org.example:parent", "version_constraint": ">=1.0"}],
+            client,
+            "maven",
+        )
+        assert result.unsolvable is False
+        assert "org.example:child" in result.optimal_set
+
+    def test_go_v_prefix_versions_resolved(self) -> None:
+        """Go v-prefixed versions from deps.dev should be normalized and resolvable."""
+        client = MockDepsDevClient(
+            versions={
+                "github.com/example/lib": _mock_versions_response(
+                    ["v1.0.0", "v1.5.0", "v2.0.0"]
+                ),
+            },
+            graphs={
+                ("github.com/example/lib", "v2.0.0"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "github.com/example/lib", "version_constraint": ">=1.0.0"}],
+            client,
+            "go",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["github.com/example/lib"] == "2.0.0"
+
+    def test_go_transitive_v_prefix_requirement(self) -> None:
+        """Transitive Go deps with v-prefix specifiers should resolve."""
+        graph_with_go_dep = _mock_dep_graph_response([("github.com/example/child", "v1.5.0")])
+        client = MockDepsDevClient(
+            versions={
+                "github.com/example/parent": _mock_versions_response(["v1.0.0"]),
+                "github.com/example/child": _mock_versions_response(
+                    ["v1.0.0", "v1.5.0", "v2.0.0"]
+                ),
+            },
+            graphs={
+                ("github.com/example/parent", "v1.0.0"): graph_with_go_dep,
+                ("github.com/example/child", "v2.0.0"): _mock_dep_graph_response([]),
+                ("github.com/example/child", "v1.5.0"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "github.com/example/parent", "version_constraint": ">=1.0.0"}],
+            client,
+            "go",
+        )
+        assert result.unsolvable is False
+        assert "github.com/example/child" in result.optimal_set
