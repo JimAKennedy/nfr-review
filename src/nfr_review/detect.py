@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ALL_TECH_KEYS: list[str] = [
     "java",
@@ -258,12 +261,15 @@ def detect_technologies(repo_path: Path) -> dict[str, bool]:
     Returns a dict with all technology keys, each mapped to True/False.
     Detection failures for individual technologies are silently skipped.
     """
+    logger.info("Detecting technologies in %s", repo_path)
     result: dict[str, bool] = {}
     for key in ALL_TECH_KEYS:
         try:
             result[key] = _DETECTORS[key](repo_path)
         except Exception:
             result[key] = False
+    detected = [k for k, v in result.items() if v]
+    logger.info("Technologies detected: %s", ", ".join(detected) if detected else "(none)")
     return result
 
 

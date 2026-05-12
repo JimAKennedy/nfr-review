@@ -40,6 +40,7 @@ class NodejsDepsCollector:
             return []
 
         client = DepsDevClient()
+        client.prefetch_package_versions("npm", [name for _, name, _ in raw_deps])
         enrichment_errors: list[str] = []
         dependencies: list[dict[str, Any]] = []
 

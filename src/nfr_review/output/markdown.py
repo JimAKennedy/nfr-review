@@ -123,6 +123,7 @@ def render_markdown_report(
     nfr_result: RunResult,
     hygiene_result: RunResult | None = None,
     pytest_result: PytestResult | None = None,
+    deps_section: str = "",
     title: str = "NFR Review Report",
 ) -> str:
     """Render a complete Markdown report from scan results.
@@ -165,6 +166,10 @@ def render_markdown_report(
 
     # Test results
     sections.append(_test_results_section(pytest_result))
+
+    # Dependency analysis
+    if deps_section:
+        sections.append(deps_section)
 
     # Findings by region
     sections.append(_findings_section(source_findings, "Source Code Findings"))

@@ -42,6 +42,7 @@ class PythonDepsCollector:
             return []
 
         client = DepsDevClient()
+        client.prefetch_package_versions("pypi", [req.name for _, req in raw_deps])
         enrichment_errors: list[str] = []
         dependencies: list[dict[str, Any]] = []
 

@@ -9,6 +9,7 @@ so downstream emitters (CSV/JSONL in T06) can record them as auditable rows.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -85,22 +86,55 @@ class Engine:
         warnings: list[str] = []
         succeeded_collectors: set[str] = set()
 
-        for collector in active_collectors:
+        logger.info(
+            "Collection phase: %d collectors to run",
+            len(active_collectors),
+        )
+        collection_t0 = time.monotonic()
+
+        for i, collector in enumerate(active_collectors, 1):
+            logger.info(
+                "[%d/%d] Running collector: %s",
+                i,
+                len(active_collectors),
+                collector.name,
+            )
+            t0 = time.monotonic()
             try:
                 produced = collector.collect(target, config)
             except Exception as exc:  # R012: never abort the run
                 logger.warning("collector %s failed: %s", collector.name, exc, exc_info=False)
                 warnings.append(f"collector {collector.name} failed: {exc}")
                 continue
+            elapsed = time.monotonic() - t0
             evidence.extend(produced)
             succeeded_collectors.add(collector.name)
+            logger.info(
+                "  collector %s finished: %d evidence items in %.2fs",
+                collector.name,
+                len(produced),
+                elapsed,
+            )
+
+        collection_elapsed = time.monotonic() - collection_t0
+        logger.info(
+            "Collection phase complete: %d/%d succeeded, %d evidence items, %.2fs total",
+            len(succeeded_collectors),
+            len(active_collectors),
+            len(evidence),
+            collection_elapsed,
+        )
 
         rule_results: list[RuleResult] = []
         findings: list[Finding] = []
         rules_run: list[str] = []
         rules_skipped: list[dict[str, Any]] = []
 
-        for rule in self._rules.all():
+        all_rules = self._rules.all()
+        logger.info("Rules phase: %d rules registered", len(all_rules))
+        rules_t0 = time.monotonic()
+
+        for rule in all_rules:
             cfg_skip, cfg_reason = _classify_rule(
                 rule, config.rules.skip, config.rules.include_only
             )
@@ -131,6 +165,8 @@ class Engine:
                 rules_skipped.append({"rule_id": rule.id, "reason": reason})
                 continue
 
+            logger.info("  Evaluating rule: %s", rule.id)
+            t0 = time.monotonic()
             try:
                 result = rule.evaluate(evidence, config)
             except Exception as exc:  # R012: never abort the run
@@ -141,6 +177,7 @@ class Engine:
                 )
                 rules_skipped.append({"rule_id": rule.id, "reason": reason})
                 continue
+            elapsed = time.monotonic() - t0
 
             rule_results.append(result)
             if result.skipped:
@@ -153,6 +190,22 @@ class Engine:
             else:
                 rules_run.append(rule.id)
                 findings.extend(result.findings)
+                if elapsed > 0.5:
+                    logger.info(
+                        "  rule %s: %d findings in %.2fs (slow)",
+                        rule.id,
+                        len(result.findings),
+                        elapsed,
+                    )
+
+        rules_elapsed = time.monotonic() - rules_t0
+        logger.info(
+            "Rules phase complete: %d run, %d skipped, %d findings, %.2fs total",
+            len(rules_run),
+            len(rules_skipped),
+            len(findings),
+            rules_elapsed,
+        )
 
         run_metadata = build_run_metadata(target, active_collectors, rules_run, rules_skipped)
 

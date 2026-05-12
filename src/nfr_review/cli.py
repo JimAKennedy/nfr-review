@@ -198,18 +198,22 @@ def run_cmd(
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
+    run_logger = logging.getLogger("nfr_review")
+
     effective_config_path = config_path
     if effective_config_path is None:
         default = Path("nfr-review.yaml")
         if default.exists():
             effective_config_path = default
 
+    run_logger.info("Loading config from %s", effective_config_path or "(defaults)")
     try:
         config: Config = load_config(effective_config_path)
     except ConfigError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    run_logger.info("Detecting technologies in %s", target)
     try:
         detected = detect_technologies(target)
     except Exception:
@@ -218,12 +222,14 @@ def run_cmd(
     config = config.model_copy(update={"tech": merged_tech})
     tech_detected = sum(1 for v in detected.values() if v)
 
+    run_logger.info("Starting NFR engine scan")
     try:
         result = Engine().run(target, config)
     except EngineError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    run_logger.info("Writing output files")
     try:
         write_csv(result, csv_path)
         write_jsonl(result, jsonl_path)
@@ -488,6 +494,12 @@ def hygiene_cmd(
     default=False,
     help="Skip pytest execution.",
 )
+@click.option(
+    "--no-deps",
+    is_flag=True,
+    default=False,
+    help="Skip dependency tree analysis.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -496,6 +508,7 @@ def report_cmd(
     config_path: Path | None,
     output_dir: Path,
     no_tests: bool,
+    no_deps: bool,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from datetime import UTC, datetime
@@ -555,11 +568,33 @@ def report_cmd(
     if not no_tests:
         pytest_result = run_pytest(target)
 
+    # Dependency analysis
+    deps_section = ""
+    if not no_deps:
+        from nfr_review.deps_analysis import analyze_deps
+        from nfr_review.output.deps_report import render_deps_section
+
+        def _progress(msg: str) -> None:
+            click.echo(msg, err=True)
+
+        try:
+            deps_reports = analyze_deps(
+                target,
+                config,
+                resolve_transitive=True,
+                progress_callback=_progress,
+            )
+            deps_section = render_deps_section(deps_reports)
+        except Exception as exc:
+            click.echo(f"warning: dependency analysis failed: {exc}", err=True)
+            deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
+
     # Generate report
     md_content = render_markdown_report(
         nfr_result=nfr_result,
         hygiene_result=hygiene_result,
         pytest_result=pytest_result,
+        deps_section=deps_section,
     )
 
     # Write output files
@@ -592,6 +627,126 @@ def report_cmd(
             f"nfr-review report: findings={total} "
             f"output={md_path} csv={csv_path} jsonl={jsonl_path}"
         ),
+        err=True,
+    )
+
+
+@cli.command("deps", help="Analyze dependency tree and show upgrade recommendations.")
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+@click.option(
+    "--no-tree",
+    is_flag=True,
+    default=False,
+    help="Skip transitive resolution and dependency tree (faster).",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write markdown report to FILE.",
+)
+def deps_cmd(
+    target: Path,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    config_path: Path | None,
+    no_tree: bool,
+    output_path: Path | None,
+) -> None:
+    """Analyze dependencies: upgrade summary table and transitive tree."""
+    from nfr_review.deps_analysis import analyze_deps
+    from nfr_review.output.deps_report import (
+        render_deps_section,
+        render_deps_terminal,
+    )
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    try:
+        detected = detect_technologies(target)
+    except Exception:
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    config = config.model_copy(update={"tech": merged_tech})
+
+    def _progress(msg: str) -> None:
+        click.echo(msg, err=True)
+
+    try:
+        reports = analyze_deps(
+            target,
+            config,
+            resolve_transitive=not no_tree,
+            progress_callback=_progress,
+        )
+    except Exception as exc:
+        click.echo(f"error: dependency analysis failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    if output_path:
+        md_content = render_deps_section(reports)
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(md_content, encoding="utf-8")
+            click.echo(f"deps report written to {output_path}", err=True)
+        except OSError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+    else:
+        click.echo(render_deps_terminal(reports))
+
+    total_deps = sum(len(r.upgrades) for r in reports)
+    ecosystems = len(reports)
+    click.echo(
+        f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}",
         err=True,
     )
 

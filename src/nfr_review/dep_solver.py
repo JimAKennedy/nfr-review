@@ -192,6 +192,16 @@ class DepsDevCandidate:
     version: str
 
 
+class TreeNode(BaseModel):
+    """A node in the resolved dependency tree."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    version: str
+    children: list[TreeNode] = []
+
+
 class ResolveResult(BaseModel):
     """Outcome of a dependency resolution attempt."""
 
@@ -200,6 +210,7 @@ class ResolveResult(BaseModel):
     optimal_set: dict[str, str]
     unsolvable: bool
     blocking_constraints: list[str]
+    tree: list[TreeNode] | None = None
 
 
 class DepsDevProvider(resolvelib.AbstractProvider):
@@ -366,6 +377,31 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         return identifiers
 
 
+def _build_tree_from_graph(
+    graph: Any,
+    optimal_set: dict[str, str],
+    max_depth: int = 20,
+) -> list[TreeNode]:
+    """Build a list of TreeNode roots from a resolvelib DirectedGraph."""
+
+    def _build(name: str, ancestors: frozenset[str], depth: int) -> TreeNode:
+        version = optimal_set.get(name, "")
+        if depth >= max_depth or name in ancestors:
+            return TreeNode(name=name, version=version)
+        children = []
+        next_ancestors = ancestors | {name}
+        for child in graph.iter_children(name):
+            if child is not None:
+                children.append(_build(child, next_ancestors, depth + 1))
+        return TreeNode(name=name, version=version, children=children)
+
+    roots: list[TreeNode] = []
+    for root_dep in graph.iter_children(None):
+        if root_dep is not None:
+            roots.append(_build(root_dep, frozenset(), 0))
+    return roots
+
+
 def resolve_dependencies(
     dependencies: list[dict],
     client: DepsDevClient,
@@ -433,7 +469,17 @@ def resolve_dependencies(
 
     optimal_set = {name: candidate.version for name, candidate in result.mapping.items()}
     logger.info("Resolution succeeded: %d packages resolved", len(optimal_set))
-    return ResolveResult(optimal_set=optimal_set, unsolvable=False, blocking_constraints=[])
+
+    tree: list[TreeNode] | None = None
+    if resolve_transitive:
+        tree = _build_tree_from_graph(result.graph, optimal_set)
+
+    return ResolveResult(
+        optimal_set=optimal_set,
+        unsolvable=False,
+        blocking_constraints=[],
+        tree=tree,
+    )
 
 
 __all__ = [
@@ -441,5 +487,6 @@ __all__ = [
     "DepsDevProvider",
     "DepsDevRequirement",
     "ResolveResult",
+    "TreeNode",
     "resolve_dependencies",
 ]

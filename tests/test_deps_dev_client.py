@@ -9,7 +9,13 @@ from unittest.mock import patch
 
 import pytest
 
+from nfr_review import deps_dev_client
 from nfr_review.deps_dev_client import DepsDevClient
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache() -> None:
+    deps_dev_client._shared_cache.clear()
 
 
 @pytest.fixture()
@@ -223,15 +229,15 @@ class TestLogging:
             hdrs={},
             fp=io.BytesIO(b""),
         )
-        with caplog.at_level("DEBUG", logger="nfr_review.deps_dev_client"):
+        with caplog.at_level("INFO", logger="nfr_review.deps_dev_client"):
             client.get_package_versions("pypi", "requests")
-        assert "deps.dev lookup failed" in caplog.text
+        assert "deps.dev API" in caplog.text
         assert "503" in caplog.text
 
     @patch("nfr_review.deps_dev_client.urllib.request.urlopen")
     def test_warning_logged_on_timeout(self, mock_urlopen, client, caplog):
         mock_urlopen.side_effect = urllib.error.URLError("timed out")
-        with caplog.at_level("DEBUG", logger="nfr_review.deps_dev_client"):
+        with caplog.at_level("INFO", logger="nfr_review.deps_dev_client"):
             client.get_package_versions("pypi", "requests")
-        assert "deps.dev lookup failed" in caplog.text
+        assert "deps.dev API" in caplog.text
         assert "timed out" in caplog.text

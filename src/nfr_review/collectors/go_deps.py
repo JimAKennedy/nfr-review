@@ -40,6 +40,7 @@ class GoDepsCollector:
             return []
 
         client = DepsDevClient()
+        client.prefetch_package_versions("go", [name for _, name, _, _ in raw_deps])
         enrichment_errors: list[str] = []
         dependencies: list[dict[str, Any]] = []
 

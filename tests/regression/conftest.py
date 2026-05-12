@@ -104,6 +104,10 @@ _DRIFT_STABLE_FIELDS = {
     "pattern_tag": "<tag>",
 }
 
+_DEP_UPGRADE_RECOMMENDED_RE = re.compile(r"Recommended set: [^\n]+")
+_DEP_UPGRADE_STUCK_RE = re.compile(r"\(resolved=\S+, latest=\S+, gap=\d+ majors?\)")
+_DEP_UPGRADE_BLOCKING_RE = re.compile(r"Blocking constraints: [^\n]+")
+
 
 def _normalize_dep_freshness(record: dict) -> dict:
     """Stabilize time-varying fields in dep-freshness findings.
@@ -127,6 +131,23 @@ def _normalize_dep_freshness(record: dict) -> dict:
     return record
 
 
+def _normalize_dep_upgrade_path(record: dict) -> dict:
+    """Stabilize version-specific fields in dep-upgrade-path findings.
+
+    The solver returns exact resolved versions that drift with every upstream
+    release.  Replace them with placeholders so snapshots stay stable.
+    """
+    record = dict(record)
+    s = record.get("summary", "")
+    s = _DEP_UPGRADE_RECOMMENDED_RE.sub("Recommended set: <versions>", s)
+    s = _DEP_UPGRADE_STUCK_RE.sub("(<resolved/latest/gap>)", s)
+    record["summary"] = s
+    s = record.get("summary", "")
+    s = _DEP_UPGRADE_BLOCKING_RE.sub("Blocking constraints: <constraints>", s)
+    record["summary"] = s
+    return record
+
+
 def normalize_findings(jsonl_path: Path) -> list[dict]:
     findings: list[dict] = []
     for line in jsonl_path.read_text(encoding="utf-8").splitlines():
@@ -143,6 +164,8 @@ def normalize_findings(jsonl_path: Path) -> list[dict]:
             record["evidence_locator"] = "."
         if record.get("rule_id") == "dep-freshness":
             record = _normalize_dep_freshness(record)
+        if record.get("rule_id") == "dep-upgrade-path":
+            record = _normalize_dep_upgrade_path(record)
         findings.append(record)
     findings.sort(
         key=lambda r: (
