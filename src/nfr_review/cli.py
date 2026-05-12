@@ -671,6 +671,13 @@ def report_cmd(
     default=None,
     help="Write markdown report to FILE.",
 )
+@click.option(
+    "--dot",
+    "dot_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write Graphviz DOT dependency graph to FILE.",
+)
 def deps_cmd(
     target: Path,
     verbose: int,
@@ -679,6 +686,7 @@ def deps_cmd(
     config_path: Path | None,
     no_tree: bool,
     output_path: Path | None,
+    dot_path: Path | None,
 ) -> None:
     """Analyze dependencies: upgrade summary table and transitive tree."""
     from nfr_review.deps_analysis import analyze_deps
@@ -730,6 +738,18 @@ def deps_cmd(
     except Exception as exc:
         click.echo(f"error: dependency analysis failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+
+    if dot_path:
+        from nfr_review.output.dot import render_dot_dependency_graph
+
+        dot_content = render_dot_dependency_graph(reports)
+        try:
+            dot_path.parent.mkdir(parents=True, exist_ok=True)
+            dot_path.write_text(dot_content, encoding="utf-8")
+            click.echo(f"DOT graph written to {dot_path}", err=True)
+        except OSError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
 
     if output_path:
         md_content = render_deps_section(reports)
