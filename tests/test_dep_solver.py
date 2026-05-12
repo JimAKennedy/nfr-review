@@ -18,6 +18,7 @@ from nfr_review.dep_solver import (
     ResolveResult,
     _normalize_ecosystem_specifier,
     _normalize_ecosystem_version,
+    _normalize_npm_specifier,
     resolve_dependencies,
 )
 from nfr_review.deps_dev_client import DepsDevClient
@@ -481,6 +482,187 @@ class TestNormalizeEcosystemSpecifier:
 
     def test_snapshot_returns_empty(self) -> None:
         assert _normalize_ecosystem_specifier("4.1.0-SNAPSHOT", "maven") == ""
+
+
+# ── npm semver specifier normalization ──────────────────────────────────
+
+
+class TestNormalizeNpmSpecifier:
+    def test_caret_major(self) -> None:
+        assert _normalize_npm_specifier("^17.0.2") == ">=17.0.2,<18.0.0"
+
+    def test_caret_minor(self) -> None:
+        assert _normalize_npm_specifier("^0.2.3") == ">=0.2.3,<0.3.0"
+
+    def test_caret_patch(self) -> None:
+        assert _normalize_npm_specifier("^0.0.3") == ">=0.0.3,<0.0.4"
+
+    def test_caret_major_only(self) -> None:
+        assert _normalize_npm_specifier("^3") == ">=3.0.0,<4.0.0"
+
+    def test_caret_major_minor(self) -> None:
+        assert _normalize_npm_specifier("^1.2") == ">=1.2.0,<2.0.0"
+
+    def test_tilde(self) -> None:
+        assert _normalize_npm_specifier("~1.2.3") == ">=1.2.3,<1.3.0"
+
+    def test_tilde_major_minor(self) -> None:
+        assert _normalize_npm_specifier("~0.2") == ">=0.2.0,<0.3.0"
+
+    def test_range_full(self) -> None:
+        assert _normalize_npm_specifier("1.0.0 - 2.0.0") == ">=1.0.0,<=2.0.0"
+
+    def test_range_partial_right(self) -> None:
+        assert _normalize_npm_specifier("1.0.0 - 2") == ">=1.0.0,<3.0.0"
+
+    def test_wildcard_major(self) -> None:
+        assert _normalize_npm_specifier("1.x") == ">=1.0.0,<2.0.0"
+
+    def test_wildcard_minor(self) -> None:
+        assert _normalize_npm_specifier("1.2.*") == ">=1.2.0,<1.3.0"
+
+    def test_union_returns_empty(self) -> None:
+        assert _normalize_npm_specifier("^1.0.0 || ^2.0.0") == ""
+
+    def test_bare_version(self) -> None:
+        assert _normalize_npm_specifier("17.0.2") == ">=17.0.2"
+
+    def test_empty(self) -> None:
+        assert _normalize_npm_specifier("") == ""
+
+    def test_space_separated_comparators(self) -> None:
+        result = _normalize_npm_specifier(">=1.0.0 <2.0.0")
+        assert result == ">=1.0.0,<2.0.0"
+
+    def test_gte_passthrough(self) -> None:
+        assert _normalize_npm_specifier(">=1.0.0") == ">=1.0.0"
+
+
+class TestNpmEcosystemSpecifier:
+    def test_caret_via_ecosystem(self) -> None:
+        assert _normalize_ecosystem_specifier("^17.0.2", "npm") == ">=17.0.2,<18.0.0"
+
+    def test_tilde_via_ecosystem(self) -> None:
+        assert _normalize_ecosystem_specifier("~1.2.3", "npm") == ">=1.2.3,<1.3.0"
+
+    def test_valid_pep440_passthrough(self) -> None:
+        assert _normalize_ecosystem_specifier(">=1.0.0", "npm") == ">=1.0.0"
+
+    def test_union_returns_empty(self) -> None:
+        assert _normalize_ecosystem_specifier("^1.0.0 || ^2.0.0", "npm") == ""
+
+
+# ── npm solver integration ─────────────────────────────────────────────
+
+
+class TestNpmSolverIntegration:
+    def test_npm_caret_constraints_resolve(self) -> None:
+        """Reproduce the react ^17.0.2 failure from awesome-compose."""
+        client = MockDepsDevClient(
+            versions={
+                "react": _mock_versions_response(
+                    ["16.13.1", "16.14.0", "17.0.0", "17.0.1", "17.0.2", "18.0.0", "19.2.6"]
+                ),
+            },
+            graphs={
+                ("react", "17.0.2"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "react", "version_constraint": "^17.0.2"}],
+            client,
+            "npm",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["react"] == "17.0.2"
+
+    def test_npm_tilde_constraints_resolve(self) -> None:
+        client = MockDepsDevClient(
+            versions={
+                "lodash": _mock_versions_response(["4.17.19", "4.17.20", "4.17.21", "4.18.0"]),
+            },
+            graphs={
+                ("lodash", "4.17.21"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "lodash", "version_constraint": "~4.17.19"}],
+            client,
+            "npm",
+        )
+        assert result.unsolvable is False
+        from packaging.version import Version
+
+        resolved = Version(result.optimal_set["lodash"])
+        assert resolved >= Version("4.17.19")
+        assert resolved < Version("4.18.0")
+
+    def test_npm_multiple_caret_constraints(self) -> None:
+        """Multiple packages with caret ranges — mirrors the real error."""
+        client = MockDepsDevClient(
+            versions={
+                "react": _mock_versions_response(
+                    ["16.13.1", "17.0.1", "17.0.2", "18.0.0", "19.2.6"]
+                ),
+                "react-dom": _mock_versions_response(
+                    ["16.13.1", "17.0.1", "17.0.2", "18.0.0", "19.2.6"]
+                ),
+            },
+            graphs={
+                ("react", "17.0.2"): _mock_dep_graph_response([]),
+                ("react-dom", "17.0.2"): _mock_dep_graph_response([("react", "^17.0.2")]),
+            },
+        )
+        result = resolve_dependencies(
+            [
+                {"name": "react", "version_constraint": "^17.0.2"},
+                {"name": "react-dom", "version_constraint": "^17.0.1"},
+            ],
+            client,
+            "npm",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["react"] == "17.0.2"
+        assert result.optimal_set["react-dom"] == "17.0.2"
+
+    def test_npm_transitive_caret_requirement(self) -> None:
+        """Transitive deps from deps.dev with npm caret specifiers should resolve."""
+        graph_with_caret = _mock_dep_graph_response([("lodash", "^4.17.0")])
+        client = MockDepsDevClient(
+            versions={
+                "express": _mock_versions_response(["4.18.0", "4.19.0"]),
+                "lodash": _mock_versions_response(["4.17.20", "4.17.21", "5.0.0"]),
+            },
+            graphs={
+                ("express", "4.19.0"): graph_with_caret,
+                ("lodash", "4.17.21"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "express", "version_constraint": "^4.18.0"}],
+            client,
+            "npm",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["lodash"] == "4.17.21"
+
+    def test_npm_union_treated_as_unconstrained(self) -> None:
+        """Union specifiers (||) can't map to PEP 440 — treated as unconstrained."""
+        client = MockDepsDevClient(
+            versions={
+                "typescript": _mock_versions_response(["4.9.0", "5.0.0", "5.1.0"]),
+            },
+            graphs={
+                ("typescript", "5.1.0"): _mock_dep_graph_response([]),
+            },
+        )
+        result = resolve_dependencies(
+            [{"name": "typescript", "version_constraint": "^4.0.0 || ^5.0.0"}],
+            client,
+            "npm",
+        )
+        assert result.unsolvable is False
+        assert result.optimal_set["typescript"] == "5.1.0"
 
 
 # ── Maven version normalization in solver integration ───────────────────

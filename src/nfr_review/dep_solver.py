@@ -40,6 +40,90 @@ _PEP440_PRE_MAP: dict[str, str] = {
     "m": "rc",
 }
 _GO_V_RE = re.compile(r"^v(\d+(?:\.\d+)*)(.*)$")
+_NPM_SEMVER_RE = re.compile(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?")
+
+
+def _npm_parts(m: re.Match) -> tuple[int, int, int]:  # type: ignore[type-arg]
+    return int(m.group(1)), int(m.group(2) or 0), int(m.group(3) or 0)
+
+
+def _normalize_npm_specifier(raw: str) -> str:
+    """Convert an npm semver range to a PEP 440 specifier string."""
+    raw = raw.strip()
+    if not raw:
+        return ""
+
+    if "||" in raw:
+        return ""
+
+    if " - " in raw:
+        left_str, right_str = raw.split(" - ", 1)
+        left_m = _NPM_SEMVER_RE.match(left_str.strip())
+        right_m = _NPM_SEMVER_RE.match(right_str.strip())
+        if left_m and right_m:
+            l_maj, l_min, l_pat = _npm_parts(left_m)
+            r_maj, r_min, r_pat = _npm_parts(right_m)
+            lower = f"{l_maj}.{l_min}.{l_pat}"
+            if right_m.group(3) is not None:
+                return f">={lower},<={r_maj}.{r_min}.{r_pat}"
+            elif right_m.group(2) is not None:
+                return f">={lower},<{r_maj}.{r_min + 1}.0"
+            else:
+                return f">={lower},<{r_maj + 1}.0.0"
+        return ""
+
+    if raw.startswith("^"):
+        m = _NPM_SEMVER_RE.match(raw[1:])
+        if not m:
+            return ""
+        major, minor, patch = _npm_parts(m)
+        lower = f"{major}.{minor}.{patch}"
+        if major > 0:
+            upper = f"{major + 1}.0.0"
+        elif minor > 0:
+            upper = f"0.{minor + 1}.0"
+        else:
+            upper = f"0.0.{patch + 1}"
+        return f">={lower},<{upper}"
+
+    if raw.startswith("~"):
+        m = _NPM_SEMVER_RE.match(raw[1:])
+        if not m:
+            return ""
+        major, minor, patch = _npm_parts(m)
+        return f">={major}.{minor}.{patch},<{major}.{minor + 1}.0"
+
+    if raw.endswith(".x") or raw.endswith(".*"):
+        base = raw[:-2]
+        m = _NPM_SEMVER_RE.match(base)
+        if m:
+            major = int(m.group(1))
+            if m.group(2) is not None:
+                minor_val = int(m.group(2))
+                return f">={major}.{minor_val}.0,<{major}.{minor_val + 1}.0"
+            return f">={major}.0.0,<{major + 1}.0.0"
+        return ""
+
+    if raw[0] in (">", "<", "=", "!"):
+        try:
+            SpecifierSet(raw)
+            return raw
+        except InvalidSpecifier:
+            parts = raw.split()
+            if len(parts) > 1:
+                joined = ",".join(parts)
+                try:
+                    SpecifierSet(joined)
+                    return joined
+                except InvalidSpecifier:
+                    pass
+            return ""
+
+    m = _NPM_SEMVER_RE.match(raw)
+    if m and m.end() == len(raw):
+        return f">={raw}"
+
+    return ""
 
 
 def _normalize_ecosystem_version(raw: str, ecosystem: str) -> str:
@@ -84,6 +168,8 @@ def _normalize_ecosystem_specifier(raw: str, ecosystem: str) -> str:
         return raw
     except InvalidSpecifier:
         pass
+    if ecosystem == "npm":
+        return _normalize_npm_specifier(raw)
     normalized = _normalize_ecosystem_version(raw, ecosystem)
     if not normalized:
         return ""
@@ -291,7 +377,9 @@ def resolve_dependencies(
     requirements = [
         DepsDevRequirement(
             name=dep["name"],
-            specifier=dep.get("version_constraint", ""),
+            specifier=_normalize_ecosystem_specifier(
+                dep.get("version_constraint", ""), ecosystem
+            ),
         )
         for dep in dependencies
     ]
