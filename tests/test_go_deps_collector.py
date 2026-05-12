@@ -154,6 +154,17 @@ class TestGoModParsing:
         assert by_name["github.com/google/uuid"]["declared_version"] == "v1.4.0"
 
     @patch("nfr_review.collectors.go_deps.DepsDevClient")
+    def test_version_constraint_normalized_to_pep440(self, mock_cls: MagicMock) -> None:
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        collector = GoDepsCollector()
+        evidences = collector.collect(FIXTURE_DIR, None)
+        deps = evidences[0].payload["dependencies"]
+        by_name = {d["name"]: d for d in deps}
+        assert by_name["github.com/gin-gonic/gin"]["version_constraint"] == ">=1.9.1"
+        assert by_name["golang.org/x/net"]["version_constraint"] == ">=0.17.0"
+        assert by_name["github.com/google/uuid"]["version_constraint"] == ">=1.4.0"
+
+    @patch("nfr_review.collectors.go_deps.DepsDevClient")
     def test_manifest_files_found(self, mock_cls: MagicMock) -> None:
         mock_cls.return_value.get_package_versions = _mock_get_versions()
         collector = GoDepsCollector()

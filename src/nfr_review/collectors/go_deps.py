@@ -16,6 +16,7 @@ from nfr_review.registry import collector_registry
 logger = logging.getLogger(__name__)
 
 _REQUIRE_LINE_RE = re.compile(r"^\s*([\w./@\-]+)\s+(v[\w.\-+]+)")
+_GO_VERSION_RE = re.compile(r"^v(\d+(?:\.\d+)*)(.*)$")
 
 
 class GoDepsCollector:
@@ -127,10 +128,13 @@ def _parse_go_mod(path: Path) -> list[tuple[str, str, bool]] | None:
 def _enrich(
     client: DepsDevClient, name: str, version: str, source_file: str, indirect: bool
 ) -> dict[str, Any]:
+    m = _GO_VERSION_RE.match(version)
+    constraint = f">={m.group(1)}{m.group(2)}" if m else version
+
     result: dict[str, Any] = {
         "name": name,
         "declared_version": version,
-        "version_constraint": version,
+        "version_constraint": constraint,
         "source_file": source_file,
         "latest_version": None,
         "latest_release_date": None,
