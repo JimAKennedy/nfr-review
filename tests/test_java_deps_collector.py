@@ -211,6 +211,85 @@ class TestPomXmlParsing:
 
 
 # ---------------------------------------------------------------------------
+# Maven pre-release version normalization
+# ---------------------------------------------------------------------------
+
+
+class TestMavenPreReleaseNormalization:
+    """Maven RC, alpha, beta, milestone, SNAPSHOT, and release qualifiers."""
+
+    @staticmethod
+    def _make_pom(tmp_path: Path, version: str) -> Path:
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <groupId>org.example</groupId>\n"
+            "      <artifactId>lib</artifactId>\n"
+            f"      <version>{version}</version>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n"
+        )
+        return pom
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_rc_normalized(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "4.1.0-RC1")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["declared_version"] == "4.1.0-RC1"
+        assert deps[0]["version_constraint"] == ">=4.1.0rc1"
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_alpha_normalized(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "1.0.0-alpha2")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ">=1.0.0a2"
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_beta_normalized(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "3.0.0-beta1")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ">=3.0.0b1"
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_milestone_normalized(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "6.0.0-M3")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ">=6.0.0rc3"
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_snapshot_yields_empty_constraint(
+        self, mock_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        self._make_pom(tmp_path, "5.0.0-SNAPSHOT")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["declared_version"] == "5.0.0-SNAPSHOT"
+        assert deps[0]["version_constraint"] == ""
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_release_suffix_stripped(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "2.3.1.RELEASE")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ">=2.3.1"
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_final_suffix_stripped(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        self._make_pom(tmp_path, "4.3.30.Final")
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        deps = JavaDepsCollector().collect(tmp_path, None)[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ">=4.3.30"
+
+
+# ---------------------------------------------------------------------------
 # build.gradle parsing
 # ---------------------------------------------------------------------------
 

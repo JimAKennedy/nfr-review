@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
+from packaging.version import InvalidVersion, Version
+
 from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
@@ -18,8 +20,56 @@ logger = logging.getLogger(__name__)
 
 _SKIP_DIRS = {"target", ".gradle", "build"}
 
-_BARE_VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 _MAVEN_PROPERTY_RE = re.compile(r"\$\{.+\}")
+
+_MAVEN_PRERELEASE_RE = re.compile(
+    r"^(\d+(?:\.\d+)*)[.-](RC|CR|alpha|beta|M)(\d+)$",
+    re.IGNORECASE,
+)
+
+_MAVEN_RELEASE_SUFFIX_RE = re.compile(
+    r"^(\d+(?:\.\d+)*)[.-](?:RELEASE|Final|GA)$",
+    re.IGNORECASE,
+)
+
+_PEP440_PRE_MAP: dict[str, str] = {
+    "rc": "rc",
+    "cr": "rc",
+    "alpha": "a",
+    "beta": "b",
+    "m": "rc",
+}
+
+
+def _normalize_maven_version(version: str) -> str:
+    """Normalize a Maven version string to PEP 440.
+
+    Returns empty string for SNAPSHOTs, property references, or
+    versions that cannot be converted to valid PEP 440.
+    """
+    if not version or _MAVEN_PROPERTY_RE.search(version):
+        return ""
+    if version.upper().endswith("-SNAPSHOT"):
+        return ""
+
+    normalized = version
+
+    m = _MAVEN_RELEASE_SUFFIX_RE.match(normalized)
+    if m:
+        normalized = m.group(1)
+
+    m = _MAVEN_PRERELEASE_RE.match(normalized)
+    if m:
+        base, qualifier, num = m.groups()
+        tag = _PEP440_PRE_MAP.get(qualifier.lower(), "rc")
+        normalized = f"{base}{tag}{num}"
+
+    try:
+        Version(normalized)
+    except InvalidVersion:
+        return ""
+    return normalized
+
 
 _GRADLE_DEP_RE = re.compile(
     r"(?:implementation|api|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly"
@@ -157,12 +207,11 @@ def _enrich(
     source_file: str,
     scope: str | None,
 ) -> dict[str, Any]:
-    if _MAVEN_PROPERTY_RE.search(version):
-        constraint = ""
-    elif version and _BARE_VERSION_RE.match(version):
-        constraint = f">={version}"
+    normalized = _normalize_maven_version(version)
+    if normalized:
+        constraint = f">={normalized}"
     else:
-        constraint = version
+        constraint = ""
 
     result: dict[str, Any] = {
         "name": name,
