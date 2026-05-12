@@ -205,9 +205,16 @@ class ResolveResult(BaseModel):
 class DepsDevProvider(resolvelib.AbstractProvider):
     """Resolvelib provider backed by the deps.dev API."""
 
-    def __init__(self, client: DepsDevClient, ecosystem: str) -> None:
+    def __init__(
+        self,
+        client: DepsDevClient,
+        ecosystem: str,
+        *,
+        resolve_transitive: bool = False,
+    ) -> None:
         self._client = client
         self._ecosystem = ecosystem
+        self._resolve_transitive = resolve_transitive
         self._versions_cache: dict[str, list[dict]] = {}
         self._deps_cache: dict[tuple[str, str], list[DepsDevRequirement]] = {}
         self._raw_versions: dict[tuple[str, str], str] = {}
@@ -304,6 +311,9 @@ class DepsDevProvider(resolvelib.AbstractProvider):
         return candidate.version in spec
 
     def get_dependencies(self, candidate: DepsDevCandidate) -> list[DepsDevRequirement]:
+        if not self._resolve_transitive:
+            return []
+
         cache_key = (candidate.name, candidate.version)
         if cache_key in self._deps_cache:
             return self._deps_cache[cache_key]
@@ -360,6 +370,8 @@ def resolve_dependencies(
     dependencies: list[dict],
     client: DepsDevClient,
     ecosystem: str,
+    *,
+    resolve_transitive: bool = False,
 ) -> ResolveResult:
     """Resolve a set of dependencies to compatible versions.
 
@@ -367,6 +379,8 @@ def resolve_dependencies(
         dependencies: List of dicts with 'name' and optional 'version_constraint'.
         client: DepsDevClient instance for API lookups.
         ecosystem: Package ecosystem (e.g. 'pypi', 'npm').
+        resolve_transitive: If True, fetch and resolve transitive dependencies.
+            Defaults to False to avoid excessive API calls for large dependency trees.
 
     Returns:
         ResolveResult with the optimal version set or unsolvable diagnostics.
@@ -390,7 +404,7 @@ def resolve_dependencies(
         ecosystem,
     )
 
-    provider = DepsDevProvider(client, ecosystem)
+    provider = DepsDevProvider(client, ecosystem, resolve_transitive=resolve_transitive)
     reporter: resolvelib.BaseReporter = resolvelib.BaseReporter()
     resolver = resolvelib.Resolver(provider, reporter)
 

@@ -180,10 +180,18 @@ class TestProviderIsSatisfiedBy:
 
 
 class TestProviderGetDependencies:
-    def test_get_dependencies_extracts_direct_deps(self) -> None:
+    def test_get_dependencies_returns_empty_without_transitive(self) -> None:
         graph = _mock_dep_graph_response([("dep-a", ">=1.0"), ("dep-b", "<3.0")])
         client = MockDepsDevClient(graphs={("pkg", "1.0.0"): graph})
         provider = DepsDevProvider(client, "pypi")
+        cand = DepsDevCandidate("pkg", "1.0.0")
+        deps = provider.get_dependencies(cand)
+        assert deps == []
+
+    def test_get_dependencies_extracts_direct_deps_with_transitive(self) -> None:
+        graph = _mock_dep_graph_response([("dep-a", ">=1.0"), ("dep-b", "<3.0")])
+        client = MockDepsDevClient(graphs={("pkg", "1.0.0"): graph})
+        provider = DepsDevProvider(client, "pypi", resolve_transitive=True)
         cand = DepsDevCandidate("pkg", "1.0.0")
         deps = provider.get_dependencies(cand)
         assert len(deps) == 2
@@ -195,7 +203,7 @@ class TestProviderGetDependencies:
 
     def test_get_dependencies_handles_none_graph(self) -> None:
         client = MockDepsDevClient(graphs={("pkg", "1.0.0"): None})
-        provider = DepsDevProvider(client, "pypi")
+        provider = DepsDevProvider(client, "pypi", resolve_transitive=True)
         cand = DepsDevCandidate("pkg", "1.0.0")
         deps = provider.get_dependencies(cand)
         assert deps == []
@@ -204,7 +212,7 @@ class TestProviderGetDependencies:
         client = MockDepsDevClient(
             graphs={("pkg", "1.0.0"): {"nodes": [{"versionKey": {"name": "SELF"}}]}}
         )
-        provider = DepsDevProvider(client, "pypi")
+        provider = DepsDevProvider(client, "pypi", resolve_transitive=True)
         cand = DepsDevCandidate("pkg", "1.0.0")
         deps = provider.get_dependencies(cand)
         assert deps == []
@@ -253,7 +261,7 @@ class TestResolveDependencies:
             {"name": "pkg-a", "version_constraint": ">=1.0"},
             {"name": "pkg-b", "version_constraint": ">=1.0"},
         ]
-        result = resolve_dependencies(deps, client, "pypi")
+        result = resolve_dependencies(deps, client, "pypi", resolve_transitive=True)
         assert result.unsolvable is False
         assert "shared" in result.optimal_set
         from packaging.version import Version
@@ -280,7 +288,7 @@ class TestResolveDependencies:
             {"name": "pkg-a", "version_constraint": ">=1.0"},
             {"name": "pkg-b", "version_constraint": ">=1.0"},
         ]
-        result = resolve_dependencies(deps, client, "pypi")
+        result = resolve_dependencies(deps, client, "pypi", resolve_transitive=True)
         assert result.unsolvable is True
         assert len(result.blocking_constraints) > 0
         assert all(isinstance(c, str) and len(c) > 0 for c in result.blocking_constraints)
@@ -642,6 +650,7 @@ class TestNpmSolverIntegration:
             [{"name": "express", "version_constraint": "^4.18.0"}],
             client,
             "npm",
+            resolve_transitive=True,
         )
         assert result.unsolvable is False
         assert result.optimal_set["lodash"] == "4.17.21"
@@ -706,6 +715,7 @@ class TestMavenSolverIntegration:
             [{"name": "org.example:parent", "version_constraint": ">=1.0"}],
             client,
             "maven",
+            resolve_transitive=True,
         )
         assert result.unsolvable is False
         assert "org.example:child" in result.optimal_set
@@ -750,6 +760,7 @@ class TestMavenSolverIntegration:
             [{"name": "github.com/example/parent", "version_constraint": ">=1.0.0"}],
             client,
             "go",
+            resolve_transitive=True,
         )
         assert result.unsolvable is False
         assert "github.com/example/child" in result.optimal_set

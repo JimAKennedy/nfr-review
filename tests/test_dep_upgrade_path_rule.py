@@ -199,21 +199,15 @@ class TestUpgradePathUnsolvable:
     def _make_unsolvable_scenario(self) -> tuple[MockDepsDevClient, list[Evidence]]:
         mock = MockDepsDevClient(
             versions={
-                "pkg-a": _versions_response(["1.0.0"]),
-                "pkg-b": _versions_response(["1.0.0"]),
-                "conflict": _versions_response(["1.0.0", "2.0.0"]),
+                "pkg-a": _versions_response(["1.0.0", "2.0.0"]),
+                "pkg-b": None,
             },
-            graphs={
-                ("pkg-a", "1.0.0"): _dep_graph([("conflict", ">=2.0")]),
-                ("pkg-b", "1.0.0"): _dep_graph([("conflict", "<1.5")]),
-                ("conflict", "2.0.0"): _dep_graph(),
-                ("conflict", "1.0.0"): _dep_graph(),
-            },
+            graphs={},
         )
         evidence = [
             _make_evidence(
                 dependencies=[
-                    _make_dep("pkg-a", ">=1.0", latest_version="1.0.0"),
+                    _make_dep("pkg-a", ">=3.0", latest_version="2.0.0"),
                     _make_dep("pkg-b", ">=1.0", latest_version="1.0.0"),
                 ]
             )
@@ -493,21 +487,15 @@ class TestUpgradePathFindingShape:
     def test_unsolvable_finding_confidence(self) -> None:
         mock = MockDepsDevClient(
             versions={
-                "a": _versions_response(["1.0.0"]),
-                "b": _versions_response(["1.0.0"]),
-                "clash": _versions_response(["1.0.0", "2.0.0"]),
+                "a": _versions_response(["1.0.0", "2.0.0"]),
+                "b": None,
             },
-            graphs={
-                ("a", "1.0.0"): _dep_graph([("clash", ">=2.0")]),
-                ("b", "1.0.0"): _dep_graph([("clash", "<1.5")]),
-                ("clash", "2.0.0"): _dep_graph(),
-                ("clash", "1.0.0"): _dep_graph(),
-            },
+            graphs={},
         )
         evidence = [
             _make_evidence(
                 dependencies=[
-                    _make_dep("a", ">=1.0", "1.0.0"),
+                    _make_dep("a", ">=3.0", "2.0.0"),
                     _make_dep("b", ">=1.0", "1.0.0"),
                 ]
             )
