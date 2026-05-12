@@ -6,6 +6,7 @@ from deps.dev.
 from __future__ import annotations
 
 import logging
+import re
 import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from nfr_review.registry import collector_registry
 logger = logging.getLogger(__name__)
 
 _SKIP_DIRS = {"bin", "obj"}
+_BARE_VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
 
 
 class CsharpDepsCollector:
@@ -108,10 +110,11 @@ def _enrich(
     version: str,
     source_file: str,
 ) -> dict[str, Any]:
+    constraint = f">={version}" if version and _BARE_VERSION_RE.match(version) else version
     result: dict[str, Any] = {
         "name": name,
         "declared_version": version,
-        "version_constraint": version,
+        "version_constraint": constraint,
         "source_file": source_file,
         "latest_version": None,
         "latest_release_date": None,

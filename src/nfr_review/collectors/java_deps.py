@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 _SKIP_DIRS = {"target", ".gradle", "build"}
 
+_BARE_VERSION_RE = re.compile(r"^\d+(\.\d+)*$")
+_MAVEN_PROPERTY_RE = re.compile(r"\$\{.+\}")
+
 _GRADLE_DEP_RE = re.compile(
     r"(?:implementation|api|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly"
     r"|annotationProcessor)\s*[\(]?\s*['\"]([^'\"]+):([^'\"]+):([^'\"]+)['\"]"
@@ -154,10 +157,17 @@ def _enrich(
     source_file: str,
     scope: str | None,
 ) -> dict[str, Any]:
+    if _MAVEN_PROPERTY_RE.search(version):
+        constraint = ""
+    elif version and _BARE_VERSION_RE.match(version):
+        constraint = f">={version}"
+    else:
+        constraint = version
+
     result: dict[str, Any] = {
         "name": name,
         "declared_version": version,
-        "version_constraint": version,
+        "version_constraint": constraint,
         "source_file": source_file,
         "latest_version": None,
         "latest_release_date": None,

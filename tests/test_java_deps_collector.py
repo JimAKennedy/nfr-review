@@ -185,6 +185,29 @@ class TestPomXmlParsing:
         evidences = collector.collect(tmp_path, None)
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["declared_version"] == "${commons.version}"
+        assert deps[0]["version_constraint"] == ""
+
+    @patch("nfr_review.collectors.java_deps.DepsDevClient")
+    def test_bare_version_normalized_to_gte(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        pom = tmp_path / "pom.xml"
+        pom.write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <dependencies>\n"
+            "    <dependency>\n"
+            "      <groupId>org.apache</groupId>\n"
+            "      <artifactId>commons-io</artifactId>\n"
+            "      <version>2.11.0</version>\n"
+            "    </dependency>\n"
+            "  </dependencies>\n"
+            "</project>\n"
+        )
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        collector = JavaDepsCollector()
+        evidences = collector.collect(tmp_path, None)
+        deps = evidences[0].payload["dependencies"]
+        assert deps[0]["declared_version"] == "2.11.0"
+        assert deps[0]["version_constraint"] == ">=2.11.0"
 
 
 # ---------------------------------------------------------------------------

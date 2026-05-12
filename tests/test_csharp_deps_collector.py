@@ -368,6 +368,33 @@ class TestEdgeCases:
         assert evidences == []
 
     @patch("nfr_review.collectors.csharp_deps.DepsDevClient")
+    def test_bare_version_normalized_to_gte(self, mock_cls: MagicMock) -> None:
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        collector = CsharpDepsCollector()
+        evidences = collector.collect(FIXTURE_DIR, None)
+        deps = evidences[0].payload["dependencies"]
+        by_name = {d["name"]: d for d in deps}
+        assert by_name["Newtonsoft.Json"]["declared_version"] == "13.0.3"
+        assert by_name["Newtonsoft.Json"]["version_constraint"] == ">=13.0.3"
+        assert by_name["Serilog"]["version_constraint"] == ">=3.1.1"
+
+    @patch("nfr_review.collectors.csharp_deps.DepsDevClient")
+    def test_empty_version_not_normalized(self, mock_cls: MagicMock, tmp_path: Path) -> None:
+        csproj = tmp_path / "NoVersion.csproj"
+        csproj.write_text(
+            '<Project Sdk="Microsoft.NET.Sdk">\n'
+            "  <ItemGroup>\n"
+            '    <PackageReference Include="ImplicitVersion" />\n'
+            "  </ItemGroup>\n"
+            "</Project>\n"
+        )
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        collector = CsharpDepsCollector()
+        evidences = collector.collect(tmp_path, None)
+        deps = evidences[0].payload["dependencies"]
+        assert deps[0]["version_constraint"] == ""
+
+    @patch("nfr_review.collectors.csharp_deps.DepsDevClient")
     def test_package_reference_without_version(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
