@@ -1,7 +1,7 @@
 # nfr-review UAT Script
 
 **Version:** 0.1.0
-**Last updated:** 2026-05-12
+**Last updated:** 2026-05-13
 
 This script covers end-to-end acceptance testing of the `nfr-review` CLI.
 Run it against a real target repository — the agentic-java-demo repo is the
@@ -265,8 +265,8 @@ nfr-review hygiene --list-checks
 | Check | Expected |
 |-------|----------|
 | Exit code | 0 |
-| Categories listed | `bld`, `ci`, `com`, `doc`, `prv` |
-| Check count | >= 19 checks listed |
+| Categories listed | `bld`, `ci`, `com`, `doc`, `license`, `prv` |
+| Check count | >= 23 checks listed |
 
 ### 4.2 Full hygiene scan
 
@@ -326,6 +326,55 @@ nfr-review hygiene tests/fixtures/hygiene-dirty-repo
 | Check | Expected |
 |-------|----------|
 | Multiple amber/red findings | Missing README, CHANGELOG, CI, etc. flagged |
+
+### 4.7 License category — copyleft detection
+
+> Requires `pip install nfr-review[scancode]` (scancode-toolkit optional dependency).
+
+```bash
+nfr-review hygiene tests/fixtures/license-dirty-repo --category license
+```
+
+| Check | Expected |
+|-------|----------|
+| Exit code | 0 |
+| `HYG-LIC-001` fires | Copyleft license detected — red for GPL/AGPL, amber for LGPL |
+| `HYG-LIC-002` fires | NOTICE file missing or incomplete |
+| `HYG-LIC-003` fires | Source files missing license headers |
+| `HYG-LIC-004` fires | Invalid or missing SPDX license expressions |
+
+```bash
+nfr-review hygiene tests/fixtures/license-clean-repo --category license
+```
+
+| Check | Expected |
+|-------|----------|
+| All license findings green | All deps permissive, NOTICE present, headers present, SPDX valid |
+
+### 4.8 License — scancode not installed
+
+If scancode-toolkit is **not** installed (`pip install nfr-review` without `[scancode]`):
+
+```bash
+nfr-review hygiene /tmp/uat-target --category license
+```
+
+| Check | Expected |
+|-------|----------|
+| Run completes | Does not crash on missing scancode |
+| Warning logged | `scancode-toolkit not installed` at WARNING level |
+| No license findings | License rules skipped — collector produces no evidence |
+
+### 4.9 License in combined report
+
+```bash
+nfr-review report /tmp/uat-target --output-dir /tmp/report-license
+```
+
+| Check | Expected |
+|-------|----------|
+| License findings included | `HYG-LIC-*` findings appear in combined markdown, CSV, and JSONL |
+| Category column | License findings show `license` category |
 
 ---
 
@@ -609,7 +658,7 @@ nfr-review run /tmp/uat-target/pom.xml
 | 1 | Informational commands | list-rules, explain (valid + invalid) | |
 | 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file | |
 | 3 | Tech filtering | spring gating, rules.skip, include_only, kustomize | |
-| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos | |
+| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip | |
 | 5 | Report | full, no-tests, no-deps | |
 | 6 | Deps | basic, file output, no-tree, multi-ecosystem | |
 | 7 | Fault tolerance | missing target, invalid config, collector failure, no helm | |

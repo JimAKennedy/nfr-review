@@ -19,3 +19,7 @@ HYG-DOC-001,green,info,pyproject.toml: all key metadata fields present.,No actio
 HYG-PRV-002,green,info,No internal organization references detected.,No action required.,.,privacy,0.1.0,0.8,internal-refs-clean
 HYG-PRV-001,green,info,No PII patterns detected in source files.,No action required.,.,privacy,0.1.0,0.7,pii-clean
 HYG-PRV-003,green,info,No hardcoded tracking or analytics IDs detected.,No action required.,.,privacy,0.1.0,0.9,tracking-ids-clean
+HYG-LIC-001,skipped,,rule skipped: no license-scan evidence available,,,,,,
+HYG-LIC-003,skipped,,rule skipped: no license-scan evidence available,,,,,,
+HYG-LIC-002,skipped,,rule skipped: no license-scan-summary evidence available,,,,,,
+HYG-LIC-004,skipped,,rule skipped: no target repo path available,,,,,,
