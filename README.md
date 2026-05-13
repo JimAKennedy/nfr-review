@@ -7,7 +7,7 @@
 
 Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python source, APIM policies, and more) and evaluates 50+ rules covering resilience, observability, security, and operational readiness. Findings are emitted as CSV and JSONL for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python source, APIM policies, and more) and evaluates 50+ rules covering resilience, observability, security, and operational readiness. It also runs hygiene audits covering documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV and JSONL for integration into review workflows.
 
 ## Quick start
 
@@ -45,12 +45,18 @@ Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` s
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -e .           # core CLI only
-pip install -e ".[llm]"    # adds Anthropic SDK for LLM-assisted rules
-pip install -e ".[dev]"    # includes llm + pytest, ruff, pytest-cov
+pip install -e .              # core CLI only
+pip install -e ".[scancode]"  # adds scancode-toolkit for license scanning
+pip install -e ".[dev]"       # includes pytest, ruff, pytest-cov
 ```
 
-The `[llm]` extra adds the Anthropic SDK for LLM-assisted rules (PII detection, ADR drift). Without it, those rules fall back gracefully. The `[dev]` extra includes `[llm]` plus test/lint tooling.
+Optional extras:
+
+| Extra | What it adds |
+|-------|-------------|
+| `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
+| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
+| `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 ## API key (optional)
 
@@ -104,6 +110,21 @@ nfr-review list-rules
 ```bash
 nfr-review explain ci-test-stage-missing
 ```
+
+### Run a hygiene audit
+
+```bash
+# Full hygiene audit (documentation, CI, community, build readiness, privacy)
+nfr-review hygiene /path/to/target/repo
+
+# License compliance only (requires scancode extra)
+nfr-review hygiene --category license /path/to/target/repo
+
+# List all registered hygiene checks
+nfr-review hygiene --list-checks
+```
+
+Without the `[scancode]` extra installed, license rules are skipped with an informative warning — all other hygiene categories still run normally.
 
 ### Check version
 

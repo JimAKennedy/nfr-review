@@ -148,15 +148,19 @@ def _normalize_ecosystem_version(raw: str, ecosystem: str) -> str:
         except InvalidVersion:
             return ""
     if ecosystem == "go":
+        cleaned = raw.lstrip("v")
         m = _GO_V_RE.match(raw)
         if m:
-            result = f"{m.group(1)}{m.group(2)}"
-            try:
-                Version(result)
-                return result
-            except InvalidVersion:
-                return ""
+            cleaned = f"{m.group(1)}{m.group(2)}"
+        try:
+            Version(cleaned)
+            return cleaned
+        except InvalidVersion:
+            return ""
     return raw
+
+
+_OPERATOR_PREFIX_RE = re.compile(r"^(>=|<=|!=|~=|==|>|<)")
 
 
 def _normalize_ecosystem_specifier(raw: str, ecosystem: str) -> str:
@@ -170,10 +174,13 @@ def _normalize_ecosystem_specifier(raw: str, ecosystem: str) -> str:
         pass
     if ecosystem == "npm":
         return _normalize_npm_specifier(raw)
-    normalized = _normalize_ecosystem_version(raw, ecosystem)
+    op_match = _OPERATOR_PREFIX_RE.match(raw)
+    operator = op_match.group(1) if op_match else ">="
+    version_part = raw[op_match.end() :] if op_match else raw
+    normalized = _normalize_ecosystem_version(version_part, ecosystem)
     if not normalized:
         return ""
-    return f">={normalized}"
+    return f"{operator}{normalized}"
 
 
 @dataclass(frozen=True)
