@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dirty-license-example"
+version = "0.1.0"
+description = "Example project with GPL dependency for license testing."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "some-gpl-library>=1.0",
+]

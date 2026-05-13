@@ -1,0 +1,8 @@
+clean-license-example
+Copyright 2026 Example Corp.
+
+This product includes software developed at Example Corp.
+
+Third-party licenses:
+- click: BSD-3-Clause
+- pydantic: MIT
