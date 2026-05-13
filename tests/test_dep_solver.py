@@ -468,6 +468,12 @@ class TestNormalizeEcosystemVersion:
     def test_go_pseudo_version_skipped(self) -> None:
         assert _normalize_ecosystem_version("v0.0.0-20220722155255-886fb9371eb4", "go") == ""
 
+    def test_go_bare_version_without_v(self) -> None:
+        assert _normalize_ecosystem_version("1.5.2", "go") == "1.5.2"
+
+    def test_go_pseudo_version_without_v(self) -> None:
+        assert _normalize_ecosystem_version("0.0.0-20251114195745-4902fdda35c8", "go") == ""
+
     def test_pypi_passthrough(self) -> None:
         assert _normalize_ecosystem_version("2.31.0", "pypi") == "2.31.0"
 
@@ -490,6 +496,19 @@ class TestNormalizeEcosystemSpecifier:
 
     def test_snapshot_returns_empty(self) -> None:
         assert _normalize_ecosystem_specifier("4.1.0-SNAPSHOT", "maven") == ""
+
+    def test_go_already_prefixed_no_double(self) -> None:
+        assert _normalize_ecosystem_specifier(">=1.5.1", "go") == ">=1.5.1"
+
+    def test_go_pseudo_version_returns_empty(self) -> None:
+        assert _normalize_ecosystem_specifier("0.0.0-20251114195745-4902fdda35c8", "go") == ""
+
+    def test_go_prefixed_pseudo_version_returns_empty(self) -> None:
+        raw = ">=0.0.0-20251114195745-4902fdda35c8"
+        assert _normalize_ecosystem_specifier(raw, "go") == ""
+
+    def test_go_bare_version_without_v(self) -> None:
+        assert _normalize_ecosystem_specifier("1.5.1", "go") == ">=1.5.1"
 
 
 # ── npm semver specifier normalization ──────────────────────────────────

@@ -130,7 +130,7 @@ def _enrich(
     client: DepsDevClient, name: str, version: str, source_file: str, indirect: bool
 ) -> dict[str, Any]:
     m = _GO_VERSION_RE.match(version)
-    constraint = f">={m.group(1)}{m.group(2)}" if m else version
+    constraint = f"{m.group(1)}{m.group(2)}" if m else version
 
     result: dict[str, Any] = {
         "name": name,
