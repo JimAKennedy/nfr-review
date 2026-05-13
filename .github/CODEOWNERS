@@ -1,0 +1,15 @@
+# Default owner — all PRs route to the maintainer for review.
+* @JimAKennedy
+
+# CI/CD and repo config — extra visibility on infra changes.
+/.github/ @JimAKennedy
+/pyproject.toml @JimAKennedy
+/scripts/ @JimAKennedy
+/.pre-commit-config.yaml @JimAKennedy
+
+# Core source and models — the engine, registry, and data contracts.
+/src/nfr_review/engine.py @JimAKennedy
+/src/nfr_review/models.py @JimAKennedy
+/src/nfr_review/protocols.py @JimAKennedy
+/src/nfr_review/registry.py @JimAKennedy
+/src/nfr_review/cli.py @JimAKennedy
