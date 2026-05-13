@@ -19,6 +19,10 @@ import nfr_review.hygiene.rules.com_security  # noqa: F401
 import nfr_review.hygiene.rules.doc_api_docs  # noqa: F401
 import nfr_review.hygiene.rules.doc_docs_exist  # noqa: F401
 import nfr_review.hygiene.rules.doc_pkg_metadata  # noqa: F401
+import nfr_review.hygiene.rules.lic_copyleft  # noqa: F401
+import nfr_review.hygiene.rules.lic_headers  # noqa: F401
+import nfr_review.hygiene.rules.lic_notice  # noqa: F401
+import nfr_review.hygiene.rules.lic_spdx  # noqa: F401
 import nfr_review.hygiene.rules.prv_internal_refs  # noqa: F401
 import nfr_review.hygiene.rules.prv_pii_patterns  # noqa: F401
 import nfr_review.hygiene.rules.prv_tracking_ids  # noqa: F401
