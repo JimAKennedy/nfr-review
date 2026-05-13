@@ -65,6 +65,8 @@ report command (nfr-review report <target>):
 | `auditability.py` | Git probe (SHA, branch, dirty), `RunMetadata` assembly | Output writing, config |
 | `collectors/*` | Evidence gathering from target repo files | Evaluating findings, accessing config.rules |
 | `rules/*` | Evaluating evidence into findings with RAG/severity/recommendation | Gathering evidence, file I/O on target repo |
+| `hygiene/collectors/license_scan.py` | scancode-based license/copyright scanning (`license-scan` + `license-scan-summary` evidence), optional dependency with graceful skip | Rule evaluation, SPDX validation |
+| `hygiene/rules/lic_*.py` | License compliance rules: copyleft detection (HYG-LIC-001), NOTICE completeness (HYG-LIC-002), header presence (HYG-LIC-003), SPDX validation (HYG-LIC-004) | Evidence gathering, scancode API calls |
 | `output/*` | CSV and JSONL serialization, `OutputError` | Finding logic, metadata assembly |
 | `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
 | `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results | Data collection, engine orchestration |
@@ -151,6 +153,9 @@ triggering registration. The CLI imports these packages at startup.
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |
+| Add a new hygiene collector | `hygiene/collectors/<name>.py` with `_register()` | `hygiene/collectors/__init__.py` (import), test fixtures |
+| Add a new hygiene rule | `hygiene/rules/<prefix>_<name>.py` with `_register()` | `hygiene/rules/__init__.py` (import), category prefix convention: `lic_`, `com_`, `ci_`, `doc_`, `bld_`, `prv_` |
+| Add an optional dependency | `pyproject.toml` `[project.optional-dependencies]`, try/except ImportError with fallback stubs | mypy `[[tool.mypy.overrides]]` for untyped package |
 
 ## Collector Contract
 
@@ -199,6 +204,39 @@ Conventions:
 - Filter evidence by `collector_name` -- don't scan all evidence
 - Band 2 rules: inject `ClaudeClient`, check `self._llm.available` before calling
 - Never do file I/O on the target repo -- consume evidence only
+
+## Optional Dependency Pattern
+
+Some collectors depend on heavy third-party packages (e.g., scancode-toolkit).
+These use try/except ImportError with fallback stubs:
+
+```python
+_AVAILABLE = False
+try:
+    from heavy_lib import func  # type: ignore[import-untyped]
+    _AVAILABLE = True
+except ImportError:
+    def func(**kwargs):  # type: ignore[misc]
+        raise RuntimeError("heavy_lib not installed")
+```
+
+The collector checks `_AVAILABLE` and returns an empty evidence list when the
+dependency is absent. Rules that depend on that collector's evidence gracefully
+skip via the engine's collector gate. Install via extras: `pip install nfr-review[scancode]`.
+
+## License Compliance Rules
+
+The `license` category contains four hygiene rules:
+
+| Rule | ID | Evidence | Behaviour |
+|------|----|----------|-----------|
+| Copyleft detection | HYG-LIC-001 | `license-scan` | Red for strong copyleft (GPL, AGPL), amber for weak (LGPL, MPL) |
+| NOTICE completeness | HYG-LIC-002 | `license-scan` | Cross-references holders against NOTICE file; red if missing, amber if incomplete |
+| License headers | HYG-LIC-003 | `license-scan` | Amber for source files missing copyright/license headers |
+| SPDX validation | HYG-LIC-004 | none (reads metadata files) | Validates license expressions in pyproject.toml, package.json, pom.xml against SPDX identifiers |
+
+HYG-LIC-004 is the only rule that does not require the `license-scan` collector —
+it reads project metadata files directly and works without scancode installed.
 
 ## Fault Tolerance (R012)
 
