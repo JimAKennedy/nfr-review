@@ -11,20 +11,38 @@ reference target used in pilot UATs.
 
 ## Prerequisites
 
-```bash
-# 1. Install nfr-review in editable mode
-pip install -e .
+### 1. Run the setup script
 
-# 2. Verify installation
+The setup script creates a venv, installs nfr-review in editable mode with dev
+dependencies, validates the installation, and optionally configures an Anthropic
+API key for Band 2 LLM rules.
+
+```bash
+./scripts/setup.sh
+```
+
+After setup completes, activate the venv:
+
+```bash
+source .venv/bin/activate
+```
+
+Verify:
+
+```bash
 nfr-review version
 # Expected: nfr-review 0.1.0
-
-# 3. Clone a target repo (or use an existing one)
-git clone https://github.com/JimAKennedy/agentic-java-demo.git /tmp/uat-target
-
-# 4. (Optional) Set up LLM key for Band 2 rule testing
-export ANTHROPIC_API_KEY="sk-ant-..."
 ```
+
+### 2. Clone a target repo
+
+```bash
+git clone https://github.com/JimAKennedy/agentic-java-demo.git /tmp/uat-target
+```
+
+> **Note:** If you skipped the API key prompt during setup and want to test
+> Band 2 (LLM) rules later, either re-run `./scripts/setup.sh` or add
+> `ANTHROPIC_API_KEY=sk-ant-...` to the `.env` file in the project root.
 
 ---
 
@@ -45,7 +63,7 @@ nfr-review list-rules
 ### 1.2 explain — valid rule
 
 ```bash
-nfr-review explain dockerfile-base-image-pinning
+nfr-review explain dockerfile-base-pinning
 ```
 
 | Check | Expected |
@@ -193,13 +211,13 @@ nfr-review run /tmp/uat-target 2>&1 | grep -i "skipped"
 version: 1
 rules:
   skip:
-    - dockerfile-base-image-pinning
+    - dockerfile-base-pinning
     - k8s-resource-limits-missing
 ```
 
 ```bash
 nfr-review run /tmp/uat-target --config /tmp/skip-test.yaml
-grep "dockerfile-base-image-pinning" nfr-review.csv
+grep "dockerfile-base-pinning" nfr-review.csv
 ```
 
 | Check | Expected |
@@ -213,7 +231,7 @@ grep "dockerfile-base-image-pinning" nfr-review.csv
 version: 1
 rules:
   include_only:
-    - dockerfile-base-image-pinning
+    - dockerfile-base-pinning
     - dockerfile-user-directive
 ```
 
