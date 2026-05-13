@@ -160,9 +160,9 @@ class TestGoModParsing:
         evidences = collector.collect(FIXTURE_DIR, None)
         deps = evidences[0].payload["dependencies"]
         by_name = {d["name"]: d for d in deps}
-        assert by_name["github.com/gin-gonic/gin"]["version_constraint"] == ">=1.9.1"
-        assert by_name["golang.org/x/net"]["version_constraint"] == ">=0.17.0"
-        assert by_name["github.com/google/uuid"]["version_constraint"] == ">=1.4.0"
+        assert by_name["github.com/gin-gonic/gin"]["version_constraint"] == "1.9.1"
+        assert by_name["golang.org/x/net"]["version_constraint"] == "0.17.0"
+        assert by_name["github.com/google/uuid"]["version_constraint"] == "1.4.0"
 
     @patch("nfr_review.collectors.go_deps.DepsDevClient")
     def test_manifest_files_found(self, mock_cls: MagicMock) -> None:
