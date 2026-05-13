@@ -125,6 +125,7 @@ def render_markdown_report(
     pytest_result: PytestResult | None = None,
     deps_section: str = "",
     title: str = "NFR Review Report",
+    diagrams: dict[str, str] | None = None,
 ) -> str:
     """Render a complete Markdown report from scan results.
 
@@ -163,6 +164,20 @@ def render_markdown_report(
     sections.append(_summary_table(all_findings, "Overall Summary"))
     sections.append(_summary_table(source_findings, "Source Code Summary"))
     sections.append(_summary_table(test_findings, "Test Code Summary"))
+
+    # Diagrams
+    if diagrams:
+        sections.append("## Diagrams")
+        sections.append("")
+        for diagram_title, mermaid_text in diagrams.items():
+            content = mermaid_text.strip()
+            if content:
+                sections.append(f"### {diagram_title}")
+                sections.append("")
+                sections.append("```mermaid")
+                sections.append(content)
+                sections.append("```")
+                sections.append("")
 
     # Test results
     sections.append(_test_results_section(pytest_result))

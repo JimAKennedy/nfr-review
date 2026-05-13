@@ -113,4 +113,37 @@ def render_dot_dependency_graph(reports: list[EcosystemDepsReport]) -> str:
     return "\n".join(lines) + "\n"
 
 
-__all__ = ["render_dot_dependency_graph"]
+def render_dot_to_file(
+    dot_text: str,
+    output_path: str,
+    fmt: str = "svg",
+) -> str | None:
+    """Render DOT text to a file using the graphviz Python package.
+
+    Returns the output path on success, or None if graphviz is not
+    available. Raises RuntimeError if rendering fails for other reasons.
+    """
+    try:
+        import graphviz  # type: ignore[import-untyped,import-not-found]
+    except ImportError:
+        return None
+
+    from pathlib import Path
+
+    out = Path(output_path)
+    src = graphviz.Source(dot_text)
+    try:
+        src.render(
+            filename=out.stem,
+            directory=str(out.parent),
+            format=fmt,
+            cleanup=True,
+        )
+    except graphviz.ExecutableNotFound:
+        return None
+
+    rendered = out.parent / f"{out.stem}.{fmt}"
+    return str(rendered)
+
+
+__all__ = ["render_dot_dependency_graph", "render_dot_to_file"]

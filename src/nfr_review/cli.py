@@ -21,6 +21,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -500,6 +501,12 @@ def hygiene_cmd(
     default=False,
     help="Skip dependency tree analysis.",
 )
+@click.option(
+    "--no-diagrams",
+    is_flag=True,
+    default=False,
+    help="Suppress Mermaid diagram sections in the report.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -509,6 +516,7 @@ def report_cmd(
     output_dir: Path,
     no_tests: bool,
     no_deps: bool,
+    no_diagrams: bool,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from datetime import UTC, datetime
@@ -570,6 +578,7 @@ def report_cmd(
 
     # Dependency analysis
     deps_section = ""
+    deps_reports: list[Any] = []
     if not no_deps:
         from nfr_review.deps_analysis import analyze_deps
         from nfr_review.output.deps_report import render_deps_section
@@ -589,12 +598,35 @@ def report_cmd(
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
             deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
 
+    # Build diagram sections
+    diagrams: dict[str, str] | None = None
+    if not no_diagrams:
+        from nfr_review.output.diagrams import (
+            render_mermaid_dep_graph,
+            render_mermaid_severity_pie,
+            render_mermaid_tech_overview,
+        )
+
+        all_findings = list(nfr_result.findings) + list(hygiene_result.findings)
+        diagrams = {}
+        if all_findings:
+            diagrams["Severity Distribution"] = render_mermaid_severity_pie(
+                all_findings,
+            )
+        if merged_tech:
+            diagrams["Technology Overview"] = render_mermaid_tech_overview(
+                merged_tech,
+            )
+        if not no_deps and deps_reports:
+            diagrams["Dependency Graph"] = render_mermaid_dep_graph(deps_reports)
+
     # Generate report
     md_content = render_markdown_report(
         nfr_result=nfr_result,
         hygiene_result=hygiene_result,
         pytest_result=pytest_result,
         deps_section=deps_section,
+        diagrams=diagrams,
     )
 
     # Write output files
@@ -678,6 +710,12 @@ def report_cmd(
     default=None,
     help="Write Graphviz DOT dependency graph to FILE.",
 )
+@click.option(
+    "--render-diagrams",
+    is_flag=True,
+    default=False,
+    help="Render DOT graph to SVG (requires graphviz).",
+)
 def deps_cmd(
     target: Path,
     verbose: int,
@@ -687,6 +725,7 @@ def deps_cmd(
     no_tree: bool,
     output_path: Path | None,
     dot_path: Path | None,
+    render_diagrams: bool,
 ) -> None:
     """Analyze dependencies: upgrade summary table and transitive tree."""
     from nfr_review.deps_analysis import analyze_deps
@@ -750,6 +789,25 @@ def deps_cmd(
         except OSError as exc:
             click.echo(f"error: {exc}", err=True)
             raise click.exceptions.Exit(1) from exc
+
+        if render_diagrams:
+            from nfr_review.output.dot import render_dot_to_file
+
+            rendered = render_dot_to_file(dot_content, str(dot_path))
+            if rendered:
+                click.echo(f"SVG rendered to {rendered}", err=True)
+            else:
+                click.echo(
+                    "info: graphviz not available — install with "
+                    "'pip install nfr-review[diagrams]' and ensure the "
+                    "'dot' binary is on PATH",
+                    err=True,
+                )
+    elif render_diagrams:
+        click.echo(
+            "warning: --render-diagrams requires --dot <file>",
+            err=True,
+        )
 
     if output_path:
         md_content = render_deps_section(reports)
