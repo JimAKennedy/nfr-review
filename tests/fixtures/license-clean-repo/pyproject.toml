@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clean-license-example"
+version = "1.0.0"
+description = "Example project with all permissive licenses for testing."
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "pydantic>=2",
+]
