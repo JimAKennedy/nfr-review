@@ -11,6 +11,7 @@ from typing import Any
 
 from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger(__name__)
@@ -24,11 +25,18 @@ class GoDepsCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
+
         manifest_files: list[str] = []
         raw_deps: list[tuple[str, str, str, bool]] = []  # (source, name, version, indirect)
 
         for mod_path in sorted(repo_path.rglob("go.mod")):
             rel = str(mod_path.relative_to(repo_path))
+            if should_exclude_path(
+                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
             parsed = _parse_go_mod(mod_path)
             if parsed is None:
                 continue

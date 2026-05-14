@@ -13,6 +13,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 
 from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger(__name__)
@@ -23,20 +24,29 @@ class PythonDepsCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
+
         manifest_files: list[str] = []
         raw_deps: list[tuple[str, Requirement]] = []
 
         for req_path in sorted(repo_path.rglob("requirements.txt")):
             rel = str(req_path.relative_to(repo_path))
+            if should_exclude_path(
+                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
             manifest_files.append(rel)
             raw_deps.extend((rel, req) for req in _parse_requirements_txt(req_path))
 
         pyproject_path = repo_path / "pyproject.toml"
         if pyproject_path.is_file():
-            manifest_files.append("pyproject.toml")
-            raw_deps.extend(
-                ("pyproject.toml", req) for req in _parse_pyproject_toml(pyproject_path)
-            )
+            rel = str(pyproject_path.relative_to(repo_path))
+            if not should_exclude_path(
+                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                manifest_files.append(rel)
+                raw_deps.extend((rel, req) for req in _parse_pyproject_toml(pyproject_path))
 
         if not raw_deps:
             return []
