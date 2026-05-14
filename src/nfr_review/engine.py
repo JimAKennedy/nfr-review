@@ -17,6 +17,7 @@ from typing import Any
 from nfr_review.auditability import build_run_metadata
 from nfr_review.config import Config
 from nfr_review.models import Evidence, Finding, RuleResult, RunMetadata
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.protocols import Collector, Rule
 from nfr_review.registry import Registry
 from nfr_review.registry import collector_registry as _default_collector_registry
@@ -82,6 +83,10 @@ class Engine:
 
         active_collectors = _select_collectors(self._collectors, config.collectors.skip)
 
+        exclude_pats = (
+            compile_exclude_patterns(config.exclude_paths) if config.exclude_paths else None
+        )
+
         evidence: list[Evidence] = []
         warnings: list[str] = []
         succeeded_collectors: set[str] = set()
@@ -107,6 +112,24 @@ class Engine:
                 warnings.append(f"collector {collector.name} failed: {exc}")
                 continue
             elapsed = time.monotonic() - t0
+            pre_filter_count = len(produced)
+            produced = [
+                e
+                for e in produced
+                if not should_exclude_path(
+                    e.locator,
+                    exclude_test_paths=config.exclude_test_paths,
+                    exclude_patterns=exclude_pats,
+                )
+            ]
+            filtered_count = pre_filter_count - len(produced)
+            if filtered_count:
+                logger.debug(
+                    "  collector %s: filtered %d/%d evidence items by path exclusion",
+                    collector.name,
+                    filtered_count,
+                    pre_filter_count,
+                )
             evidence.extend(produced)
             succeeded_collectors.add(collector.name)
             logger.info(

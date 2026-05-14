@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 from nfr_review.collectors.ast_common import make_parser
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.java_ast")
@@ -378,10 +379,18 @@ class JavaAstCollector:
         self._parser = make_parser("java")
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
+        exclude_test = getattr(config, "exclude_test_paths", True)
         evidence: list[Evidence] = []
         for java_file in sorted(repo_path.rglob("*.java")):
             rel = java_file.relative_to(repo_path)
             if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
+                continue
+            if should_exclude_path(
+                str(rel),
+                exclude_test_paths=exclude_test,
+                exclude_patterns=exclude_pats or None,
+            ):
                 continue
             try:
                 source = java_file.read_bytes()

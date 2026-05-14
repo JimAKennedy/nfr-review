@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from tree_sitter import Node, Parser
 
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 
 logger = logging.getLogger("nfr_review.collectors.ast_common")
 
@@ -98,11 +99,19 @@ class BaseASTCollector(ABC):
         ...
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
+        exclude_test = getattr(config, "exclude_test_paths", True)
         evidence: list[Evidence] = []
         for ext in self.file_extensions:
             for src_file in sorted(repo_path.rglob(f"*{ext}")):
                 rel = src_file.relative_to(repo_path)
                 if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
+                    continue
+                if should_exclude_path(
+                    str(rel),
+                    exclude_test_paths=exclude_test,
+                    exclude_patterns=exclude_pats or None,
+                ):
                     continue
                 try:
                     source = src_file.read_bytes()
