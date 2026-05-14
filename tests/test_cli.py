@@ -258,3 +258,21 @@ def test_run_detection_failure_is_nonfatal(
     )
     assert result.exit_code == 0, result.stderr
     assert "tech_detected=0" in result.stderr
+
+
+# -- --include-tests flag presence tests --
+
+
+def test_run_help_shows_include_tests() -> None:
+    result = _runner().invoke(cli, ["run", "--help"])
+    assert "--include-tests" in result.output
+
+
+def test_report_help_shows_include_tests() -> None:
+    result = _runner().invoke(cli, ["report", "--help"])
+    assert "--include-tests" in result.output
+
+
+def test_hygiene_help_shows_include_tests() -> None:
+    result = _runner().invoke(cli, ["hygiene", "--help"])
+    assert "--include-tests" in result.output

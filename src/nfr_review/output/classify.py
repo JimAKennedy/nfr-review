@@ -2,28 +2,12 @@
 
 from __future__ import annotations
 
-import re
 from typing import Literal
 
 from nfr_review.models import Finding
+from nfr_review.path_filter import _TEST_PATH_PATTERNS
 
 Region = Literal["source", "test"]
-
-_TEST_PATH_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"(^|/)tests?/"),
-    re.compile(r"(^|/)__tests__/"),
-    re.compile(r"(^|/)spec/"),
-    re.compile(r"(^|/)test_[^/]+\.py$"),
-    re.compile(r"(^|/)[^/]+_test\.py$"),
-    re.compile(r"(^|/)[^/]+_test\.go$"),
-    re.compile(r"(^|/)conftest\.py$"),
-    re.compile(r"(^|/)[^/]*Test\.java$"),
-    re.compile(r"(^|/)[^/]*Tests\.java$"),
-    re.compile(r"(^|/)[^/]*Test\.cs$"),
-    re.compile(r"(^|/)[^/]*Tests\.cs$"),
-    re.compile(r"(^|/)[^/]+\.test\.[jt]sx?$"),
-    re.compile(r"(^|/)[^/]+\.spec\.[jt]sx?$"),
-)
 
 
 def classify_region(path: str) -> Region:

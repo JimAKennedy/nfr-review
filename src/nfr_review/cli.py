@@ -179,6 +179,12 @@ def cli() -> None:
     show_default=True,
     help="Output path for the R018 JSONL run record.",
 )
+@click.option(
+    "--include-tests",
+    is_flag=True,
+    default=False,
+    help="Include test and fixture directories in analysis.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -187,6 +193,7 @@ def run_cmd(
     config_path: Path | None,
     csv_path: Path,
     jsonl_path: Path,
+    include_tests: bool,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     if verbose and quiet:
@@ -221,6 +228,8 @@ def run_cmd(
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
+    if include_tests:
+        config = config.model_copy(update={"exclude_test_paths": False})
     tech_detected = sum(1 for v in detected.values() if v)
 
     run_logger.info("Starting NFR engine scan")
@@ -345,6 +354,12 @@ def explain_cmd(rule_id: str) -> None:
     default=None,
     help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
 )
+@click.option(
+    "--include-tests",
+    is_flag=True,
+    default=False,
+    help="Include test and fixture directories in analysis.",
+)
 def hygiene_cmd(
     target: Path | None,
     verbose: int,
@@ -356,6 +371,7 @@ def hygiene_cmd(
     severity_threshold: str | None,
     category: str | None,
     config_path: Path | None,
+    include_tests: bool,
 ) -> None:
     """Hygiene command — run hygiene collectors and rules, emit output."""
     if list_checks:
@@ -390,6 +406,9 @@ def hygiene_cmd(
     except ConfigError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+
+    if include_tests:
+        config = config.model_copy(update={"exclude_test_paths": False})
 
     from nfr_review.protocols import Rule as RuleProtocol
 
@@ -507,6 +526,12 @@ def hygiene_cmd(
     default=False,
     help="Suppress Mermaid diagram sections in the report.",
 )
+@click.option(
+    "--include-tests",
+    is_flag=True,
+    default=False,
+    help="Include test and fixture directories in analysis.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -517,6 +542,7 @@ def report_cmd(
     no_tests: bool,
     no_deps: bool,
     no_diagrams: bool,
+    include_tests: bool,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from datetime import UTC, datetime
@@ -553,6 +579,8 @@ def report_cmd(
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
+    if include_tests:
+        config = config.model_copy(update={"exclude_test_paths": False})
 
     # NFR scan
     try:
