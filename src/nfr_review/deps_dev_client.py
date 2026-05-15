@@ -136,4 +136,24 @@ class DepsDevClient:
         )
 
 
-__all__ = ["DepsDevClient"]
+def pick_latest_version(versions: list[dict]) -> dict | None:
+    """Select the latest version from a deps.dev versions list.
+
+    Prefers the version marked ``isDefault`` by the registry, falls back
+    to the most recently published version, and finally to the last element.
+    """
+    if not versions:
+        return None
+
+    for v in versions:
+        if v.get("isDefault"):
+            return v
+
+    with_date = [(v, v.get("publishedAt", "")) for v in versions]
+    if any(d for _, d in with_date):
+        return max(with_date, key=lambda pair: pair[1])[0]
+
+    return versions[-1]
+
+
+__all__ = ["DepsDevClient", "pick_latest_version"]

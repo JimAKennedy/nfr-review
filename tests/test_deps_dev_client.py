@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from nfr_review import deps_dev_client
-from nfr_review.deps_dev_client import DepsDevClient
+from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 
 
 @pytest.fixture(autouse=True)
@@ -241,3 +241,70 @@ class TestLogging:
             client.get_package_versions("pypi", "requests")
         assert "deps.dev API" in caplog.text
         assert "timed out" in caplog.text
+
+
+# ── pick_latest_version ─────────────────────────────────────────────────
+
+
+class TestPickLatestVersion:
+    def test_empty_list_returns_none(self):
+        assert pick_latest_version([]) is None
+
+    def test_prefers_is_default(self):
+        versions = [
+            {"versionKey": {"version": "1.9.9"}, "publishedAt": "2023-03-01T00:00:00Z"},
+            {
+                "versionKey": {"version": "1.16.5"},
+                "publishedAt": "2025-01-15T00:00:00Z",
+                "isDefault": True,
+            },
+            {"versionKey": {"version": "1.17.0-RC1"}, "publishedAt": "2026-04-01T00:00:00Z"},
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "1.16.5"
+
+    def test_falls_back_to_most_recent_published(self):
+        versions = [
+            {"versionKey": {"version": "1.9.9"}, "publishedAt": "2023-03-01T00:00:00Z"},
+            {"versionKey": {"version": "1.17.0"}, "publishedAt": "2026-04-01T00:00:00Z"},
+            {"versionKey": {"version": "1.16.5"}, "publishedAt": "2025-01-15T00:00:00Z"},
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "1.17.0"
+
+    def test_falls_back_to_last_element_when_no_dates(self):
+        versions = [
+            {"versionKey": {"version": "1.0.0"}},
+            {"versionKey": {"version": "2.0.0"}},
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "2.0.0"
+
+    def test_lexicographic_trap_resolved(self):
+        """The original bug: versions[-1] picked 1.9.9 over 1.16.5 due to lex sort."""
+        versions = [
+            {"versionKey": {"version": "1.10.0"}, "publishedAt": "2022-06-01T00:00:00Z"},
+            {"versionKey": {"version": "1.16.5"}, "publishedAt": "2025-01-15T00:00:00Z"},
+            {"versionKey": {"version": "1.9.9"}, "publishedAt": "2023-03-01T00:00:00Z"},
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "1.16.5"
+
+    def test_single_version(self):
+        versions = [
+            {"versionKey": {"version": "1.0.0"}, "publishedAt": "2024-01-01T00:00:00Z"}
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "1.0.0"
+
+    def test_is_default_false_not_treated_as_default(self):
+        versions = [
+            {
+                "versionKey": {"version": "1.0.0"},
+                "publishedAt": "2024-01-01T00:00:00Z",
+                "isDefault": False,
+            },
+            {"versionKey": {"version": "2.0.0"}, "publishedAt": "2025-06-01T00:00:00Z"},
+        ]
+        result = pick_latest_version(versions)
+        assert result["versionKey"]["version"] == "2.0.0"

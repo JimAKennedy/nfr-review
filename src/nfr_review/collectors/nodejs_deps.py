@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from nfr_review.deps_dev_client import DepsDevClient
+from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -119,9 +119,9 @@ def _enrich(
         result["deps_dev_status"] = "not_found"
         return result
 
-    latest = versions[-1]
-    result["latest_version"] = latest.get("versionKey", {}).get("version")
-    result["latest_release_date"] = latest.get("publishedAt")
+    latest = pick_latest_version(versions)
+    result["latest_version"] = latest.get("versionKey", {}).get("version") if latest else None
+    result["latest_release_date"] = latest.get("publishedAt") if latest else None
     result["deps_dev_status"] = "ok"
     return result
 
