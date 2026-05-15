@@ -1,7 +1,7 @@
 # nfr-review UAT Script
 
 **Version:** 0.1.0
-**Last updated:** 2026-05-13
+**Last updated:** 2026-05-15
 
 This script covers end-to-end acceptance testing of the `nfr-review` CLI.
 Run it against a real target repository — the agentic-java-demo repo is the
@@ -9,32 +9,47 @@ reference target used in pilot UATs.
 
 ---
 
-## Prerequisites
+## 0. Environment Setup
 
-### 1. Run the setup script
+Every UAT run starts from a clean environment. This ensures results are
+reproducible and not affected by stale venvs, cached packages, or leftover
+config from previous sessions.
 
-The setup script creates a venv, installs nfr-review in editable mode with dev
-dependencies, validates the installation, and optionally configures an Anthropic
-API key for Band 2 LLM rules.
+### 0.1 Remove any existing venv
+
+```bash
+cd /path/to/nfr-review
+rm -rf .venv
+```
+
+### 0.2 Run the setup script
 
 ```bash
 ./scripts/setup.sh
 ```
 
-After setup completes, activate the venv:
+| Check | Expected |
+|-------|----------|
+| Exit code | 0 |
+| Venv created | `.venv/` directory exists |
+| Editable install | `pip show nfr-review` shows `Location:` pointing at `src/` |
+| Binary resolves inside venv | `which nfr-review` is under `.venv/bin/` |
+| Skills installed | Agent skills downloaded from `skills-lock.json` |
+
+### 0.3 Activate the venv
 
 ```bash
 source .venv/bin/activate
 ```
 
-Verify:
+### 0.4 Verify installation
 
 ```bash
 nfr-review version
-# Expected: nfr-review 0.1.0
+# Expected: 0.1.0
 ```
 
-### 2. Clone a target repo
+### 0.5 Clone a target repo
 
 ```bash
 git clone https://github.com/JimAKennedy/agentic-java-demo.git /tmp/uat-target
@@ -97,7 +112,7 @@ nfr-review run .
 |-------|----------|
 | Exit code | 0 |
 | Summary on stderr | Shows `tech_detected`, `collectors_run`, `rules_run`, `findings` counts |
-| `nfr-review.csv` created | 10-column CSV with header row |
+| `nfr-review.csv` created | CSV with header row |
 | `nfr-review.jsonl` created | Line 1 = run metadata JSON, remaining = findings |
 | Tech auto-detection | Java/Spring Boot detected from `pom.xml` |
 | Findings count | > 0 findings |
@@ -348,7 +363,7 @@ nfr-review hygiene /tmp/uat-target --category ci,com
 
 | Check | Expected |
 |-------|----------|
-| Only CI and Community findings | No `bld`, `doc`, or `prv` findings in output |
+| Only CI and Community findings | No `bld`, `doc`, `license`, or `prv` findings in output |
 
 ### 4.5 Clean repo (all green)
 
@@ -419,6 +434,29 @@ nfr-review report /tmp/uat-target --output-dir /tmp/report-license
 | License findings included | `HYG-LIC-*` findings appear in combined markdown, CSV, and JSONL |
 | Category column | License findings show `license` category |
 
+### 4.10 Hygiene severity threshold
+
+```bash
+nfr-review hygiene /tmp/uat-target --severity-threshold info
+echo $?
+```
+
+| Check | Expected |
+|-------|----------|
+| Exit code | 2 (threshold exceeded, if any findings present) |
+| Findings still written | Output files created before exit |
+
+### 4.11 Hygiene --include-tests
+
+```bash
+nfr-review hygiene /tmp/uat-target --include-tests
+```
+
+| Check | Expected |
+|-------|----------|
+| Test-path findings included | Hygiene findings from test directories appear |
+| Exit code | 0 |
+
 ---
 
 ## 5. Report Command
@@ -471,6 +509,18 @@ nfr-review report /tmp/uat-target --include-tests --output-dir /tmp/report-inclu
 | More findings than default | Finding count exceeds a report without `--include-tests` |
 | Exit code | 0 |
 
+### 5.5 Skip diagrams
+
+```bash
+nfr-review report /tmp/uat-target --no-diagrams --output-dir /tmp/report-nodiag
+```
+
+| Check | Expected |
+|-------|----------|
+| No Mermaid diagrams | Markdown report omits diagram sections |
+| Other sections intact | Summary, findings, hygiene sections present |
+| Exit code | 0 |
+
 ---
 
 ## 6. Dependency Analysis (`deps`)
@@ -520,6 +570,18 @@ nfr-review deps tests/fixtures/multi-ecosystem-deps-repo
 |-------|----------|
 | Multiple ecosystems detected | Handles mixed package managers |
 | Per-ecosystem sections | Each ecosystem's deps reported separately |
+
+### 6.5 DOT graph output
+
+```bash
+nfr-review deps /tmp/uat-target --dot /tmp/deps.dot
+```
+
+| Check | Expected |
+|-------|----------|
+| `/tmp/deps.dot` created | Valid Graphviz DOT file |
+| Graph structure | Nodes for packages, edges for dependencies |
+| Exit code | 0 |
 
 ---
 
@@ -613,7 +675,7 @@ head -1 nfr-review.csv
 
 | Check | Expected |
 |-------|----------|
-| Header row | 10 columns in fixed order |
+| Header row | Columns in fixed order |
 | No empty required fields | Every finding has rule_id, severity, rag |
 | Paths are relative | File paths relative to target root |
 
@@ -690,7 +752,7 @@ nfr-review run tests/fixtures/polyglot-sample-repo
 
 | Check | Expected |
 |-------|----------|
-| Multiple tech detected | Java + Go + Python (or whichever combo is in fixture) |
+| Multiple tech detected | Java + Go + Python + C# + Node.js |
 | Cross-language rules fire | `bare-except-catch-all`, `logging-to-stdout` across languages |
 
 ### 11.3 Target is a file, not directory
@@ -701,8 +763,49 @@ nfr-review run /tmp/uat-target/pom.xml
 
 | Check | Expected |
 |-------|----------|
-| Exit code | 1 |
-| Error message | Target must be a directory |
+| Exit code | 2 (Click path validation) |
+| Error message | Not a valid directory path |
+
+---
+
+## 12. Cleanup / Teardown
+
+After completing all tests, destroy the UAT environment:
+
+```bash
+# Return to the nfr-review project root
+cd /path/to/nfr-review
+
+# Deactivate venv
+deactivate
+
+# Remove the venv
+rm -rf .venv
+
+# Remove the target repo
+rm -rf /tmp/uat-target
+
+# Remove temp files created during testing
+rm -f /tmp/custom.csv /tmp/custom.jsonl
+rm -f /tmp/threshold-test.yaml /tmp/exclude-test.yaml
+rm -f /tmp/skip-test.yaml /tmp/include-test.yaml
+rm -f /tmp/info.log /tmp/debug.log /tmp/quiet.log
+rm -f /tmp/nfr.log
+rm -f /tmp/deps-report.md /tmp/deps.dot
+rm -rf /tmp/hygiene-out /tmp/hyg-csv /tmp/hyg-jsonl
+rm -rf /tmp/report-out /tmp/report-notest /tmp/report-nodeps
+rm -rf /tmp/report-include-tests /tmp/report-nodiag /tmp/report-license
+rm -rf /tmp/empty-repo
+
+# Remove any nfr-review output left in the target dir
+rm -f nfr-review.csv nfr-review.jsonl
+```
+
+| Check | Expected |
+|-------|----------|
+| `.venv/` removed | No leftover venv |
+| `/tmp/uat-*` removed | No leftover clones or outputs |
+| No stale temp files | `/tmp` clean of UAT artifacts |
 
 ---
 
@@ -710,14 +813,16 @@ nfr-review run /tmp/uat-target/pom.xml
 
 | # | Area | Scenarios | Status |
 |---|------|-----------|--------|
+| 0 | Environment setup | Clean venv via setup.sh, verify install | |
 | 1 | Informational commands | list-rules, explain (valid + invalid) | |
 | 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file, --include-tests, exclude_paths config | |
 | 3 | Tech filtering | spring gating, rules.skip, include_only, kustomize | |
-| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip | |
-| 5 | Report | full, no-tests, no-deps, --include-tests | |
-| 6 | Deps | basic, file output, no-tree, multi-ecosystem | |
+| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip, severity threshold, --include-tests | |
+| 5 | Report | full, no-tests, no-deps, --include-tests, --no-diagrams | |
+| 6 | Deps | basic, file output, no-tree, multi-ecosystem, DOT graph | |
 | 7 | Fault tolerance | missing target, invalid config, collector failure, no helm | |
 | 8 | Band 2 LLM | with key, without key | |
 | 9 | Output quality | CSV structure, JSONL structure, Markdown structure | |
 | 10 | Performance | scan time, concurrent prefetch | |
 | 11 | Edge cases | empty repo, polyglot, file-as-target | |
+| 12 | Cleanup | Remove venv, target repo, temp files | |
