@@ -189,6 +189,49 @@ nfr-review run /tmp/uat-target -v --log-file /tmp/nfr.log
 | `/tmp/nfr.log` created | Contains log output |
 | stderr | Minimal (summary only, logs redirected to file) |
 
+### 2.8 Path exclusion — --include-tests
+
+By default, `nfr-review` excludes findings from test/fixture paths. The
+`--include-tests` flag disables this filter.
+
+```bash
+# Default — test-path findings excluded
+nfr-review run /tmp/uat-target
+```
+
+```bash
+# With flag — test-path findings included
+nfr-review run /tmp/uat-target --include-tests
+```
+
+| Check | Expected |
+|-------|----------|
+| Default run finding count | Findings from `tests/` or `*_test.*` paths absent |
+| `--include-tests` finding count | More findings than default — test-path findings appear |
+| Exit code (both) | 0 |
+
+### 2.9 Path exclusion — exclude_paths config
+
+The `exclude_paths` config key lets users suppress findings from arbitrary
+directory prefixes.
+
+```yaml
+# /tmp/exclude-test.yaml
+version: 1
+exclude_paths:
+  - "src/nfr_review/collectors/"
+```
+
+```bash
+nfr-review run . --config /tmp/exclude-test.yaml
+```
+
+| Check | Expected |
+|-------|----------|
+| Findings from excluded prefix absent | No findings with locator matching `src/nfr_review/collectors/` |
+| Other findings present | Non-excluded paths still produce findings |
+| Exit code | 0 |
+
 ---
 
 ## 3. Tech Filtering and Rule Gating
@@ -415,6 +458,18 @@ nfr-review report /tmp/uat-target --no-deps --output-dir /tmp/report-nodeps
 |-------|----------|
 | No dependency section | Markdown report omits deps analysis |
 | No API calls to deps.dev | Faster execution, no network dependency |
+
+### 5.4 Report with --include-tests
+
+```bash
+nfr-review report /tmp/uat-target --include-tests --output-dir /tmp/report-include-tests
+```
+
+| Check | Expected |
+|-------|----------|
+| Test-path findings in report | Markdown and CSV include findings from `tests/` paths |
+| More findings than default | Finding count exceeds a report without `--include-tests` |
+| Exit code | 0 |
 
 ---
 
@@ -656,10 +711,10 @@ nfr-review run /tmp/uat-target/pom.xml
 | # | Area | Scenarios | Status |
 |---|------|-----------|--------|
 | 1 | Informational commands | list-rules, explain (valid + invalid) | |
-| 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file | |
+| 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file, --include-tests, exclude_paths config | |
 | 3 | Tech filtering | spring gating, rules.skip, include_only, kustomize | |
 | 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip | |
-| 5 | Report | full, no-tests, no-deps | |
+| 5 | Report | full, no-tests, no-deps, --include-tests | |
 | 6 | Deps | basic, file output, no-tree, multi-ecosystem | |
 | 7 | Fault tolerance | missing target, invalid config, collector failure, no helm | |
 | 8 | Band 2 LLM | with key, without key | |
