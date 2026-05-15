@@ -94,4 +94,5 @@ testpaths = ["tests"]
 addopts = "-ra"
 markers = [
     "regression: clones public repos and diffs output against snapshot baselines (requires network)",
+    "slow: full analysis pass on the repo (may hit network for dep resolution)",
 ]

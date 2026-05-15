@@ -14,6 +14,7 @@ from packaging.version import InvalidVersion, Version
 
 from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,9 @@ class JavaDepsCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
+
         manifest_files: list[str] = []
         raw_deps: list[tuple[str, str, str, str | None]] = []
 
@@ -89,6 +93,10 @@ class JavaDepsCollector:
             if _should_skip(pom_path):
                 continue
             rel = str(pom_path.relative_to(repo_path))
+            if should_exclude_path(
+                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
             parsed = _parse_pom_xml(pom_path)
             if parsed is None:
                 continue
@@ -102,6 +110,10 @@ class JavaDepsCollector:
             if _should_skip(gradle_path):
                 continue
             rel = str(gradle_path.relative_to(repo_path))
+            if should_exclude_path(
+                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
             parsed_gradle = _parse_build_gradle(gradle_path)
             if parsed_gradle:
                 manifest_files.append(rel)

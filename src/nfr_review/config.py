@@ -61,6 +61,8 @@ class Config(BaseModel):
     rules: RulesConfig = Field(default_factory=RulesConfig)
     collectors: CollectorsConfig = Field(default_factory=CollectorsConfig)
     severity_threshold: Severity | None = None
+    exclude_paths: list[str] = Field(default_factory=list)
+    exclude_test_paths: bool = True
 
 
 def _format_validation_error(exc: ValidationError) -> str:

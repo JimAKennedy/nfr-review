@@ -147,3 +147,35 @@ def test_include_only_can_be_explicit_null(tmp_path: Path) -> None:
     p.write_text("rules:\n  include_only: null\n", encoding="utf-8")
     cfg = load_config(p)
     assert cfg.rules.include_only is None
+
+
+def test_config_default_exclude_test_paths_true() -> None:
+    cfg = Config()
+    assert cfg.exclude_test_paths is True
+
+
+def test_config_default_exclude_paths_empty() -> None:
+    cfg = Config()
+    assert cfg.exclude_paths == []
+
+
+def test_config_exclude_paths_from_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("exclude_paths:\n  - 'vendor/'\n  - 'generated/'\n", encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.exclude_paths == ["vendor/", "generated/"]
+
+
+def test_config_exclude_test_paths_false_from_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("exclude_test_paths: false\n", encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.exclude_test_paths is False
+
+
+def test_config_model_copy_exclude_test_paths() -> None:
+    cfg = Config()
+    assert cfg.exclude_test_paths is True
+    updated = cfg.model_copy(update={"exclude_test_paths": False})
+    assert updated.exclude_test_paths is False
+    assert cfg.exclude_test_paths is True

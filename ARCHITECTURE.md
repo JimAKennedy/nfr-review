@@ -68,6 +68,7 @@ report command (nfr-review report <target>):
 | `hygiene/collectors/license_scan.py` | scancode-based license/copyright scanning (`license-scan` + `license-scan-summary` evidence), optional dependency with graceful skip | Rule evaluation, SPDX validation |
 | `hygiene/rules/lic_*.py` | License compliance rules: copyleft detection (HYG-LIC-001), NOTICE completeness (HYG-LIC-002), header presence (HYG-LIC-003), SPDX validation (HYG-LIC-004) | Evidence gathering, scancode API calls |
 | `output/*` | CSV and JSONL serialization, `OutputError` | Finding logic, metadata assembly |
+| `path_filter.py` | Pre-aggregation test-path detection (`is_test_path`), configurable path exclusion (`should_exclude_path`, `compile_exclude_patterns`); used by collectors to drop evidence before it reaches rules | Rule evaluation, output classification |
 | `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
 | `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results | Data collection, engine orchestration |
 | `output/pytest_runner.py` | Subprocess pytest execution, summary line parsing, `PytestResult` | Test framework logic, assertions |
@@ -150,6 +151,7 @@ triggering registration. The CLI imports these packages at startup.
 | Add a new config option | `config.py` Pydantic model | CLI if it needs a flag, docs |
 | Add a new output format | `output/<format>.py` | `cli.py` (new flag + writer call) |
 | Add a new report section | `output/markdown.py` (new `_section()` helper) | Nothing -- renderer is self-contained |
+| Change pre-collector path exclusion | `path_filter.py` (edit `_TEST_PATH_PATTERNS` or `should_exclude_path`) | Tests in `test_path_filter.py` |
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |

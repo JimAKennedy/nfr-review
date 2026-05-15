@@ -75,6 +75,21 @@ def _make_finding(rule_id: str = "static") -> Finding:
     )
 
 
+def _make_finding_with_locator(locator: str, rule_id: str = "echo") -> Finding:
+    return Finding(
+        rule_id=rule_id,
+        rag="green",
+        severity="info",
+        summary="ok",
+        recommendation="none",
+        evidence_locator=locator,
+        collector_name="c",
+        collector_version="0.0.1",
+        confidence=1.0,
+        pattern_tag="x",
+    )
+
+
 def test_target_missing_raises_engine_error(tmp_path: Path) -> None:
     engine, _, _ = _make_engine()
     missing = tmp_path / "does-not-exist"
@@ -422,6 +437,295 @@ def test_tech_filter_skip_reason_appears_in_rules_skipped(tmp_path: Path) -> Non
         e for e in result.run_metadata.rules_skipped if e["rule_id"] == "apim-rule"
     )
     assert skipped_entry["reason"] == "tech not declared: apim"
+
+
+# ----- Path filtering -------------------------------------------------------
+
+
+def test_engine_filters_test_path_evidence(tmp_path: Path) -> None:
+    """Default config (exclude_test_paths=True) drops test-path evidence."""
+    engine, cregistry, _ = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="tests/test_foo.py",
+                    kind="x",
+                    payload={},
+                ),
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/main.py",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    result = engine.run(tmp_path, Config())
+    assert result.warnings == []
+
+
+def test_engine_filters_test_path_evidence_via_rule(tmp_path: Path) -> None:
+    """Verify engine-level filtering removes test-path evidence before rules see it."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="tests/test_foo.py",
+                    kind="x",
+                    payload={},
+                ),
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/main.py",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(tmp_path, Config())
+    locators = [f.evidence_locator for f in result.findings]
+    assert locators == ["src/main.py"]
+
+
+def test_engine_includes_test_paths_when_disabled(tmp_path: Path) -> None:
+    """exclude_test_paths=False passes all evidence through."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="tests/test_foo.py",
+                    kind="x",
+                    payload={},
+                ),
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/main.py",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(tmp_path, Config(exclude_test_paths=False))
+    locators = [f.evidence_locator for f in result.findings]
+    assert "tests/test_foo.py" in locators
+    assert "src/main.py" in locators
+
+
+def test_engine_filters_custom_exclude_paths(tmp_path: Path) -> None:
+    """Config with exclude_paths=['vendor/*'] filters vendor evidence."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="vendor/lib.py",
+                    kind="x",
+                    payload={},
+                ),
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/app.py",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(
+        tmp_path,
+        Config(exclude_test_paths=False, exclude_paths=["vendor/*"]),
+    )
+    locators = [f.evidence_locator for f in result.findings]
+    assert locators == ["src/app.py"]
+
+
+def test_engine_filters_compound_locator(tmp_path: Path) -> None:
+    """K8s-style compound locator 'tests/fixtures/k8s/deploy.yaml:my-app' is filtered."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="tests/fixtures/k8s/deploy.yaml:my-app",
+                    kind="x",
+                    payload={},
+                ),
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/deploy.yaml",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(tmp_path, Config())
+    locators = [f.evidence_locator for f in result.findings]
+    assert locators == ["src/deploy.yaml"]
+
+
+def test_engine_does_not_filter_aggregate_locator(tmp_path: Path) -> None:
+    """Evidence with locator '.' (aggregate collectors) must NOT be filtered."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "agg",
+        _StaticCollector(
+            "agg",
+            [
+                Evidence(
+                    collector_name="agg",
+                    collector_version="0.0.1",
+                    locator=".",
+                    kind="repo-structure-summary",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(tmp_path, Config())
+    locators = [f.evidence_locator for f in result.findings]
+    assert locators == ["."]
+
+
+def test_engine_empty_exclude_paths_filters_nothing_extra(tmp_path: Path) -> None:
+    """Empty exclude_paths list should not cause errors or filter anything extra."""
+
+    class _EchoRule:
+        id = "echo"
+        band = 1
+        required_collectors: list[str] = []
+
+        def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+            return RuleResult(
+                rule_id=self.id,
+                findings=[_make_finding_with_locator(e.locator) for e in evidence],
+            )
+
+    engine, cregistry, rregistry = _make_engine()
+    cregistry.register(
+        "mixed",
+        _StaticCollector(
+            "mixed",
+            [
+                Evidence(
+                    collector_name="mixed",
+                    collector_version="0.0.1",
+                    locator="src/main.py",
+                    kind="x",
+                    payload={},
+                ),
+            ],
+        ),
+    )
+    rregistry.register("echo", _EchoRule())
+
+    result = engine.run(
+        tmp_path,
+        Config(exclude_test_paths=False, exclude_paths=[]),
+    )
+    locators = [f.evidence_locator for f in result.findings]
+    assert locators == ["src/main.py"]
 
 
 def test_engine_end_to_end_with_sample_collector_and_rule(tmp_path: Path) -> None:
