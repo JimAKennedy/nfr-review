@@ -293,6 +293,53 @@ def _parse_csproj(repo_path: Path) -> dict[str, Any] | None:
     }
 
 
+def _detect_py_typed(repo_path: Path) -> bool:
+    """Check for PEP 561 py.typed marker file."""
+    src_dir = repo_path / "src"
+    if src_dir.is_dir():
+        for child in src_dir.iterdir():
+            if child.is_dir() and (child / "py.typed").is_file():
+                return True
+    for child in repo_path.iterdir():
+        if (
+            child.is_dir()
+            and child.name not in ("src", "tests", "test", "docs", ".git", ".tox", ".venv")
+            and (child / "__init__.py").is_file()
+            and (child / "py.typed").is_file()
+        ):
+            return True
+    return False
+
+
+def _extract_classifiers(repo_path: Path) -> list[str]:
+    """Extract trove classifiers from pyproject.toml."""
+    path = repo_path / "pyproject.toml"
+    if not path.is_file():
+        return []
+
+    try:
+        if hasattr(__builtins__, "__import__"):
+            import tomllib
+        else:
+            import tomllib
+    except ModuleNotFoundError:  # pragma: no cover
+        try:
+            import tomli as tomllib  # type: ignore[no-redef,import-not-found]
+        except ModuleNotFoundError:
+            return []
+
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        return []
+    classifiers = project.get("classifiers", [])
+    return classifiers if isinstance(classifiers, list) else []
+
+
 def _detect_doc_tool(repo_path: Path) -> str:
     if (repo_path / "mkdocs.yml").is_file():
         return "mkdocs"
@@ -361,12 +408,17 @@ class DocumentationCollector:
         has_docs_dir = (repo_path / "docs").is_dir()
         doc_tool = _detect_doc_tool(repo_path)
         has_api_docs_hint = _check_api_docs_hint(repo_path)
+        has_py_typed = _detect_py_typed(repo_path)
+        classifiers = _extract_classifiers(repo_path)
 
         payload: dict[str, Any] = {
             "manifests": manifests,
             "has_docs_dir": has_docs_dir,
             "doc_tool": doc_tool,
             "has_api_docs_hint": has_api_docs_hint,
+            "has_py_typed": has_py_typed,
+            "classifier_count": len(classifiers),
+            "has_classifiers": len(classifiers) > 0,
         }
 
         return [
