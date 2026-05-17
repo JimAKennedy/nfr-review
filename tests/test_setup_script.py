@@ -14,11 +14,17 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SETUP_SCRIPT = PROJECT_ROOT / "scripts" / "setup.sh"
+SETUP_ALL_SCRIPT = PROJECT_ROOT / "scripts" / "setup-all.sh"
 
 
 @pytest.fixture()
 def script_text() -> str:
     return SETUP_SCRIPT.read_text()
+
+
+@pytest.fixture()
+def all_script_text() -> str:
+    return SETUP_ALL_SCRIPT.read_text()
 
 
 class TestSetupScriptStructure:
@@ -50,3 +56,42 @@ class TestSetupScriptStructure:
 
     def test_skips_prompt_when_not_tty(self, script_text: str) -> None:
         assert "-t 0" in script_text
+
+
+class TestSetupAllScriptStructure:
+    def test_valid_bash_syntax(self) -> None:
+        result = subprocess.run(
+            ["bash", "-n", str(SETUP_ALL_SCRIPT)],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
+
+    def test_is_executable(self) -> None:
+        mode = SETUP_ALL_SCRIPT.stat().st_mode
+        assert mode & stat.S_IXUSR, "setup-all.sh is missing owner-execute bit"
+
+    def test_has_safety_flags(self, all_script_text: str) -> None:
+        assert "set -euo pipefail" in all_script_text
+
+    def test_installs_all_extras(self, all_script_text: str) -> None:
+        assert "[dev,scancode,diagrams]" in all_script_text
+
+    def test_installs_helm(self, all_script_text: str) -> None:
+        assert "helm" in all_script_text
+        assert "brew install helm" in all_script_text
+
+    def test_installs_graphviz_binary(self, all_script_text: str) -> None:
+        assert "brew install graphviz" in all_script_text
+
+    def test_verifies_scancode(self, all_script_text: str) -> None:
+        assert "scancode" in all_script_text
+
+    def test_has_api_key_prompt(self, all_script_text: str) -> None:
+        assert "ANTHROPIC_API_KEY" in all_script_text
+
+    def test_has_stale_install_check(self, all_script_text: str) -> None:
+        assert ".gsd/worktrees/" in all_script_text
+
+    def test_skips_prompt_when_not_tty(self, all_script_text: str) -> None:
+        assert "-t 0" in all_script_text
