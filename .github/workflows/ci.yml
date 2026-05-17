@@ -164,20 +164,20 @@ jobs:
 
       - name: Check licenses
         run: |
-          pip-licenses --from=mixed --allow-only='\
-            Apache Software License;\
-            Apache Software License; MIT License;\
-            Apache-2.0;\
-            Apache-2.0 OR BSD-2-Clause;\
-            BSD License;\
-            BSD-2-Clause;\
-            BSD-3-Clause;\
-            DFSG approved; MIT License;\
-            ISC License (ISCL);\
-            MIT;\
-            MIT License;\
-            Mozilla Public License 2.0 (MPL 2.0);\
-            PSF-2.0;\
+          pip-licenses --from=mixed --allow-only='
+            Apache Software License;
+            Apache Software License; MIT License;
+            Apache-2.0;
+            Apache-2.0 OR BSD-2-Clause;
+            BSD License;
+            BSD-2-Clause;
+            BSD-3-Clause;
+            DFSG approved; MIT License;
+            ISC License (ISCL);
+            MIT;
+            MIT License;
+            Mozilla Public License 2.0 (MPL 2.0);
+            PSF-2.0;
             Python Software Foundation License'
 
   # Advisory job — requires GITLEAKS_LICENSE which is unavailable on fork PRs.
