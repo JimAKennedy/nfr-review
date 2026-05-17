@@ -51,6 +51,14 @@ _SECURITY_KEYWORDS = frozenset(
         "semgrep",
         "bandit",
         "safety",
+        "pip-audit",
+        "npm audit",
+        "cargo audit",
+        "govulncheck",
+        "ossf-scorecard",
+        "scorecard",
+        "grype",
+        "osv-scanner",
     }
 )
 
