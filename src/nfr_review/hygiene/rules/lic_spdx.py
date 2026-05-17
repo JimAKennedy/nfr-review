@@ -8,6 +8,7 @@ scancode — reads metadata files directly.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import tomllib
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+
+logger = logging.getLogger(__name__)
 
 _VALID_SPDX = frozenset(
     {
@@ -289,8 +292,8 @@ class SpdxValidationRule:
                     results.append(("pyproject.toml", lic))
                 elif isinstance(lic, dict) and "text" in lic:
                     results.append(("pyproject.toml", lic["text"]))
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:  # nosec B110
+                logger.debug("Failed to parse pyproject.toml license: %s", e)
 
         pkg_json = repo_path / "package.json"
         if pkg_json.is_file():
@@ -299,8 +302,8 @@ class SpdxValidationRule:
                 lic = data.get("license")
                 if isinstance(lic, str):
                     results.append(("package.json", lic))
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:  # nosec B110
+                logger.debug("Failed to parse package.json license: %s", e)
 
         pom = repo_path / "pom.xml"
         if pom.is_file():
@@ -316,8 +319,8 @@ class SpdxValidationRule:
                     name_elem = lic_elem.find(f"{ns}name")
                     if name_elem is not None and name_elem.text:
                         results.append(("pom.xml", name_elem.text.strip()))
-            except Exception:  # nosec B110
-                pass
+            except Exception as e:  # nosec B110
+                logger.debug("Failed to parse pom.xml license: %s", e)
 
         return results
 

@@ -7,12 +7,15 @@ third-party copyrights exist; amber for missing entries; green when complete.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+
+logger = logging.getLogger(__name__)
 
 
 class NoticeCompletenessRule:
@@ -152,7 +155,8 @@ class NoticeCompletenessRule:
             if p.is_file():
                 try:
                     return p.read_text(encoding="utf-8")
-                except Exception:
+                except Exception as e:
+                    logger.debug("Failed to read NOTICE file %s: %s", p, e)
                     return None
         return None
 
