@@ -38,6 +38,8 @@ from nfr_review.models import Severity
 from nfr_review.output import OutputError, write_csv, write_jsonl
 from nfr_review.registry import Registry, rule_registry
 
+logger = logging.getLogger(__name__)
+
 _SEVERITY_ORDER: tuple[Severity, ...] = ("info", "low", "medium", "high", "critical")
 
 
@@ -224,7 +226,8 @@ def run_cmd(
     run_logger.info("Detecting technologies in %s", target)
     try:
         detected = detect_technologies(target)
-    except Exception:
+    except Exception as e:
+        logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
@@ -575,7 +578,8 @@ def report_cmd(
 
     try:
         detected = detect_technologies(target)
-    except Exception:
+    except Exception as e:
+        logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
@@ -623,6 +627,7 @@ def report_cmd(
             )
             deps_section = render_deps_section(deps_reports)
         except Exception as exc:
+            logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
             deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
 
@@ -787,7 +792,8 @@ def deps_cmd(
 
     try:
         detected = detect_technologies(target)
-    except Exception:
+    except Exception as e:
+        logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})

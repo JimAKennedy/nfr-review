@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import json
 import logging
+import re
+import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,16 @@ _PACKAGE_JSON_FIELDS = (
     "homepage",
     "repository",
     "keywords",
+)
+
+_POM_FIELDS = (
+    "artifactId",
+    "version",
+    "description",
+    "url",
+    "licenses",
+    "developers",
+    "scm",
 )
 
 
@@ -107,6 +119,180 @@ def _parse_package_json(repo_path: Path) -> dict[str, Any] | None:
     }
 
 
+_MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
+
+
+def _parse_pom_xml(repo_path: Path) -> dict[str, Any] | None:
+    path = repo_path / "pom.xml"
+    if not path.is_file():
+        return None
+
+    try:
+        tree = ET.parse(path)  # noqa: S314 — local repo path, not user-supplied URL  # nosec B314
+    except ET.ParseError:
+        logger.debug("Failed to parse %s", path)
+        return None
+
+    root = tree.getroot()
+
+    # Determine whether the document uses the Maven namespace or is bare.
+    # ET.Element.tag is "{ns}localname" when a namespace is present.
+    if root.tag == f"{{{_MAVEN_NS}}}project":
+        ns_prefix = f"{{{_MAVEN_NS}}}"
+    else:
+        ns_prefix = ""
+
+    def _find(tag: str) -> ET.Element | None:
+        return root.find(f"{ns_prefix}{tag}")
+
+    present: list[str] = []
+    missing: list[str] = []
+    for field in _POM_FIELDS:
+        elem = _find(field)
+        if elem is not None and (elem.text or len(elem)):
+            present.append(field)
+        else:
+            missing.append(field)
+
+    return {
+        "path": "pom.xml",
+        "type": "pom.xml",
+        "fields_present": present,
+        "fields_missing": missing,
+    }
+
+
+_CARGO_FIELDS = (
+    "name",
+    "version",
+    "description",
+    "license",
+    "authors",
+    "repository",
+    "homepage",
+    "keywords",
+)
+
+_GO_MOD_FIELDS = (
+    "module",
+    "go-version",
+)
+
+_CSPROJ_FIELDS = (
+    "Version",
+    "Description",
+    "Authors",
+    "PackageLicenseExpression",
+    "RepositoryUrl",
+    "PackageProjectUrl",
+)
+
+
+def _parse_cargo_toml(repo_path: Path) -> dict[str, Any] | None:
+    path = repo_path / "Cargo.toml"
+    if not path.is_file():
+        return None
+
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # pragma: no cover
+        try:
+            import tomli as tomllib  # type: ignore[no-redef,import-not-found]
+        except ModuleNotFoundError:
+            logger.debug("Neither tomllib nor tomli available — skipping Cargo.toml")
+            return None
+
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.debug("Failed to parse %s", path)
+        return None
+
+    package = data.get("package")
+    if not isinstance(package, dict):
+        return {
+            "path": "Cargo.toml",
+            "type": "Cargo.toml",
+            "fields_present": [],
+            "fields_missing": list(_CARGO_FIELDS),
+        }
+
+    present = [f for f in _CARGO_FIELDS if f in package]
+    missing = [f for f in _CARGO_FIELDS if f not in package]
+    return {
+        "path": "Cargo.toml",
+        "type": "Cargo.toml",
+        "fields_present": present,
+        "fields_missing": missing,
+    }
+
+
+def _parse_go_mod(repo_path: Path) -> dict[str, Any] | None:
+    path = repo_path / "go.mod"
+    if not path.is_file():
+        return None
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        logger.debug("Failed to read %s", path)
+        return None
+
+    present: list[str] = []
+    missing: list[str] = []
+
+    if re.search(r"^\s*module\s+\S+", text, re.MULTILINE):
+        present.append("module")
+    else:
+        missing.append("module")
+
+    if re.search(r"^\s*go\s+\d+\.\d+", text, re.MULTILINE):
+        present.append("go-version")
+    else:
+        missing.append("go-version")
+
+    return {
+        "path": "go.mod",
+        "type": "go.mod",
+        "fields_present": present,
+        "fields_missing": missing,
+    }
+
+
+def _parse_csproj(repo_path: Path) -> dict[str, Any] | None:
+    candidates = sorted(repo_path.glob("*.csproj"))
+    if not candidates:
+        return None
+
+    path = candidates[0]
+    rel_path = path.name
+
+    try:
+        tree = ET.parse(path)  # noqa: S314 — local repo path, not user-supplied URL  # nosec B314
+    except ET.ParseError:
+        logger.debug("Failed to parse %s", path)
+        return None
+
+    root = tree.getroot()
+
+    # Collect all text from PropertyGroup children
+    props: set[str] = set()
+    for pg in root.iter("PropertyGroup"):
+        for child in pg:
+            tag = child.tag
+            if child.text and child.text.strip():
+                props.add(tag)
+
+    present = [f for f in _CSPROJ_FIELDS if f in props]
+    missing = [f for f in _CSPROJ_FIELDS if f not in props]
+    return {
+        "path": rel_path,
+        "type": "csproj",
+        "fields_present": present,
+        "fields_missing": missing,
+    }
+
+
 def _detect_doc_tool(repo_path: Path) -> str:
     if (repo_path / "mkdocs.yml").is_file():
         return "mkdocs"
@@ -126,7 +312,8 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
                 tree = ast.parse(init.read_text(encoding="utf-8"))
                 if ast.get_docstring(tree):
                     return True
-            except Exception:  # nosec B112
+            except Exception as e:  # nosec B112
+                logger.debug("Failed to parse %s for API docs hint: %s", init, e)
                 continue
     top_init = repo_path / "__init__.py"
     if top_init.is_file():
@@ -134,7 +321,8 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
             tree = ast.parse(top_init.read_text(encoding="utf-8"))
             if ast.get_docstring(tree):
                 return True
-        except Exception:  # nosec B110
+        except Exception as e:  # nosec B110
+            logger.debug("Failed to parse %s for API docs hint: %s", top_init, e)
             pass
     return False
 
@@ -153,6 +341,22 @@ class DocumentationCollector:
         pkg_json = _parse_package_json(repo_path)
         if pkg_json is not None:
             manifests.append(pkg_json)
+
+        pom = _parse_pom_xml(repo_path)
+        if pom is not None:
+            manifests.append(pom)
+
+        cargo = _parse_cargo_toml(repo_path)
+        if cargo is not None:
+            manifests.append(cargo)
+
+        go_mod = _parse_go_mod(repo_path)
+        if go_mod is not None:
+            manifests.append(go_mod)
+
+        csproj = _parse_csproj(repo_path)
+        if csproj is not None:
+            manifests.append(csproj)
 
         has_docs_dir = (repo_path / "docs").is_dir()
         doc_tool = _detect_doc_tool(repo_path)

@@ -10,8 +10,25 @@ from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 
 _LINT_PATTERNS = re.compile(
-    r"(?:^|\s|/)(lint|ruff|eslint|prettier|black|flake8|rubocop|golangci-lint"
-    r"|clippy|stylelint|pylint|mypy|biome)(?:\s|$|\")",
+    r"(?:^|[\s/:\-])"
+    r"("
+    # General
+    r"lint|format"
+    # Python
+    r"|ruff|black|flake8|pylint|mypy"
+    # JavaScript/CSS
+    r"|eslint|prettier|stylelint|biome"
+    # Go
+    r"|golangci-lint"
+    # Rust
+    r"|clippy"
+    # Ruby
+    r"|rubocop"
+    # JVM (Java/Kotlin)
+    r"|checkstyle|spotbugs|pmd|ktlint|detekt|error-?prone|spotless"
+    # .NET
+    r"|dotnet-format|roslyn"
+    r")",
     re.IGNORECASE,
 )
 

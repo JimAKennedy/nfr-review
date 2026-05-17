@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -38,9 +38,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -57,9 +57,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -78,14 +78,14 @@ jobs:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
@@ -93,7 +93,7 @@ jobs:
             pip-${{ runner.os }}-${{ matrix.python-version }}-
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: 'latest'
 
@@ -107,7 +107,7 @@ jobs:
         run: coverage report --fail-under=70
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: matrix.python-version == '3.12'
         with:
           name: coverage-report
@@ -124,7 +124,7 @@ jobs:
 
       - name: Update coverage badge
         if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.COVERAGE_GIST_ID != ''
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@e9a478b16159b4d31420099ba146cdc50f134483 # v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
           gistID: ${{ env.COVERAGE_GIST_ID }}
@@ -146,6 +146,40 @@ jobs:
             echo "Coverage: ${COV_PCT:-unknown}%" >> $GITHUB_STEP_SUMMARY
           fi
 
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pip-licenses
+
+      - name: Check licenses
+        run: |
+          pip-licenses --from=mixed --allow-only='
+            Apache Software License;
+            Apache Software License; MIT License;
+            Apache-2.0;
+            Apache-2.0 OR BSD-2-Clause;
+            BSD License;
+            BSD-2-Clause;
+            BSD-3-Clause;
+            DFSG approved; MIT License;
+            ISC License (ISCL);
+            MIT;
+            MIT License;
+            Mozilla Public License 2.0 (MPL 2.0);
+            PSF-2.0;
+            Python Software Foundation License'
+
   # Advisory job — requires GITLEAKS_LICENSE which is unavailable on fork PRs.
   # ci-complete does not gate on secrets-scan.result, so fork PRs are not blocked.
   secrets-scan:
@@ -153,12 +187,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
@@ -166,7 +200,7 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, security, test, secrets-scan]
+    needs: [lint, typecheck, security, test, license-check, secrets-scan]
     if: always()
 
     steps:
@@ -175,7 +209,8 @@ jobs:
           if [ "${{ needs.lint.result }}" == "failure" ] || \
              [ "${{ needs.typecheck.result }}" == "failure" ] || \
              [ "${{ needs.security.result }}" == "failure" ] || \
-             [ "${{ needs.test.result }}" == "failure" ]; then
+             [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.license-check.result }}" == "failure" ]; then
             echo "CI failed"
             exit 1
           fi
@@ -191,4 +226,5 @@ jobs:
           echo "| Type Check | ${{ needs.typecheck.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security | ${{ needs.security.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests | ${{ needs.test.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Compliance | ${{ needs.license-check.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secrets Scan | ${{ needs.secrets-scan.result == 'success' && '✓' || '⚠' }} |" >> $GITHUB_STEP_SUMMARY

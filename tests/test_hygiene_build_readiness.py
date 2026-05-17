@@ -550,3 +550,815 @@ class TestNegativeCases:
         result = rule.evaluate(_make_evidence({}), context=None)
         assert result.findings[0].rag == "green"
         assert result.findings[0].severity == "info"
+
+
+# ---------------------------------------------------------------------------
+# Polyglot Build System Detection
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotBuildSystem:
+    """Tests for Maven, Gradle, Go, Rust, and .NET detection."""
+
+    def test_maven_detected(self, tmp_path: Path) -> None:
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "maven"
+        assert ev.payload["build_system"]["path"] == "pom.xml"
+
+    def test_maven_invalid_xml_not_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "pom.xml").write_text("this is not valid xml <<< >>>")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is False
+
+    def test_gradle_groovy_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "gradle"
+        assert ev.payload["build_system"]["path"] == "build.gradle"
+
+    def test_gradle_kotlin_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "build.gradle.kts").write_text('plugins { id("java") }\n')
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "gradle"
+        assert ev.payload["build_system"]["path"] == "build.gradle.kts"
+
+    def test_go_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "go"
+        assert ev.payload["build_system"]["path"] == "go.mod"
+
+    def test_rust_detected(self, tmp_path: Path) -> None:
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.1.0"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "cargo"
+        assert ev.payload["build_system"]["path"] == "Cargo.toml"
+
+    def test_dotnet_csproj_detected(self, tmp_path: Path) -> None:
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "dotnet"
+        assert ev.payload["build_system"]["path"] == "MyApp.csproj"
+
+    def test_dotnet_sln_detected(self, tmp_path: Path) -> None:
+        (tmp_path / "MyApp.sln").write_text("Microsoft Visual Studio Solution File\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "dotnet"
+        assert ev.payload["build_system"]["path"] == "MyApp.sln"
+
+    def test_python_pyproject_wins_over_pom_xml(self, tmp_path: Path) -> None:
+        """Python pyproject.toml takes priority over pom.xml when both exist."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "hatchling.build"
+        assert ev.payload["build_system"]["path"] == "pyproject.toml"
+
+
+# ---------------------------------------------------------------------------
+# Polyglot Version Detection
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotVersion:
+    """Tests for version extraction from Maven, Gradle, Rust, .NET, and Go."""
+
+    def test_maven_with_namespace_extracts_version(self, tmp_path: Path) -> None:
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>2.5.1</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "2.5.1"
+        assert ev.payload["version"]["source"] == "pom.xml"
+
+    def test_maven_without_namespace_extracts_version(self, tmp_path: Path) -> None:
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "1.0.0-SNAPSHOT"
+        assert ev.payload["version"]["source"] == "pom.xml"
+
+    def test_maven_no_version_tag(self, tmp_path: Path) -> None:
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        # Maven detected as build system but no version declared
+        assert ev.payload["version"]["declared"] is False
+        assert ev.payload["version"]["value"] is None
+
+    def test_gradle_build_gradle_extracts_version(self, tmp_path: Path) -> None:
+        gradle_content = """\
+plugins {
+    id 'java'
+}
+
+group = 'com.example'
+version = '3.2.1'
+
+repositories {
+    mavenCentral()
+}
+"""
+        (tmp_path / "build.gradle").write_text(gradle_content)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "3.2.1"
+        assert ev.payload["version"]["source"] == "build.gradle"
+
+    def test_gradle_kts_extracts_version(self, tmp_path: Path) -> None:
+        gradle_content = """\
+plugins {
+    id("java")
+}
+
+group = "com.example"
+version = "4.0.0-beta"
+
+repositories {
+    mavenCentral()
+}
+"""
+        (tmp_path / "build.gradle.kts").write_text(gradle_content)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "4.0.0-beta"
+        assert ev.payload["version"]["source"] == "build.gradle.kts"
+
+    def test_gradle_no_version_returns_not_declared(self, tmp_path: Path) -> None:
+        gradle_content = """\
+plugins {
+    id 'java'
+}
+
+group = 'com.example'
+
+repositories {
+    mavenCentral()
+}
+"""
+        (tmp_path / "build.gradle").write_text(gradle_content)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is False
+
+    def test_cargo_toml_extracts_version(self, tmp_path: Path) -> None:
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.3.7"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "0.3.7"
+        assert ev.payload["version"]["source"] == "Cargo.toml"
+
+    def test_cargo_toml_no_version_returns_not_declared(self, tmp_path: Path) -> None:
+        cargo_toml = """\
+[package]
+name = "myapp"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is False
+
+    def test_csproj_extracts_version(self, tmp_path: Path) -> None:
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Version>5.1.0</Version>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "5.1.0"
+        assert ev.payload["version"]["source"] == "MyApp.csproj"
+
+    def test_csproj_assembly_version_fallback(self, tmp_path: Path) -> None:
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyLib.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "2.0.0.0"
+        assert ev.payload["version"]["source"] == "MyLib.csproj"
+
+    def test_csproj_no_version_returns_not_declared(self, tmp_path: Path) -> None:
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is False
+
+    def test_go_mod_returns_git_tags(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "(git-tags)"
+        assert ev.payload["version"]["source"] == "go.mod"
+
+    def test_python_version_takes_priority_over_polyglot(self, tmp_path: Path) -> None:
+        """When pyproject.toml and Cargo.toml both exist, Python version wins."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.3.7"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["version"]["declared"] is True
+        assert ev.payload["version"]["value"] == "1.2.3"
+        assert ev.payload["version"]["source"] == "pyproject.toml"
+
+
+# ---------------------------------------------------------------------------
+# Priority Ordering
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotPriorityOrdering:
+    """Verify that when multiple build systems coexist, priority order is correct.
+
+    Priority: Python (pyproject.toml) > setup.py > setup.cfg >
+    Maven > Gradle > Go > Rust > .NET
+    """
+
+    def test_maven_wins_over_gradle(self, tmp_path: Path) -> None:
+        """When both pom.xml and build.gradle exist, Maven wins."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>2.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\nversion = '1.0.0'\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "maven"
+        assert ev.payload["build_system"]["path"] == "pom.xml"
+
+    def test_go_wins_over_rust(self, tmp_path: Path) -> None:
+        """When both go.mod and Cargo.toml exist, Go wins."""
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.1.0"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "go"
+        assert ev.payload["build_system"]["path"] == "go.mod"
+
+    def test_gradle_wins_over_go(self, tmp_path: Path) -> None:
+        """When both build.gradle and go.mod exist, Gradle wins."""
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\n")
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "gradle"
+        assert ev.payload["build_system"]["path"] == "build.gradle"
+
+    def test_rust_wins_over_dotnet(self, tmp_path: Path) -> None:
+        """When both Cargo.toml and .csproj exist, Rust wins."""
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.1.0"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "cargo"
+        assert ev.payload["build_system"]["path"] == "Cargo.toml"
+
+    def test_maven_wins_over_go_and_dotnet(self, tmp_path: Path) -> None:
+        """Maven > Go > .NET — Maven should win."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        (tmp_path / "MyApp.csproj").write_text("<Project></Project>\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["backend"] == "maven"
+
+
+# ---------------------------------------------------------------------------
+# BLD-001 Rule Evaluation for Polyglot Ecosystems
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotBLD001RuleEvaluation:
+    """BLD-001 rule evaluation for non-Python ecosystems."""
+
+    def test_maven_bld001_green_with_maven_in_summary(self, tmp_path: Path) -> None:
+        """Maven pom.xml produces BLD-001 green with 'maven' in summary."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "maven" in result.findings[0].summary.lower()
+
+    def test_go_bld001_green_with_go_in_summary(self, tmp_path: Path) -> None:
+        """Go go.mod produces BLD-001 green with 'go' in summary."""
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "go" in result.findings[0].summary.lower()
+
+    def test_gradle_bld001_green_with_gradle_in_summary(self, tmp_path: Path) -> None:
+        """Gradle build.gradle produces BLD-001 green with 'gradle' in summary."""
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\n")
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "gradle" in result.findings[0].summary.lower()
+
+    def test_rust_bld001_green_with_cargo_in_summary(self, tmp_path: Path) -> None:
+        """Rust Cargo.toml produces BLD-001 green with 'cargo' in summary."""
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.1.0"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "cargo" in result.findings[0].summary.lower()
+
+    def test_dotnet_bld001_green_with_dotnet_in_summary(self, tmp_path: Path) -> None:
+        """.NET csproj produces BLD-001 green with 'dotnet' in summary."""
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "dotnet" in result.findings[0].summary.lower()
+
+    def test_no_build_files_bld001_red(self, tmp_path: Path) -> None:
+        """No recognized build files produces BLD-001 red."""
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "red"
+
+
+# ---------------------------------------------------------------------------
+# BLD-002 Rule Evaluation for Polyglot Ecosystems
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotBLD002RuleEvaluation:
+    """BLD-002 rule evaluation for version extraction across ecosystems."""
+
+    def test_maven_version_bld002_green(self, tmp_path: Path) -> None:
+        """Maven with version → BLD-002 green."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>3.1.0</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "3.1.0" in result.findings[0].summary
+
+    def test_gradle_version_bld002_green_with_value(self, tmp_path: Path) -> None:
+        """Gradle with version → BLD-002 green with version value in summary."""
+        gradle_content = """\
+plugins {
+    id 'java'
+}
+version = '2.4.0'
+"""
+        (tmp_path / "build.gradle").write_text(gradle_content)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "2.4.0" in result.findings[0].summary
+
+    def test_go_git_tags_bld002_green(self, tmp_path: Path) -> None:
+        """Go (git-tags) → BLD-002 green with '(git-tags)' in summary."""
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "(git-tags)" in result.findings[0].summary
+
+    def test_rust_version_bld002_green(self, tmp_path: Path) -> None:
+        """Rust Cargo.toml with version → BLD-002 green."""
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "1.2.3"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "1.2.3" in result.findings[0].summary
+
+    def test_dotnet_version_bld002_green(self, tmp_path: Path) -> None:
+        """.NET csproj with Version → BLD-002 green."""
+        csproj = """\
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Version>6.0.1</Version>
+  </PropertyGroup>
+</Project>
+"""
+        (tmp_path / "MyApp.csproj").write_text(csproj)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "6.0.1" in result.findings[0].summary
+
+    def test_no_version_anywhere_bld002_amber(self, tmp_path: Path) -> None:
+        """No version anywhere → BLD-002 amber."""
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'\n")
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "amber"
+
+
+# ---------------------------------------------------------------------------
+# Python Regression Guards
+# ---------------------------------------------------------------------------
+
+
+class TestPythonRegressionGuards:
+    """Explicitly verify Python detection still works after polyglot additions."""
+
+    def test_pyproject_hatchling_still_green(self, tmp_path: Path) -> None:
+        """pyproject.toml with hatchling → BLD-001 still green."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = BuildSystemRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "hatchling" in result.findings[0].summary.lower()
+
+    def test_setup_py_with_version_still_detected(self, tmp_path: Path) -> None:
+        """setup.py with version → still detected for both BLD-001 and BLD-002."""
+        (tmp_path / "setup.py").write_text(
+            'from setuptools import setup\nsetup(name="pkg", version="2.0.0")\n'
+        )
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+
+        bld001 = BuildSystemRule()
+        result_001 = bld001.evaluate(ev_list, context=None)
+        assert result_001.findings[0].rag == "green"
+        assert "setup.py" in result_001.findings[0].summary.lower()
+
+        bld002 = VersionStrategyRule()
+        result_002 = bld002.evaluate(ev_list, context=None)
+        assert result_002.findings[0].rag == "green"
+        assert "2.0.0" in result_002.findings[0].summary
+
+    def test_dynamic_version_still_detected(self, tmp_path: Path) -> None:
+        """Dynamic version in pyproject.toml → BLD-002 green with (dynamic)."""
+        (tmp_path / "pyproject.toml").write_text(_DYNAMIC_VERSION_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "(dynamic)" in result.findings[0].summary
+
+    def test_pyproject_wins_over_all_polyglot(self, tmp_path: Path) -> None:
+        """Python pyproject.toml takes priority over all polyglot alternatives."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.9.9"
+edition = "2021"
+"""
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        ev = ev_list[0]
+        # Build system → Python wins
+        assert ev.payload["build_system"]["backend"] == "hatchling.build"
+        # Version → Python version wins
+        assert ev.payload["version"]["value"] == "1.2.3"
+        assert ev.payload["version"]["source"] == "pyproject.toml"
+
+    def test_setup_cfg_version_still_works(self, tmp_path: Path) -> None:
+        """setup.cfg with version → BLD-002 green."""
+        (tmp_path / "setup.cfg").write_text("[metadata]\nname = pkg\nversion = 3.0.0\n")
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "3.0.0" in result.findings[0].summary
+
+
+# ---------------------------------------------------------------------------
+# Edge Cases
+# ---------------------------------------------------------------------------
+
+
+class TestPolyglotEdgeCases:
+    """Edge cases for polyglot detection."""
+
+    def test_pom_and_cargo_present_maven_wins(self, tmp_path: Path) -> None:
+        """Both pom.xml and Cargo.toml present — Maven wins for build, Maven version used."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>7.0.0</version>
+</project>
+"""
+        cargo_toml = """\
+[package]
+name = "myapp"
+version = "0.1.0"
+edition = "2021"
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        (tmp_path / "Cargo.toml").write_text(cargo_toml)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        # Build system: Maven wins
+        assert ev.payload["build_system"]["backend"] == "maven"
+        assert ev.payload["build_system"]["path"] == "pom.xml"
+        # Version: Maven version used (appears first in detection order)
+        assert ev.payload["version"]["value"] == "7.0.0"
+        assert ev.payload["version"]["source"] == "pom.xml"
+
+    def test_empty_cargo_toml_no_package_section(self, tmp_path: Path) -> None:
+        """Cargo.toml without [package] section is still detected as Rust."""
+        # Note: _detect_build_system only checks if Cargo.toml exists, not its content
+        (tmp_path / "Cargo.toml").write_text('[dependencies]\nserde = "1.0"\n')
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        # Build system still detected (file presence is enough)
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "cargo"
+        # But version is NOT extracted (no [package].version)
+        assert ev.payload["version"]["declared"] is False
+
+    def test_gradle_kts_wins_over_groovy_gradle(self, tmp_path: Path) -> None:
+        """build.gradle.kts takes priority over build.gradle."""
+        (tmp_path / "build.gradle.kts").write_text('version = "2.0.0"\n')
+        (tmp_path / "build.gradle").write_text("version = '1.0.0'\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["path"] == "build.gradle.kts"
+
+    def test_invalid_xml_pom_falls_through_to_next(self, tmp_path: Path) -> None:
+        """Invalid XML pom.xml is skipped, detection falls through to next system."""
+        (tmp_path / "pom.xml").write_text("not valid xml <<<>>>")
+        (tmp_path / "go.mod").write_text("module example.com/myapp\n\ngo 1.21\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        # Invalid pom.xml skipped, Go detected instead
+        assert ev.payload["build_system"]["backend"] == "go"
+        assert ev.payload["build_system"]["path"] == "go.mod"
+
+    def test_sln_detected_when_no_csproj(self, tmp_path: Path) -> None:
+        """.sln is detected even without .csproj."""
+        (tmp_path / "Solution.sln").write_text("Microsoft Visual Studio Solution File\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["build_system"]["has_build_system"] is True
+        assert ev.payload["build_system"]["backend"] == "dotnet"
+        assert ev.payload["build_system"]["path"] == "Solution.sln"
+
+    def test_maven_snapshot_version_detected(self, tmp_path: Path) -> None:
+        """Maven SNAPSHOT version is properly extracted via BLD-002."""
+        pom_xml = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>myapp</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+</project>
+"""
+        (tmp_path / "pom.xml").write_text(pom_xml)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = VersionStrategyRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "1.0.0-SNAPSHOT" in result.findings[0].summary

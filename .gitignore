@@ -33,6 +33,8 @@ tmp/
 *.egg-info/
 nfr-review.csv
 nfr-review.jsonl
+hygiene-report.csv
+hygiene-report.jsonl
 .regression-repos/
 package.json
 package-lock.json

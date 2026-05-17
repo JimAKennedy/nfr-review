@@ -266,7 +266,8 @@ def detect_technologies(repo_path: Path) -> dict[str, bool]:
     for key in ALL_TECH_KEYS:
         try:
             result[key] = _DETECTORS[key](repo_path)
-        except Exception:
+        except Exception as e:
+            logger.debug("Detector '%s' failed for %s: %s", key, repo_path, e)
             result[key] = False
     detected = [k for k, v in result.items() if v]
     logger.info("Technologies detected: %s", ", ".join(detected) if detected else "(none)")
