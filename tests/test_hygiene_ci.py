@@ -1,4 +1,4 @@
-"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-006 rules."""
+"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-007 rules."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from nfr_review.hygiene.rules.ci_has_lint import CiHasLintRule
 from nfr_review.hygiene.rules.ci_has_sast import CiHasSastRule
 from nfr_review.hygiene.rules.ci_has_tests import CiHasTestsRule
 from nfr_review.hygiene.rules.ci_pin_actions import CiPinActionsRule
+from nfr_review.hygiene.rules.ci_release_publish import CiReleasePublishRule
 from nfr_review.models import Evidence
 
 # ---------------------------------------------------------------------------
@@ -153,6 +154,7 @@ class TestRegistration:
             "HYG-CI-004",
             "HYG-CI-005",
             "HYG-CI-006",
+            "HYG-CI-007",
         ]:
             assert rule_id in hygiene_rule_registry, f"{rule_id} not registered"
 
@@ -164,6 +166,7 @@ class TestRegistration:
             "HYG-CI-004",
             "HYG-CI-005",
             "HYG-CI-006",
+            "HYG-CI-007",
         ]:
             rule = hygiene_rule_registry.get(rule_id)
             assert rule.category == "ci-automation"
@@ -1289,6 +1292,248 @@ class TestCiCoverageGateRule:
         )
         assert result.findings[0].rag == "amber"
         assert "no threshold" in result.findings[0].summary.lower()
+
+
+# ---------------------------------------------------------------------------
+# HYG-CI-007: Release/publish automation
+# ---------------------------------------------------------------------------
+
+
+class TestCiReleasePublishRule:
+    def test_amber_no_release_automation(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm test", "npm run lint"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "No release" in result.findings[0].summary
+
+    def test_green_twine_upload(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["twine upload dist/*"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_poetry_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["poetry publish --build"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_flit_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["flit publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_npm_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_semantic_release(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npx semantic-release"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_mvn_deploy(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["mvn deploy -DskipTests"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_goreleaser(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["goreleaser release --rm-dist"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gh_release_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["softprops/action-gh-release@v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_pypi_publish_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pypa/gh-action-pypi-publish@release/v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_cargo_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["cargo publish --token $CARGO_TOKEN"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_docker_push(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["docker push myrepo/app:latest"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gh_release_create(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["gh release create v1.0.0 --generate-notes"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gradle_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gitlab_release(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["gitlab-ci"],
+                    configs=[_gitlab_config(steps=["twine upload dist/*"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_changesets_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["changesets/action@v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_skip_no_ci(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
+        assert result.skipped is True
+
+    def test_skip_no_evidence(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate([], None)
+        assert result.skipped is True
 
 
 # ---------------------------------------------------------------------------
