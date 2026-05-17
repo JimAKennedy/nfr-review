@@ -1,5 +1,7 @@
 # Clean Java Example
 
+![CI](https://github.com/org/repo/actions/workflows/ci.yml/badge.svg)
+
 A well-maintained Java project demonstrating hygiene best practices.
 
 ## Installation

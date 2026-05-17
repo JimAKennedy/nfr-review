@@ -615,15 +615,90 @@ class TestSecurityRule:
 
 
 class TestChangelogRule:
-    def test_green_when_present(self) -> None:
+    def test_green_when_well_formatted(self) -> None:
         evidence = _make_evidence(_full_payload())
         result = ChangelogPresenceRule().evaluate(evidence, context=None)
         assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "changelog-presence"
+        tags = {f.pattern_tag for f in result.findings}
+        assert "changelog-no-versions" not in tags
+        assert "changelog-no-categories" not in tags
+        assert "changelog-stub" not in tags
 
     def test_amber_when_missing(self) -> None:
         payload = _full_payload(changelog=_file_info(False))
         result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
+        assert result.findings[0].severity == "medium"
+        assert result.findings[0].pattern_tag == "changelog-presence"
+
+    def test_stub_changelog_fires_medium(self) -> None:
+        payload = _full_payload(changelog=_file_info(True, "CHANGELOG.md", 20))
+        result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+        assert result.findings[0].severity == "medium"
+        assert result.findings[0].pattern_tag == "changelog-stub"
+
+    def test_no_version_headers_fires_low(self) -> None:
+        payload = _full_payload(
+            changelog=_file_info(True, "CHANGELOG.md", 500),
+            changelog_structure={
+                "has_versions": False,
+                "version_count": 0,
+                "follows_keep_a_changelog": False,
+                "kac_sections_found": [],
+                "has_recent_entries": False,
+            },
+        )
+        result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag: f for f in result.findings}
+        assert "changelog-no-versions" in tags
+        assert tags["changelog-no-versions"].severity == "low"
+        assert tags["changelog-no-versions"].rag == "amber"
+
+    def test_versions_but_no_categories_fires_info(self) -> None:
+        payload = _full_payload(
+            changelog=_file_info(True, "CHANGELOG.md", 500),
+            changelog_structure={
+                "has_versions": True,
+                "version_count": 3,
+                "follows_keep_a_changelog": False,
+                "kac_sections_found": [],
+                "has_recent_entries": True,
+            },
+        )
+        result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag: f for f in result.findings}
+        assert "changelog-no-categories" in tags
+        assert tags["changelog-no-categories"].severity == "info"
+        assert tags["changelog-no-categories"].rag == "green"
+        assert "changelog-no-versions" not in tags
+
+    def test_keep_a_changelog_format_no_extra_findings(self) -> None:
+        payload = _full_payload(
+            changelog=_file_info(True, "CHANGELOG.md", 500),
+            changelog_structure={
+                "has_versions": True,
+                "version_count": 5,
+                "follows_keep_a_changelog": True,
+                "kac_sections_found": ["added", "changed", "fixed"],
+                "has_recent_entries": True,
+            },
+        )
+        result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag for f in result.findings}
+        assert "changelog-presence" in tags
+        assert "changelog-no-versions" not in tags
+        assert "changelog-no-categories" not in tags
+        assert "changelog-stub" not in tags
+
+    def test_stub_returns_single_finding(self) -> None:
+        payload = _full_payload(changelog=_file_info(True, "CHANGELOG.md", 10))
+        result = ChangelogPresenceRule().evaluate(_make_evidence(payload), context=None)
+        assert len(result.findings) == 1
+        assert result.findings[0].pattern_tag == "changelog-stub"
 
     def test_category_attribute(self) -> None:
         assert ChangelogPresenceRule.category == "community"
