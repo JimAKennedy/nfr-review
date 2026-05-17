@@ -1362,3 +1362,101 @@ edition = "2021"
         result = rule.evaluate(ev_list, context=None)
         assert result.findings[0].rag == "green"
         assert "1.0.0-SNAPSHOT" in result.findings[0].summary
+
+
+# ---------------------------------------------------------------------------
+# Pre-commit / Git Hooks Detection
+# ---------------------------------------------------------------------------
+
+
+class TestPreCommitDetection:
+    """Tests for _detect_pre_commit in build-readiness collector."""
+
+    def test_pre_commit_config_yaml(self, tmp_path: Path) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "pre-commit"
+
+    def test_husky_directory(self, tmp_path: Path) -> None:
+        (tmp_path / ".husky").mkdir()
+        (tmp_path / ".husky" / "pre-commit").write_text("#!/bin/sh\nnpx lint-staged\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "husky"
+
+    def test_lefthook_yml(self, tmp_path: Path) -> None:
+        (tmp_path / "lefthook.yml").write_text("pre-commit:\n  commands: {}\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lefthook"
+
+    def test_lefthook_yaml(self, tmp_path: Path) -> None:
+        (tmp_path / "lefthook.yaml").write_text("pre-commit:\n  commands: {}\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lefthook"
+
+    def test_lint_staged_in_package_json(self, tmp_path: Path) -> None:
+        import json
+
+        pkg = {"name": "myapp", "lint-staged": {"*.js": ["eslint --fix"]}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lint-staged"
+
+    def test_no_pre_commit_tools(self, tmp_path: Path) -> None:
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_package_json_without_lint_staged(self, tmp_path: Path) -> None:
+        import json
+
+        pkg = {"name": "myapp", "version": "1.0.0"}
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_malformed_package_json_no_crash(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text("not valid json {{{")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_pre_commit_priority_over_husky(self, tmp_path: Path) -> None:
+        """When both .pre-commit-config.yaml and .husky exist, pre-commit wins."""
+        (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+        (tmp_path / ".husky").mkdir()
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "pre-commit"
+
+    def test_payload_structure_includes_pre_commit(self, tmp_path: Path) -> None:
+        """Verify pre_commit is always present in payload even with no tools."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert "pre_commit" in ev.payload
+        assert "has_pre_commit" in ev.payload["pre_commit"]
+        assert "pre_commit_tool" in ev.payload["pre_commit"]
