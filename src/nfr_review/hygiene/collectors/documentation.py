@@ -312,7 +312,8 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
                 tree = ast.parse(init.read_text(encoding="utf-8"))
                 if ast.get_docstring(tree):
                     return True
-            except Exception:  # nosec B112
+            except Exception as e:  # nosec B112
+                logger.debug("Failed to parse %s for API docs hint: %s", init, e)
                 continue
     top_init = repo_path / "__init__.py"
     if top_init.is_file():
@@ -320,7 +321,8 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
             tree = ast.parse(top_init.read_text(encoding="utf-8"))
             if ast.get_docstring(tree):
                 return True
-        except Exception:  # nosec B110
+        except Exception as e:  # nosec B110
+            logger.debug("Failed to parse %s for API docs hint: %s", top_init, e)
             pass
     return False
 

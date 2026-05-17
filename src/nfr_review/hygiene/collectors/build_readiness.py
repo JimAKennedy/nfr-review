@@ -4,6 +4,7 @@ and entry point configuration in Python packages.
 
 from __future__ import annotations
 
+import logging
 import re
 import tomllib
 import xml.etree.ElementTree as ET  # nosec B405
@@ -13,6 +14,8 @@ from typing import Any
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 
+logger = logging.getLogger(__name__)
+
 
 def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
     pp = repo_path / "pyproject.toml"
@@ -20,7 +23,8 @@ def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
         return None
     try:
         return tomllib.loads(pp.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to parse pyproject.toml: %s", e)
         return None
 
 
@@ -98,7 +102,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
         if p.is_file():
             try:
                 text = p.read_text(encoding="utf-8")
-            except Exception:  # nosec B112
+            except Exception as e:  # nosec B112
+                logger.debug("Failed to read %s for version detection: %s", setup_file, e)
                 continue
             m = re.search(r'version\s*=\s*["\']?([^"\'\s,\n]+)["\']?', text)
             if m:
@@ -107,7 +112,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
     for init_path in repo_path.glob("src/*/__init__.py"):
         try:
             text = init_path.read_text(encoding="utf-8")
-        except Exception:  # nosec B112
+        except Exception as e:  # nosec B112
+            logger.debug("Failed to read %s for version detection: %s", init_path, e)
             continue
         m = _VERSION_RE.search(text)
         if m:
@@ -119,7 +125,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
             continue
         try:
             text = init_path.read_text(encoding="utf-8")
-        except Exception:  # nosec B112
+        except Exception as e:  # nosec B112
+            logger.debug("Failed to read %s for version detection: %s", init_path, e)
             continue
         m = _VERSION_RE.search(text)
         if m:
@@ -140,7 +147,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
                 ver_el = root.find("version")
             if ver_el is not None and ver_el.text:
                 return {"declared": True, "value": ver_el.text.strip(), "source": "pom.xml"}
-        except (ET.ParseError, Exception):  # nosec B110
+        except (ET.ParseError, Exception) as e:  # nosec B110
+            logger.debug("Failed to parse pom.xml for version: %s", e)
             pass
 
     # --- Gradle (build.gradle / build.gradle.kts) ---
@@ -149,7 +157,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
         if gp.is_file():
             try:
                 text = gp.read_text(encoding="utf-8")
-            except Exception:  # nosec B112
+            except Exception as e:  # nosec B112
+                logger.debug("Failed to read %s for version detection: %s", gradle_file, e)
                 continue
             m = re.search(r'version\s*[=]?\s*["\']([^"\']+)["\']', text)
             if m:
@@ -163,7 +172,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
             pkg_version = cargo_data.get("package", {}).get("version")
             if pkg_version:
                 return {"declared": True, "value": pkg_version, "source": "Cargo.toml"}
-        except Exception:  # nosec B110
+        except Exception as e:  # nosec B110
+            logger.debug("Failed to parse Cargo.toml for version: %s", e)
             pass
 
     # --- .NET (*.csproj) ---
@@ -186,7 +196,8 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> dict[s
                         "value": asm_el.text.strip(),
                         "source": csproj_path.name,
                     }
-        except (ET.ParseError, Exception):  # nosec B110
+        except (ET.ParseError, Exception) as e:  # nosec B110
+            logger.debug("Failed to parse %s for version: %s", csproj_path.name, e)
             pass
 
     # --- Go (go.mod) --- Go uses git tags for versioning
@@ -210,7 +221,8 @@ def _detect_entry_points(repo_path: Path, pyproject: dict[str, Any] | None) -> d
         if p.is_file():
             try:
                 text = p.read_text(encoding="utf-8")
-            except Exception:  # nosec B112
+            except Exception as e:  # nosec B112
+                logger.debug("Failed to read %s for entry point detection: %s", setup_file, e)
                 continue
             if "console_scripts" in text or "gui_scripts" in text:
                 label = f"(parsed from {setup_file})"
