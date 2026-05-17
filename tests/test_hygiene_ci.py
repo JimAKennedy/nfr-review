@@ -1,4 +1,4 @@
-"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-005 rules."""
+"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-006 rules."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
 from nfr_review.hygiene.collectors.ci_automation import CiAutomationCollector
+from nfr_review.hygiene.rules.ci_coverage_gate import CiCoverageGateRule
 from nfr_review.hygiene.rules.ci_has_ci import CiPresenceRule
 from nfr_review.hygiene.rules.ci_has_lint import CiHasLintRule
 from nfr_review.hygiene.rules.ci_has_sast import CiHasSastRule
@@ -151,6 +152,7 @@ class TestRegistration:
             "HYG-CI-003",
             "HYG-CI-004",
             "HYG-CI-005",
+            "HYG-CI-006",
         ]:
             assert rule_id in hygiene_rule_registry, f"{rule_id} not registered"
 
@@ -161,6 +163,7 @@ class TestRegistration:
             "HYG-CI-003",
             "HYG-CI-004",
             "HYG-CI-005",
+            "HYG-CI-006",
         ]:
             rule = hygiene_rule_registry.get(rule_id)
             assert rule.category == "ci-automation"
@@ -1071,6 +1074,221 @@ class TestCiPinActionsRule:
         rule = CiPinActionsRule()
         result = rule.evaluate([], None)
         assert result.skipped is True
+
+
+# ---------------------------------------------------------------------------
+# HYG-CI-006: CI coverage gate
+# ---------------------------------------------------------------------------
+
+
+class TestCiCoverageGateRule:
+    def test_amber_no_coverage_tool(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm test", "npm run lint"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "No test coverage tooling" in result.findings[0].summary
+
+    def test_amber_tool_no_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pytest --cov=src tests/"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "no threshold" in result.findings[0].summary.lower()
+
+    def test_green_pytest_cov_with_fail_under(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(steps=["pytest --cov=src --cov-fail-under=80 tests/"])
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_coverage_report_fail_under(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "coverage run -m pytest tests/",
+                                "coverage report --fail-under=90",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_nyc_check_coverage(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["nyc --check-coverage --lines 80 npm test"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_jacoco_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "./gradlew jacocoTestReport",
+                                "./gradlew jacocoTestCoverageVerification"
+                                " minimumCoveragePercentage=80",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_go_cover(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "go test -coverprofile=coverage.out ./...",
+                                "COVERAGE_THRESHOLD=80 && coverage=$("
+                                "go tool cover -func=coverage.out)",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_codecov_action(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "codecov/codecov-action@v4",
+                                "minimum_coverage=75",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_istanbul_c8(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(steps=["c8 --check-coverage --lines 80 node test.js"])
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gitlab_coverage(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["gitlab-ci"],
+                    configs=[
+                        _gitlab_config(
+                            steps=[
+                                "pytest --cov=src tests/",
+                                "coverage report --fail-under=85",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_skip_no_ci(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
+        assert result.skipped is True
+
+    def test_skip_no_evidence(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate([], None)
+        assert result.skipped is True
+
+    def test_amber_only_codecov_no_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["codecov/codecov-action@v4"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "no threshold" in result.findings[0].summary.lower()
 
 
 # ---------------------------------------------------------------------------

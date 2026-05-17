@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -e ".[dev]"
-      - run: pytest --tb=short -q
+      - run: pytest --cov=src --cov-fail-under=80 --tb=short -q
 
   lint:
     runs-on: ubuntu-latest

@@ -26,3 +26,6 @@ jobs:
 
       - name: Run tests
         run: mvn test
+
+      - name: Check coverage
+        run: mvn jacoco:check -Djacoco.minimum=0.80
