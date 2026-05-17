@@ -872,6 +872,90 @@ class TestCiHasSastRule:
         )
         assert result.findings[0].rag == "green"
 
+    def test_green_pip_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pip-audit --strict"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_npm_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm audit --audit-level=high"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_cargo_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["cargo audit"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_govulncheck(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["govulncheck ./..."])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_ossf_scorecard(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["ossf/scorecard-action@v2"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_osv_scanner(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["osv-scanner --lockfile=package-lock.json"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
     def test_skip_no_ci(self) -> None:
         rule = CiHasSastRule()
         result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
