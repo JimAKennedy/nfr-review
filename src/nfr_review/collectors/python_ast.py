@@ -105,6 +105,18 @@ def _has_logging_call(block_node: Node, source: bytes) -> bool:
     return False
 
 
+def _caught_type_from_node(node: Node, source: bytes) -> str:
+    """Extract the caught exception type string from a tree-sitter node."""
+    if node.type in ("identifier", "attribute"):
+        return text(node, source)
+    if node.type == "tuple":
+        parts = [
+            text(c, source) for c in node.children if c.type in ("identifier", "attribute")
+        ]
+        return ", ".join(parts)
+    return ""
+
+
 def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for exc_clause in find_nodes(root, "except_clause"):
@@ -112,12 +124,12 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
         for child in exc_clause.children:
             if child.type == "as_pattern":
                 for sub in child.children:
-                    if sub.type == "identifier":
-                        caught_type = text(sub, source)
+                    if sub.type in ("identifier", "attribute", "tuple"):
+                        caught_type = _caught_type_from_node(sub, source)
                         break
                 break
-            if child.type == "identifier":
-                caught_type = text(child, source)
+            if child.type in ("identifier", "attribute", "tuple"):
+                caught_type = _caught_type_from_node(child, source)
                 break
 
         rethrows = len(find_nodes(exc_clause, "raise_statement")) > 0

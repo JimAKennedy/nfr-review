@@ -101,6 +101,41 @@ class TestBareExceptCatchAllRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    def test_python_broad_with_logging_no_finding(self) -> None:
+        ev = _make_evidence(
+            "python-ast",
+            "python-ast-file",
+            {
+                "file_path": "app.py",
+                "catch_blocks": [
+                    {
+                        "caught_type": "Exception",
+                        "rethrows": False,
+                        "has_logging": True,
+                        "line": 10,
+                    }
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
+    def test_python_bare_with_logging_still_flagged(self) -> None:
+        ev = _make_evidence(
+            "python-ast",
+            "python-ast-file",
+            {
+                "file_path": "app.py",
+                "catch_blocks": [
+                    {"caught_type": "", "rethrows": False, "has_logging": True, "line": 5}
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
+
     def test_python_specific_exception_green(self) -> None:
         ev = _make_evidence(
             "python-ast",
@@ -270,6 +305,26 @@ class TestBareExceptCatchAllRule:
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
+    def test_csharp_broad_with_logging_no_finding(self) -> None:
+        ev = _make_evidence(
+            "csharp-ast",
+            "csharp-ast-file",
+            {
+                "file_path": "Service.cs",
+                "catch_blocks": [
+                    {
+                        "caught_type": "Exception",
+                        "rethrows": False,
+                        "has_logging": True,
+                        "line": 10,
+                    }
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+
     def test_csharp_specific_exception_green(self) -> None:
         ev = _make_evidence(
             "csharp-ast",
@@ -302,6 +357,21 @@ class TestBareExceptCatchAllRule:
         assert f.rag == "amber"
         assert f.severity == "medium"
         assert f.collector_name == "nodejs-ast"
+
+    def test_nodejs_bare_with_logging_still_flagged(self) -> None:
+        ev = _make_evidence(
+            "nodejs-ast",
+            "nodejs-ast-file",
+            {
+                "file_path": "app.js",
+                "catch_blocks": [
+                    {"caught_type": "", "rethrows": False, "has_logging": True, "line": 5}
+                ],
+            },
+        )
+        result = self.rule.evaluate([ev], None)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
 
     def test_nodejs_rethrow_green(self) -> None:
         ev = _make_evidence(

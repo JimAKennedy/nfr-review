@@ -176,10 +176,12 @@ class TestCrossLanguageWithCSharp:
         engine = Engine(collectors=cregistry, rules=rregistry)
         return engine.run(target=CSHARP_REPO, config=Config(tech={}))
 
-    def test_bare_except_detects_csharp_catch_exception(self, full_result: RunResult) -> None:
+    def test_bare_except_exempts_csharp_catch_exception_with_logging(
+        self, full_result: RunResult
+    ) -> None:
         findings = _findings_by_rule(full_result, "bare-except-catch-all")
         red = [f for f in findings if f.rag == "red"]
-        assert len(red) >= 1, "Expected red finding for catch(Exception)"
+        assert len(red) == 0, "catch(Exception) with Console.WriteLine should be exempt"
 
     def test_bare_except_detects_csharp_bare_catch(self, full_result: RunResult) -> None:
         findings = _findings_by_rule(full_result, "bare-except-catch-all")

@@ -79,7 +79,7 @@ class BareExceptCatchAllRule:
                                 pattern_tag="bare-except-catch-all",
                             )
                         )
-                    elif caught in broad:
+                    elif caught in broad and not block.get("has_logging", False):
                         findings.append(
                             Finding(
                                 rule_id=self.id,
