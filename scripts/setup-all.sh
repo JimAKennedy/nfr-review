@@ -66,12 +66,22 @@ if command -v brew &>/dev/null; then
   else
     info "graphviz already installed: $(dot -V 2>&1 || echo 'unknown')"
   fi
+
+  if ! brew list libmagic &>/dev/null; then
+    info "Installing libmagic via Homebrew (required by scancode-toolkit)"
+    brew install libmagic
+  else
+    info "libmagic already installed"
+  fi
 else
   if ! command -v helm &>/dev/null; then
     MISSING_BINS+=("helm")
   fi
   if ! command -v dot &>/dev/null; then
     MISSING_BINS+=("graphviz (dot)")
+  fi
+  if ! python -c "from typecode.magic2 import load_lib; load_lib()" 2>/dev/null; then
+    MISSING_BINS+=("libmagic (required by scancode-toolkit)")
   fi
 fi
 
@@ -199,6 +209,7 @@ if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   warn "Missing external binaries (install manually): ${MISSING_BINS[*]}"
   warn "  helm:     https://helm.sh/docs/intro/install/"
   warn "  graphviz: https://graphviz.org/download/"
+  warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
 fi
 
 if [[ ${#MISSING_PKGS[@]} -eq 0 ]] && [[ ${#MISSING_BINS[@]} -eq 0 ]]; then

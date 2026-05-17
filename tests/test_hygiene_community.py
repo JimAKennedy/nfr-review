@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
-from nfr_review.hygiene.collectors.community import CommunityCollector
+from nfr_review.hygiene.collectors.community import (
+    CommunityCollector,
+    _extract_changelog_structure,
+    _extract_readme_badges,
+    _extract_readme_sections,
+)
 from nfr_review.hygiene.rules.com_changelog import ChangelogPresenceRule
 from nfr_review.hygiene.rules.com_code_of_conduct import (
     CodeOfConductPresenceRule,
@@ -27,7 +32,7 @@ def _make_evidence(payload: dict) -> list[Evidence]:
     return [
         Evidence(
             collector_name="community",
-            collector_version="0.1.0",
+            collector_version="0.3.0",
             locator=".",
             kind="community-analysis",
             payload=payload,
@@ -44,10 +49,23 @@ def _file_info(exists: bool, path: str | None = None, size: int = 500) -> dict:
 def _full_payload(**overrides: dict) -> dict:
     base = {
         "readme": _file_info(True, "README.md", 1000),
+        "readme_sections": {
+            "headings": ["Installation", "Usage"],
+            "section_count": 2,
+            "well_known_sections": ["installation", "usage"],
+        },
+        "readme_badges": [],
         "contributing": _file_info(True, "CONTRIBUTING.md"),
         "code_of_conduct": _file_info(True, "CODE_OF_CONDUCT.md"),
         "security": _file_info(True, "SECURITY.md"),
         "changelog": _file_info(True, "CHANGELOG.md"),
+        "changelog_structure": {
+            "has_versions": True,
+            "version_count": 3,
+            "follows_keep_a_changelog": True,
+            "kac_sections_found": ["added", "changed", "fixed"],
+            "has_recent_entries": True,
+        },
         "codeowners": _file_info(True, ".github/CODEOWNERS"),
     }
     base.update(overrides)
@@ -172,6 +190,241 @@ class TestCommunityCollector:
         assert ev.payload["codeowners"]["exists"] is True
         assert ev.payload["codeowners"]["path"] == "CODEOWNERS"
 
+    def test_readme_sections_extracted(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text(
+            "# My Project\n\n## Installation\n\npip install\n\n"
+            "## Usage\n\nhello()\n\n## Contributing\n\nPRs welcome\n"
+        )
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        sections = ev.payload["readme_sections"]
+        assert sections["section_count"] == 4
+        assert "My Project" in sections["headings"]
+        assert "Installation" in sections["headings"]
+        assert "installation" in sections["well_known_sections"]
+        assert "usage" in sections["well_known_sections"]
+        assert "contributing" in sections["well_known_sections"]
+
+    def test_readme_badges_extracted(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text(
+            "# Project\n\n"
+            "![CI](https://img.shields.io/badge/build-passing-green)\n"
+            "![Coverage](https://codecov.io/gh/org/repo/branch/main/graph/badge.svg)\n"
+        )
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        badges = ev.payload["readme_badges"]
+        assert len(badges) == 2
+        assert any("img.shields.io" in b for b in badges)
+        assert any("codecov.io" in b for b in badges)
+
+    def test_no_readme_yields_empty_sections_and_badges(self, tmp_path: Path) -> None:
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        assert ev.payload["readme_sections"]["section_count"] == 0
+        assert ev.payload["readme_sections"]["headings"] == []
+        assert ev.payload["readme_sections"]["well_known_sections"] == []
+        assert ev.payload["readme_badges"] == []
+
+
+# ---------------------------------------------------------------------------
+# README structure extraction unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractReadmeSections:
+    def test_empty_text(self) -> None:
+        result = _extract_readme_sections("")
+        assert result["section_count"] == 0
+        assert result["headings"] == []
+        assert result["well_known_sections"] == []
+
+    def test_headings_at_various_levels(self) -> None:
+        text = "# Title\n## Installation\n### Sub\n#### Deep\n"
+        result = _extract_readme_sections(text)
+        assert result["section_count"] == 4
+        assert result["headings"] == ["Title", "Installation", "Sub", "Deep"]
+
+    def test_well_known_detection(self) -> None:
+        text = (
+            "# Readme\n## Installation\n## Usage\n## API Reference\n"
+            "## License\n## FAQ\n## Examples\n## Testing\n"
+        )
+        result = _extract_readme_sections(text)
+        wk = result["well_known_sections"]
+        assert "installation" in wk
+        assert "usage" in wk
+        assert "license" in wk
+        assert "faq" in wk
+        assert "examples" in wk
+        assert "testing" in wk
+
+    def test_install_alias(self) -> None:
+        text = "## Install\n"
+        result = _extract_readme_sections(text)
+        assert "install" in result["well_known_sections"]
+
+    def test_non_heading_lines_ignored(self) -> None:
+        text = "Hello world\nsome text\n#not a heading\n## Real Heading\n"
+        result = _extract_readme_sections(text)
+        assert result["section_count"] == 1
+        assert result["headings"] == ["Real Heading"]
+
+
+class TestExtractReadmeBadges:
+    def test_no_badges(self) -> None:
+        assert _extract_readme_badges("# Hello\n\nNo badges here.\n") == []
+
+    def test_shields_io(self) -> None:
+        text = "![badge](https://img.shields.io/badge/foo-bar-blue)\n"
+        result = _extract_readme_badges(text)
+        assert len(result) == 1
+        assert "img.shields.io" in result[0]
+
+    def test_multiple_providers(self) -> None:
+        text = (
+            "![a](https://img.shields.io/badge/ci-ok-green)\n"
+            "![b](https://codecov.io/gh/x/y/badge.svg)\n"
+            "![c](https://badgen.net/npm/v/express)\n"
+        )
+        result = _extract_readme_badges(text)
+        assert len(result) == 3
+
+    def test_github_actions_badge(self) -> None:
+        text = "![CI](https://github.com/org/repo/actions/workflows/ci.yml/badge.svg)\n"
+        result = _extract_readme_badges(text)
+        assert len(result) == 1
+
+    def test_regular_images_not_matched(self) -> None:
+        text = "![logo](https://example.com/logo.png)\n"
+        assert _extract_readme_badges(text) == []
+
+
+# ---------------------------------------------------------------------------
+# Changelog structure extraction unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractChangelogStructure:
+    def test_empty_text(self) -> None:
+        result = _extract_changelog_structure("")
+        assert result["has_versions"] is False
+        assert result["version_count"] == 0
+        assert result["follows_keep_a_changelog"] is False
+        assert result["kac_sections_found"] == []
+        assert result["has_recent_entries"] is False
+
+    def test_versioned_headers(self) -> None:
+        text = (
+            "# Changelog\n\n"
+            "## [1.2.0] - 2026-01-15\n\n"
+            "### Added\n- feature\n\n"
+            "## [1.1.0] - 2025-12-01\n\n"
+            "### Fixed\n- bug\n\n"
+            "## [1.0.0] - 2024-01-01\n\n"
+            "### Added\n- initial\n"
+        )
+        result = _extract_changelog_structure(text)
+        assert result["has_versions"] is True
+        assert result["version_count"] == 3
+        assert result["has_recent_entries"] is True
+
+    def test_keep_a_changelog_format(self) -> None:
+        text = (
+            "## [2.0.0] - 2026-04-01\n\n"
+            "### Added\n- new feat\n\n"
+            "### Changed\n- behavior\n\n"
+            "### Fixed\n- bug\n"
+        )
+        result = _extract_changelog_structure(text)
+        assert result["follows_keep_a_changelog"] is True
+        assert "added" in result["kac_sections_found"]
+        assert "changed" in result["kac_sections_found"]
+        assert "fixed" in result["kac_sections_found"]
+
+    def test_not_keep_a_changelog_with_random_sections(self) -> None:
+        text = "## [1.0.0] - 2026-03-01\n\n### Stuff\n- thing\n\n### Misc\n- other\n"
+        result = _extract_changelog_structure(text)
+        assert result["follows_keep_a_changelog"] is False
+        assert result["kac_sections_found"] == []
+
+    def test_single_kac_section_not_enough(self) -> None:
+        text = "## [1.0.0] - 2026-03-01\n\n### Added\n- feat\n"
+        result = _extract_changelog_structure(text)
+        assert result["follows_keep_a_changelog"] is False
+        assert result["kac_sections_found"] == ["added"]
+
+    def test_no_recent_entries(self) -> None:
+        text = (
+            "## [1.0.0] - 2020-01-01\n\n"
+            "### Added\n- initial\n\n"
+            "## [0.9.0] - 2019-06-01\n\n"
+            "### Fixed\n- bug\n"
+        )
+        result = _extract_changelog_structure(text)
+        assert result["has_versions"] is True
+        assert result["has_recent_entries"] is False
+
+    def test_version_without_date(self) -> None:
+        text = "## [1.0.0]\n\n- Some changes\n\n## [0.9.0]\n\n- Other\n"
+        result = _extract_changelog_structure(text)
+        assert result["has_versions"] is True
+        assert result["version_count"] == 2
+        assert result["has_recent_entries"] is False
+
+    def test_version_without_brackets(self) -> None:
+        text = "## 1.0.0 - 2026-05-01\n\n### Added\n- feat\n### Changed\n- x\n"
+        result = _extract_changelog_structure(text)
+        assert result["has_versions"] is True
+        assert result["version_count"] == 1
+        assert result["has_recent_entries"] is True
+        assert result["follows_keep_a_changelog"] is True
+
+
+# ---------------------------------------------------------------------------
+# Collector integration — changelog structure
+# ---------------------------------------------------------------------------
+
+
+class TestCollectorChangelogStructure:
+    def test_changelog_structure_populated(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text(
+            "# Changelog\n\n"
+            "## [1.0.0] - 2026-05-01\n\n"
+            "### Added\n- feature\n\n"
+            "### Fixed\n- bug\n"
+        )
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        cs = ev.payload["changelog_structure"]
+        assert cs["has_versions"] is True
+        assert cs["version_count"] == 1
+        assert cs["follows_keep_a_changelog"] is True
+        assert cs["has_recent_entries"] is True
+
+    def test_no_changelog_yields_empty_structure(self, tmp_path: Path) -> None:
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        cs = ev.payload["changelog_structure"]
+        assert cs["has_versions"] is False
+        assert cs["version_count"] == 0
+        assert cs["follows_keep_a_changelog"] is False
+        assert cs["has_recent_entries"] is False
+
+    def test_changelog_with_no_format(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("Just some text about changes\n")
+        collector = CommunityCollector()
+        ev = collector.collect(tmp_path, config=None)[0]
+
+        cs = ev.payload["changelog_structure"]
+        assert cs["has_versions"] is False
+        assert cs["follows_keep_a_changelog"] is False
+
 
 # ---------------------------------------------------------------------------
 # Rule tests — skip path (no evidence)
@@ -207,10 +460,12 @@ class TestReadmeRule:
         evidence = _make_evidence(_full_payload())
         result = ReadmePresenceRule().evaluate(evidence, context=None)
         assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "readme-presence"
 
     def test_red_when_missing(self) -> None:
         payload = _full_payload(readme=_file_info(False))
         result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        assert len(result.findings) == 1
         assert result.findings[0].rag == "red"
         assert result.findings[0].severity == "high"
 
@@ -219,6 +474,7 @@ class TestReadmeRule:
         result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
         assert result.findings[0].rag == "amber"
         assert result.findings[0].severity == "medium"
+        assert len(result.findings) == 1
 
     def test_whitespace_only_treated_as_stub(self) -> None:
         payload = _full_payload(readme=_file_info(True, "README.md", 5))
@@ -227,6 +483,69 @@ class TestReadmeRule:
 
     def test_category_attribute(self) -> None:
         assert ReadmePresenceRule.category == "community"
+
+    def test_missing_required_sections_fires_medium(self) -> None:
+        payload = _full_payload(
+            readme_sections={
+                "headings": ["My Project"],
+                "section_count": 1,
+                "well_known_sections": [],
+            },
+        )
+        result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag: f for f in result.findings}
+        assert "readme-required-sections" in tags
+        assert tags["readme-required-sections"].severity == "medium"
+        assert tags["readme-required-sections"].rag == "amber"
+
+    def test_missing_recommended_sections_fires_low(self) -> None:
+        payload = _full_payload(
+            readme_sections={
+                "headings": ["My Project", "Installation", "Usage"],
+                "section_count": 3,
+                "well_known_sections": ["installation", "usage"],
+            },
+        )
+        result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag: f for f in result.findings}
+        assert "readme-recommended-sections" in tags
+        assert tags["readme-recommended-sections"].severity == "low"
+
+    def test_missing_badges_fires_info(self) -> None:
+        payload = _full_payload(readme_badges=[])
+        result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag: f for f in result.findings}
+        assert "readme-badges" in tags
+        assert tags["readme-badges"].severity == "info"
+
+    def test_well_structured_readme_no_section_findings(self) -> None:
+        payload = _full_payload(
+            readme_sections={
+                "headings": ["Project", "Installation", "Usage", "Contributing", "License"],
+                "section_count": 5,
+                "well_known_sections": [
+                    "installation",
+                    "usage",
+                    "contributing",
+                    "license",
+                ],
+            },
+            readme_badges=[
+                "![CI](https://img.shields.io/badge/ci-passing-green)",
+            ],
+        )
+        result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        tags = {f.pattern_tag for f in result.findings}
+        assert "readme-presence" in tags
+        assert "readme-required-sections" not in tags
+        assert "readme-recommended-sections" not in tags
+        assert "readme-badges" not in tags
+
+    def test_stub_readme_returns_single_finding(self) -> None:
+        payload = _full_payload(readme=_file_info(True, "README.md", 50))
+        result = ReadmePresenceRule().evaluate(_make_evidence(payload), context=None)
+        assert len(result.findings) == 1
+        assert result.findings[0].pattern_tag == "readme-presence"
 
 
 # ---------------------------------------------------------------------------
