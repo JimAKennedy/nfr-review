@@ -244,6 +244,110 @@ class TestDocumentationCollector:
         assert ev.kind == "documentation-analysis"
         assert ev.collector_name == "documentation"
 
+    # ------------------------------------------------------------------
+    # pom.xml tests
+    # ------------------------------------------------------------------
+
+    def test_pom_xml_namespaced_complete(self, tmp_path: Path) -> None:
+        """Namespaced pom.xml with all tracked fields present."""
+        (tmp_path / "pom.xml").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">\n'
+            "  <modelVersion>4.0.0</modelVersion>\n"
+            "  <artifactId>my-app</artifactId>\n"
+            "  <version>1.0.0</version>\n"
+            "  <description>A sample Maven project</description>\n"
+            "  <url>https://example.com</url>\n"
+            "  <licenses><license><name>Apache-2.0</name></license></licenses>\n"
+            "  <developers><developer><name>Alice</name></developer></developers>\n"
+            "  <scm><url>https://github.com/example/my-app</url></scm>\n"
+            "</project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        assert len(manifests) == 1
+        m = manifests[0]
+        assert m["type"] == "pom.xml"
+        assert m["path"] == "pom.xml"
+        assert "artifactId" in m["fields_present"]
+        assert "version" in m["fields_present"]
+        assert "description" in m["fields_present"]
+        assert "url" in m["fields_present"]
+        assert "licenses" in m["fields_present"]
+        assert "developers" in m["fields_present"]
+        assert "scm" in m["fields_present"]
+        assert m["fields_missing"] == []
+
+    def test_pom_xml_bare_no_namespace(self, tmp_path: Path) -> None:
+        """pom.xml without xmlns attribute (bare tags)."""
+        (tmp_path / "pom.xml").write_text(
+            '<?xml version="1.0"?>\n'
+            "<project>\n"
+            "  <artifactId>bare-app</artifactId>\n"
+            "  <version>2.0</version>\n"
+            "  <description>Bare pom</description>\n"
+            "</project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        m = results[0].payload["manifests"][0]
+        assert m["type"] == "pom.xml"
+        assert "artifactId" in m["fields_present"]
+        assert "version" in m["fields_present"]
+        assert "description" in m["fields_present"]
+        # url, licenses, developers, scm absent
+        assert "url" in m["fields_missing"]
+        assert "licenses" in m["fields_missing"]
+
+    def test_pom_xml_partial_fields(self, tmp_path: Path) -> None:
+        """pom.xml with only a subset of fields — missing ones reported."""
+        (tmp_path / "pom.xml").write_text(
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">\n'
+            "  <artifactId>partial</artifactId>\n"
+            "  <version>0.1</version>\n"
+            "</project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        m = results[0].payload["manifests"][0]
+        assert "artifactId" in m["fields_present"]
+        assert "version" in m["fields_present"]
+        assert "description" in m["fields_missing"]
+        assert "licenses" in m["fields_missing"]
+        assert "developers" in m["fields_missing"]
+        assert "scm" in m["fields_missing"]
+
+    def test_pom_xml_not_present(self, tmp_path: Path) -> None:
+        """No pom.xml — parser returns None, not included in manifests."""
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        types = [m["type"] for m in results[0].payload["manifests"]]
+        assert "pom.xml" not in types
+
+    def test_pom_xml_malformed(self, tmp_path: Path) -> None:
+        """Malformed pom.xml — skipped gracefully, no manifest entry."""
+        (tmp_path / "pom.xml").write_text("<project><unclosed>")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        types = [m["type"] for m in results[0].payload["manifests"]]
+        assert "pom.xml" not in types
+
+    def test_pom_xml_alongside_pyproject(self, tmp_path: Path) -> None:
+        """Both pom.xml and pyproject.toml produce two manifest entries."""
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\n')
+        (tmp_path / "pom.xml").write_text(
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">\n'
+            "  <artifactId>foo</artifactId>\n"
+            "</project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        types = [m["type"] for m in results[0].payload["manifests"]]
+        assert "pyproject.toml" in types
+        assert "pom.xml" in types
+        assert len(types) == 2
+
 
 # ---------------------------------------------------------------------------
 # HYG-DOC-001: Package metadata completeness
@@ -396,3 +500,173 @@ class TestApiDocsRule:
         rule = ApiDocsRule()
         result = rule.evaluate(ev, None)
         assert result.findings[0].rag == "green"
+
+
+# ---------------------------------------------------------------------------
+# Cargo.toml parser tests
+# ---------------------------------------------------------------------------
+
+
+class TestCargoTomlParser:
+    def test_cargo_complete(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[package]\nname = "mylib"\nversion = "0.1.0"\n'
+            'description = "A Rust lib"\nlicense = "MIT"\n'
+            'authors = ["Alice <alice@example.com>"]\n'
+            'repository = "https://github.com/alice/mylib"\n'
+            'homepage = "https://mylib.rs"\n'
+            'keywords = ["rust", "lib"]\n'
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        cargo_manifests = [m for m in manifests if m["type"] == "Cargo.toml"]
+        assert len(cargo_manifests) == 1
+        m = cargo_manifests[0]
+        assert m["path"] == "Cargo.toml"
+        assert "name" in m["fields_present"]
+        assert "version" in m["fields_present"]
+        assert "description" in m["fields_present"]
+        assert "license" in m["fields_present"]
+        assert m["fields_missing"] == []
+
+    def test_cargo_missing_fields(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text('[package]\nname = "mylib"\nversion = "0.1.0"\n')
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "Cargo.toml")
+        assert "description" in m["fields_missing"]
+        assert "license" in m["fields_missing"]
+        assert "authors" in m["fields_missing"]
+
+    def test_cargo_no_package_section(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text("[workspace]\nmembers = []\n")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "Cargo.toml")
+        assert m["fields_present"] == []
+        assert len(m["fields_missing"]) > 0
+
+    def test_cargo_malformed(self, tmp_path: Path) -> None:
+        (tmp_path / "Cargo.toml").write_text("{{{{ not valid toml")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        cargo_manifests = [m for m in manifests if m["type"] == "Cargo.toml"]
+        assert cargo_manifests == []
+
+    def test_cargo_absent(self, tmp_path: Path) -> None:
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        cargo_manifests = [m for m in manifests if m["type"] == "Cargo.toml"]
+        assert cargo_manifests == []
+
+
+# ---------------------------------------------------------------------------
+# go.mod parser tests
+# ---------------------------------------------------------------------------
+
+
+class TestGoModParser:
+    def test_go_mod_complete(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module github.com/alice/myapp\n\ngo 1.21\n")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "go.mod")
+        assert m["path"] == "go.mod"
+        assert "module" in m["fields_present"]
+        assert "go-version" in m["fields_present"]
+        assert m["fields_missing"] == []
+
+    def test_go_mod_missing_go_version(self, tmp_path: Path) -> None:
+        (tmp_path / "go.mod").write_text("module github.com/alice/myapp\n")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "go.mod")
+        assert "module" in m["fields_present"]
+        assert "go-version" in m["fields_missing"]
+
+    def test_go_mod_absent(self, tmp_path: Path) -> None:
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        go_manifests = [m for m in manifests if m["type"] == "go.mod"]
+        assert go_manifests == []
+
+
+# ---------------------------------------------------------------------------
+# .csproj parser tests
+# ---------------------------------------------------------------------------
+
+
+class TestCsprojParser:
+    def test_csproj_complete(self, tmp_path: Path) -> None:
+        (tmp_path / "MyApp.csproj").write_text(
+            '<Project Sdk="Microsoft.NET.Sdk">\n'
+            "  <PropertyGroup>\n"
+            "    <Version>1.2.3</Version>\n"
+            "    <Description>My awesome app</Description>\n"
+            "    <Authors>Alice</Authors>\n"
+            "    <PackageLicenseExpression>MIT</PackageLicenseExpression>\n"
+            "    <RepositoryUrl>https://github.com/alice/myapp</RepositoryUrl>\n"
+            "    <PackageProjectUrl>https://myapp.example.com</PackageProjectUrl>\n"
+            "  </PropertyGroup>\n"
+            "</Project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "csproj")
+        assert m["path"] == "MyApp.csproj"
+        assert "Version" in m["fields_present"]
+        assert "Description" in m["fields_present"]
+        assert "Authors" in m["fields_present"]
+        assert "PackageLicenseExpression" in m["fields_present"]
+        assert m["fields_missing"] == []
+
+    def test_csproj_missing_fields(self, tmp_path: Path) -> None:
+        (tmp_path / "MyApp.csproj").write_text(
+            '<Project Sdk="Microsoft.NET.Sdk">\n'
+            "  <PropertyGroup>\n"
+            "    <TargetFramework>net8.0</TargetFramework>\n"
+            "  </PropertyGroup>\n"
+            "</Project>\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "csproj")
+        assert "Version" in m["fields_missing"]
+        assert "Description" in m["fields_missing"]
+
+    def test_csproj_malformed_xml(self, tmp_path: Path) -> None:
+        (tmp_path / "MyApp.csproj").write_text("<Project><Unclosed>\n")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        csproj_manifests = [m for m in manifests if m["type"] == "csproj"]
+        assert csproj_manifests == []
+
+    def test_csproj_absent(self, tmp_path: Path) -> None:
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        csproj_manifests = [m for m in manifests if m["type"] == "csproj"]
+        assert csproj_manifests == []
+
+    def test_csproj_picks_first_alphabetically(self, tmp_path: Path) -> None:
+        # Two .csproj files; parser picks the first sorted by name
+        for name in ("ZApp.csproj", "AApp.csproj"):
+            (tmp_path / name).write_text(
+                f"<Project><PropertyGroup><Description>{name}</Description></PropertyGroup></Project>\n"
+            )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        manifests = results[0].payload["manifests"]
+        m = next(x for x in manifests if x["type"] == "csproj")
+        assert m["path"] == "AApp.csproj"

@@ -31,11 +31,14 @@ class VersionStrategyRule:
             rag: RAG = "amber"
             severity: Severity = "medium"
             summary = (
-                "No version declared in pyproject.toml, setup.py/cfg, or package __init__.py."
+                "No version declared (checked pyproject.toml, setup.py/cfg, "
+                "package __init__.py, pom.xml, build.gradle(.kts), go.mod, "
+                "Cargo.toml, *.csproj)."
             )
             recommendation = (
-                "Declare a version in [project].version in pyproject.toml "
-                "or set __version__ in the package __init__.py."
+                "Declare a version: [project].version in pyproject.toml (Python), "
+                "<version> in pom.xml (JVM), version in Cargo.toml (Rust), "
+                "or <Version> in *.csproj (C#)."
             )
         else:
             source = info.get("source", "unknown")

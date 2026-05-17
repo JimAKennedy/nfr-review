@@ -31,12 +31,14 @@ class BuildSystemRule:
             rag: RAG = "red"
             severity: Severity = "high"
             summary = (
-                "No build system found "
-                "(no pyproject.toml [build-system], setup.py, or setup.cfg)."
+                "No build system found (checked pyproject.toml, setup.py, "
+                "setup.cfg, pom.xml, build.gradle(.kts), go.mod, Cargo.toml, "
+                "*.csproj/*.sln)."
             )
             recommendation = (
-                "Add a [build-system] section to pyproject.toml "
-                "specifying a build backend (e.g. hatchling, setuptools, flit)."
+                "Add a build manifest: pyproject.toml [build-system] (Python), "
+                "pom.xml/build.gradle (JVM), go.mod (Go), Cargo.toml (Rust), "
+                "or *.csproj (C#)."
             )
         else:
             backend = info.get("backend", "unknown")

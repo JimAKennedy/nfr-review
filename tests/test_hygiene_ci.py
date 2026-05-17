@@ -524,6 +524,258 @@ class TestCiHasLintRule:
         )
         assert result.findings[0].rag == "green"
 
+    def test_green_checkstyle(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["mvn checkstyle:check"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_spotbugs(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["mvn spotbugs:check"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_pmd(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew pmd"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_ktlint(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew ktlintCheck"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_detekt(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew detekt"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_errorprone(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew errorprone"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_error_prone_hyphenated(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["mvn error-prone:check"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_spotless(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew spotlessCheck"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_dotnet_format(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["dotnet-format --verify-no-changes"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_roslyn(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["dotnet build /p:roslyn analyzers"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_npm_run_format(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm run format"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gradle_spotbugs_main(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["gradle spotbugsMain"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gradlew_pmd_main(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew pmdMain"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_ktlint_format(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["ktlint --format"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_detekt_input_src(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["detekt --input src"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_dotnet_format_space(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["dotnet format --verify-no-changes"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_spotless_check_run_prefix(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["run: spotlessCheck"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_super_linter_action(self) -> None:
+        rule = CiHasLintRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["uses: github/super-linter@v5"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
     def test_skip_no_ci(self) -> None:
         rule = CiHasLintRule()
         result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
