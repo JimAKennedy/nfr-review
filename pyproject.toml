@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nfr-review"
 version = "0.1.0"
-description = "Automated non-functional requirements review of Java/Spring Boot microservice repositories"
+description = "Automated non-functional requirements review for polyglot codebases"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -34,6 +34,12 @@ dependencies = [
     "packaging>=24.0",
     "resolvelib>=1.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/JimAKennedy/nfr-review"
+Documentation = "https://github.com/JimAKennedy/nfr-review#readme"
+Issues = "https://github.com/JimAKennedy/nfr-review/issues"
+Changelog = "https://github.com/JimAKennedy/nfr-review/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
