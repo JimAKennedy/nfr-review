@@ -65,9 +65,16 @@ def _base_payload(**overrides: Any) -> dict[str, Any]:
         "has_docs_dir": False,
         "doc_tool": "none",
         "has_api_docs_hint": False,
+        "has_py_typed": False,
+        "classifier_count": 0,
+        "has_classifiers": False,
     }
     base.update(overrides)
     return base
+
+
+def _find_by_tag(result: Any, tag: str) -> Any:
+    return next(f for f in result.findings if f.pattern_tag == tag)
 
 
 def _full_payload(**overrides: Any) -> dict[str, Any]:
@@ -78,6 +85,9 @@ def _full_payload(**overrides: Any) -> dict[str, Any]:
         has_docs_dir=True,
         doc_tool="mkdocs",
         has_api_docs_hint=True,
+        has_py_typed=True,
+        classifier_count=3,
+        has_classifiers=True,
         **overrides,
     )
 
@@ -243,6 +253,94 @@ class TestDocumentationCollector:
         ev = results[0]
         assert ev.kind == "documentation-analysis"
         assert ev.collector_name == "documentation"
+
+    # ------------------------------------------------------------------
+    # py.typed detection tests
+    # ------------------------------------------------------------------
+
+    def test_py_typed_src_layout(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        (pkg / "py.typed").write_text("")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        assert results[0].payload["has_py_typed"] is True
+
+    def test_py_typed_flat_layout(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        (pkg / "py.typed").write_text("")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        assert results[0].payload["has_py_typed"] is True
+
+    def test_py_typed_absent(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "src" / "mypkg"
+        pkg.mkdir(parents=True)
+        (pkg / "__init__.py").write_text("")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        assert results[0].payload["has_py_typed"] is False
+
+    def test_py_typed_not_in_tests_dir(self, tmp_path: Path) -> None:
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "__init__.py").write_text("")
+        (tests_dir / "py.typed").write_text("")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        assert results[0].payload["has_py_typed"] is False
+
+    # ------------------------------------------------------------------
+    # Classifier extraction tests
+    # ------------------------------------------------------------------
+
+    def test_classifiers_present(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "foo"\nclassifiers = [\n'
+            '  "Development Status :: 3 - Alpha",\n'
+            '  "Programming Language :: Python :: 3",\n'
+            '  "License :: OSI Approved :: MIT License",\n'
+            "]\n"
+        )
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        payload = results[0].payload
+        assert payload["has_classifiers"] is True
+        assert payload["classifier_count"] == 3
+
+    def test_classifiers_absent(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\n')
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        payload = results[0].payload
+        assert payload["has_classifiers"] is False
+        assert payload["classifier_count"] == 0
+
+    def test_classifiers_empty_list(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\nclassifiers = []\n')
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        payload = results[0].payload
+        assert payload["has_classifiers"] is False
+        assert payload["classifier_count"] == 0
+
+    def test_classifiers_no_pyproject(self, tmp_path: Path) -> None:
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        payload = results[0].payload
+        assert payload["has_classifiers"] is False
+        assert payload["classifier_count"] == 0
+
+    def test_classifiers_no_project_section(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 88\n")
+        collector = DocumentationCollector()
+        results = collector.collect(tmp_path, None)
+        payload = results[0].payload
+        assert payload["has_classifiers"] is False
+        assert payload["classifier_count"] == 0
 
     # ------------------------------------------------------------------
     # pom.xml tests
@@ -467,6 +565,7 @@ class TestApiDocsRule:
         ev = _make_evidence(_base_payload())
         rule = ApiDocsRule()
         result = rule.evaluate(ev, None)
+        assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
         assert "not applicable" in result.findings[0].summary.lower()
 
@@ -475,14 +574,16 @@ class TestApiDocsRule:
         ev = _make_evidence(_base_payload(manifests=[m], has_api_docs_hint=True))
         rule = ApiDocsRule()
         result = rule.evaluate(ev, None)
-        assert result.findings[0].rag == "green"
+        docstring_f = _find_by_tag(result, "api-docs-hint")
+        assert docstring_f.rag == "green"
 
     def test_python_no_docstring_amber(self) -> None:
         m = _manifest(present=["name"], missing=[])
         ev = _make_evidence(_base_payload(manifests=[m]))
         rule = ApiDocsRule()
         result = rule.evaluate(ev, None)
-        assert result.findings[0].rag == "amber"
+        docstring_f = _find_by_tag(result, "api-docs-hint")
+        assert docstring_f.rag == "amber"
 
     def test_no_evidence_skipped(self) -> None:
         rule = ApiDocsRule()
@@ -499,7 +600,87 @@ class TestApiDocsRule:
         ev = _make_evidence(_base_payload(manifests=[m]))
         rule = ApiDocsRule()
         result = rule.evaluate(ev, None)
+        assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
+
+    def test_python_produces_three_findings(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(_base_payload(manifests=[m]))
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        assert len(result.findings) == 3
+        tags = {f.pattern_tag for f in result.findings}
+        assert tags == {"api-docs-hint", "py-typed", "classifiers"}
+
+    # ------------------------------------------------------------------
+    # py.typed sub-check
+    # ------------------------------------------------------------------
+
+    def test_py_typed_present_green(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(_base_payload(manifests=[m], has_py_typed=True))
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        f = _find_by_tag(result, "py-typed")
+        assert f.rag == "green"
+        assert f.severity == "info"
+        assert "PEP 561" in f.summary
+
+    def test_py_typed_absent_amber(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(_base_payload(manifests=[m], has_py_typed=False))
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        f = _find_by_tag(result, "py-typed")
+        assert f.rag == "amber"
+        assert f.severity == "low"
+        assert "py.typed" in f.recommendation
+
+    # ------------------------------------------------------------------
+    # Classifier sub-check
+    # ------------------------------------------------------------------
+
+    def test_classifiers_present_green(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(
+            _base_payload(manifests=[m], has_classifiers=True, classifier_count=3)
+        )
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        f = _find_by_tag(result, "classifiers")
+        assert f.rag == "green"
+        assert f.severity == "info"
+        assert "3" in f.summary
+
+    def test_classifiers_absent_info(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(_base_payload(manifests=[m]))
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        f = _find_by_tag(result, "classifiers")
+        assert f.rag == "green"
+        assert f.severity == "info"
+        assert "Development Status" in f.recommendation
+
+    # ------------------------------------------------------------------
+    # Full pass: everything present
+    # ------------------------------------------------------------------
+
+    def test_all_checks_green(self) -> None:
+        m = _manifest(present=["name"], missing=[])
+        ev = _make_evidence(
+            _base_payload(
+                manifests=[m],
+                has_api_docs_hint=True,
+                has_py_typed=True,
+                has_classifiers=True,
+                classifier_count=5,
+            )
+        )
+        rule = ApiDocsRule()
+        result = rule.evaluate(ev, None)
+        assert len(result.findings) == 3
+        assert all(f.rag == "green" for f in result.findings)
 
 
 # ---------------------------------------------------------------------------
