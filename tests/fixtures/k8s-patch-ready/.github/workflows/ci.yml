@@ -1,0 +1,58 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build container image
+        run: docker build -t patch-ready-app:${{ github.sha }} .
+
+      - name: Run unit tests
+        run: pytest tests/
+
+      - name: Push image
+        run: docker push myregistry.example.com/patch-ready-app:${{ github.sha }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          kubectl set image deployment/patch-ready-app \
+            app=myregistry.example.com/patch-ready-app:${{ github.sha }} \
+            -n production
+          kubectl rollout status deployment/patch-ready-app -n production --timeout=300s
+
+      - name: Verify health checks
+        run: |
+          kubectl wait --for=condition=available deployment/patch-ready-app \
+            -n production --timeout=120s
+
+  rollback:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    steps:
+      - name: Rollback deployment
+        run: |
+          echo "Deploy failed — initiating rollback"
+          kubectl rollout undo deployment/patch-ready-app -n production
+          kubectl rollout status deployment/patch-ready-app -n production --timeout=300s
+
+      - name: Verify rollback health
+        run: |
+          kubectl wait --for=condition=available deployment/patch-ready-app \
+            -n production --timeout=120s
