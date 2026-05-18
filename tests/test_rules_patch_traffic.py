@@ -441,6 +441,12 @@ class TestTraffic003:
 
 class TestRegistration:
     def test_rules_registered(self):
+        import importlib
+
+        import nfr_review.rules.patch_traffic
+
+        importlib.reload(nfr_review.rules.patch_traffic)
+
         from nfr_review.registry import rule_registry
 
         assert "PATCH-TRAFFIC-001" in rule_registry
