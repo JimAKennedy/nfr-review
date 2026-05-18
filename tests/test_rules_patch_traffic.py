@@ -208,6 +208,34 @@ class TestTraffic001:
         result = self.rule.evaluate(ev, None)
         assert result.findings[0].rag == "amber"
 
+    def test_finding_metadata(self):
+        ev = [
+            _mesh_evidence(
+                "service-mesh-virtual-service",
+                {"name": "svc", "has_weighted_routing": True, "http_routes": []},
+            ),
+            _summary_evidence(vs=1),
+        ]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-001"
+        assert f.pattern_tag == "patch-traffic-shifting"
+        assert f.severity == "info"
+
+    def test_amber_finding_metadata(self):
+        ev = [
+            _mesh_evidence(
+                "service-mesh-virtual-service",
+                {"name": "svc", "has_weighted_routing": False, "http_routes": []},
+            ),
+            _summary_evidence(vs=1),
+        ]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-001"
+        assert f.pattern_tag == "patch-traffic-shifting"
+        assert f.severity == "medium"
+
 
 # ===========================================================================
 # PATCH-TRAFFIC-002: Failover documentation
@@ -282,6 +310,22 @@ class TestTraffic002:
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
+
+    def test_finding_metadata(self):
+        ev = [_repo_structure_evidence(top_level_files=["failover.md"])]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-002"
+        assert f.pattern_tag == "patch-traffic-failover-docs"
+        assert f.severity == "info"
+
+    def test_amber_finding_metadata(self):
+        ev = [_repo_structure_evidence(top_level_files=["README.md"])]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-002"
+        assert f.pattern_tag == "patch-traffic-failover-docs"
+        assert f.severity == "medium"
 
 
 # ===========================================================================
@@ -360,6 +404,34 @@ class TestTraffic003:
         rags = {f.rag for f in result.findings}
         assert "green" in rags
         assert "amber" in rags
+
+    def test_finding_metadata(self):
+        ev = [
+            _mesh_evidence(
+                "service-mesh-destination-rule",
+                {"name": "svc", "has_connection_pool": True, "connection_pool": {}},
+            ),
+            _summary_evidence(dr=1),
+        ]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-003"
+        assert f.pattern_tag == "patch-traffic-drain"
+        assert f.severity == "info"
+
+    def test_amber_finding_metadata(self):
+        ev = [
+            _mesh_evidence(
+                "service-mesh-destination-rule",
+                {"name": "svc", "has_connection_pool": False, "connection_pool": None},
+            ),
+            _summary_evidence(dr=1),
+        ]
+        result = self.rule.evaluate(ev, None)
+        f = result.findings[0]
+        assert f.rule_id == "PATCH-TRAFFIC-003"
+        assert f.pattern_tag == "patch-traffic-drain"
+        assert f.severity == "medium"
 
 
 # ===========================================================================
