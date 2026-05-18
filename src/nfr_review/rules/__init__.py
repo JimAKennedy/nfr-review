@@ -101,6 +101,9 @@ from nfr_review.rules import (
     patch_arch_strategy as patch_arch_strategy,  # noqa: F401
 )
 from nfr_review.rules import (
+    patch_deps as patch_deps,  # noqa: F401
+)
+from nfr_review.rules import (
     patch_forward_migration as patch_forward_migration,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -212,6 +215,7 @@ __all__ = [
     "patch_arch_pdb",
     "patch_arch_singleton",
     "patch_arch_strategy",
+    "patch_deps",
     "patch_forward_migration",
     "patch_health_probes",
     "patch_health_startup",

@@ -78,6 +78,12 @@ def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
         if not isinstance(c, dict):
             continue
         lifecycle = c.get("lifecycle") or {}
+        env_raw = c.get("env") or []
+        env_out = [
+            {"name": e.get("name", ""), "value": e.get("value")}
+            for e in env_raw
+            if isinstance(e, dict)
+        ] or None
         result.append(
             {
                 "name": c.get("name", ""),
@@ -88,6 +94,7 @@ def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
                 "startup_probe": c.get("startupProbe") or None,
                 "security_context": c.get("securityContext") or None,
                 "pre_stop": lifecycle.get("preStop") or None,
+                "env": env_out,
             }
         )
     return result
@@ -189,6 +196,10 @@ class K8sManifestCollector:
                 else:
                     pod_labels = None
 
+                annotations = metadata.get("annotations") or None
+                node_selector = pod_spec.get("nodeSelector") or None
+                node_affinity = affinity.get("nodeAffinity") or None
+
                 evidence.append(
                     Evidence(
                         collector_name=self.name,
@@ -200,9 +211,12 @@ class K8sManifestCollector:
                             "kind": kind,
                             "name": resource_name,
                             "namespace": namespace,
+                            "annotations": annotations,
                             "labels": pod_labels,
                             "replicas": spec.get("replicas"),
                             "strategy": strategy,
+                            "node_selector": node_selector,
+                            "node_affinity": node_affinity,
                             "anti_affinity": affinity.get("podAntiAffinity") or None,
                             "termination_grace_period": pod_spec.get(
                                 "terminationGracePeriodSeconds"
