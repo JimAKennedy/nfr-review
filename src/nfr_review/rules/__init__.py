@@ -121,6 +121,9 @@ from nfr_review.rules import (
 from nfr_review.rules import (
     patch_rollback_docs as patch_rollback_docs,  # noqa: F401
 )
+from nfr_review.rules import (
+    patch_traffic as patch_traffic,  # noqa: F401
+)
 from nfr_review.rules import pii_logging as pii_logging  # noqa: F401
 from nfr_review.rules import (
     proto_field_numbering as proto_field_numbering,  # noqa: F401
@@ -216,6 +219,7 @@ __all__ = [
     "patch_health_trivial_probe",
     "patch_rollback_ci",
     "patch_rollback_docs",
+    "patch_traffic",
     "pii_logging",
     "proto_field_numbering",
     "proto_method_comments",
