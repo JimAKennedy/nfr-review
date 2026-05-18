@@ -1,4 +1,4 @@
-"""Tests for build-readiness collector and HYG-BLD-001 through HYG-BLD-003 rules."""
+"""Tests for build-readiness collector and HYG-BLD-001 through HYG-BLD-005 rules."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
 from nfr_review.hygiene.collectors.build_readiness import BuildReadinessCollector
 from nfr_review.hygiene.rules.bld_build_system import BuildSystemRule
 from nfr_review.hygiene.rules.bld_entry_points import EntryPointsRule
+from nfr_review.hygiene.rules.bld_pre_commit import PreCommitRule
 from nfr_review.hygiene.rules.bld_version_strategy import VersionStrategyRule
 from nfr_review.models import Evidence
 
@@ -417,6 +418,52 @@ class TestVersionStrategyRule:
         f = result.findings[0]
         assert f.rule_id == "HYG-BLD-002"
         assert f.pattern_tag == "version-strategy"
+
+    def test_green_for_valid_semver(self) -> None:
+        rule = VersionStrategyRule()
+        for ver in ["1.2.3", "0.1.0", "10.20.30"]:
+            payload = _build_payload(version_value=ver)
+            result = rule.evaluate(_make_evidence(payload), context=None)
+            assert result.findings[0].rag == "green", f"Expected green for {ver}"
+
+    def test_green_for_semver_with_prerelease(self) -> None:
+        rule = VersionStrategyRule()
+        for ver in ["0.1.0-alpha", "1.0.0-beta.1", "2.0.0-rc.1"]:
+            payload = _build_payload(version_value=ver)
+            result = rule.evaluate(_make_evidence(payload), context=None)
+            assert result.findings[0].rag == "green", f"Expected green for {ver}"
+
+    def test_amber_for_non_semver_date_based(self) -> None:
+        rule = VersionStrategyRule()
+        payload = _build_payload(version_value="2026.05")
+        result = rule.evaluate(_make_evidence(payload), context=None)
+        assert result.findings[0].rag == "amber"
+        assert result.findings[0].severity == "low"
+        assert "Semantic Versioning" in result.findings[0].summary
+
+    def test_amber_for_non_semver_single_number(self) -> None:
+        rule = VersionStrategyRule()
+        payload = _build_payload(version_value="v1")
+        result = rule.evaluate(_make_evidence(payload), context=None)
+        assert result.findings[0].rag == "amber"
+
+    def test_amber_for_non_semver_text(self) -> None:
+        rule = VersionStrategyRule()
+        payload = _build_payload(version_value="abc")
+        result = rule.evaluate(_make_evidence(payload), context=None)
+        assert result.findings[0].rag == "amber"
+
+    def test_amber_for_two_part_version(self) -> None:
+        rule = VersionStrategyRule()
+        payload = _build_payload(version_value="1.0")
+        result = rule.evaluate(_make_evidence(payload), context=None)
+        assert result.findings[0].rag == "amber"
+
+    def test_semver_recommendation_includes_link(self) -> None:
+        rule = VersionStrategyRule()
+        payload = _build_payload(version_value="bad")
+        result = rule.evaluate(_make_evidence(payload), context=None)
+        assert "semver.org" in result.findings[0].recommendation
 
 
 # ---------------------------------------------------------------------------
@@ -1362,3 +1409,156 @@ edition = "2021"
         result = rule.evaluate(ev_list, context=None)
         assert result.findings[0].rag == "green"
         assert "1.0.0-SNAPSHOT" in result.findings[0].summary
+
+
+# ---------------------------------------------------------------------------
+# Pre-commit / Git Hooks Detection
+# ---------------------------------------------------------------------------
+
+
+class TestPreCommitDetection:
+    """Tests for _detect_pre_commit in build-readiness collector."""
+
+    def test_pre_commit_config_yaml(self, tmp_path: Path) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "pre-commit"
+
+    def test_husky_directory(self, tmp_path: Path) -> None:
+        (tmp_path / ".husky").mkdir()
+        (tmp_path / ".husky" / "pre-commit").write_text("#!/bin/sh\nnpx lint-staged\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "husky"
+
+    def test_lefthook_yml(self, tmp_path: Path) -> None:
+        (tmp_path / "lefthook.yml").write_text("pre-commit:\n  commands: {}\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lefthook"
+
+    def test_lefthook_yaml(self, tmp_path: Path) -> None:
+        (tmp_path / "lefthook.yaml").write_text("pre-commit:\n  commands: {}\n")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lefthook"
+
+    def test_lint_staged_in_package_json(self, tmp_path: Path) -> None:
+        import json
+
+        pkg = {"name": "myapp", "lint-staged": {"*.js": ["eslint --fix"]}}
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is True
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "lint-staged"
+
+    def test_no_pre_commit_tools(self, tmp_path: Path) -> None:
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_package_json_without_lint_staged(self, tmp_path: Path) -> None:
+        import json
+
+        pkg = {"name": "myapp", "version": "1.0.0"}
+        (tmp_path / "package.json").write_text(json.dumps(pkg))
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_malformed_package_json_no_crash(self, tmp_path: Path) -> None:
+        (tmp_path / "package.json").write_text("not valid json {{{")
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["has_pre_commit"] is False
+        assert ev.payload["pre_commit"]["pre_commit_tool"] is None
+
+    def test_pre_commit_priority_over_husky(self, tmp_path: Path) -> None:
+        """When both .pre-commit-config.yaml and .husky exist, pre-commit wins."""
+        (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+        (tmp_path / ".husky").mkdir()
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert ev.payload["pre_commit"]["pre_commit_tool"] == "pre-commit"
+
+    def test_payload_structure_includes_pre_commit(self, tmp_path: Path) -> None:
+        """Verify pre_commit is always present in payload even with no tools."""
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        results = c.collect(tmp_path, config=None)
+        ev = results[0]
+        assert "pre_commit" in ev.payload
+        assert "has_pre_commit" in ev.payload["pre_commit"]
+        assert "pre_commit_tool" in ev.payload["pre_commit"]
+
+
+# ---------------------------------------------------------------------------
+# HYG-BLD-004: Pre-commit Rule
+# ---------------------------------------------------------------------------
+
+
+class TestPreCommitRule:
+    def test_rule_registered(self) -> None:
+        assert "HYG-BLD-004" in hygiene_rule_registry
+
+    def test_rule_metadata(self) -> None:
+        assert PreCommitRule.id == "HYG-BLD-004"
+        assert PreCommitRule.category == "build-readiness"
+        assert PreCommitRule.band == 1
+
+    def test_skip_when_no_evidence(self) -> None:
+        rule = PreCommitRule()
+        result = rule.evaluate([], context=None)
+        assert result.skipped
+
+    def test_green_when_pre_commit_present(self, tmp_path: Path) -> None:
+        (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = PreCommitRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "green"
+        assert "pre-commit" in result.findings[0].summary
+
+    def test_amber_when_no_hooks(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = PreCommitRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].rag == "amber"
+        assert result.findings[0].severity == "low"
+
+    def test_finding_pattern_tag(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = PreCommitRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert result.findings[0].pattern_tag == "pre-commit-hooks"
+
+    def test_amber_recommendation_mentions_tools(self, tmp_path: Path) -> None:
+        (tmp_path / "pyproject.toml").write_text(_MINIMAL_PYPROJECT)
+        c = BuildReadinessCollector()
+        ev_list = c.collect(tmp_path, config=None)
+        rule = PreCommitRule()
+        result = rule.evaluate(ev_list, context=None)
+        assert "pre-commit.com" in result.findings[0].recommendation

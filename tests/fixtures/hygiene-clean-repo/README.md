@@ -1,5 +1,7 @@
 # Clean Example Project
 
+![CI](https://img.shields.io/badge/build-passing-green)
+
 A well-maintained project that follows all community, CI, documentation,
 build-readiness, and privacy hygiene best practices.
 

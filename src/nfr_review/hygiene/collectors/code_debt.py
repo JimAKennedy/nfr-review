@@ -1,0 +1,158 @@
+"""Code debt marker collector — scans source files for TODO/FIXME/HACK markers."""
+
+from __future__ import annotations
+
+import logging
+import re
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+from nfr_review.hygiene import hygiene_collector_registry
+from nfr_review.models import Evidence
+
+logger = logging.getLogger(__name__)
+
+_MARKERS = ("TODO", "FIXME", "HACK", "XXX", "TEMP", "WORKAROUND")
+_MARKER_RE = re.compile(
+    r"\b(" + "|".join(_MARKERS) + r")\b",
+    re.IGNORECASE,
+)
+
+_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        "node_modules",
+        "vendor",
+        "third_party",
+        "third-party",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        ".nox",
+        "dist",
+        "build",
+        ".eggs",
+        "*.egg-info",
+        ".gsd",
+        ".venv",
+        "venv",
+        "env",
+        "target",
+    }
+)
+
+_SOURCE_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".java",
+        ".go",
+        ".rs",
+        ".cs",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".rb",
+        ".php",
+        ".swift",
+        ".kt",
+        ".kts",
+        ".scala",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".gradle",
+        ".tf",
+        ".hcl",
+    }
+)
+
+
+def _should_skip_dir(name: str) -> bool:
+    return name in _SKIP_DIRS or name.endswith(".egg-info")
+
+
+def _scan_file(path: Path) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return counts
+    for match in _MARKER_RE.finditer(text):
+        counts[match.group(1).upper()] += 1
+    return counts
+
+
+class CodeDebtCollector:
+    name = "code-debt"
+    version = "0.1.0"
+
+    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        total = 0
+        per_marker: Counter[str] = Counter()
+        file_counts: list[dict[str, Any]] = []
+
+        for path in sorted(repo_path.rglob("*")):
+            if not path.is_file():
+                continue
+            if path.suffix not in _SOURCE_SUFFIXES:
+                continue
+
+            rel = path.relative_to(repo_path)
+            parts = rel.parts
+            if any(_should_skip_dir(p) for p in parts):
+                continue
+
+            counts = _scan_file(path)
+            if counts:
+                file_total = sum(counts.values())
+                total += file_total
+                per_marker += counts
+                file_counts.append(
+                    {
+                        "path": str(rel),
+                        "count": file_total,
+                        "markers": dict(counts),
+                    }
+                )
+
+        file_counts.sort(key=lambda f: f["count"], reverse=True)
+
+        payload: dict[str, Any] = {
+            "total_markers": total,
+            "per_marker": dict(per_marker),
+            "file_count": len(file_counts),
+            "top_files": file_counts[:10],
+        }
+
+        return [
+            Evidence(
+                collector_name=self.name,
+                collector_version=self.version,
+                locator=".",
+                kind="code-debt-analysis",
+                payload=payload,
+            )
+        ]
+
+
+def _register() -> None:
+    if "code-debt" not in hygiene_collector_registry:
+        hygiene_collector_registry.register("code-debt", CodeDebtCollector())
+
+
+_register()
+
+__all__ = ["CodeDebtCollector"]

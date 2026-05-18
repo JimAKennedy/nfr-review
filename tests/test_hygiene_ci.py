@@ -1,4 +1,4 @@
-"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-005 rules."""
+"""Tests for CI-automation collector and HYG-CI-001 through HYG-CI-007 rules."""
 
 from __future__ import annotations
 
@@ -7,11 +7,13 @@ from typing import Any
 
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
 from nfr_review.hygiene.collectors.ci_automation import CiAutomationCollector
+from nfr_review.hygiene.rules.ci_coverage_gate import CiCoverageGateRule
 from nfr_review.hygiene.rules.ci_has_ci import CiPresenceRule
 from nfr_review.hygiene.rules.ci_has_lint import CiHasLintRule
 from nfr_review.hygiene.rules.ci_has_sast import CiHasSastRule
 from nfr_review.hygiene.rules.ci_has_tests import CiHasTestsRule
 from nfr_review.hygiene.rules.ci_pin_actions import CiPinActionsRule
+from nfr_review.hygiene.rules.ci_release_publish import CiReleasePublishRule
 from nfr_review.models import Evidence
 
 # ---------------------------------------------------------------------------
@@ -151,6 +153,8 @@ class TestRegistration:
             "HYG-CI-003",
             "HYG-CI-004",
             "HYG-CI-005",
+            "HYG-CI-006",
+            "HYG-CI-007",
         ]:
             assert rule_id in hygiene_rule_registry, f"{rule_id} not registered"
 
@@ -161,6 +165,8 @@ class TestRegistration:
             "HYG-CI-003",
             "HYG-CI-004",
             "HYG-CI-005",
+            "HYG-CI-006",
+            "HYG-CI-007",
         ]:
             rule = hygiene_rule_registry.get(rule_id)
             assert rule.category == "ci-automation"
@@ -872,6 +878,90 @@ class TestCiHasSastRule:
         )
         assert result.findings[0].rag == "green"
 
+    def test_green_pip_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pip-audit --strict"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_npm_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm audit --audit-level=high"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_cargo_audit(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["cargo audit"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_govulncheck(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["govulncheck ./..."])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_ossf_scorecard(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["ossf/scorecard-action@v2"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_osv_scanner(self) -> None:
+        rule = CiHasSastRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["osv-scanner --lockfile=package-lock.json"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
     def test_skip_no_ci(self) -> None:
         rule = CiHasSastRule()
         result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
@@ -985,6 +1075,463 @@ class TestCiPinActionsRule:
 
     def test_skip_no_evidence(self) -> None:
         rule = CiPinActionsRule()
+        result = rule.evaluate([], None)
+        assert result.skipped is True
+
+
+# ---------------------------------------------------------------------------
+# HYG-CI-006: CI coverage gate
+# ---------------------------------------------------------------------------
+
+
+class TestCiCoverageGateRule:
+    def test_amber_no_coverage_tool(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm test", "npm run lint"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "No test coverage tooling" in result.findings[0].summary
+
+    def test_amber_tool_no_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pytest --cov=src tests/"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "no threshold" in result.findings[0].summary.lower()
+
+    def test_green_pytest_cov_with_fail_under(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(steps=["pytest --cov=src --cov-fail-under=80 tests/"])
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_coverage_report_fail_under(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "coverage run -m pytest tests/",
+                                "coverage report --fail-under=90",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_nyc_check_coverage(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["nyc --check-coverage --lines 80 npm test"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_jacoco_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "./gradlew jacocoTestReport",
+                                "./gradlew jacocoTestCoverageVerification"
+                                " minimumCoveragePercentage=80",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_go_cover(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "go test -coverprofile=coverage.out ./...",
+                                "COVERAGE_THRESHOLD=80 && coverage=$("
+                                "go tool cover -func=coverage.out)",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_codecov_action(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(
+                            steps=[
+                                "codecov/codecov-action@v4",
+                                "minimum_coverage=75",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_istanbul_c8(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[
+                        _gha_config(steps=["c8 --check-coverage --lines 80 node test.js"])
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gitlab_coverage(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["gitlab-ci"],
+                    configs=[
+                        _gitlab_config(
+                            steps=[
+                                "pytest --cov=src tests/",
+                                "coverage report --fail-under=85",
+                            ]
+                        )
+                    ],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_skip_no_ci(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
+        assert result.skipped is True
+
+    def test_skip_no_evidence(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate([], None)
+        assert result.skipped is True
+
+    def test_amber_only_codecov_no_threshold(self) -> None:
+        rule = CiCoverageGateRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["codecov/codecov-action@v4"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "no threshold" in result.findings[0].summary.lower()
+
+
+# ---------------------------------------------------------------------------
+# HYG-CI-007: Release/publish automation
+# ---------------------------------------------------------------------------
+
+
+class TestCiReleasePublishRule:
+    def test_amber_no_release_automation(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm test", "npm run lint"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "amber"
+        assert "No release" in result.findings[0].summary
+
+    def test_green_twine_upload(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["twine upload dist/*"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_poetry_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["poetry publish --build"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_flit_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["flit publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_npm_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npm publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_semantic_release(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["npx semantic-release"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_mvn_deploy(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["mvn deploy -DskipTests"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_goreleaser(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["goreleaser release --rm-dist"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gh_release_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["softprops/action-gh-release@v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_pypi_publish_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["pypa/gh-action-pypi-publish@release/v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_cargo_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["cargo publish --token $CARGO_TOKEN"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_docker_push(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["docker push myrepo/app:latest"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gh_release_create(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["gh release create v1.0.0 --generate-notes"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gradle_publish(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["./gradlew publish"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_gitlab_release(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["gitlab-ci"],
+                    configs=[_gitlab_config(steps=["twine upload dist/*"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_changesets_action(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["changesets/action@v1"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_skip_no_ci(self) -> None:
+        rule = CiReleasePublishRule()
+        result = rule.evaluate(_make_evidence(_ci_payload(has_ci=False)), None)
+        assert result.skipped is True
+
+    def test_skip_no_evidence(self) -> None:
+        rule = CiReleasePublishRule()
         result = rule.evaluate([], None)
         assert result.skipped is True
 
