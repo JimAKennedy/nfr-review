@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from nfr_review.collectors.repo_structure import RepoStructureCollector
 from nfr_review.models import Evidence
 from nfr_review.rules.patch_scope import AcceleratedCadenceRule, PatchClassSoakConfigRule
+
+FIXTURES = Path(__file__).parent / "fixtures"
+GOOD_REPO = FIXTURES / "patch-scope-good"
+BAD_REPO = FIXTURES / "patch-scope-bad"
 
 
 def _repo_ev(
@@ -276,3 +283,70 @@ class TestAcceleratedCadence:
         assert self.rule.id == "PATCH-SCOPE-002"
         assert self.rule.band == 2
         assert self.rule.required_collectors == ["repo-structure"]
+
+
+# ---------------------------------------------------------------------------
+# Fixture-repo integration tests — collector -> rule pipeline
+# ---------------------------------------------------------------------------
+
+
+def _collect_evidence(repo: Path) -> list[Evidence]:
+    collector = RepoStructureCollector()
+    return collector.collect(repo, None)
+
+
+class TestFixtureGoodRepo:
+    """patch-scope-good fixture has patching-policy.yaml -> green findings."""
+
+    def test_collector_finds_patching_policy(self) -> None:
+        evidence = _collect_evidence(GOOD_REPO)
+        assert len(evidence) == 1
+        files = evidence[0].payload["top_level_files"]
+        assert "patching-policy.yaml" in files
+
+    def test_scope_001_green_with_fixture(self) -> None:
+        evidence = _collect_evidence(GOOD_REPO)
+        rule = PatchClassSoakConfigRule()
+        result = rule.evaluate(evidence, None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+        assert "patching-policy.yaml" in result.findings[0].summary
+
+    def test_scope_002_info_unparsed_with_fixture(self) -> None:
+        evidence = _collect_evidence(GOOD_REPO)
+        rule = AcceleratedCadenceRule()
+        result = rule.evaluate(evidence, None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].severity == "info"
+        assert "not parsed" in result.findings[0].summary
+
+
+class TestFixtureBadRepo:
+    """patch-scope-bad fixture has no patching config -> info findings."""
+
+    def test_collector_finds_no_patch_config(self) -> None:
+        evidence = _collect_evidence(BAD_REPO)
+        assert len(evidence) == 1
+        files = evidence[0].payload["top_level_files"]
+        assert all(not f.lower().startswith("patch") for f in files)
+
+    def test_scope_001_info_with_fixture(self) -> None:
+        evidence = _collect_evidence(BAD_REPO)
+        rule = PatchClassSoakConfigRule()
+        result = rule.evaluate(evidence, None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].severity == "info"
+        assert "No patch-class soak configuration" in result.findings[0].summary
+
+    def test_scope_002_info_with_fixture(self) -> None:
+        evidence = _collect_evidence(BAD_REPO)
+        rule = AcceleratedCadenceRule()
+        result = rule.evaluate(evidence, None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].severity == "info"
+        assert "not applicable" in result.findings[0].summary
