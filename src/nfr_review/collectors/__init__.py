@@ -22,6 +22,7 @@ from nfr_review.collectors import proto as proto  # noqa: F401
 from nfr_review.collectors import python_ast as python_ast  # noqa: F401
 from nfr_review.collectors import python_deps as python_deps  # noqa: F401
 from nfr_review.collectors import repo_structure as repo_structure  # noqa: F401
+from nfr_review.collectors import service_mesh as service_mesh  # noqa: F401
 from nfr_review.collectors import skaffold as skaffold  # noqa: F401
 from nfr_review.collectors import spring_config as spring_config  # noqa: F401
 from nfr_review.collectors import terraform as terraform  # noqa: F401
@@ -47,6 +48,7 @@ __all__ = [
     "python_ast",
     "python_deps",
     "repo_structure",
+    "service_mesh",
     "skaffold",
     "spring_config",
     "terraform",

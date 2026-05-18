@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: production
+spec:
+  args:
+    - name: service-name
+      value: reviews
+    - name: threshold
+      value: "0.95"
+  metrics:
+    - name: success-rate
+      interval: 30s
+      count: 10
+      successCondition: result[0] >= 0.95
+      failureCondition: result[0] < 0.80
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            sum(rate(http_requests_total{status=~"2..",service="{{args.service-name}}"}[5m]))
+            /
+            sum(rate(http_requests_total{service="{{args.service-name}}"}[5m]))
+    - name: latency-p99
+      interval: 30s
+      count: 10
+      successCondition: result[0] <= 500
+      provider:
+        prometheus:
+          address: http://prometheus:9090
+          query: |
+            histogram_quantile(0.99, sum(rate(http_request_duration_ms_bucket{service="{{args.service-name}}"}[5m])) by (le))
