@@ -1,0 +1,76 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "app-metrics"
+          scrape_interval: 10s
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  resource:
+    attributes:
+      - key: service.name
+        value: payment-service
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+      - key: service.version
+        value: "2.1.0"
+        action: upsert
+      - key: team
+        value: platform
+        action: upsert
+  attributes:
+    actions:
+      - key: http.method
+        action: insert
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  otlp/traces:
+    endpoint: "tempo.monitoring:4317"
+    tls:
+      insecure: false
+  otlp/logs:
+    endpoint: "loki.monitoring:4317"
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+  zpages:
+    endpoint: "0.0.0.0:55679"
+
+service:
+  extensions: [health_check, zpages]
+  telemetry:
+    resource:
+      service.namespace: payments
+      cloud.provider: azure
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/traces]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/logs]

@@ -25,6 +25,7 @@ from nfr_review.collectors import repo_structure as repo_structure  # noqa: F401
 from nfr_review.collectors import service_mesh as service_mesh  # noqa: F401
 from nfr_review.collectors import skaffold as skaffold  # noqa: F401
 from nfr_review.collectors import spring_config as spring_config  # noqa: F401
+from nfr_review.collectors import telemetry_config as telemetry_config  # noqa: F401
 from nfr_review.collectors import terraform as terraform  # noqa: F401
 
 __all__ = [
@@ -51,5 +52,6 @@ __all__ = [
     "service_mesh",
     "skaffold",
     "spring_config",
+    "telemetry_config",
     "terraform",
 ]

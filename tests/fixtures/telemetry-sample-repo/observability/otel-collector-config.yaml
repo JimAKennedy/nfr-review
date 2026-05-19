@@ -1,0 +1,46 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "app"
+          scrape_interval: 15s
+
+processors:
+  batch:
+    timeout: 5s
+  resource:
+    attributes:
+      - key: service.name
+        value: my-service
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+
+exporters:
+  otlp:
+    endpoint: "tempo.monitoring:4317"
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [otlp]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [batch]
+      exporters: [prometheus]
