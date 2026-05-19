@@ -29,6 +29,12 @@ processors:
       - key: team
         value: platform
         action: upsert
+      - key: ring
+        value: r1
+        action: upsert
+      - key: side
+        value: active
+        action: upsert
   attributes:
     actions:
       - key: http.method

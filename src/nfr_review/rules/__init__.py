@@ -128,6 +128,9 @@ from nfr_review.rules import (
     patch_scope as patch_scope,  # noqa: F401
 )
 from nfr_review.rules import (
+    patch_telem as patch_telem,  # noqa: F401
+)
+from nfr_review.rules import (
     patch_traffic as patch_traffic,  # noqa: F401
 )
 from nfr_review.rules import pii_logging as pii_logging  # noqa: F401
@@ -227,6 +230,7 @@ __all__ = [
     "patch_rollback_ci",
     "patch_rollback_docs",
     "patch_scope",
+    "patch_telem",
     "patch_traffic",
     "pii_logging",
     "proto_field_numbering",
