@@ -177,6 +177,14 @@ _FAILOVER_FILES = {
 _FAILOVER_DIRS = {"failover", "disaster-recovery", "dr-runbooks"}
 
 
+def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
+    return any(
+        (e.collector_name == "k8s-manifest" and e.kind == "k8s-resource")
+        or e.kind == "patch-config"
+        for e in evidence
+    )
+
+
 class FailoverDocumentationRule:
     """PATCH-TRAFFIC-002: detect failover/DR documentation in repo root."""
 
@@ -195,6 +203,29 @@ class FailoverDocumentationRule:
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no repo-structure-summary evidence available",
+            )
+
+        if not _has_k8s_workloads(evidence):
+            ev = summaries[0]
+            return RuleResult(
+                rule_id=self.id,
+                findings=[
+                    Finding(
+                        rule_id=self.id,
+                        rag="green",
+                        severity="info",
+                        summary=(
+                            "No K8s workloads or patching config detected"
+                            " — failover docs check not applicable"
+                        ),
+                        recommendation="No action required.",
+                        evidence_locator="repo-root",
+                        collector_name=ev.collector_name,
+                        collector_version=ev.collector_version,
+                        confidence=0.80,
+                        pattern_tag="patch-traffic-failover-docs",
+                    )
+                ],
             )
 
         ev = summaries[0]

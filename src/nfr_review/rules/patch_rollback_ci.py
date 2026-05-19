@@ -23,6 +23,14 @@ _ROLLBACK_RE = re.compile(
 )
 
 
+def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
+    return any(
+        (e.collector_name == "k8s-manifest" and e.kind == "k8s-resource")
+        or e.kind == "patch-config"
+        for e in evidence
+    )
+
+
 class CiRollbackStageMissingRule:
     """Check that at least one CI pipeline has a rollback/revert stage."""
 
@@ -41,6 +49,29 @@ class CiRollbackStageMissingRule:
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no ci-pipeline evidence available",
+            )
+
+        if not _has_k8s_workloads(evidence):
+            first = ci_pipelines[0]
+            return RuleResult(
+                rule_id=self.id,
+                findings=[
+                    Finding(
+                        rule_id=self.id,
+                        rag="green",
+                        severity="info",
+                        summary=(
+                            "No K8s workloads or patching config detected"
+                            " — CI rollback stage check not applicable"
+                        ),
+                        recommendation="No action required.",
+                        evidence_locator="all-pipelines",
+                        collector_name=first.collector_name,
+                        collector_version=first.collector_version,
+                        confidence=0.80,
+                        pattern_tag="patch-rollback-ci",
+                    )
+                ],
             )
 
         findings: list[Finding] = []

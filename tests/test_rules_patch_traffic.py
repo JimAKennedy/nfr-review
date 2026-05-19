@@ -59,6 +59,17 @@ def _repo_structure_evidence(
     )
 
 
+def _k8s_workload_ev() -> Evidence:
+    """Minimal k8s-resource evidence to signal this repo has K8s workloads."""
+    return Evidence(
+        collector_name="k8s-manifest",
+        collector_version="0.1.0",
+        locator="deployment.yaml:web",
+        kind="k8s-resource",
+        payload={"kind": "Deployment", "name": "web", "namespace": "default"},
+    )
+
+
 # ===========================================================================
 # PATCH-TRAFFIC-001: Progressive traffic shifting
 # ===========================================================================
@@ -250,39 +261,53 @@ class TestTraffic002:
         assert result.skipped is True
         assert "repo-structure" in result.skip_reason
 
+    def test_no_k8s_workloads_info(self):
+        ev = [_repo_structure_evidence(top_level_files=["README.md"])]
+        result = self.rule.evaluate(ev, None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+        assert "not applicable" in result.findings[0].summary.lower()
+
     def test_failover_md_found_green(self):
-        ev = [_repo_structure_evidence(top_level_files=["failover.md", "README.md"])]
+        ev = [
+            _repo_structure_evidence(top_level_files=["failover.md", "README.md"]),
+            _k8s_workload_ev(),
+        ]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
         assert "failover.md" in result.findings[0].summary
 
     def test_dr_runbook_found_green(self):
-        ev = [_repo_structure_evidence(top_level_files=["DR-RUNBOOK.md"])]
+        ev = [_repo_structure_evidence(top_level_files=["DR-RUNBOOK.md"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_failover_dir_found_green(self):
-        ev = [_repo_structure_evidence(top_level_dirs=["failover"])]
+        ev = [_repo_structure_evidence(top_level_dirs=["failover"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_disaster_recovery_dir_green(self):
-        ev = [_repo_structure_evidence(top_level_dirs=["disaster-recovery"])]
+        ev = [
+            _repo_structure_evidence(top_level_dirs=["disaster-recovery"]),
+            _k8s_workload_ev(),
+        ]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_dr_runbooks_dir_green(self):
-        ev = [_repo_structure_evidence(top_level_dirs=["dr-runbooks"])]
+        ev = [_repo_structure_evidence(top_level_dirs=["dr-runbooks"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_no_failover_docs_amber(self):
-        ev = [_repo_structure_evidence(top_level_files=["README.md"])]
+        ev = [_repo_structure_evidence(top_level_files=["README.md"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
@@ -293,26 +318,30 @@ class TestTraffic002:
             _repo_structure_evidence(
                 top_level_files=["failover.md", "disaster-recovery.md"],
                 top_level_dirs=["dr-runbooks"],
-            )
+            ),
+            _k8s_workload_ev(),
         ]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 3
         assert all(f.rag == "green" for f in result.findings)
 
     def test_case_insensitive_match(self):
-        ev = [_repo_structure_evidence(top_level_files=["FAILOVER.md"])]
+        ev = [_repo_structure_evidence(top_level_files=["FAILOVER.md"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_disaster_recovery_md_green(self):
-        ev = [_repo_structure_evidence(top_level_files=["disaster-recovery.md"])]
+        ev = [
+            _repo_structure_evidence(top_level_files=["disaster-recovery.md"]),
+            _k8s_workload_ev(),
+        ]
         result = self.rule.evaluate(ev, None)
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_finding_metadata(self):
-        ev = [_repo_structure_evidence(top_level_files=["failover.md"])]
+        ev = [_repo_structure_evidence(top_level_files=["failover.md"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         f = result.findings[0]
         assert f.rule_id == "PATCH-TRAFFIC-002"
@@ -320,7 +349,7 @@ class TestTraffic002:
         assert f.severity == "info"
 
     def test_amber_finding_metadata(self):
-        ev = [_repo_structure_evidence(top_level_files=["README.md"])]
+        ev = [_repo_structure_evidence(top_level_files=["README.md"]), _k8s_workload_ev()]
         result = self.rule.evaluate(ev, None)
         f = result.findings[0]
         assert f.rule_id == "PATCH-TRAFFIC-002"

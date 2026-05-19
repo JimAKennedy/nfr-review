@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from nfr_review.collectors.k8s_manifest import K8sManifestCollector
 from nfr_review.collectors.repo_structure import RepoStructureCollector
 from nfr_review.collectors.service_mesh import ServiceMeshCollector
 from nfr_review.config import Config
@@ -39,6 +40,7 @@ def _traffic_registries() -> tuple[Registry, Registry]:
 
     cregistry.register("service-mesh", ServiceMeshCollector())
     cregistry.register("repo-structure", RepoStructureCollector())
+    cregistry.register("k8s-manifest", K8sManifestCollector())
 
     rregistry.register("PATCH-TRAFFIC-001", ProgressiveTrafficShiftingRule())
     rregistry.register("PATCH-TRAFFIC-002", FailoverDocumentationRule())

@@ -8,6 +8,17 @@ from nfr_review.rules.patch_rollback_ci import CiRollbackStageMissingRule
 from nfr_review.rules.patch_rollback_docs import RollbackDocsMissingRule
 
 
+def _k8s_workload_ev() -> Evidence:
+    """Minimal k8s-resource evidence to signal this repo has K8s workloads."""
+    return Evidence(
+        collector_name="k8s-manifest",
+        collector_version="0.1.0",
+        locator="deployment.yaml:web",
+        kind="k8s-resource",
+        payload={"kind": "Deployment", "name": "web", "namespace": "default"},
+    )
+
+
 def _repo_ev(
     top_level_files: list[str] | None = None,
     top_level_dirs: list[str] | None = None,
@@ -61,12 +72,20 @@ class TestRollbackDocsMissing:
         assert result.skipped is True
         assert result.skip_reason == "no repo-structure-summary evidence available"
 
+    def test_no_k8s_workloads_info(self) -> None:
+        ev = _repo_ev(top_level_files=["README.md"])
+        result = self.rule.evaluate([ev], None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+        assert "not applicable" in result.findings[0].summary.lower()
+
     def test_no_rollback_docs_amber(self) -> None:
         ev = _repo_ev(
             top_level_files=["README.md", "setup.py"],
             top_level_dirs=["src", "tests"],
         )
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
@@ -74,7 +93,7 @@ class TestRollbackDocsMissing:
 
     def test_rollback_md_green(self) -> None:
         ev = _repo_ev(top_level_files=["ROLLBACK.md"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
@@ -82,32 +101,32 @@ class TestRollbackDocsMissing:
 
     def test_disaster_recovery_md_green(self) -> None:
         ev = _repo_ev(top_level_files=["disaster-recovery.md"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_runbooks_dir_green(self) -> None:
         ev = _repo_ev(top_level_dirs=["runbooks"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
         assert "runbooks" in result.findings[0].summary
 
     def test_rollback_dir_green(self) -> None:
         ev = _repo_ev(top_level_dirs=["rollback"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_case_insensitive_file(self) -> None:
         ev = _repo_ev(top_level_files=["rollback.md"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_case_insensitive_dir(self) -> None:
         ev = _repo_ev(top_level_dirs=["Runbooks"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
@@ -116,7 +135,7 @@ class TestRollbackDocsMissing:
             top_level_files=["ROLLBACK.md"],
             top_level_dirs=["runbooks"],
         )
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 2
         assert all(f.rag == "green" for f in result.findings)
@@ -141,9 +160,17 @@ class TestCiRollbackStageMissing:
         assert result.skipped is True
         assert result.skip_reason == "no ci-pipeline evidence available"
 
-    def test_no_rollback_jobs_amber(self) -> None:
+    def test_no_k8s_workloads_info(self) -> None:
         ev = _ci_ev(job_names=["build", "test", "deploy"])
         result = self.rule.evaluate([ev], None)
+        assert not result.skipped
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "green"
+        assert "not applicable" in result.findings[0].summary.lower()
+
+    def test_no_rollback_jobs_amber(self) -> None:
+        ev = _ci_ev(job_names=["build", "test", "deploy"])
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
@@ -151,46 +178,46 @@ class TestCiRollbackStageMissing:
 
     def test_rollback_job_green(self) -> None:
         ev = _ci_ev(job_names=["build", "test", "rollback"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "green"
 
     def test_revert_step_green(self) -> None:
         ev = _ci_ev(step_names=["Build", "Revert on failure"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_canary_rollback_job_green(self) -> None:
         ev = _ci_ev(job_names=["canary-rollback"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_roll_back_hyphenated_green(self) -> None:
         ev = _ci_ev(job_names=["roll-back-prod"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_case_insensitive_match(self) -> None:
         ev = _ci_ev(job_names=["ROLLBACK"])
-        result = self.rule.evaluate([ev], None)
+        result = self.rule.evaluate([ev, _k8s_workload_ev()], None)
         assert not result.skipped
         assert result.findings[0].rag == "green"
 
     def test_multiple_pipelines_one_with_rollback(self) -> None:
         ev1 = _ci_ev(job_names=["build", "deploy"], file_path="deploy.yml")
         ev2 = _ci_ev(job_names=["rollback"], file_path="rollback.yml")
-        result = self.rule.evaluate([ev1, ev2], None)
+        result = self.rule.evaluate([ev1, ev2, _k8s_workload_ev()], None)
         assert not result.skipped
         assert any(f.rag == "green" for f in result.findings)
 
     def test_multiple_pipelines_none_with_rollback(self) -> None:
         ev1 = _ci_ev(job_names=["build"], file_path="build.yml")
         ev2 = _ci_ev(job_names=["deploy"], file_path="deploy.yml")
-        result = self.rule.evaluate([ev1, ev2], None)
+        result = self.rule.evaluate([ev1, ev2, _k8s_workload_ev()], None)
         assert not result.skipped
         assert len(result.findings) == 1
         assert result.findings[0].rag == "amber"
