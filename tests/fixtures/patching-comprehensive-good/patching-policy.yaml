@@ -1,0 +1,39 @@
+# Patching policy: soak durations per patch class and ring.
+# Passes PATCH-SCOPE-001 (patch class config present) and
+# PATCH-SCOPE-002 (critical-security with compressed non-zero soaks).
+
+patch_classes:
+  - name: critical-security
+    description: CVSS >= 9 or KEV-listed vulnerabilities — accelerated cadence
+    soak_hours:
+      R0: 4
+      R1: 8
+      R2: 12
+
+  - name: high-security
+    description: CVSS 7-8.9 security patches
+    soak_hours:
+      R0: 12
+      R1: 24
+      R2: 48
+
+  - name: routine
+    description: Standard monthly patching cadence (OS, runtime)
+    soak_hours:
+      R0: 24
+      R1: 48
+      R2: 72
+
+  - name: postgres-minor
+    description: PostgreSQL minor version upgrades
+    soak_hours:
+      R0: 48
+      R1: 96
+      R2: 168
+
+  - name: aks-node
+    description: AKS node image upgrades
+    soak_hours:
+      R0: 24
+      R1: 72
+      R2: 168

@@ -1,0 +1,70 @@
+# OpenTelemetry Collector configuration.
+# Passes PATCH-TELEM-001 (metrics + traces pipelines) and
+# PATCH-TELEM-002 (mandatory labels: service, version, ring, side).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "payment-metrics"
+          scrape_interval: 10s
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  resource:
+    attributes:
+      - key: service.name
+        value: payment-api
+        action: upsert
+      - key: service.version
+        value: "2.4.1"
+        action: upsert
+      - key: ring
+        value: r2
+        action: upsert
+      - key: side
+        value: active
+        action: upsert
+      - key: region
+        value: eastus2
+        action: upsert
+      - key: environment
+        value: prod
+        action: upsert
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  otlp/traces:
+    endpoint: "tempo.monitoring:4317"
+    tls:
+      insecure: false
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    resource_to_telemetry_conversion:
+      enabled: true
+
+extensions:
+  health_check:
+    endpoint: "0.0.0.0:13133"
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [otlp/traces]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus]

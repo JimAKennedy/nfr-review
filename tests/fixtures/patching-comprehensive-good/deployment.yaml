@@ -1,0 +1,258 @@
+# Comprehensive GOOD patching fixture — passes ALL PATCH-* rules.
+#
+# Guardrail areas covered:
+#   1. Architecture: multi-replica, preStop hook, RollingUpdate strategy, PDB present
+#   2. Health: httpGet probes, startup probe, >=30s grace period, safe thresholds
+#   3. Rollback: rollback docs present, CI rollback stage, migration rollback support
+#   4. Traffic: VirtualService weighted routing, DestinationRule connectionPool, failover docs
+#   5. Dependencies: dependency annotations, isolated nodeSelector, ring labels
+#   6. Scope: patching-policy.yaml with per-class soak config
+#   7. Telemetry: OTel collector with metrics+traces, mandatory labels, synthetics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: production
+  labels:
+    app: payment-api
+    app.kubernetes.io/ring: "2"
+  annotations:
+    app.kubernetes.io/part-of: payment-platform
+    backstage.io/system: payments
+    dependencies/database: postgres-payments
+    dependencies/cache: redis-payments
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: payment-api
+        app.kubernetes.io/ring: "2"
+    spec:
+      terminationGracePeriodSeconds: 60
+      nodeSelector:
+        pool: payment-pool
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: payment-api
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: api
+          image: myregistry.example.com/payment-api:2.4.1
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: postgres-payments.db.svc.cluster.local
+            - name: REDIS_HOST
+              value: redis-payments.cache.svc.cluster.local
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.monitoring.svc.cluster.local:4317"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /healthz/startup
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 15
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-worker
+  namespace: production
+  labels:
+    app: payment-worker
+    app.kubernetes.io/ring: "2"
+  annotations:
+    app.kubernetes.io/part-of: payment-platform
+    backstage.io/system: payments
+    dependencies/database: postgres-payments
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: payment-worker
+        app.kubernetes.io/ring: "2"
+    spec:
+      terminationGracePeriodSeconds: 90
+      nodeSelector:
+        pool: payment-worker-pool
+      containers:
+        - name: worker
+          image: myregistry.example.com/payment-worker:2.4.1
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DB_HOST
+              value: postgres-payments.db.svc.cluster.local
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz/startup
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: 8081
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 30
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-api-pdb
+  namespace: production
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: payment-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payment-worker-pdb
+  namespace: production
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: payment-worker
+---
+# Service mesh: VirtualService with weighted routing — passes PATCH-TRAFFIC-001
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: payment-api-route
+  namespace: production
+spec:
+  hosts:
+    - payment-api
+  http:
+    - timeout: 10s
+      retries:
+        attempts: 3
+        perTryTimeout: 3s
+        retryOn: 5xx,reset,connect-failure
+      route:
+        - destination:
+            host: payment-api
+            subset: stable
+          weight: 90
+        - destination:
+            host: payment-api
+            subset: canary
+          weight: 10
+---
+# Service mesh: DestinationRule with connectionPool — passes PATCH-TRAFFIC-003
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: payment-api
+  namespace: production
+spec:
+  host: payment-api.production.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 200
+      http:
+        h2UpgradePolicy: DEFAULT
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
