@@ -21,6 +21,18 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
+def _hygiene_jsonl(tmp_path: Path) -> Path:
+    matches = list(tmp_path.glob("*-hygiene-report.jsonl"))
+    assert len(matches) == 1, f"Expected one hygiene JSONL, found {matches}"
+    return matches[0]
+
+
+def _hygiene_csv(tmp_path: Path) -> Path:
+    matches = list(tmp_path.glob("*-hygiene-report.csv"))
+    assert len(matches) == 1, f"Expected one hygiene CSV, found {matches}"
+    return matches[0]
+
+
 class TestListChecks:
     def test_shows_all_rules(self, runner: CliRunner) -> None:
         result = runner.invoke(cli, ["hygiene", "--list-checks"])
@@ -61,7 +73,7 @@ class TestCategoryFiltering:
             ],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert "HYG-BLD" in jsonl
         assert "HYG-COM" not in jsonl
         assert "HYG-PRV" not in jsonl
@@ -79,7 +91,7 @@ class TestCategoryFiltering:
             ],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert "HYG-PRV" in jsonl
         assert "HYG-COM" not in jsonl
         assert "HYG-BLD" not in jsonl
@@ -97,7 +109,7 @@ class TestCategoryFiltering:
             ],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert "HYG-COM" in jsonl
         assert "HYG-CI" in jsonl
         assert "HYG-BLD" not in jsonl
@@ -110,7 +122,7 @@ class TestDirtyRepoE2E:
             ["hygiene", str(DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert "HYG-COM" in jsonl
         assert "HYG-CI" in jsonl
         assert "HYG-DOC" in jsonl
@@ -123,7 +135,7 @@ class TestDirtyRepoE2E:
             ["hygiene", str(DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert '"red"' in jsonl or '"amber"' in jsonl
 
 
@@ -134,7 +146,7 @@ class TestCleanRepoE2E:
             ["hygiene", str(CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0, f"Exit {result.exit_code}: {result.output}"
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert '"red"' not in jsonl
         assert '"amber"' not in jsonl
 
@@ -144,7 +156,7 @@ class TestCleanRepoE2E:
             ["hygiene", str(CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         lines = [ln for ln in jsonl.splitlines() if ln.strip()]
         total = len(lines)
         false_positives = sum(1 for ln in lines if '"red"' in ln or '"amber"' in ln)
@@ -178,7 +190,7 @@ class TestDogfood:
             ],
         )
         assert result.exit_code == 0
-        jsonl = (tmp_path / "hygiene-report.jsonl").read_text()
+        jsonl = _hygiene_jsonl(tmp_path).read_text()
         assert '"red"' not in jsonl, f"Red findings in non-privacy dogfood:\n{jsonl}"
 
     def test_nfr_review_source_files_no_pii(
@@ -201,7 +213,7 @@ class TestDogfood:
         )
         assert result.exit_code == 0
         src_red = []
-        for line in (tmp_path / "hygiene-report.jsonl").read_text().splitlines():
+        for line in _hygiene_jsonl(tmp_path).read_text().splitlines():
             if not line.strip():
                 continue
             rec = json.loads(line)
@@ -241,11 +253,11 @@ class TestCoexistence:
 
         assert (tmp_path / "nfr-review.csv").exists()
         assert (tmp_path / "nfr-review.jsonl").exists()
-        assert (tmp_path / "hygiene-report.csv").exists()
-        assert (tmp_path / "hygiene-report.jsonl").exists()
+        assert _hygiene_csv(tmp_path).exists()
+        assert _hygiene_jsonl(tmp_path).exists()
 
         nfr_content = (tmp_path / "nfr-review.jsonl").read_text()
-        hyg_content = (tmp_path / "hygiene-report.jsonl").read_text()
+        hyg_content = _hygiene_jsonl(tmp_path).read_text()
         assert nfr_content != hyg_content
 
 

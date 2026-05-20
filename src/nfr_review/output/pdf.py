@@ -191,17 +191,30 @@ def _provenance_html(nfr_result: RunResult) -> str:
     meta = nfr_result.run_metadata
     if not meta:
         return ""
+    repo_label = Path(meta.target_repo).name
     parts = [
         '<div class="provenance">',
-        f"<p><strong>Tool version:</strong> {_h(meta.tool_version)} | ",
-        f"<strong>Target:</strong> <code>{_h(meta.target_repo)}</code> | ",
-        f"<strong>Timestamp:</strong> {_h(meta.timestamp)}</p>",
+        "<table>",
+        f"<tr><td><strong>Repository</strong></td><td><code>{_h(repo_label)}</code></td></tr>",
+        "<tr><td><strong>Target path</strong></td>"
+        f"<td><code>{_h(meta.target_repo)}</code></td></tr>",
+        f"<tr><td><strong>Report generated</strong></td><td>{_h(meta.timestamp)}</td></tr>",
     ]
     if meta.git_sha:
         dirty = " (dirty)" if meta.git_dirty else ""
+        sha_short = meta.git_sha[:10]
         parts.append(
-            f"<p><strong>Git SHA:</strong> <code>{_h(meta.git_sha)}</code>{dirty}</p>"
+            f"<tr><td><strong>Commit</strong></td>"
+            f"<td><code>{_h(sha_short)}</code>{dirty}</td></tr>"
         )
+    if meta.git_branch:
+        parts.append(
+            f"<tr><td><strong>Branch / tag</strong></td><td>{_h(meta.git_branch)}</td></tr>"
+        )
+    parts.append(
+        f"<tr><td><strong>Tool version</strong></td><td>{_h(meta.tool_version)}</td></tr>"
+    )
+    parts.append("</table>")
     parts.append("</div>")
     return "\n".join(parts)
 
@@ -256,7 +269,10 @@ def render_pdf(
 
     sections: list[str] = []
 
-    sections.append(f"<h1>{_h(title)}</h1>")
+    meta = nfr_result.run_metadata
+    repo_label = Path(meta.target_repo).name if meta else ""
+    heading = f"{_h(title)} — {_h(repo_label)}" if repo_label else _h(title)
+    sections.append(f"<h1>{heading}</h1>")
     sections.append(_provenance_html(nfr_result))
 
     if exec_summary:
