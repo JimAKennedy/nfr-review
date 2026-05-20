@@ -212,9 +212,23 @@ class DockerfileCollector:
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self._parser = make_parser("dockerfile")
+        self._parser: Parser | None = None
+
+    def _get_parser(self) -> Parser | None:
+        if self._parser is None:
+            try:
+                self._parser = make_parser("dockerfile")
+            except (ImportError, ModuleNotFoundError):
+                logger.warning(
+                    "tree-sitter grammar for dockerfile not installed"
+                    " — dockerfile collector disabled"
+                )
+                return None
+        return self._parser
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        if self._get_parser() is None:
+            return []
         evidence: list[Evidence] = []
         for dockerfile in _iter_dockerfiles(repo_path):
             rel = dockerfile.relative_to(repo_path)

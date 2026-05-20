@@ -376,9 +376,22 @@ class JavaAstCollector:
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self._parser = make_parser("java")
+        self._parser: Parser | None = None
+
+    def _get_parser(self) -> Parser | None:
+        if self._parser is None:
+            try:
+                self._parser = make_parser("java")
+            except (ImportError, ModuleNotFoundError):
+                logger.warning(
+                    "tree-sitter grammar for java not installed — java-ast collector disabled"
+                )
+                return None
+        return self._parser
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        if self._get_parser() is None:
+            return []
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         exclude_test = getattr(config, "exclude_test_paths", True)
         evidence: list[Evidence] = []

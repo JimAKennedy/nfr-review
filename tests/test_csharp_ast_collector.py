@@ -32,7 +32,7 @@ class TestRegistration:
         assert "csharp-ast" in collector_registry
 
     def test_parser_init(self, collector: CSharpAstCollector) -> None:
-        assert collector._parser is not None
+        assert collector._get_parser() is not None
 
     def test_collector_metadata(self, collector: CSharpAstCollector) -> None:
         assert collector.name == "csharp-ast"

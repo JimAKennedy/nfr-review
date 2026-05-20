@@ -337,6 +337,7 @@ class PythonAstCollector(BaseASTCollector):
     evidence_kind = "python-ast-file"
 
     def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+        assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
         return {

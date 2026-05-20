@@ -32,7 +32,7 @@ class TestRegistration:
         assert "nodejs-ast" in collector_registry
 
     def test_parser_init(self, collector: NodejsAstCollector) -> None:
-        assert collector._parser is not None
+        assert collector._get_parser() is not None
 
     def test_collector_metadata(self, collector: NodejsAstCollector) -> None:
         assert collector.name == "nodejs-ast"

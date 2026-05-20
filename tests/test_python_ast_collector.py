@@ -24,7 +24,7 @@ class TestRegistration:
         assert "python-ast" in collector_registry
 
     def test_parser_init(self, collector: PythonAstCollector) -> None:
-        assert collector._parser is not None
+        assert collector._get_parser() is not None
 
 
 class TestCollectOnFixtures:

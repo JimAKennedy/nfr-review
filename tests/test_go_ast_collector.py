@@ -29,7 +29,7 @@ class TestRegistration:
         assert len(collector_registry) >= 3
 
     def test_parser_init(self, collector: GoAstCollector) -> None:
-        assert collector._parser is not None
+        assert collector._get_parser() is not None
 
     def test_class_attributes(self, collector: GoAstCollector) -> None:
         assert collector.name == "go-ast"
