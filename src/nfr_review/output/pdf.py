@@ -72,7 +72,10 @@ _CSS = (  # noqa: E501
     ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
     ".urgency-short-term { color: #fd7e14; }\n"
     ".urgency-medium-term { color: #6c757d; }\n"
-    ".diagram-img { max-width: 100%; margin: 0.5em 0; }\n"
+    ".diagram-container { page-break-inside: avoid;"
+    " margin: 0.5em 0; }\n"
+    ".diagram-img { max-width: 100%; max-height: 700px;"
+    " object-fit: contain; display: block; }\n"
     ".finding { margin: 0.4em 0; padding: 6px 10px;"
     " border-left: 3px solid #ddd; font-size: 9pt; }\n"
     ".finding-red { border-left-color: #dc3545; }\n"
@@ -287,8 +290,11 @@ def render_pdf(
         sections.append("<h2>Diagrams</h2>")
         for diagram_title, path in diagram_paths.items():
             if path.exists():
-                sections.append(f"<h3>{_h(diagram_title)}</h3>")
-                sections.append(_embed_image(path))
+                sections.append(
+                    f'<div class="diagram-container">'
+                    f"<h3>{_h(diagram_title)}</h3>"
+                    f"{_embed_image(path)}</div>"
+                )
 
     sections.append(_test_results_html(pytest_result))
 
