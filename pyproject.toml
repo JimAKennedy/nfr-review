@@ -31,6 +31,7 @@ dependencies = [
     "tree-sitter-dockerfile>=0.2",
     "tree-sitter-c-sharp>=0.23",
     "tree-sitter-typescript>=0.23",
+    "tree-sitter-cpp>=0.23",
     "packaging>=24.0",
     "resolvelib>=1.0",
 ]
@@ -91,6 +92,7 @@ module = [
     "tree_sitter_dockerfile.*",
     "tree_sitter_c_sharp.*",
     "tree_sitter_typescript.*",
+    "tree_sitter_cpp.*",
     "scancode.*",
 ]
 ignore_missing_imports = true

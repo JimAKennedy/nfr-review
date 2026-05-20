@@ -11,6 +11,25 @@ from nfr_review.rules import ast_bare_except as ast_bare_except  # noqa: F401
 from nfr_review.rules import ast_logging_stdout as ast_logging_stdout  # noqa: F401
 from nfr_review.rules import ci_security_scan as ci_security_scan  # noqa: F401
 from nfr_review.rules import ci_test_stage as ci_test_stage  # noqa: F401
+from nfr_review.rules import cmake_build_config as cmake_build_config  # noqa: F401
+from nfr_review.rules import (
+    cmake_fetchcontent_pinning as cmake_fetchcontent_pinning,  # noqa: F401
+)
+from nfr_review.rules import (
+    cmake_minimum_version as cmake_minimum_version,  # noqa: F401
+)
+from nfr_review.rules import cpp_clang_format as cpp_clang_format  # noqa: F401
+from nfr_review.rules import cpp_clang_tidy as cpp_clang_tidy  # noqa: F401
+from nfr_review.rules import (
+    cpp_exception_safety as cpp_exception_safety,  # noqa: F401
+)
+from nfr_review.rules import (
+    cpp_include_guards as cpp_include_guards,  # noqa: F401
+)
+from nfr_review.rules import cpp_raw_memory as cpp_raw_memory  # noqa: F401
+from nfr_review.rules import (
+    cpp_sanitizer_ci as cpp_sanitizer_ci,  # noqa: F401
+)
 from nfr_review.rules import (
     csharp_async_void as csharp_async_void,  # noqa: F401
 )
@@ -180,6 +199,15 @@ __all__ = [
     "apim_auth",
     "apim_backend_url",
     "apim_rate_limit",
+    "cmake_build_config",
+    "cmake_fetchcontent_pinning",
+    "cmake_minimum_version",
+    "cpp_clang_format",
+    "cpp_clang_tidy",
+    "cpp_exception_safety",
+    "cpp_include_guards",
+    "cpp_raw_memory",
+    "cpp_sanitizer_ci",
     "ci_security_scan",
     "ci_test_stage",
     "csharp_async_void",

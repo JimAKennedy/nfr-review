@@ -1,0 +1,23 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cmake -B build && cmake --build build
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: cmake -B build -DBUILD_TESTING=ON && cmake --build build && ctest --test-dir build
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ASAN
+        run: cmake -B build-asan -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" && cmake --build build-asan
+      - name: UBSAN
+        run: cmake -B build-ubsan -DCMAKE_CXX_FLAGS="-fsanitize=undefined" && cmake --build build-ubsan

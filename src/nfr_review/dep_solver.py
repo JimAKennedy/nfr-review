@@ -390,22 +390,29 @@ def _build_tree_from_graph(
     max_depth: int = 20,
 ) -> list[TreeNode]:
     """Build a list of TreeNode roots from a resolvelib DirectedGraph."""
+    memo: dict[str, TreeNode] = {}
+    in_progress: set[str] = set()
 
-    def _build(name: str, ancestors: frozenset[str], depth: int) -> TreeNode:
+    def _build(name: str, depth: int) -> TreeNode:
+        if name in memo:
+            return memo[name]
         version = optimal_set.get(name, "")
-        if depth >= max_depth or name in ancestors:
+        if depth >= max_depth or name in in_progress:
             return TreeNode(name=name, version=version)
+        in_progress.add(name)
         children = []
-        next_ancestors = ancestors | {name}
         for child in graph.iter_children(name):
             if child is not None:
-                children.append(_build(child, next_ancestors, depth + 1))
-        return TreeNode(name=name, version=version, children=children)
+                children.append(_build(child, depth + 1))
+        node = TreeNode(name=name, version=version, children=children)
+        in_progress.discard(name)
+        memo[name] = node
+        return node
 
     roots: list[TreeNode] = []
     for root_dep in graph.iter_children(None):
         if root_dep is not None:
-            roots.append(_build(root_dep, frozenset(), 0))
+            roots.append(_build(root_dep, 0))
     return roots
 
 

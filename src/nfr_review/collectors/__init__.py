@@ -5,6 +5,8 @@ from __future__ import annotations
 from nfr_review.collectors import adr as adr  # noqa: F401
 from nfr_review.collectors import apim_policy as apim_policy  # noqa: F401
 from nfr_review.collectors import ci_artifact as ci_artifact  # noqa: F401
+from nfr_review.collectors import cmake as cmake  # noqa: F401
+from nfr_review.collectors import cpp_ast as cpp_ast  # noqa: F401
 from nfr_review.collectors import csharp_ast as csharp_ast  # noqa: F401
 from nfr_review.collectors import csharp_deps as csharp_deps  # noqa: F401
 from nfr_review.collectors import dockerfile as dockerfile  # noqa: F401
@@ -32,6 +34,8 @@ __all__ = [
     "adr",
     "apim_policy",
     "ci_artifact",
+    "cmake",
+    "cpp_ast",
     "csharp_ast",
     "csharp_deps",
     "dockerfile",

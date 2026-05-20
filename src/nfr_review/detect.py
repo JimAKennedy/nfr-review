@@ -26,6 +26,7 @@ ALL_TECH_KEYS: list[str] = [
     "helm",
     "terraform",
     "skaffold",
+    "cpp",
 ]
 
 _K8S_RESOURCE_TYPES = {
@@ -233,6 +234,19 @@ def _detect_skaffold(repo: Path) -> bool:
     return bool(_safe_rglob(repo, "skaffold.yaml"))
 
 
+def _detect_cpp(repo: Path) -> bool:
+    for name in ("CMakeLists.txt", "Makefile", "meson.build"):
+        if _safe_exists(repo / name):
+            return True
+    for pattern in ("*.vcxproj", "conanfile.txt", "conanfile.py", "vcpkg.json"):
+        if _safe_rglob(repo, pattern):
+            return True
+    for ext in ("*.cpp", "*.cc", "*.cxx"):
+        if _safe_rglob(repo, ext):
+            return True
+    return False
+
+
 _DETECTORS: dict[str, Callable[..., bool]] = {
     "java": _detect_java,
     "spring_boot": _detect_spring_boot,
@@ -251,6 +265,7 @@ _DETECTORS: dict[str, Callable[..., bool]] = {
     "helm": _detect_helm,
     "terraform": _detect_terraform,
     "skaffold": _detect_skaffold,
+    "cpp": _detect_cpp,
 }
 
 

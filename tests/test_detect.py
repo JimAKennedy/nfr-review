@@ -37,9 +37,9 @@ class TestDetectTechnologiesWholeFunction:
         assert _has_all_keys(result)
         assert _all_false(result)
 
-    def test_always_returns_all_17_keys(self, tmp_path: Path) -> None:
+    def test_always_returns_all_keys(self, tmp_path: Path) -> None:
         result = detect_technologies(tmp_path)
-        assert len(result) == 17
+        assert len(result) == len(ALL_TECH_KEYS)
         assert set(result.keys()) == set(ALL_TECH_KEYS)
 
     def test_polyglot_repo(self, tmp_path: Path) -> None:

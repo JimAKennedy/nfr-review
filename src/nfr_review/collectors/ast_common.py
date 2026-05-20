@@ -35,6 +35,7 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
     "dockerfile": ("tree_sitter_dockerfile", "language"),
     "typescript": ("tree_sitter_typescript", "language_typescript"),
     "csharp": ("tree_sitter_c_sharp", "language"),
+    "cpp": ("tree_sitter_cpp", "language"),
 }
 
 

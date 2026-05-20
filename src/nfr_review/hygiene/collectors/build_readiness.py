@@ -77,6 +77,18 @@ def _detect_build_system(repo_path: Path, pyproject: dict[str, Any] | None) -> d
             matched_name = matches[0].name
             return {"has_build_system": True, "backend": "dotnet", "path": matched_name}
 
+    # CMake
+    if (repo_path / "CMakeLists.txt").is_file():
+        return {"has_build_system": True, "backend": "cmake", "path": "CMakeLists.txt"}
+
+    # Meson
+    if (repo_path / "meson.build").is_file():
+        return {"has_build_system": True, "backend": "meson", "path": "meson.build"}
+
+    # Make
+    if (repo_path / "Makefile").is_file():
+        return {"has_build_system": True, "backend": "make", "path": "Makefile"}
+
     return {"has_build_system": False, "backend": None, "path": None}
 
 
