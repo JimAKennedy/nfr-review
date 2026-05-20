@@ -1,12 +1,14 @@
-"""HYG-COM-005: CHANGELOG presence check."""
+"""HYG-COM-005: CHANGELOG presence and format validation."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+
+_STUB_THRESHOLD = 50
 
 
 class ChangelogPresenceRule:
@@ -26,31 +28,116 @@ class ChangelogPresenceRule:
 
         info = ev.payload.get("changelog", {})
         exists = info.get("exists", False)
+        size = info.get("size", 0)
+        locator = info.get("path") or ev.locator
 
-        if exists:
-            rag: RAG = "green"
-            severity: Severity = "info"
-            summary = f"Changelog found at {info.get('path')}."
-            recommendation = "No action required."
-        else:
-            rag = "amber"
-            severity = "medium"
-            summary = "No CHANGELOG.md, CHANGES.md, or HISTORY.md found."
-            recommendation = "Add a changelog to document notable changes between releases."
+        findings: list[Finding] = []
 
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="changelog-presence",
+        if not exists:
+            findings.append(
+                Finding(
+                    rule_id=self.id,
+                    rag="amber",
+                    severity="medium",
+                    summary="No CHANGELOG.md, CHANGES.md, or HISTORY.md found.",
+                    recommendation=(
+                        "Add a changelog to document notable changes between releases."
+                    ),
+                    evidence_locator=locator,
+                    collector_name=ev.collector_name,
+                    collector_version=ev.collector_version,
+                    confidence=1.0,
+                    pattern_tag="changelog-presence",
+                )
+            )
+            return RuleResult(rule_id=self.id, findings=findings)
+
+        if size < _STUB_THRESHOLD:
+            findings.append(
+                Finding(
+                    rule_id=self.id,
+                    rag="amber",
+                    severity="medium",
+                    summary=(
+                        f"Changelog exists but is only {size} bytes"
+                        " — likely a stub or empty template."
+                    ),
+                    recommendation=(
+                        "Populate the changelog with versioned entries "
+                        "documenting notable changes per release."
+                    ),
+                    evidence_locator=locator,
+                    collector_name=ev.collector_name,
+                    collector_version=ev.collector_version,
+                    confidence=1.0,
+                    pattern_tag="changelog-stub",
+                )
+            )
+            return RuleResult(rule_id=self.id, findings=findings)
+
+        findings.append(
+            Finding(
+                rule_id=self.id,
+                rag="green",
+                severity="info",
+                summary=f"Changelog found at {info.get('path')}.",
+                recommendation="No action required.",
+                evidence_locator=locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="changelog-presence",
+            )
         )
-        return RuleResult(rule_id=self.id, findings=[finding])
+
+        structure = ev.payload.get("changelog_structure", {})
+        has_versions = structure.get("has_versions", False)
+        follows_kac = structure.get("follows_keep_a_changelog", False)
+
+        if not has_versions:
+            findings.append(
+                Finding(
+                    rule_id=self.id,
+                    rag="amber",
+                    severity="low",
+                    summary=(
+                        "Changelog has no versioned headers (e.g. ## [1.0.0] - 2024-01-01)."
+                    ),
+                    recommendation=(
+                        "Add version headers following semver to make it easy "
+                        "to find changes for a specific release."
+                    ),
+                    evidence_locator=locator,
+                    collector_name=ev.collector_name,
+                    collector_version=ev.collector_version,
+                    confidence=0.9,
+                    pattern_tag="changelog-no-versions",
+                )
+            )
+
+        if has_versions and not follows_kac:
+            findings.append(
+                Finding(
+                    rule_id=self.id,
+                    rag="green",
+                    severity="info",
+                    summary=(
+                        "Changelog has version headers but does not use "
+                        "Keep a Changelog categories (Added/Changed/Fixed etc.)."
+                    ),
+                    recommendation=(
+                        "Consider adopting Keep a Changelog format with "
+                        "standard categories for better readability."
+                    ),
+                    evidence_locator=locator,
+                    collector_name=ev.collector_name,
+                    collector_version=ev.collector_version,
+                    confidence=0.8,
+                    pattern_tag="changelog-no-categories",
+                )
+            )
+
+        return RuleResult(rule_id=self.id, findings=findings)
 
 
 def _register() -> None:

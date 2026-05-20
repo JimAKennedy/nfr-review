@@ -88,6 +88,51 @@ from nfr_review.rules import (
 from nfr_review.rules import otel_exporter as otel_exporter  # noqa: F401
 from nfr_review.rules import otel_pipeline as otel_pipeline  # noqa: F401
 from nfr_review.rules import otel_sampling as otel_sampling  # noqa: F401
+from nfr_review.rules import (
+    patch_arch_graceful as patch_arch_graceful,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_arch_pdb as patch_arch_pdb,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_arch_singleton as patch_arch_singleton,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_arch_strategy as patch_arch_strategy,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_deps as patch_deps,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_forward_migration as patch_forward_migration,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_health_probes as patch_health_probes,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_health_startup as patch_health_startup,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_health_termination as patch_health_termination,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_health_trivial_probe as patch_health_trivial_probe,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_rollback_ci as patch_rollback_ci,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_rollback_docs as patch_rollback_docs,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_scope as patch_scope,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_telem as patch_telem,  # noqa: F401
+)
+from nfr_review.rules import (
+    patch_traffic as patch_traffic,  # noqa: F401
+)
 from nfr_review.rules import pii_logging as pii_logging  # noqa: F401
 from nfr_review.rules import (
     proto_field_numbering as proto_field_numbering,  # noqa: F401
@@ -172,6 +217,21 @@ __all__ = [
     "otel_exporter",
     "otel_pipeline",
     "otel_sampling",
+    "patch_arch_graceful",
+    "patch_arch_pdb",
+    "patch_arch_singleton",
+    "patch_arch_strategy",
+    "patch_deps",
+    "patch_forward_migration",
+    "patch_health_probes",
+    "patch_health_startup",
+    "patch_health_termination",
+    "patch_health_trivial_probe",
+    "patch_rollback_ci",
+    "patch_rollback_docs",
+    "patch_scope",
+    "patch_telem",
+    "patch_traffic",
     "pii_logging",
     "proto_field_numbering",
     "proto_method_comments",

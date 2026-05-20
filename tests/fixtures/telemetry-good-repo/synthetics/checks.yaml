@@ -1,0 +1,13 @@
+checks:
+  - target: "https://api.payments.example.com/health"
+    frequency: 60000
+    probeSelector: "region in (eu-west-1, us-east-1)"
+    settings:
+      http:
+        method: GET
+        validStatusCodes: [200]
+  - target: "https://api.payments.example.com/readiness"
+    frequency: 120000
+    settings:
+      http:
+        method: GET

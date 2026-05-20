@@ -1,0 +1,45 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: reviews-rollout
+  namespace: production
+spec:
+  replicas: 5
+  strategy:
+    canary:
+      maxSurge: "25%"
+      maxUnavailable: 0
+      steps:
+        - setWeight: 10
+        - pause:
+            duration: 60s
+        - analysis:
+            templates:
+              - templateName: success-rate
+        - setWeight: 50
+        - pause:
+            duration: 120s
+        - setWeight: 100
+      analysis:
+        templates:
+          - templateName: latency-check
+      backgroundAnalysis:
+        templates:
+          - templateName: error-rate
+  template:
+    metadata:
+      labels:
+        app: reviews
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: reviews
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: reviews
+          image: reviews:v2

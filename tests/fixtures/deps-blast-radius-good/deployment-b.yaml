@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: production
+  labels:
+    app: payment-service
+    app.kubernetes.io/ring: "2"
+  annotations:
+    app.kubernetes.io/part-of: payment-platform
+    backstage.io/system: payments
+    dependencies/database: postgres-payments
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+        app.kubernetes.io/ring: "2"
+    spec:
+      nodeSelector:
+        pool: payment-pool
+      containers:
+        - name: app
+          image: myregistry.example.com/payment-service:1.5.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: postgres-payments.db.svc.cluster.local
+            - name: ORDER_SERVICE_URL
+              value: http://order-service.production.svc.cluster.local:8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi

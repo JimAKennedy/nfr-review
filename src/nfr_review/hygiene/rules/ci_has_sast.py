@@ -11,7 +11,9 @@ from nfr_review.protocols import Band
 
 _SAST_PATTERNS = re.compile(
     r"(codeql|semgrep|snyk|trivy|bandit|gitleaks|sonar"
-    r"|dependabot|safety|grype|checkov|tfsec|osv-scanner)",
+    r"|dependabot|safety|grype|checkov|tfsec|osv-scanner"
+    r"|pip-audit|npm[\s-]audit|cargo[\s-]audit|govulncheck"
+    r"|ossf-scorecard|scorecard)",
     re.IGNORECASE,
 )
 

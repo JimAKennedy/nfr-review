@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import nfr_review.hygiene.rules.bld_build_system  # noqa: F401
+import nfr_review.hygiene.rules.bld_code_debt  # noqa: F401
 import nfr_review.hygiene.rules.bld_entry_points  # noqa: F401
+import nfr_review.hygiene.rules.bld_pre_commit  # noqa: F401
 import nfr_review.hygiene.rules.bld_version_strategy  # noqa: F401
+import nfr_review.hygiene.rules.ci_coverage_gate  # noqa: F401
 import nfr_review.hygiene.rules.ci_has_ci  # noqa: F401
 import nfr_review.hygiene.rules.ci_has_lint  # noqa: F401
 import nfr_review.hygiene.rules.ci_has_sast  # noqa: F401
 import nfr_review.hygiene.rules.ci_has_tests  # noqa: F401
 import nfr_review.hygiene.rules.ci_pin_actions  # noqa: F401
+import nfr_review.hygiene.rules.ci_release_publish  # noqa: F401
 import nfr_review.hygiene.rules.com_changelog  # noqa: F401
 import nfr_review.hygiene.rules.com_code_of_conduct  # noqa: F401
 import nfr_review.hygiene.rules.com_codeowners  # noqa: F401

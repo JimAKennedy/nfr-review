@@ -1,0 +1,25 @@
+# Synthetic transaction configuration.
+# Passes PATCH-TELEM-003 (synthetic targets present).
+
+checks:
+  - target: "https://api.payments.example.com/health"
+    frequency: 60000
+    probeSelector: "region in (eastus2, westus2)"
+    settings:
+      http:
+        method: GET
+        validStatusCodes: [200]
+  - target: "https://api.payments.example.com/readiness"
+    frequency: 60000
+    settings:
+      http:
+        method: GET
+        validStatusCodes: [200]
+  - target: "https://api.payments.example.com/api/v1/payments/synthetic"
+    frequency: 120000
+    probeSelector: "region in (eastus2, westus2)"
+    settings:
+      http:
+        method: POST
+        body: '{"amount": 0.01, "currency": "USD", "synthetic": true}'
+        validStatusCodes: [200, 201]

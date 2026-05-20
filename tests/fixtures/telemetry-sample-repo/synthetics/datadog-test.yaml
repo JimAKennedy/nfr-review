@@ -1,0 +1,10 @@
+type: api
+config:
+  request:
+    url: "https://api.example.com/health"
+    method: GET
+  tick_every: 60
+  assertions:
+    - type: statusCode
+      operator: is
+      target: 200

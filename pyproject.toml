@@ -97,6 +97,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-ra"
 markers = [
     "regression: clones public repos and diffs output against snapshot baselines (requires network)",

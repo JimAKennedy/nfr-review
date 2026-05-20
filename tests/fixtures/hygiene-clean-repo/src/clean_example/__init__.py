@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Clean example package — no PII, no tracking, no internal references."""
 
 __version__ = "1.0.0"

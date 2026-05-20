@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: production
+  labels:
+    app: order-service
+    app.kubernetes.io/ring: "1"
+  annotations:
+    app.kubernetes.io/part-of: order-platform
+    dependencies/database: postgres-orders
+    dependencies/cache: redis-orders
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+        app.kubernetes.io/ring: "1"
+    spec:
+      nodeSelector:
+        pool: order-pool
+      containers:
+        - name: app
+          image: myregistry.example.com/order-service:2.1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: postgres-orders.db.svc.cluster.local
+            - name: REDIS_HOST
+              value: redis-orders.cache.svc.cluster.local
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi

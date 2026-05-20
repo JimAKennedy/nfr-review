@@ -234,6 +234,30 @@ def _detect_entry_points(repo_path: Path, pyproject: dict[str, Any] | None) -> d
     return {"has_entry_points": False, "scripts": {}}
 
 
+def _detect_pre_commit(repo_path: Path) -> dict[str, Any]:
+    if (repo_path / ".pre-commit-config.yaml").is_file():
+        return {"has_pre_commit": True, "pre_commit_tool": "pre-commit"}
+
+    if (repo_path / ".husky").is_dir():
+        return {"has_pre_commit": True, "pre_commit_tool": "husky"}
+
+    if (repo_path / "lefthook.yml").is_file() or (repo_path / "lefthook.yaml").is_file():
+        return {"has_pre_commit": True, "pre_commit_tool": "lefthook"}
+
+    pkg_json = repo_path / "package.json"
+    if pkg_json.is_file():
+        try:
+            import json
+
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            if "lint-staged" in data:
+                return {"has_pre_commit": True, "pre_commit_tool": "lint-staged"}
+        except Exception as e:
+            logger.debug("Failed to parse package.json for lint-staged: %s", e)
+
+    return {"has_pre_commit": False, "pre_commit_tool": None}
+
+
 class BuildReadinessCollector:
     name = "build-readiness"
     version = "0.1.0"
@@ -245,6 +269,7 @@ class BuildReadinessCollector:
             "build_system": _detect_build_system(repo_path, pyproject),
             "version": _detect_version(repo_path, pyproject),
             "entry_points": _detect_entry_points(repo_path, pyproject),
+            "pre_commit": _detect_pre_commit(repo_path),
         }
 
         return [

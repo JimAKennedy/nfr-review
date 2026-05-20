@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: production
+  labels:
+    app: payment-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      nodeSelector:
+        pool: shared-general
+      containers:
+        - name: app
+          image: myregistry.example.com/payment-service:1.5.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: postgres-shared.db.svc.cluster.local
+            - name: STRIPE_API_URL
+              value: https://api.stripe.com
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi

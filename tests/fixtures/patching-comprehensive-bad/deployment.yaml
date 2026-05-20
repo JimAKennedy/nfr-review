@@ -1,0 +1,122 @@
+# Comprehensive BAD patching fixture — triggers ALL PATCH-* rules.
+#
+# Guardrail areas covered:
+#   1. Architecture (PATCH-ARCH-001..004): singleton, no preStop, no strategy, no PDB
+#   2. Health (PATCH-HEALTH-001..004): trivial probes, no startup probe, low grace period
+#   3. Rollback (PATCH-ROLL-001..003): no rollback docs, no CI rollback, forward-only migrations
+#   4. Traffic (PATCH-TRAFFIC-001..003): no service mesh, no failover docs, no connection draining
+#   5. Dependencies (PATCH-DEPS-001..003): no annotations, shared fate, cross-ring violations
+#   6. Scope (PATCH-SCOPE-001..002): no patch-class config
+#   7. Telemetry (PATCH-TELEM-001..003): no OTel config
+#
+# This single Deployment is deliberately misconfigured:
+#   - replicas: 1 (singleton)                         → PATCH-ARCH-001 RED
+#   - no preStop hook                                  → PATCH-ARCH-002 AMBER
+#   - no strategy block                                → PATCH-ARCH-003 AMBER
+#   - no PDB (separate resource missing)               → PATCH-ARCH-004 (n/a for singleton)
+#   - readiness is tcpSocket-only                      → PATCH-HEALTH-002 AMBER (trivial probe)
+#   - readiness has failureThreshold: 1                → PATCH-HEALTH-002 AMBER (fragile)
+#   - readiness has initialDelay=2, period=3           → PATCH-HEALTH-002 AMBER (aggressive)
+#   - no startup probe                                 → PATCH-HEALTH-003 (info for singleton)
+#   - terminationGracePeriodSeconds: 5                 → PATCH-HEALTH-004 AMBER
+#   - no dependency annotations                        → PATCH-DEPS-001 AMBER
+#   - shares nodeSelector with second deployment       → PATCH-DEPS-002 AMBER
+#   - cross-ring dependency (ring 3 → ring 0)          → PATCH-DEPS-003 AMBER
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-api
+  namespace: production
+  labels:
+    app: payment-api
+    app.kubernetes.io/ring: "3"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-api
+  # No strategy block — triggers PATCH-ARCH-003
+  template:
+    metadata:
+      labels:
+        app: payment-api
+        app.kubernetes.io/ring: "3"
+    spec:
+      terminationGracePeriodSeconds: 5
+      nodeSelector:
+        pool: shared-general
+      containers:
+        - name: api
+          image: myregistry.example.com/payment-api:0.1.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              value: postgres-shared.db.svc.cluster.local
+            - name: CONFIG_SERVICE_URL
+              value: "http://config-server.infra.svc.cluster.local:8888"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          # Liveness probe present but readiness is trivial tcpSocket
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            failureThreshold: 1
+          # No startupProbe — triggers PATCH-HEALTH-003
+          # No lifecycle.preStop — triggers PATCH-ARCH-002
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+---
+# Second deployment sharing nodeSelector and DB host — triggers PATCH-DEPS-002
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-server
+  namespace: production
+  labels:
+    app: config-server
+    app.kubernetes.io/ring: "0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: config-server
+  template:
+    metadata:
+      labels:
+        app: config-server
+        app.kubernetes.io/ring: "0"
+    spec:
+      terminationGracePeriodSeconds: 10
+      nodeSelector:
+        pool: shared-general
+      containers:
+        - name: config
+          image: myregistry.example.com/config-server:0.5.0
+          ports:
+            - containerPort: 8888
+          env:
+            - name: DB_HOST
+              value: postgres-shared.db.svc.cluster.local
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

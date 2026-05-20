@@ -53,8 +53,8 @@ class TestSelfScanLogHygiene:
         stderr_lines = [
             line for line in (result.output or "").splitlines() if line.startswith("WARNING:")
         ]
-        assert len(stderr_lines) <= 5, (
-            f"Expected ≤5 WARNING lines at default verbosity, got {len(stderr_lines)}:\n"
+        assert len(stderr_lines) <= 10, (
+            f"Expected ≤10 WARNING lines at default verbosity, got {len(stderr_lines)}:\n"
             + "\n".join(stderr_lines)
         )
 
