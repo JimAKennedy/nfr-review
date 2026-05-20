@@ -46,8 +46,8 @@ info "Upgrading pip"
 pip install --upgrade pip --quiet
 
 # --- Editable install with all optional extras ---
-info "Installing nfr-review in editable mode with ALL extras (dev, scancode, diagrams)"
-pip install -e "$PROJECT_ROOT[dev,scancode,diagrams]" --quiet
+info "Installing nfr-review in editable mode with ALL extras (dev, scancode, diagrams, pdf)"
+pip install -e "$PROJECT_ROOT[dev,scancode,diagrams,pdf]" --quiet
 
 # --- External binaries ---
 MISSING_BINS=()
@@ -121,6 +121,12 @@ if python -c "import graphviz" 2>/dev/null; then
   success "graphviz (Python): OK"
 else
   MISSING_PKGS+=("graphviz (Python)")
+fi
+
+if python -c "import weasyprint" 2>/dev/null; then
+  success "weasyprint: OK"
+else
+  MISSING_PKGS+=("weasyprint")
 fi
 
 # --- API key prompt ---
@@ -198,7 +204,7 @@ else
   echo "  API key: not set (LLM rules will be skipped)"
 fi
 echo ""
-echo "  Extras installed: dev, scancode, diagrams"
+echo "  Extras installed: dev, scancode, diagrams, pdf"
 echo ""
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then
