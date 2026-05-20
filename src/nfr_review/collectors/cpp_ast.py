@@ -275,6 +275,7 @@ class CppAstCollector(BaseASTCollector):
     evidence_kind = "cpp-ast-file"
 
     def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+        assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
         has_pragma, has_guard = _detect_include_guard(source)

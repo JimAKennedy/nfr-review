@@ -393,9 +393,22 @@ class TerraformCollector:
     version = "0.1.0"
 
     def __init__(self) -> None:
-        self._parser = make_parser("hcl")
+        self._parser: Parser | None = None
+
+    def _get_parser(self) -> Parser | None:
+        if self._parser is None:
+            try:
+                self._parser = make_parser("hcl")
+            except (ImportError, ModuleNotFoundError):
+                logger.warning(
+                    "tree-sitter grammar for hcl not installed — terraform collector disabled"
+                )
+                return None
+        return self._parser
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        if self._get_parser() is None:
+            return []
         evidence: list[Evidence] = []
         for tf_file in _iter_tf_files(repo_path):
             rel = tf_file.relative_to(repo_path)

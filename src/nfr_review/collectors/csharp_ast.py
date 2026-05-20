@@ -331,6 +331,7 @@ class CSharpAstCollector(BaseASTCollector):
     evidence_kind = "csharp-ast-file"
 
     def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+        assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
         return {

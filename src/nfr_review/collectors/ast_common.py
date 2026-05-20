@@ -87,7 +87,24 @@ class BaseASTCollector(ABC):
     evidence_kind: str
 
     def __init__(self) -> None:
-        self._parser: Parser = make_parser(self.language)  # type: ignore[assignment]
+        self._parser: Parser | None = None  # type: ignore[assignment]
+
+    def _get_parser(self) -> Parser | None:
+        """Return the tree-sitter parser, creating it on first use.
+
+        Returns ``None`` if the grammar package is not installed.
+        """
+        if self._parser is None:
+            try:
+                self._parser = make_parser(self.language)  # type: ignore[assignment]
+            except (ImportError, ModuleNotFoundError):
+                logger.warning(
+                    "tree-sitter grammar for %s not installed — %s collector disabled",
+                    self.language,
+                    self.name,
+                )
+                return None
+        return self._parser
 
     @abstractmethod
     def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
@@ -100,6 +117,8 @@ class BaseASTCollector(ABC):
         ...
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        if self._get_parser() is None:
+            return []
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         exclude_test = getattr(config, "exclude_test_paths", True)
         evidence: list[Evidence] = []
