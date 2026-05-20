@@ -535,6 +535,18 @@ def hygiene_cmd(
     default=False,
     help="Include test and fixture directories in analysis.",
 )
+@click.option(
+    "--pdf",
+    is_flag=True,
+    default=False,
+    help="Generate a PDF report with rendered diagrams and executive summary.",
+)
+@click.option(
+    "--no-summary",
+    is_flag=True,
+    default=False,
+    help="Skip LLM executive summary generation (PDF will omit summary section).",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -546,6 +558,8 @@ def report_cmd(
     no_deps: bool,
     no_diagrams: bool,
     include_tests: bool,
+    pdf: bool,
+    no_summary: bool,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from datetime import UTC, datetime
@@ -686,14 +700,75 @@ def report_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    # PDF generation
+    pdf_path: Path | None = None
+    if pdf:
+        try:
+            from nfr_review.output.pdf import render_pdf
+        except ImportError as exc:
+            click.echo(
+                "error: weasyprint is required for PDF output — "
+                "install with 'pip install nfr-review[pdf]'",
+                err=True,
+            )
+            raise click.exceptions.Exit(1) from exc
+
+        # Render diagram images
+        diagram_image_paths: dict[str, Path] | None = None
+        if diagrams:
+            from nfr_review.output.render import render_dot_to_png, render_mermaid_to_png
+
+            img_dir = output_dir / f"{stem}-images"
+            diagram_image_paths = {}
+            for dtitle, mermaid_text in diagrams.items():
+                slug = dtitle.lower().replace(" ", "-")
+                png = render_mermaid_to_png(mermaid_text, img_dir / f"{slug}.png")
+                if png is None and dtitle == "Dependency Graph" and deps_reports:
+                    from nfr_review.output.dot import render_dot_dependency_graph
+
+                    dot_text = render_dot_dependency_graph(deps_reports)
+                    png = render_dot_to_png(dot_text, img_dir / f"{slug}.png")
+                if png is not None:
+                    diagram_image_paths[dtitle] = png
+
+        # Generate executive summary
+        exec_summary = None
+        if not no_summary:
+            from nfr_review.output.summarize import generate_executive_summary
+
+            click.echo("Generating executive summary via LLM...", err=True)
+            exec_summary = generate_executive_summary(
+                nfr_result, hygiene_result, pytest_result, deps_section
+            )
+            if exec_summary is None:
+                click.echo(
+                    "info: executive summary skipped (ANTHROPIC_API_KEY not set or LLM error)",
+                    err=True,
+                )
+
+        pdf_path = output_dir / f"{stem}.pdf"
+        try:
+            render_pdf(
+                nfr_result=nfr_result,
+                output_path=pdf_path,
+                hygiene_result=hygiene_result,
+                exec_summary=exec_summary,
+                pytest_result=pytest_result,
+                deps_section_html=deps_section.replace("\n", "<br/>") if deps_section else "",
+                diagram_paths=diagram_image_paths,
+            )
+        except Exception as exc:
+            click.echo(f"error: PDF generation failed: {exc}", err=True)
+            pdf_path = None
+
     total = len(nfr_result.findings) + len(hygiene_result.findings)
-    click.echo(
-        (
-            f"nfr-review report: findings={total} "
-            f"output={md_path} csv={csv_path} jsonl={jsonl_path}"
-        ),
-        err=True,
-    )
+    summary_parts = [
+        f"nfr-review report: findings={total}",
+        f"output={md_path} csv={csv_path} jsonl={jsonl_path}",
+    ]
+    if pdf_path:
+        summary_parts.append(f"pdf={pdf_path}")
+    click.echo(" ".join(summary_parts), err=True)
 
 
 @cli.command("deps", help="Analyze dependency tree and show upgrade recommendations.")

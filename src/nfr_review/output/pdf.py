@@ -1,0 +1,301 @@
+"""PDF report generator using weasyprint.
+
+Composes an HTML document from scan results, optional executive summary,
+and optional rendered diagram images, then converts to PDF.
+"""
+
+from __future__ import annotations
+
+import base64
+import html
+import logging
+from collections import Counter
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nfr_review.engine import RunResult
+    from nfr_review.models import RAG, Finding, Severity
+    from nfr_review.output.pytest_runner import PytestResult
+    from nfr_review.output.summary_models import ExecSummary
+
+logger = logging.getLogger(__name__)
+
+_RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
+_SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
+
+_RAG_COLORS = {
+    "red": "#dc3545",
+    "amber": "#fd7e14",
+    "green": "#28a745",
+    "skipped": "#6c757d",
+}
+
+_VERDICT_STYLES = {
+    "fit": ("Fit for Purpose", "#28a745", "#d4edda"),
+    "conditional": ("Conditional", "#fd7e14", "#fff3cd"),
+    "unfit": ("Not Fit for Purpose", "#dc3545", "#f8d7da"),
+}
+
+_CSS = (  # noqa: E501
+    "@page { size: A4; margin: 2cm 1.5cm;"
+    " @bottom-center { content: counter(page) ' / ' counter(pages);"
+    " font-size: 9pt; color: #666; } }\n"
+    "* { box-sizing: border-box; }\n"
+    "body { font-family: -apple-system, 'Segoe UI', Roboto,"
+    " Helvetica, Arial, sans-serif;"
+    " font-size: 10pt; line-height: 1.5; color: #1a1a1a; }\n"
+    "h1 { font-size: 20pt; color: #1a1a1a; margin-bottom: 0.2em;"
+    " border-bottom: 2px solid #333; padding-bottom: 0.3em; }\n"
+    "h2 { font-size: 14pt; color: #333; margin-top: 1.5em;"
+    " border-bottom: 1px solid #ccc; padding-bottom: 0.2em;"
+    " page-break-after: avoid; }\n"
+    "h3 { font-size: 12pt; color: #444; margin-top: 1em;"
+    " page-break-after: avoid; }\n"
+    "table { width: 100%; border-collapse: collapse;"
+    " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
+    " font-size: 9pt; }\n"
+    "th, td { border: 1px solid #ddd; padding: 4px 8px;"
+    " text-align: left; }\n"
+    "th { background: #f5f5f5; font-weight: 600; }\n"
+    "tr:nth-child(even) { background: #fafafa; }\n"
+    ".verdict-box { padding: 12px 16px; border-radius: 6px;"
+    " margin: 1em 0; }\n"
+    ".verdict-label { font-size: 14pt; font-weight: 700; }\n"
+    ".verdict-score { float: right; font-size: 20pt;"
+    " font-weight: 700; }\n"
+    ".risk-item { margin: 0.3em 0; padding-left: 1em;"
+    " border-left: 3px solid #dc3545; }\n"
+    ".remediation { margin: 0.5em 0; padding: 8px 12px;"
+    " background: #f8f9fa; border-radius: 4px; }\n"
+    ".remediation-title { font-weight: 600; }\n"
+    ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
+    ".urgency-short-term { color: #fd7e14; }\n"
+    ".urgency-medium-term { color: #6c757d; }\n"
+    ".diagram-img { max-width: 100%; margin: 0.5em 0; }\n"
+    ".finding { margin: 0.4em 0; padding: 6px 10px;"
+    " border-left: 3px solid #ddd; font-size: 9pt; }\n"
+    ".finding-red { border-left-color: #dc3545; }\n"
+    ".finding-amber { border-left-color: #fd7e14; }\n"
+    ".finding-green { border-left-color: #28a745; }\n"
+    ".provenance { font-size: 9pt; color: #666; }\n"
+    ".provenance code { background: #f5f5f5; padding: 1px 4px;"
+    " border-radius: 2px; }\n"
+    ".section-break { page-break-before: always; }\n"
+)
+
+
+def _h(text: str) -> str:
+    return html.escape(str(text))
+
+
+def _embed_image(path: Path) -> str:
+    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    suffix = path.suffix.lstrip(".")
+    mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}.get(
+        suffix, "image/png"
+    )
+    return f'<img class="diagram-img" src="data:{mime};base64,{data}" />'
+
+
+def _summary_table_html(findings: list[Finding], title: str) -> str:
+    counts: Counter[tuple[RAG, Severity]] = Counter()
+    for f in findings:
+        counts[(f.rag, f.severity)] += 1
+
+    rows = []
+    for rag in _RAG_ORDER:
+        cells = []
+        row_total = 0
+        for sev in _SEVERITY_ORDER:
+            n = counts.get((rag, sev), 0)
+            row_total += n
+            cells.append(f"<td>{n if n else '-'}</td>")
+        color = _RAG_COLORS.get(rag, "#666")
+        rows.append(
+            f'<tr><td style="color:{color};font-weight:600">{_h(rag.upper())}</td>'
+            f"{''.join(cells)}<td><strong>{row_total}</strong></td></tr>"
+        )
+    rows.append(
+        f"<tr><td><strong>Total</strong></td>"
+        f'<td colspan="5"></td><td><strong>{len(findings)}</strong></td></tr>'
+    )
+
+    return f"""<h3>{_h(title)}</h3>
+<table>
+<thead><tr><th>RAG</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Info</th><th>Total</th></tr></thead>
+<tbody>{"".join(rows)}</tbody>
+</table>"""
+
+
+def _exec_summary_html(summary: ExecSummary) -> str:
+    label, color, bg = _VERDICT_STYLES.get(summary.verdict, ("Unknown", "#666", "#f0f0f0"))
+
+    parts = [
+        f'<div class="verdict-box" style="background:{bg};border:2px solid {color}">',
+        f'<span class="verdict-score">{summary.overall_score}/100</span>',
+        f'<span class="verdict-label" style="color:{color}">{_h(label)}</span>',
+        f"<p>{_h(summary.verdict_explanation)}</p>",
+        "</div>",
+    ]
+
+    if summary.risk_highlights:
+        parts.append("<h3>Key Risks</h3>")
+        for risk in summary.risk_highlights:
+            parts.append(f'<div class="risk-item">{_h(risk)}</div>')
+
+    if summary.remediation_priorities:
+        parts.append("<h3>Remediation Priorities</h3>")
+        for item in summary.remediation_priorities:
+            urgency_cls = f"urgency-{item.urgency}"
+            parts.append(
+                f'<div class="remediation">'
+                f'<span class="remediation-title">{_h(item.title)}</span> '
+                f'<span class="{urgency_cls}">({_h(item.urgency)})</span>'
+                f"<br/>{_h(item.description)}</div>"
+            )
+
+    parts.append(f"<h3>Production Risks</h3><p>{_h(summary.production_risks)}</p>")
+    parts.append(f"<h3>Open-Source Readiness</h3><p>{_h(summary.open_source_readiness)}</p>")
+
+    return "\n".join(parts)
+
+
+def _findings_html(findings: list[Finding], title: str) -> str:
+    if not findings:
+        return f"<h2>{_h(title)}</h2><p>No findings.</p>"
+
+    by_rag: dict[RAG, list[Finding]] = {}
+    for f in findings:
+        by_rag.setdefault(f.rag, []).append(f)
+
+    parts = [f"<h2>{_h(title)}</h2>"]
+    for rag in _RAG_ORDER:
+        group = by_rag.get(rag, [])
+        if not group:
+            continue
+        parts.append(f"<h3>{_h(rag.upper())} ({len(group)})</h3>")
+        for f in group:
+            parts.append(
+                f'<div class="finding finding-{f.rag}">'
+                f"<strong>[{_h(f.rule_id)}]</strong> {_h(f.summary)}<br/>"
+                f"Severity: {_h(f.severity)} | Confidence: {f.confidence:.0%} | "
+                f"Location: <code>{_h(f.evidence_locator)}</code><br/>"
+                f"Recommendation: {_h(f.recommendation)}</div>"
+            )
+
+    return "\n".join(parts)
+
+
+def _provenance_html(nfr_result: RunResult) -> str:
+    meta = nfr_result.run_metadata
+    if not meta:
+        return ""
+    parts = [
+        '<div class="provenance">',
+        f"<p><strong>Tool version:</strong> {_h(meta.tool_version)} | ",
+        f"<strong>Target:</strong> <code>{_h(meta.target_repo)}</code> | ",
+        f"<strong>Timestamp:</strong> {_h(meta.timestamp)}</p>",
+    ]
+    if meta.git_sha:
+        dirty = " (dirty)" if meta.git_dirty else ""
+        parts.append(
+            f"<p><strong>Git SHA:</strong> <code>{_h(meta.git_sha)}</code>{dirty}</p>"
+        )
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
+def _test_results_html(pytest_result: PytestResult | None) -> str:
+    if pytest_result is None:
+        return "<h2>Test Results</h2><p>Test execution was not performed.</p>"
+
+    if pytest_result.exit_code == -1:
+        return f"<h2>Test Results</h2><p>&#9888; {_h(pytest_result.raw_output)}</p>"
+
+    all_green = pytest_result.failed == 0 and pytest_result.errors == 0
+    icon = "&#10003;" if all_green else "&#10007;"
+    status = "PASSED" if all_green else "FAILED"
+    color = "#28a745" if all_green else "#dc3545"
+
+    return f"""<h2>Test Results</h2>
+<p style="color:{color};font-weight:600">{icon} {status}</p>
+<table>
+<tr><th>Metric</th><th>Count</th></tr>
+<tr><td>Passed</td><td>{pytest_result.passed}</td></tr>
+<tr><td>Failed</td><td>{pytest_result.failed}</td></tr>
+<tr><td>Skipped</td><td>{pytest_result.skipped}</td></tr>
+<tr><td>Errors</td><td>{pytest_result.errors}</td></tr>
+<tr><td>Duration</td><td>{pytest_result.duration_seconds:.2f}s</td></tr>
+</table>"""
+
+
+def render_pdf(
+    *,
+    nfr_result: RunResult,
+    output_path: Path,
+    hygiene_result: RunResult | None = None,
+    exec_summary: ExecSummary | None = None,
+    pytest_result: PytestResult | None = None,
+    deps_section_html: str = "",
+    diagram_paths: dict[str, Path] | None = None,
+    title: str = "NFR Review Report",
+) -> Path:
+    """Render a complete PDF report from scan results.
+
+    Returns the output path on success. Raises ``ImportError`` if weasyprint
+    is not installed.
+    """
+    from nfr_review.output.classify import partition_findings
+
+    all_findings: list[Finding] = list(nfr_result.findings)
+    if hygiene_result:
+        all_findings.extend(hygiene_result.findings)
+
+    source_findings, test_findings = partition_findings(all_findings)
+
+    sections: list[str] = []
+
+    sections.append(f"<h1>{_h(title)}</h1>")
+    sections.append(_provenance_html(nfr_result))
+
+    if exec_summary:
+        sections.append("<h2>Executive Summary</h2>")
+        sections.append(_exec_summary_html(exec_summary))
+
+    sections.append(_summary_table_html(all_findings, "Overall Summary"))
+    sections.append(_summary_table_html(source_findings, "Source Code Summary"))
+    sections.append(_summary_table_html(test_findings, "Test Code Summary"))
+
+    if diagram_paths:
+        sections.append("<h2>Diagrams</h2>")
+        for diagram_title, path in diagram_paths.items():
+            if path.exists():
+                sections.append(f"<h3>{_h(diagram_title)}</h3>")
+                sections.append(_embed_image(path))
+
+    sections.append(_test_results_html(pytest_result))
+
+    if deps_section_html:
+        sections.append(deps_section_html)
+
+    sections.append('<div class="section-break"></div>')
+    sections.append(_findings_html(source_findings, "Source Code Findings"))
+    sections.append(_findings_html(test_findings, "Test Code Findings"))
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>{_h(title)}</title>
+<style>{_CSS}</style></head>
+<body>{"".join(sections)}</body>
+</html>"""
+
+    import weasyprint  # type: ignore[import-not-found]
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    weasyprint.HTML(string=html_doc).write_pdf(str(output_path))
+    logger.info("PDF written to %s (%d bytes)", output_path, output_path.stat().st_size)
+    return output_path
+
+
+__all__ = ["render_pdf"]
