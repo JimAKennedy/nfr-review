@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nfr_review.models import RAG, Finding, Severity
@@ -141,23 +142,31 @@ def render_markdown_report(
     sections: list[str] = []
 
     # Header with provenance
-    sections.append(f"# {title}")
+    meta = nfr_result.run_metadata
+    repo_label = Path(meta.target_repo).name if meta else ""
+    if repo_label:
+        sections.append(f"# {title} — {repo_label}")
+    else:
+        sections.append(f"# {title}")
     sections.append("")
 
-    meta = nfr_result.run_metadata
     if meta:
-        sections.append("## Provenance")
+        sections.append("## Report Details")
         sections.append("")
-        sections.append(f"- **Tool version:** {meta.tool_version}")
-        sections.append(f"- **Target:** `{meta.target_repo}`")
-        sections.append(f"- **Timestamp:** {meta.timestamp}")
+        sections.append("| Field | Value |")
+        sections.append("|-------|-------|")
+        sections.append(f"| **Repository** | `{repo_label}` |")
+        sections.append(f"| **Target path** | `{meta.target_repo}` |")
+        sections.append(f"| **Report generated** | {meta.timestamp} |")
         if meta.git_sha:
             dirty = " (dirty)" if meta.git_dirty else ""
-            sections.append(f"- **Git SHA:** `{meta.git_sha}`{dirty}")
+            sha_short = meta.git_sha[:10]
+            sections.append(f"| **Commit** | `{sha_short}`{dirty} |")
         if meta.git_branch:
-            sections.append(f"- **Branch:** {meta.git_branch}")
+            sections.append(f"| **Branch / tag** | {meta.git_branch} |")
+        sections.append(f"| **Tool version** | {meta.tool_version} |")
         if meta.git_error:
-            sections.append(f"- **Git error:** {meta.git_error}")
+            sections.append(f"| **Git error** | {meta.git_error} |")
         sections.append("")
 
     # Summary tables

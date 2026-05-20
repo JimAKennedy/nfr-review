@@ -69,6 +69,11 @@ def _rule_description(rule: object) -> str:
     return "\n".join(line.rstrip() for line in doc.strip().splitlines())
 
 
+def _repo_name(target: Path) -> str:
+    """Extract a filesystem-safe repo name from the target directory."""
+    return target.resolve().name
+
+
 class _DedupFilter(logging.Filter):
     """Suppress duplicate log messages within a single run."""
 
@@ -169,17 +174,15 @@ def cli() -> None:
     "--csv",
     "csv_path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path("nfr-review.csv"),
-    show_default=True,
-    help="Output path for the R007 CSV findings file.",
+    default=None,
+    help="Output path for the R007 CSV findings file. [default: {repo}-nfr-review.csv]",
 )
 @click.option(
     "--jsonl",
     "jsonl_path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path("nfr-review.jsonl"),
-    show_default=True,
-    help="Output path for the R018 JSONL run record.",
+    default=None,
+    help="Output path for the R018 JSONL run record. [default: {repo}-nfr-review.jsonl]",
 )
 @click.option(
     "--include-tests",
@@ -193,14 +196,20 @@ def run_cmd(
     quiet: bool,
     log_file: Path | None,
     config_path: Path | None,
-    csv_path: Path,
-    jsonl_path: Path,
+    csv_path: Path | None,
+    jsonl_path: Path | None,
     include_tests: bool,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
+
+    repo = _repo_name(target)
+    if csv_path is None:
+        csv_path = Path(f"{repo}-nfr-review.csv")
+    if jsonl_path is None:
+        jsonl_path = Path(f"{repo}-nfr-review.jsonl")
     if not target.exists():
         click.echo(f"error: target does not exist: {target}", err=True)
         raise click.exceptions.Exit(1)
@@ -434,11 +443,15 @@ def hygiene_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    repo = _repo_name(target)
+    csv_name = f"{repo}-hygiene-report.csv"
+    jsonl_name = f"{repo}-hygiene-report.jsonl"
+
     try:
         if output_format in ("csv", "both"):
-            write_csv(result, output_dir / "hygiene-report.csv")
+            write_csv(result, output_dir / csv_name)
         if output_format in ("jsonl", "both"):
-            write_jsonl(result, output_dir / "hygiene-report.jsonl")
+            write_jsonl(result, output_dir / jsonl_name)
     except OutputError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
@@ -455,9 +468,9 @@ def hygiene_cmd(
     )
     output_paths: list[str] = []
     if output_format in ("csv", "both"):
-        output_paths.append(str(output_dir / "hygiene-report.csv"))
+        output_paths.append(str(output_dir / csv_name))
     if output_format in ("jsonl", "both"):
-        output_paths.append(str(output_dir / "hygiene-report.jsonl"))
+        output_paths.append(str(output_dir / jsonl_name))
 
     click.echo(
         (
@@ -677,8 +690,9 @@ def report_cmd(
     )
 
     # Write output files
+    repo = _repo_name(target)
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-    stem = f"nfr-review-{timestamp}"
+    stem = f"{repo}-nfr-review-{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     md_path = output_dir / f"{stem}.md"

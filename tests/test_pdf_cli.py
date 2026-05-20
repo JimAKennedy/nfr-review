@@ -35,8 +35,8 @@ class TestReportPdfFlag:
         )
         assert result.exit_code == 0, f"CLI failed: {result.output}"
 
-        md_files = list(tmp_path.glob("nfr-review-*.md"))
-        pdf_files = list(tmp_path.glob("nfr-review-*.pdf"))
+        md_files = list(tmp_path.glob("*-nfr-review-*.md"))
+        pdf_files = list(tmp_path.glob("*-nfr-review-*.pdf"))
 
         assert len(md_files) == 1, f"Expected 1 MD file, got {md_files}"
         assert len(pdf_files) == 1, f"Expected 1 PDF file, got {pdf_files}"
