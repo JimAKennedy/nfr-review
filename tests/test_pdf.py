@@ -8,7 +8,7 @@ import pytest
 
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.pdf import render_pdf
+from nfr_review.output.pdf import _png_dimensions, render_pdf
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
 
 weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
@@ -141,6 +141,48 @@ class TestRenderPdf:
         out = tmp_path / "nested" / "deep" / "report.pdf"
         render_pdf(nfr_result=_make_run_result(), output_path=out)
         assert out.exists()
+
+    def test_png_dimensions_reads_ihdr(self, tmp_path: Path) -> None:
+        """_png_dimensions reads width/height from PNG IHDR chunk."""
+        import struct
+
+        w, h = 800, 2400
+        ihdr_data = struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
+        ihdr_crc = b"\x00\x00\x00\x00"
+        raw = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + ihdr_data + ihdr_crc
+        dims = _png_dimensions(raw)
+        assert dims == (800, 2400)
+
+    def test_png_dimensions_returns_none_for_non_png(self) -> None:
+        assert _png_dimensions(b"not a png at all") is None
+        assert _png_dimensions(b"") is None
+
+    def test_tall_diagram_gets_explicit_dimensions(self, tmp_path: Path) -> None:
+        """Tall PNG diagram gets inline style constraining it to page."""
+        import struct
+
+        w, h = 1489, 4669
+        ihdr_data = struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
+        ihdr_crc = b"\x00\x00\x00\x00"
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + ihdr_data
+            + ihdr_crc
+            + b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        img_path = tmp_path / "tall.png"
+        img_path.write_bytes(png)
+
+        out = tmp_path / "tall-diagram.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            diagram_paths={"Tall Graph": img_path},
+        )
+        assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"
 
     def test_hygiene_findings_included(self, tmp_path: Path) -> None:
         """Hygiene findings are merged into the report."""

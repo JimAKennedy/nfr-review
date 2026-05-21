@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import struct
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -72,10 +73,9 @@ _CSS = (  # noqa: E501
     ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
     ".urgency-short-term { color: #fd7e14; }\n"
     ".urgency-medium-term { color: #6c757d; }\n"
-    ".diagram-container { page-break-inside: avoid;"
+    ".diagram-container { page-break-before: always;"
     " margin: 0.5em 0; }\n"
-    ".diagram-img { max-width: 100%; max-height: 700px;"
-    " object-fit: contain; display: block; }\n"
+    ".diagram-img { display: block; margin: 0 auto; }\n"
     ".finding { margin: 0.4em 0; padding: 6px 10px;"
     " border-left: 3px solid #ddd; font-size: 9pt; }\n"
     ".finding-red { border-left-color: #dc3545; }\n"
@@ -92,13 +92,42 @@ def _h(text: str) -> str:
     return html.escape(str(text))
 
 
+_PAGE_CONTENT_W_MM = 210.0 - 30  # A4 width minus 1.5cm margins each side
+_PAGE_CONTENT_H_MM = 297.0 - 40  # A4 height minus 2cm margins top/bottom
+_DIAGRAM_MAX_H_MM = _PAGE_CONTENT_H_MM - 25  # room for heading + padding
+
+
+def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
+    if raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
+        return None
+    w, h = struct.unpack(">II", raw[16:24])
+    return w, h
+
+
 def _embed_image(path: Path) -> str:
-    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    raw = path.read_bytes()
+    data = base64.b64encode(raw).decode("ascii")
     suffix = path.suffix.lstrip(".")
     mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}.get(
         suffix, "image/png"
     )
-    return f'<img class="diagram-img" src="data:{mime};base64,{data}" />'
+
+    dims = _png_dimensions(raw) if suffix == "png" else None
+    style = ""
+    if dims:
+        img_w, img_h = dims
+        if img_w > 0 and img_h > 0:
+            aspect = img_w / img_h
+            max_aspect = _PAGE_CONTENT_W_MM / _DIAGRAM_MAX_H_MM
+            if aspect >= max_aspect:
+                fw = _PAGE_CONTENT_W_MM
+                fh = fw / aspect
+            else:
+                fh = _DIAGRAM_MAX_H_MM
+                fw = fh * aspect
+            style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
+
+    return f'<img class="diagram-img" src="data:{mime};base64,{data}"{style} />'
 
 
 def _summary_table_html(findings: list[Finding], title: str) -> str:
