@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: nodejs-callback-error-ignored — detects callbacks that ignore the error parameter."""
 
 from __future__ import annotations

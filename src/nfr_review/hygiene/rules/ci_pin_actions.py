@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-CI-005: GitHub Actions pin-by-SHA check."""
 
 from __future__ import annotations

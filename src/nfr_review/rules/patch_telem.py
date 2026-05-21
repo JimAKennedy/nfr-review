@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """PATCH-TELEM rules — patching telemetry standard conformance detection.
 
 PATCH-TELEM-001: Golden signal emission coverage.

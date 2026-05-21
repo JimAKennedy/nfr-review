@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Click command-line interface for nfr-review.
 
 Wires the four user-facing commands (R010): ``run``, ``list-rules``,

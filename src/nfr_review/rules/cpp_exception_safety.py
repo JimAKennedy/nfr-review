@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: CPP-003 — detects exception safety issues: catch-all without rethrow."""
 
 from __future__ import annotations

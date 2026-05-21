@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: dep-upgrade-path — N-1 ceiling detection and upgrade recommendations."""
 
 from __future__ import annotations

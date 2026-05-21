@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: ci-test-stage-missing — checks CI pipelines include a test step."""
 
 from __future__ import annotations

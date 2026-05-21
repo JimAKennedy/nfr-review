@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """R018 JSONL writer.
 
 The first line is always a ``run_metadata`` record carrying the full

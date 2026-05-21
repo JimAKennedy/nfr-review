@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Output formatters for nfr-review.
 
 R007 CSV (10 fields, fixed order) and R018 JSONL (run_metadata + per-finding

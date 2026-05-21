@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: go-error-ignored — detects ignored error return values in Go code."""
 
 from __future__ import annotations

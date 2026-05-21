@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """OTel Collector config collector — parses OpenTelemetry Collector configuration
 YAML files and emits structured evidence about pipeline topology.
 

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Engine orchestration for nfr-review.
 
 Wires the collector and rule registries into a runnable pipeline. The contract
@@ -80,6 +82,8 @@ class Engine:
             raise EngineError(f"target does not exist: {target}")
         if not target.is_dir():
             raise EngineError(f"target is not a directory: {target}")
+
+        config = config.model_copy(update={"target": target.resolve()})
 
         active_collectors = _select_collectors(self._collectors, config.collectors.skip)
 

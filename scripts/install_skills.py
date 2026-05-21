@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Install third-party skills from skills-lock.json.
 
 Downloads skill directories from their source GitHub repositories and

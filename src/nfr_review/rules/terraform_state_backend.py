@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: terraform-state-backend — flags repos with no remote state backend."""
 
 from __future__ import annotations

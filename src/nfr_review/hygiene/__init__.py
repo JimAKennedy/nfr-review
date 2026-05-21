@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Hygiene audit registries, separate from the core NFR registries."""
 
 from __future__ import annotations

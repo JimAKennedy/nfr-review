@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-ROLL-003 — forward-only migration detection.
 
 Checks the repo-structure-summary evidence for common migration directories

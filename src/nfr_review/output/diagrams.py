@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Mermaid diagram text generators for NFR review reports.
 
 Converts existing model data into valid Mermaid diagram text for three

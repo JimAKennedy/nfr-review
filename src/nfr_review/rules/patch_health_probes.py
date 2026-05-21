@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-HEALTH-001 — readiness probe presence for patching safety.
 
 Different from the generic 'probes-missing' rule: this rule evaluates probe

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Dependency analysis: tree resolution and upgrade recommendations.
 
 Orchestrates dependency collectors, the resolvelib-based solver, and the

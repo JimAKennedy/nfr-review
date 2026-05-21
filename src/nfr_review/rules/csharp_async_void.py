@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: csharp-async-void — detects async void methods in C# code."""
 
 from __future__ import annotations

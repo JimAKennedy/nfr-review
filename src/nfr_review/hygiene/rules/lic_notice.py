@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-LIC-002: NOTICE file completeness.
 
 Cross-references third-party copyright holders from license-scan evidence
@@ -8,6 +10,7 @@ third-party copyrights exist; amber for missing entries; green when complete.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,8 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 
 logger = logging.getLogger(__name__)
+
+_SPDX_JUNK = re.compile(r"\s*SPDX-License-Identifier.*", re.IGNORECASE)
 
 
 class NoticeCompletenessRule:
@@ -41,7 +46,9 @@ class NoticeCompletenessRule:
         for ev in per_file:
             for h in ev.payload.get("holders", []):
                 if h and h.strip():
-                    all_holders.add(h.strip())
+                    cleaned = _SPDX_JUNK.sub("", h).strip()
+                    if cleaned:
+                        all_holders.add(cleaned)
 
         if not all_holders:
             return RuleResult(

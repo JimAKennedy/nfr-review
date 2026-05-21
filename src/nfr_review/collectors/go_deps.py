@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Go dependency collector — parses go.mod files,
 enriches each dependency with version metadata from deps.dev.
 """

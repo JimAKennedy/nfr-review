@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Dependency tree and upgrade summary renderers.
 
 Produces ASCII tree output, upgrade summary tables, and markdown sections

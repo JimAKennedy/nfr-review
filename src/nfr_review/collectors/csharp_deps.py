@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """C# dependency collector — parses .csproj files (MSBuild XML with
 PackageReference elements), enriches each dependency with version metadata
 from deps.dev.

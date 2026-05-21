@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: resilience-annotation-missing.
 
 Flags classes using HTTP clients that lack resilience annotations.

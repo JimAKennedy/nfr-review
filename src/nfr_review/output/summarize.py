@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """LLM-powered executive summary generation for NFR review reports."""
 
 from __future__ import annotations

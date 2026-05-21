@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-CI-003: CI lint/format step presence check."""
 
 from __future__ import annotations

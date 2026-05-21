@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Java dependency collector — parses pom.xml and build.gradle/build.gradle.kts,
 enriches each dependency with version metadata from deps.dev.
 """

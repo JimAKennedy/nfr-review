@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """PATCH-TRAFFIC rules — traffic management readiness for safe patching.
 
 PATCH-TRAFFIC-001: Progressive traffic shifting detection.

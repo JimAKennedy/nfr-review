@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-ROLL-001 — rollback documentation presence.
 
 Checks the repo-structure-summary evidence for rollback-related documentation

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: otel-exporter-config — flags OTel Collector configs without production exporters."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-LIC-003: License header presence in source files.
 
 Checks source files for copyright/license headers using scancode copyright
@@ -14,6 +16,7 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 
 _DEFAULT_EXTENSIONS = frozenset({".py", ".java", ".go", ".ts", ".js", ".rs"})
+_SKIP_PREFIXES = (".agents/", ".gsd/", "venv/", ".venv/", "node_modules/")
 
 
 class LicenseHeaderRule:
@@ -39,7 +42,12 @@ class LicenseHeaderRule:
                 if ext_list and isinstance(ext_list, list):
                     extensions = frozenset(ext_list)
 
-        relevant = [e for e in per_file if any(e.locator.endswith(ext) for ext in extensions)]
+        relevant = [
+            e
+            for e in per_file
+            if any(e.locator.endswith(ext) for ext in extensions)
+            and not any(e.locator.startswith(p) for p in _SKIP_PREFIXES)
+        ]
 
         if not relevant:
             return RuleResult(

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """R007 CSV writer.
 
 Emits the 10 R007 fields in the canonical order (locked by

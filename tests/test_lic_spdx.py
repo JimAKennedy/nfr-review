@@ -132,6 +132,51 @@ class TestPackageJson:
         assert result.findings[0].rag == "green"
 
 
+class TestCommonNameNormalization:
+    def test_pom_mit_license_normalized(self, tmp_path: Path) -> None:
+        (tmp_path / "pom.xml").write_text(
+            '<?xml version="1.0"?>'
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+            "<licenses><license><name>MIT License</name></license></licenses>"
+            "</project>",
+            encoding="utf-8",
+        )
+        context = SimpleNamespace(target=str(tmp_path))
+        rule = SpdxValidationRule()
+        result = rule.evaluate([], context)
+
+        assert result.findings[0].rag == "green"
+
+    def test_pom_apache_license_normalized(self, tmp_path: Path) -> None:
+        (tmp_path / "pom.xml").write_text(
+            '<?xml version="1.0"?>'
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+            "<licenses><license>"
+            "<name>The Apache Software License, Version 2.0</name>"
+            "</license></licenses></project>",
+            encoding="utf-8",
+        )
+        context = SimpleNamespace(target=str(tmp_path))
+        rule = SpdxValidationRule()
+        result = rule.evaluate([], context)
+
+        assert result.findings[0].rag == "green"
+
+    def test_unmapped_name_stays_invalid(self, tmp_path: Path) -> None:
+        (tmp_path / "pom.xml").write_text(
+            '<?xml version="1.0"?>'
+            '<project xmlns="http://maven.apache.org/POM/4.0.0">'
+            "<licenses><license><name>Some Custom License</name>"
+            "</license></licenses></project>",
+            encoding="utf-8",
+        )
+        context = SimpleNamespace(target=str(tmp_path))
+        rule = SpdxValidationRule()
+        result = rule.evaluate([], context)
+
+        assert result.findings[0].rag == "red"
+
+
 class TestMultipleFiles:
     def test_both_pyproject_and_package_json(self, tmp_path: Path) -> None:
         (tmp_path / "pyproject.toml").write_text(

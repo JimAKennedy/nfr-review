@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: dockerfile-multistage — suggests multi-stage builds for single-stage Dockerfiles."""
 
 from __future__ import annotations

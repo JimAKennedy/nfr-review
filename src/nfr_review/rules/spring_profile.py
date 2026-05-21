@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: spring-profile-misconfiguration — flags production profiles with debug settings."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: apim-rate-limit-missing -- checks APIM policies for rate limiting."""
 
 from __future__ import annotations

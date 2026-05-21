@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Graphviz DOT text generator for dependency graphs.
 
 Converts EcosystemDepsReport data into valid DOT digraph text with

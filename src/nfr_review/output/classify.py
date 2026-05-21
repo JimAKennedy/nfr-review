@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Path-based classification of findings into source vs test regions."""
 
 from __future__ import annotations

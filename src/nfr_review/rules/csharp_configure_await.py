@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: csharp-configure-await — detects await expressions missing ConfigureAwait(false)."""
 
 from __future__ import annotations

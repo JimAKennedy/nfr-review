@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-BLD-004: Pre-commit / git hooks presence check."""
 
 from __future__ import annotations

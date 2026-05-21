@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Auditability utilities — git provenance + run metadata (R021).
 
 Every run records full provenance so downstream consumers can reproduce or

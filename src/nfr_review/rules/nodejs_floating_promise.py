@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: nodejs-floating-promise — detects unhandled promise rejections in Node.js code."""
 
 from __future__ import annotations

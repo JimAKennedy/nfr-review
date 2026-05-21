@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Skaffold collector — parses skaffold.yaml and extracts build/deploy topology.
 
 Evidence payload contract (kind="skaffold-analysis"):

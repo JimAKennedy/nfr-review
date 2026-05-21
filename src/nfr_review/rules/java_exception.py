@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: exception-handling-antipattern — catches broad Exception/Throwable without rethrow."""
 
 from __future__ import annotations

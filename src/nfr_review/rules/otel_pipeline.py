@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """otel-pipeline-completeness: flags incomplete signal coverage."""
 
 from __future__ import annotations
