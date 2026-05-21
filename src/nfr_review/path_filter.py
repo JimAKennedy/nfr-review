@@ -24,11 +24,38 @@ _TEST_PATH_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(^|/)[^/]+\.spec\.[jt]sx?$"),
 )
 
+_ALWAYS_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        ".gsd",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        "node_modules",
+        ".regression-repos",
+    }
+)
+
 __all__ = [
+    "ALWAYS_SKIP_DIRS",
     "is_test_path",
     "should_exclude_path",
     "compile_exclude_patterns",
 ]
+
+ALWAYS_SKIP_DIRS = _ALWAYS_SKIP_DIRS
+
+
+def _in_skipped_dir(path: str) -> bool:
+    """Return True if any path component is a directory that should always be skipped."""
+    parts = path.split("/")
+    return bool(_ALWAYS_SKIP_DIRS.intersection(parts))
 
 
 def is_test_path(path: str) -> bool:
@@ -48,6 +75,8 @@ def should_exclude_path(
 ) -> bool:
     """Return True if *rel_path* should be excluded from analysis."""
     normalised = rel_path.replace("\\", "/")
+    if _in_skipped_dir(normalised):
+        return True
     if exclude_test_paths and is_test_path(normalised):
         return True
     if exclude_patterns:

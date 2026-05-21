@@ -46,6 +46,7 @@ from typing import Any
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.k8s_manifest")
@@ -110,6 +111,8 @@ class K8sManifestCollector:
         has_network_policy = False
         files_parsed = 0
         files_failed = 0
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
 
         yaml = YAML(typ="safe")
 
@@ -118,6 +121,10 @@ class K8sManifestCollector:
             if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
                 continue
             if yaml_file.suffix not in (".yaml", ".yml"):
+                continue
+            if should_exclude_path(
+                str(rel), exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
                 continue
 
             try:

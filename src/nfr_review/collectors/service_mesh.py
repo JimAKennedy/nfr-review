@@ -70,6 +70,7 @@ from typing import Any
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.service_mesh")
@@ -215,6 +216,8 @@ class ServiceMeshCollector:
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         evidence: list[Evidence] = []
         yaml = YAML(typ="safe")
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
 
         vs_count = 0
         dr_count = 0
@@ -229,6 +232,10 @@ class ServiceMeshCollector:
                 continue
             if yaml_file.suffix not in (".yaml", ".yml"):
                 continue
+            if should_exclude_path(
+                str(rel), exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
 
             try:
                 content = yaml_file.read_bytes()
@@ -240,7 +247,7 @@ class ServiceMeshCollector:
             try:
                 docs = list(yaml.load_all(content))
             except YAMLError as exc:
-                logger.warning("YAML parse error in %s: %s", rel, exc)
+                logger.debug("YAML parse error in %s: %s", rel, exc)
                 files_failed += 1
                 continue
 
