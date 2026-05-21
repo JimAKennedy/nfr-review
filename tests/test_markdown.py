@@ -58,8 +58,8 @@ class TestRenderMarkdownReport:
     def test_empty_report_has_header(self) -> None:
         result = FakeRunResult(run_metadata=_metadata())
         md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
-        assert md.startswith("# NFR Review Report")
-        assert "## Provenance" in md
+        assert "# NFR Review Report" in md
+        assert "## Report Details" in md
         assert "1.0.0" in md
         assert "abc1234" in md
 
@@ -71,9 +71,12 @@ class TestRenderMarkdownReport:
     def test_provenance_includes_git_info(self) -> None:
         result = FakeRunResult(run_metadata=_metadata())
         md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
-        assert "**Git SHA:** `abc1234`" in md
-        assert "**Branch:** main" in md
-        assert "**Target:** `/home/user/project`" in md
+        assert "**Commit**" in md
+        assert "abc1234" in md
+        assert "**Branch / tag**" in md
+        assert "main" in md
+        assert "**Repository**" in md
+        assert "project" in md
 
     def test_dirty_repo_noted(self) -> None:
         meta = _metadata()

@@ -284,7 +284,7 @@ class TestEdgeCases:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         (tmp_path / "bad.yaml").write_text("{{invalid yaml: [unclosed\n")
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.telemetry_config"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.telemetry_config"):
             results = collector.collect(tmp_path, config=None)
         assert "YAML parse error" in caplog.text
         p = _payload(results, "telemetry-config-summary")
@@ -339,7 +339,7 @@ class TestEdgeCases:
         f.chmod(0o000)
         try:
             with caplog.at_level(
-                logging.WARNING, logger="nfr_review.collectors.telemetry_config"
+                logging.DEBUG, logger="nfr_review.collectors.telemetry_config"
             ):
                 results = collector.collect(tmp_path, config=None)
             pipelines = _by_kind(results, "telemetry-pipeline")

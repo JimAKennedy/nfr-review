@@ -38,6 +38,12 @@ def _findings_by_rule(findings: list[dict]) -> dict[str, dict]:
     return {f["rule_id"]: f for f in findings}
 
 
+def _hygiene_jsonl(tmp_path: Path) -> Path:
+    matches = list(tmp_path.glob("*-hygiene-report.jsonl"))
+    assert len(matches) == 1, f"Expected one hygiene JSONL, found {matches}"
+    return matches[0]
+
+
 class TestJavaCleanRepo:
     """Java clean fixture should pass hygiene with no red/amber findings."""
 
@@ -55,7 +61,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-BLD-001" in findings
         assert findings["HYG-BLD-001"]["rag"] == "green"
 
@@ -66,7 +72,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-BLD-002" in findings
         assert findings["HYG-BLD-002"]["rag"] == "green"
 
@@ -77,7 +83,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-CI-003" in findings
         assert findings["HYG-CI-003"]["rag"] == "green"
 
@@ -88,7 +94,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-DOC-001" in findings
         assert findings["HYG-DOC-001"]["rag"] != "red"
 
@@ -99,7 +105,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         com_rules = {k: v for k, v in findings.items() if k.startswith("HYG-COM")}
         green_count = sum(1 for f in com_rules.values() if f["rag"] == "green")
         assert green_count >= 4, (
@@ -113,7 +119,7 @@ class TestJavaCleanRepo:
             ["hygiene", str(JAVA_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _parse_findings(tmp_path / "hygiene-report.jsonl")
+        findings = _parse_findings(_hygiene_jsonl(tmp_path))
         total = len(findings)
         bad = [f for f in findings if f["rag"] in ("red", "amber")]
         if total > 0:
@@ -141,7 +147,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-BLD-001" in findings
         assert findings["HYG-BLD-001"]["rag"] == "green"
 
@@ -152,7 +158,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-BLD-002" in findings
         assert findings["HYG-BLD-002"]["rag"] == "amber"
 
@@ -163,7 +169,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-DOC-001" in findings
 
     def test_ci_003_amber(self, runner: CliRunner, tmp_path: Path) -> None:
@@ -173,7 +179,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         if "HYG-CI-003" in findings:
             assert findings["HYG-CI-003"]["rag"] in ("amber", "red", "skipped")
 
@@ -184,7 +190,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _parse_findings(tmp_path / "hygiene-report.jsonl")
+        findings = _parse_findings(_hygiene_jsonl(tmp_path))
         bad = [f for f in findings if f["rag"] in ("red", "amber")]
         assert len(bad) >= 3, f"Expected >=3 red/amber findings, got {len(bad)}"
 
@@ -195,7 +201,7 @@ class TestJavaDirtyRepo:
             ["hygiene", str(JAVA_DIRTY_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         com_rules = {k: v for k, v in findings.items() if k.startswith("HYG-COM")}
         non_green = sum(1 for f in com_rules.values() if f["rag"] != "green")
         assert non_green >= 3, f"Expected >=3 non-green COM rules, got {non_green}"
@@ -218,7 +224,7 @@ class TestPythonCleanRepoRegression:
             ["hygiene", str(PYTHON_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _parse_findings(tmp_path / "hygiene-report.jsonl")
+        findings = _parse_findings(_hygiene_jsonl(tmp_path))
         red = [f for f in findings if f["rag"] == "red"]
         assert red == [], f"Unexpected red findings in Python clean repo: {red}"
 
@@ -229,7 +235,7 @@ class TestPythonCleanRepoRegression:
             ["hygiene", str(PYTHON_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _parse_findings(tmp_path / "hygiene-report.jsonl")
+        findings = _parse_findings(_hygiene_jsonl(tmp_path))
         amber = [f for f in findings if f["rag"] == "amber"]
         assert amber == [], f"Unexpected amber findings in Python clean repo: {amber}"
 
@@ -240,7 +246,7 @@ class TestPythonCleanRepoRegression:
             ["hygiene", str(PYTHON_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _findings_by_rule(_parse_findings(tmp_path / "hygiene-report.jsonl"))
+        findings = _findings_by_rule(_parse_findings(_hygiene_jsonl(tmp_path)))
         assert "HYG-BLD-001" in findings
         assert findings["HYG-BLD-001"]["rag"] == "green"
 
@@ -251,6 +257,6 @@ class TestPythonCleanRepoRegression:
             ["hygiene", str(PYTHON_CLEAN_REPO), "--output-dir", str(tmp_path)],
         )
         assert result.exit_code == 0
-        findings = _parse_findings(tmp_path / "hygiene-report.jsonl")
+        findings = _parse_findings(_hygiene_jsonl(tmp_path))
         false_pos = [f for f in findings if f["rag"] in ("red", "amber")]
         assert false_pos == [], f"False positives in Python clean repo: {false_pos}"

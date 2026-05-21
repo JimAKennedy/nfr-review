@@ -40,9 +40,9 @@ class TestReportCommand:
         assert result.exit_code == 0, f"stderr: {result.output}"
         assert output_dir.exists()
 
-        md_files = list(output_dir.glob("nfr-review-*.md"))
-        csv_files = list(output_dir.glob("nfr-review-*.csv"))
-        jsonl_files = list(output_dir.glob("nfr-review-*.jsonl"))
+        md_files = list(output_dir.glob("*-nfr-review-*.md"))
+        csv_files = list(output_dir.glob("*-nfr-review-*.csv"))
+        jsonl_files = list(output_dir.glob("*-nfr-review-*.jsonl"))
 
         assert len(md_files) == 1
         assert len(csv_files) == 1
@@ -50,7 +50,7 @@ class TestReportCommand:
 
         md_content = md_files[0].read_text()
         assert "# NFR Review Report" in md_content
-        assert "## Provenance" in md_content
+        assert "## Report Details" in md_content
         assert "## Source Code Findings" in md_content
         assert "## Test Code Findings" in md_content
 

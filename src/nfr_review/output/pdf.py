@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import struct
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -72,7 +73,9 @@ _CSS = (  # noqa: E501
     ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
     ".urgency-short-term { color: #fd7e14; }\n"
     ".urgency-medium-term { color: #6c757d; }\n"
-    ".diagram-img { max-width: 100%; margin: 0.5em 0; }\n"
+    ".diagram-container { page-break-before: always;"
+    " margin: 0.5em 0; }\n"
+    ".diagram-img { display: block; margin: 0 auto; }\n"
     ".finding { margin: 0.4em 0; padding: 6px 10px;"
     " border-left: 3px solid #ddd; font-size: 9pt; }\n"
     ".finding-red { border-left-color: #dc3545; }\n"
@@ -89,13 +92,42 @@ def _h(text: str) -> str:
     return html.escape(str(text))
 
 
+_PAGE_CONTENT_W_MM = 210.0 - 30  # A4 width minus 1.5cm margins each side
+_PAGE_CONTENT_H_MM = 297.0 - 40  # A4 height minus 2cm margins top/bottom
+_DIAGRAM_MAX_H_MM = _PAGE_CONTENT_H_MM - 25  # room for heading + padding
+
+
+def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
+    if raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
+        return None
+    w, h = struct.unpack(">II", raw[16:24])
+    return w, h
+
+
 def _embed_image(path: Path) -> str:
-    data = base64.b64encode(path.read_bytes()).decode("ascii")
+    raw = path.read_bytes()
+    data = base64.b64encode(raw).decode("ascii")
     suffix = path.suffix.lstrip(".")
     mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}.get(
         suffix, "image/png"
     )
-    return f'<img class="diagram-img" src="data:{mime};base64,{data}" />'
+
+    dims = _png_dimensions(raw) if suffix == "png" else None
+    style = ""
+    if dims:
+        img_w, img_h = dims
+        if img_w > 0 and img_h > 0:
+            aspect = img_w / img_h
+            max_aspect = _PAGE_CONTENT_W_MM / _DIAGRAM_MAX_H_MM
+            if aspect >= max_aspect:
+                fw = _PAGE_CONTENT_W_MM
+                fh = fw / aspect
+            else:
+                fh = _DIAGRAM_MAX_H_MM
+                fw = fh * aspect
+            style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
+
+    return f'<img class="diagram-img" src="data:{mime};base64,{data}"{style} />'
 
 
 def _summary_table_html(findings: list[Finding], title: str) -> str:
@@ -191,17 +223,30 @@ def _provenance_html(nfr_result: RunResult) -> str:
     meta = nfr_result.run_metadata
     if not meta:
         return ""
+    repo_label = Path(meta.target_repo).name
     parts = [
         '<div class="provenance">',
-        f"<p><strong>Tool version:</strong> {_h(meta.tool_version)} | ",
-        f"<strong>Target:</strong> <code>{_h(meta.target_repo)}</code> | ",
-        f"<strong>Timestamp:</strong> {_h(meta.timestamp)}</p>",
+        "<table>",
+        f"<tr><td><strong>Repository</strong></td><td><code>{_h(repo_label)}</code></td></tr>",
+        "<tr><td><strong>Target path</strong></td>"
+        f"<td><code>{_h(meta.target_repo)}</code></td></tr>",
+        f"<tr><td><strong>Report generated</strong></td><td>{_h(meta.timestamp)}</td></tr>",
     ]
     if meta.git_sha:
         dirty = " (dirty)" if meta.git_dirty else ""
+        sha_short = meta.git_sha[:10]
         parts.append(
-            f"<p><strong>Git SHA:</strong> <code>{_h(meta.git_sha)}</code>{dirty}</p>"
+            f"<tr><td><strong>Commit</strong></td>"
+            f"<td><code>{_h(sha_short)}</code>{dirty}</td></tr>"
         )
+    if meta.git_branch:
+        parts.append(
+            f"<tr><td><strong>Branch / tag</strong></td><td>{_h(meta.git_branch)}</td></tr>"
+        )
+    parts.append(
+        f"<tr><td><strong>Tool version</strong></td><td>{_h(meta.tool_version)}</td></tr>"
+    )
+    parts.append("</table>")
     parts.append("</div>")
     return "\n".join(parts)
 
@@ -256,7 +301,10 @@ def render_pdf(
 
     sections: list[str] = []
 
-    sections.append(f"<h1>{_h(title)}</h1>")
+    meta = nfr_result.run_metadata
+    repo_label = Path(meta.target_repo).name if meta else ""
+    heading = f"{_h(title)} — {_h(repo_label)}" if repo_label else _h(title)
+    sections.append(f"<h1>{heading}</h1>")
     sections.append(_provenance_html(nfr_result))
 
     if exec_summary:
@@ -271,8 +319,11 @@ def render_pdf(
         sections.append("<h2>Diagrams</h2>")
         for diagram_title, path in diagram_paths.items():
             if path.exists():
-                sections.append(f"<h3>{_h(diagram_title)}</h3>")
-                sections.append(_embed_image(path))
+                sections.append(
+                    f'<div class="diagram-container">'
+                    f"<h3>{_h(diagram_title)}</h3>"
+                    f"{_embed_image(path)}</div>"
+                )
 
     sections.append(_test_results_html(pytest_result))
 

@@ -52,6 +52,7 @@ from typing import Any
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.telemetry_config")
@@ -380,6 +381,8 @@ class TelemetryConfigCollector:
             "traces": False,
             "logs": False,
         }
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
 
         yaml = YAML(typ="safe")
 
@@ -389,18 +392,22 @@ class TelemetryConfigCollector:
                 continue
             if yaml_file.suffix not in (".yaml", ".yml"):
                 continue
+            if should_exclude_path(
+                str(rel), exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
+                continue
 
             try:
                 raw = yaml_file.read_bytes()
             except OSError as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
+                logger.debug("Cannot read %s: %s", rel, exc)
                 files_failed += 1
                 continue
 
             try:
                 doc = yaml.load(raw)
             except YAMLError as exc:
-                logger.warning("YAML parse error in %s: %s", rel, exc)
+                logger.debug("YAML parse error in %s: %s", rel, exc)
                 files_failed += 1
                 continue
 
@@ -485,6 +492,10 @@ class TelemetryConfigCollector:
                 continue
             rel = src_file.relative_to(repo_path)
             if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
+                continue
+            if should_exclude_path(
+                str(rel), exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
                 continue
 
             try:

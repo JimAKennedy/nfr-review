@@ -287,7 +287,7 @@ class TestEdgeCases:
             "        - destination:\n"
             "            host: test\n"
         )
-        with caplog.at_level(logging.WARNING, logger="nfr_review.collectors.service_mesh"):
+        with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.service_mesh"):
             results = collector.collect(tmp_path, config=None)
         vs = _by_kind(results, "service-mesh-virtual-service")
         assert len(vs) == 1

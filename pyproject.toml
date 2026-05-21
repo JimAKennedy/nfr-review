@@ -56,6 +56,8 @@ pdf = [
 ]
 scancode = [
     "scancode-toolkit>=32.0,<34",
+    "typecode-libmagic>=5.39",
+    "extractcode-libarchive>=3.5",
 ]
 
 [project.scripts]
