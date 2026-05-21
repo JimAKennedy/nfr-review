@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +74,44 @@ def _rule_description(rule: object) -> str:
 def _repo_name(target: Path) -> str:
     """Extract a filesystem-safe repo name from the target directory."""
     return target.resolve().name
+
+
+def _timestamp() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _phase(name: str, *, quiet: bool = False) -> float:
+    if not quiet:
+        click.echo(f"[{_timestamp()}] {name}", err=True)
+    return time.monotonic()
+
+
+def _phase_done(name: str, t0: float, *, quiet: bool = False) -> None:
+    elapsed = time.monotonic() - t0
+    if not quiet:
+        click.echo(f"[{_timestamp()}] {name} completed ({elapsed:.1f}s)", err=True)
+
+
+def _banner(
+    command: str,
+    repo: str,
+    target: Path,
+    *,
+    options: dict[str, str] | None = None,
+    phases: list[str] | None = None,
+    quiet: bool = False,
+) -> None:
+    if quiet:
+        return
+    click.echo(f"\nnfr-review {command} v{__version__}", err=True)
+    click.echo(f"Repository: {repo} ({target.resolve()})", err=True)
+    click.echo(f"Started:    {_timestamp()}", err=True)
+    if options:
+        parts = [f"{k}={v}" for k, v in options.items()]
+        click.echo(f"Options:    {', '.join(parts)}", err=True)
+    if phases:
+        click.echo(f"Phases:     {' → '.join(phases)}", err=True)
+    click.echo("", err=True)
 
 
 class _DedupFilter(logging.Filter):
@@ -217,8 +257,23 @@ def run_cmd(
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
+    opts: dict[str, str] = {}
+    if include_tests:
+        opts["include_tests"] = "true"
+    if config_path:
+        opts["config"] = str(config_path)
+    _banner(
+        "run",
+        repo,
+        target,
+        options=opts or None,
+        phases=["config", "detect", "collect+evaluate", "output"],
+        quiet=quiet,
+    )
+
     run_logger = logging.getLogger("nfr_review")
 
+    t0 = _phase("Loading configuration", quiet=quiet)
     effective_config_path = config_path
     if effective_config_path is None:
         default = Path("nfr-review.yaml")
@@ -232,6 +287,7 @@ def run_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    t0 = _phase("Detecting technologies", quiet=quiet)
     run_logger.info("Detecting technologies in %s", target)
     try:
         detected = detect_technologies(target)
@@ -243,14 +299,20 @@ def run_cmd(
     if include_tests:
         config = config.model_copy(update={"exclude_test_paths": False})
     tech_detected = sum(1 for v in detected.values() if v)
+    active_tech = [k for k, v in merged_tech.items() if v]
+    if active_tech and not quiet:
+        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
 
+    t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     run_logger.info("Starting NFR engine scan")
     try:
         result = Engine().run(target, config)
     except EngineError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+    _phase_done("NFR scan", t0, quiet=quiet)
 
+    t0 = _phase("Writing output files", quiet=quiet)
     run_logger.info("Writing output files")
     try:
         write_csv(result, csv_path)
@@ -407,6 +469,24 @@ def hygiene_cmd(
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
+    repo = _repo_name(target)
+    opts: dict[str, str] = {}
+    if category:
+        opts["category"] = category
+    if include_tests:
+        opts["include_tests"] = "true"
+    if output_format != "both":
+        opts["format"] = output_format
+    _banner(
+        "hygiene",
+        repo,
+        target,
+        options=opts or None,
+        phases=["config", "collect+evaluate", "output"],
+        quiet=quiet,
+    )
+
+    _phase("Loading configuration", quiet=quiet)
     effective_config_path = config_path
     if effective_config_path is None:
         default = Path("nfr-review.yaml")
@@ -434,6 +514,7 @@ def hygiene_cmd(
     else:
         effective_rules = hygiene_rule_registry
 
+    t0 = _phase("Running hygiene scan (collect + evaluate)", quiet=quiet)
     try:
         result: RunResult = Engine(
             collectors=hygiene_collector_registry,
@@ -442,11 +523,12 @@ def hygiene_cmd(
     except EngineError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+    _phase_done("Hygiene scan", t0, quiet=quiet)
 
-    repo = _repo_name(target)
     csv_name = f"{repo}-hygiene-report.csv"
     jsonl_name = f"{repo}-hygiene-report.jsonl"
 
+    _phase("Writing output files", quiet=quiet)
     try:
         if output_format in ("csv", "both"):
             write_csv(result, output_dir / csv_name)
@@ -560,6 +642,13 @@ def hygiene_cmd(
     default=False,
     help="Skip LLM executive summary generation (PDF will omit summary section).",
 )
+@click.option(
+    "--test-timeout",
+    type=int,
+    default=300,
+    show_default=True,
+    help="Maximum seconds to wait for pytest to complete (default: 300).",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -573,10 +662,9 @@ def report_cmd(
     include_tests: bool,
     pdf: bool,
     no_summary: bool,
+    test_timeout: int,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
-    from datetime import UTC, datetime
-
     from nfr_review.output.markdown import render_markdown_report
     from nfr_review.output.pytest_runner import run_pytest
 
@@ -591,6 +679,30 @@ def report_cmd(
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
+    repo = _repo_name(target)
+    phases = ["config", "detect", "nfr-scan", "hygiene-scan"]
+    opts: dict[str, str] = {}
+    if not no_tests:
+        phases.append("pytest")
+        opts["test_timeout"] = f"{test_timeout}s"
+    else:
+        opts["tests"] = "skipped"
+    if not no_deps:
+        phases.append("deps")
+    else:
+        opts["deps"] = "skipped"
+    if not no_diagrams:
+        phases.append("diagrams")
+    if pdf:
+        phases.append("pdf")
+        if not no_summary:
+            phases.append("llm-summary")
+    phases.append("output")
+    if include_tests:
+        opts["include_tests"] = "true"
+    _banner("report", repo, target, options=opts or None, phases=phases, quiet=quiet)
+
+    _phase("Loading configuration", quiet=quiet)
     effective_config_path = config_path
     if effective_config_path is None:
         default = Path("nfr-review.yaml")
@@ -603,6 +715,7 @@ def report_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
     except Exception as e:
@@ -612,15 +725,21 @@ def report_cmd(
     config = config.model_copy(update={"tech": merged_tech})
     if include_tests:
         config = config.model_copy(update={"exclude_test_paths": False})
+    active_tech = [k for k, v in merged_tech.items() if v]
+    if active_tech and not quiet:
+        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
 
     # NFR scan
+    t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     try:
         nfr_result: RunResult = Engine().run(target, config)
     except EngineError as exc:
         click.echo(f"error: NFR scan failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+    _phase_done("NFR scan", t0, quiet=quiet)
 
     # Hygiene scan
+    t0 = _phase("Running hygiene scan (collect + evaluate)", quiet=quiet)
     try:
         hygiene_result: RunResult = Engine(
             collectors=hygiene_collector_registry,
@@ -629,11 +748,14 @@ def report_cmd(
     except EngineError as exc:
         click.echo(f"error: hygiene scan failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+    _phase_done("Hygiene scan", t0, quiet=quiet)
 
     # Pytest execution
     pytest_result = None
     if not no_tests:
-        pytest_result = run_pytest(target)
+        t0 = _phase(f"Running pytest (timeout: {test_timeout}s)", quiet=quiet)
+        pytest_result = run_pytest(target, timeout=test_timeout)
+        _phase_done("Pytest", t0, quiet=quiet)
 
     # Dependency analysis
     deps_section = ""
@@ -641,6 +763,8 @@ def report_cmd(
     if not no_deps:
         from nfr_review.deps_analysis import analyze_deps
         from nfr_review.output.deps_report import render_deps_section
+
+        t0 = _phase("Analyzing dependencies", quiet=quiet)
 
         def _progress(msg: str) -> None:
             click.echo(msg, err=True)
@@ -657,6 +781,7 @@ def report_cmd(
             logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
             deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
+        _phase_done("Dependency analysis", t0, quiet=quiet)
 
     # Build diagram sections
     diagrams: dict[str, str] | None = None
@@ -667,6 +792,7 @@ def report_cmd(
             render_mermaid_tech_overview,
         )
 
+        _phase("Building diagrams", quiet=quiet)
         all_findings = list(nfr_result.findings) + list(hygiene_result.findings)
         diagrams = {}
         if all_findings:
@@ -681,6 +807,7 @@ def report_cmd(
             diagrams["Dependency Graph"] = render_mermaid_dep_graph(deps_reports)
 
     # Generate report
+    _phase("Rendering Markdown report", quiet=quiet)
     md_content = render_markdown_report(
         nfr_result=nfr_result,
         hygiene_result=hygiene_result,
@@ -690,7 +817,6 @@ def report_cmd(
     )
 
     # Write output files
-    repo = _repo_name(target)
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     stem = f"{repo}-nfr-review-{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -699,6 +825,7 @@ def report_cmd(
     csv_path = output_dir / f"{stem}.csv"
     jsonl_path = output_dir / f"{stem}.jsonl"
 
+    _phase("Writing output files", quiet=quiet)
     try:
         md_path.write_text(md_content, encoding="utf-8")
 
@@ -732,6 +859,7 @@ def report_cmd(
         if diagrams:
             from nfr_review.output.render import render_dot_to_png, render_mermaid_to_png
 
+            _phase("Rendering diagram images", quiet=quiet)
             img_dir = output_dir / f"{stem}-images"
             diagram_image_paths = {}
             for dtitle, mermaid_text in diagrams.items():
@@ -750,17 +878,20 @@ def report_cmd(
         if not no_summary:
             from nfr_review.output.summarize import generate_executive_summary
 
-            click.echo("Generating executive summary via LLM...", err=True)
+            t0 = _phase("Generating executive summary via LLM", quiet=quiet)
             exec_summary = generate_executive_summary(
                 nfr_result, hygiene_result, pytest_result, deps_section
             )
             if exec_summary is None:
                 click.echo(
-                    "info: executive summary skipped (ANTHROPIC_API_KEY not set or LLM error)",
+                    "  skipped (ANTHROPIC_API_KEY not set or LLM error)",
                     err=True,
                 )
+            else:
+                _phase_done("Executive summary", t0, quiet=quiet)
 
         pdf_path = output_dir / f"{stem}.pdf"
+        t0 = _phase("Generating PDF report", quiet=quiet)
         try:
             render_pdf(
                 nfr_result=nfr_result,
@@ -771,11 +902,14 @@ def report_cmd(
                 deps_section_html=deps_section.replace("\n", "<br/>") if deps_section else "",
                 diagram_paths=diagram_image_paths,
             )
+            _phase_done("PDF generation", t0, quiet=quiet)
         except Exception as exc:
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None
 
     total = len(nfr_result.findings) + len(hygiene_result.findings)
+    if not quiet:
+        click.echo("", err=True)
     summary_parts = [
         f"nfr-review report: findings={total}",
         f"output={md_path} csv={csv_path} jsonl={jsonl_path}",
@@ -867,6 +1001,20 @@ def deps_cmd(
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
+    repo = _repo_name(target)
+    opts: dict[str, str] = {}
+    if no_tree:
+        opts["transitive"] = "skipped"
+    _banner(
+        "deps",
+        repo,
+        target,
+        options=opts or None,
+        phases=["config", "detect", "analyze"],
+        quiet=quiet,
+    )
+
+    _phase("Loading configuration", quiet=quiet)
     effective_config_path = config_path
     if effective_config_path is None:
         default = Path("nfr-review.yaml")
@@ -879,6 +1027,7 @@ def deps_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
     except Exception as e:
@@ -886,6 +1035,8 @@ def deps_cmd(
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
+
+    t0 = _phase("Analyzing dependencies", quiet=quiet)
 
     def _progress(msg: str) -> None:
         click.echo(msg, err=True)
@@ -900,6 +1051,7 @@ def deps_cmd(
     except Exception as exc:
         click.echo(f"error: dependency analysis failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
+    _phase_done("Dependency analysis", t0, quiet=quiet)
 
     if dot_path:
         from nfr_review.output.dot import render_dot_dependency_graph
