@@ -7,7 +7,7 @@
 
 Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python source, APIM policies, and more) and evaluates 50+ rules covering resilience, observability, security, and operational readiness. It also runs hygiene audits covering documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV and JSONL for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C++ source, APIM policies, and more) and evaluates 110+ rules covering resilience, observability, security, operational readiness, and deployment patching. It also runs hygiene audits covering documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, Markdown, and optional PDF for integration into review workflows.
 
 ## Quick start
 
@@ -56,6 +56,7 @@ Optional extras:
 |-------|-------------|
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
+| `[pdf]` | [weasyprint](https://weasyprint.org/) for `--pdf` PDF report generation with rendered diagrams and executive summary. |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 ## API key (optional)
@@ -80,7 +81,7 @@ nfr-review run /path/to/target/repo
 This will:
 1. Collect evidence from the target repo (Spring configs, K8s manifests, CI workflows, Dockerfiles, Helm charts, Terraform, Istio, source code, ADRs, APIM policies, and more)
 2. Evaluate all applicable rules against the collected evidence
-3. Write findings to `nfr-review.csv` and `nfr-review.jsonl` in the current directory
+3. Write findings to `{repo}-nfr-review.csv` and `{repo}-nfr-review.jsonl` in the current directory
 4. Print a summary to stderr
 
 **Options:**
@@ -88,8 +89,12 @@ This will:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--config PATH` | `./nfr-review.yaml` (if present) | Path to configuration file |
-| `--csv PATH` | `nfr-review.csv` | Output path for CSV findings |
-| `--jsonl PATH` | `nfr-review.jsonl` | Output path for JSONL run record |
+| `--csv PATH` | `{repo}-nfr-review.csv` | Output path for CSV findings |
+| `--jsonl PATH` | `{repo}-nfr-review.jsonl` | Output path for JSONL run record |
+| `--include-tests` | off | Include test and fixture directories in analysis |
+| `-v` / `--verbose` | off | Increase verbosity (`-v` for INFO, `-vv` for DEBUG) |
+| `-q` / `--quiet` | off | Suppress warnings (ERROR level only) |
+| `--log-file PATH` | stderr | Write diagnostics to FILE instead of stderr |
 
 **Exit codes:**
 
@@ -126,6 +131,66 @@ nfr-review hygiene --list-checks
 
 Without the `[scancode]` extra installed, license rules are skipped with an informative warning — all other hygiene categories still run normally.
 
+### Generate a full report
+
+```bash
+# Run NFR + hygiene + pytest + deps and produce timestamped files in reports/
+nfr-review report /path/to/target/repo
+
+# Also generate a PDF with an LLM executive summary and rendered diagrams
+nfr-review report --pdf /path/to/target/repo
+
+# Skip LLM summary (PDF still generated, without summary section)
+nfr-review report --pdf --no-summary /path/to/target/repo
+```
+
+This produces timestamped files under `reports/`:
+- `{repo}-nfr-review-{timestamp}.md` — Markdown report with NFR findings, hygiene findings, test results, and dependency summary
+- `{repo}-nfr-review-{timestamp}.csv` — combined CSV findings
+- `{repo}-nfr-review-{timestamp}.jsonl` — combined JSONL run record
+- `{repo}-nfr-review-{timestamp}.pdf` — PDF report (with `--pdf`)
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--config PATH` | `./nfr-review.yaml` (if present) | Path to configuration file |
+| `--output-dir PATH` | `reports/` | Directory where report files are written |
+| `--pdf` | off | Generate PDF with rendered diagrams and executive summary |
+| `--no-summary` | off | Skip LLM executive summary (PDF will omit summary section) |
+| `--no-tests` | off | Skip pytest execution |
+| `--no-deps` | off | Skip dependency tree analysis |
+| `--no-diagrams` | off | Suppress Mermaid diagram sections in the report |
+| `--include-tests` | off | Include test and fixture directories in analysis |
+| `-v` / `-q` / `--log-file` | — | Same as `run` command |
+
+### Analyze dependencies
+
+```bash
+# Show upgrade summary table and transitive dependency tree
+nfr-review deps /path/to/target/repo
+
+# Skip transitive resolution (faster)
+nfr-review deps --no-tree /path/to/target/repo
+
+# Write Markdown report to a file
+nfr-review deps --output deps-report.md /path/to/target/repo
+
+# Write Graphviz DOT dependency graph (optionally render to SVG)
+nfr-review deps --dot deps.dot /path/to/target/repo
+nfr-review deps --dot deps.dot --render-diagrams /path/to/target/repo
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--no-tree` | off | Skip transitive resolution and dependency tree (faster) |
+| `--output PATH` | — | Write Markdown dependency report to FILE |
+| `--dot PATH` | — | Write Graphviz DOT dependency graph to FILE |
+| `--render-diagrams` | off | Render DOT graph to SVG (requires `[diagrams]` extra) |
+| `-v` / `-q` / `--log-file` | — | Same as `run` command |
+
 ### Check version
 
 ```bash
@@ -141,10 +206,12 @@ version: 1
 
 # Declare which technology stacks the target repo uses.
 # Rules requiring a tech that isn't declared true will be skipped.
+# 17+ tech keys are auto-detected; these override detection results.
 tech:
   spring_boot: true
   apim: false
   kafka: false
+  cmake: true   # enables C++ rules
 
 # Control which rules run.
 rules:
@@ -161,11 +228,20 @@ collectors:
 # If any finding has severity >= this threshold, exit code is 2.
 # Valid values: info, low, medium, high, critical
 severity_threshold: high
+
+# Glob patterns for paths to exclude from all collectors.
+# Built-in exclusions (.venv, node_modules, .regression-repos, etc.) always apply.
+exclude_paths:
+  - "vendor/**"
+  - "third_party/**"
+
+# Set to false to include test directories in analysis (default: excluded).
+exclude_test_paths: true
 ```
 
 ## Rules
 
-nfr-review ships with 50+ rules across several domains. A selection:
+nfr-review ships with 110+ rules across several domains. A selection:
 
 | Rule ID | Domain | Description |
 |---------|--------|-------------|
@@ -189,15 +265,36 @@ nfr-review ships with 50+ rules across several domains. A selection:
 | `apim-hardcoded-backend-url` | APIM | Detect hardcoded backend URLs in APIM policies |
 | `apim-rate-limit-missing` | APIM | Flag APIs without rate limiting |
 | `pii-in-log-statements` | Security | Detect potential PII in log statements (LLM-assisted) |
+| `cmake-build-config` | C++ | Flag CMake builds missing Release/RelWithDebInfo configuration |
+| `cmake-fetchcontent-pinning` | C++ | Flag FetchContent dependencies without a pinned tag or hash |
+| `cmake-minimum-version` | C++ | Flag cmake_minimum_required set below a supported floor |
+| `cpp-clang-format` | C++ | Check for a `.clang-format` configuration in the repo |
+| `cpp-clang-tidy` | C++ | Check for a `.clang-tidy` configuration in the repo |
+| `cpp-exception-safety` | C++ | Flag unsafe exception handling patterns in C++ source |
+| `cpp-include-guards` | C++ | Flag header files missing include guards or `#pragma once` |
+| `cpp-raw-memory` | C++ | Flag raw `new`/`delete` usage that should use smart pointers |
+| `cpp-sanitizer-ci` | C++ | Flag CI pipelines missing AddressSanitizer / UBSan steps |
+| `dep-freshness` | Dependencies | Flag packages with updates available beyond their declared constraints |
+| `dep-upgrade-path` | Dependencies | Identify packages that require multi-step version upgrades |
+| `PATCH-*` (22 rules) | Patching | Deployment and infrastructure patching readiness analysis |
 
 Rules marked "LLM-assisted" use an optional LLM call for deeper analysis and fall back gracefully when no API key is configured.
 
+Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule.
+
 ## Output
 
-Each scan produces two files:
+The `run` command produces two files (named after the target repository):
 
-- **CSV** (`nfr-review.csv`) — one row per finding, suitable for spreadsheet review
-- **JSONL** (`nfr-review.jsonl`) — first line is run metadata, subsequent lines are findings
+- **CSV** (`{repo}-nfr-review.csv`) — one row per finding, suitable for spreadsheet review
+- **JSONL** (`{repo}-nfr-review.jsonl`) — first line is run metadata, subsequent lines are findings
+
+The `report` command produces timestamped files under `reports/`:
+
+- **Markdown** (`{repo}-nfr-review-{timestamp}.md`) — full report with NFR findings, hygiene findings, test results, and dependency summary
+- **CSV** (`{repo}-nfr-review-{timestamp}.csv`) — combined findings from all scans
+- **JSONL** (`{repo}-nfr-review-{timestamp}.jsonl`) — combined run record
+- **PDF** (`{repo}-nfr-review-{timestamp}.pdf`) — rendered PDF with executive summary and diagrams (with `--pdf`)
 
 ### Finding fields
 
@@ -227,7 +324,7 @@ nfr-review run tests/fixtures/java-sample-repo \
   --config tests/fixtures/configs/tech-spring-only.yaml
 
 # View findings
-cat nfr-review.csv
+cat java-sample-repo-nfr-review.csv
 ```
 
 ## Development

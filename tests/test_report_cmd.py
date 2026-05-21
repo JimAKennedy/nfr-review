@@ -117,6 +117,42 @@ class TestReportCommand:
         assert "## Test Results" in content
         assert "| Passed | 5 |" in content
 
+    def test_test_timeout_passed_to_runner(self, tmp_path: Path) -> None:
+        fixture = Path("tests/fixtures/hygiene-clean-repo")
+        output_dir = tmp_path / "reports"
+
+        mock_result = type(
+            "CompletedProcess",
+            (),
+            {
+                "stdout": "3 passed in 0.05s\n",
+                "stderr": "",
+                "returncode": 0,
+            },
+        )()
+
+        with patch(
+            "nfr_review.output.pytest_runner.subprocess.run",
+            return_value=mock_result,
+        ) as mock_run:
+            runner = CliRunner()
+            result = runner.invoke(
+                cli,
+                [
+                    "report",
+                    str(fixture),
+                    "--output-dir",
+                    str(output_dir),
+                    "--test-timeout",
+                    "60",
+                ],
+            )
+
+        assert result.exit_code == 0
+        # subprocess.run is called with a timeout kwarg equal to the CLI value
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("timeout") == 60
+
     def test_report_summary_to_stderr(self, tmp_path: Path) -> None:
         fixture = Path("tests/fixtures/hygiene-clean-repo")
         output_dir = tmp_path / "reports"

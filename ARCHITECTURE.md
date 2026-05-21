@@ -37,6 +37,7 @@ report command (nfr-review report <target>):
   NFR Engine.run()     -->  RunResult (nfr_result)
   Hygiene Engine.run() -->  RunResult (hygiene_result)
   run_pytest()         -->  PytestResult (optional, --no-tests to skip)
+  analyze_deps()       -->  list[DepReport] (optional, --no-deps to skip)
         |
         v
   partition_findings()  -->  (source_findings, test_findings)
@@ -44,10 +45,29 @@ report command (nfr-review report <target>):
         v
   render_markdown_report()  -->  Markdown report
         |
-        +-- write_csv()   (combined findings)
-        +-- write_jsonl() (combined findings)
+        +-- write_csv()      (combined findings)
+        +-- write_jsonl()    (combined findings)
+        |
+        v  [with --pdf]
+  generate_executive_summary()  -->  SummaryResult  (LLM, --no-summary skips)
+        |
         v
-  Timestamped files in reports/: nfr-review-{timestamp}.{md,csv,jsonl}
+  render_pdf_report()  -->  PDF (weasyprint)
+        |
+  Timestamped files in reports/:
+    {repo}-nfr-review-{timestamp}.md
+    {repo}-nfr-review-{timestamp}.csv
+    {repo}-nfr-review-{timestamp}.jsonl
+    {repo}-nfr-review-{timestamp}.pdf  (with --pdf)
+
+deps command (nfr-review deps <target>):
+
+  analyze_deps()  -->  list[DepReport]
+        |
+        +-- render_deps_terminal()  -->  stdout summary table
+        +-- render_deps_section()   -->  Markdown (--output)
+        +-- render_dot_dependency_graph()  -->  DOT file (--dot)
+        +-- render_dot_to_file()           -->  SVG (--render-diagrams)
 ```
 
 ## Module Responsibility Map
@@ -70,8 +90,20 @@ report command (nfr-review report <target>):
 | `output/*` | CSV and JSONL serialization, `OutputError` | Finding logic, metadata assembly |
 | `path_filter.py` | Pre-aggregation test-path detection (`is_test_path`), configurable path exclusion (`should_exclude_path`, `compile_exclude_patterns`); used by collectors to drop evidence before it reaches rules | Rule evaluation, output classification |
 | `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
-| `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results | Data collection, engine orchestration |
+| `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results, and dependency section | Data collection, engine orchestration |
 | `output/pytest_runner.py` | Subprocess pytest execution, summary line parsing, `PytestResult` | Test framework logic, assertions |
+| `output/pdf.py` | PDF report generation via weasyprint; assembles HTML from rendered Markdown + diagrams + summary section, converts to PDF | Markdown rendering, diagram rendering, LLM calls |
+| `output/render.py` | Mermaid diagram rendering to PNG/SVG via subprocess; image embedding helpers for PDF | Diagram content generation, rule logic |
+| `output/summarize.py` | LLM executive summary generation; calls `ClaudeClient` with structured findings, returns `SummaryResult` | PDF assembly, finding evaluation |
+| `output/summary_models.py` | Pydantic models for executive summary: `SummaryResult`, `SummarySection`, `RiskItem` | LLM prompt design, serialization |
+| `output/diagrams.py` | Mermaid diagram section helpers; generates architecture and dependency diagrams for Markdown and PDF | Diagram rendering (that's `render.py`), rule logic |
+| `output/dot.py` | Graphviz DOT graph generation from `DepReport` list; `render_dot_to_file()` for SVG output | Dependency resolution, rule logic |
+| `output/deps_report.py` | Markdown and terminal rendering of dependency analysis results (`render_deps_section`, `render_deps_terminal`) | Dependency resolution, finding evaluation |
+| `deps_analysis.py` | Orchestrates per-ecosystem dependency analysis; calls dep solvers and `deps_dev_client`; returns `list[DepReport]` | Individual resolver logic, HTTP calls |
+| `dep_solver.py` | resolvelib-based transitive dependency solver; `DepReport` model | Network I/O (delegated to `deps_dev_client`), output formatting |
+| `deps_dev_client.py` | HTTP client for deps.dev API; package version and dependency metadata retrieval | Solving logic, caching policy |
+| `collectors/cmake.py` | CMake build system evidence: `CMakeLists.txt` parsing, FetchContent detection, minimum version | Rule evaluation, C++ AST analysis |
+| `collectors/cpp_ast.py` | C++ source evidence: header guard detection, raw memory patterns, exception handling patterns | Rule evaluation, build system analysis |
 
 ## Key Types
 
@@ -150,7 +182,10 @@ triggering registration. The CLI imports these packages at startup.
 | Add a new tech detection | `detect.py` -- add key to `ALL_TECH_KEYS` + detector function | Config docs if users need to override it |
 | Add a new config option | `config.py` Pydantic model | CLI if it needs a flag, docs |
 | Add a new output format | `output/<format>.py` | `cli.py` (new flag + writer call) |
-| Add a new report section | `output/markdown.py` (new `_section()` helper) | Nothing -- renderer is self-contained |
+| Add a new report section | `output/markdown.py` (new `_section()` helper) | `output/pdf.py` if the section should appear in PDF output |
+| Add a new PDF section | `output/pdf.py` (extend HTML assembly) | `output/summarize.py` if LLM input is needed |
+| Add a new diagram type | `output/diagrams.py` (new helper) | `output/render.py` if new Mermaid syntax is needed |
+| Add a new dependency ecosystem | `deps_analysis.py` (new resolver branch) | `dep_solver.py` if resolvelib model changes, `output/deps_report.py` for display |
 | Change pre-collector path exclusion | `path_filter.py` (edit `_TEST_PATH_PATTERNS` or `should_exclude_path`) | Tests in `test_path_filter.py` |
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
