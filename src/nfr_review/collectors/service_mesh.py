@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Service mesh collector — parses Istio VirtualService, DestinationRule and
 argo-rollouts Rollout, AnalysisTemplate CRDs to extract structured traffic
 management signals for PATCH-TRAFFIC rules.

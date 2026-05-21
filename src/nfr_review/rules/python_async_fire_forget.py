@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: python-async-fire-and-forget — detects fire-and-forget async patterns."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-ARCH-003 — checks K8s workloads for safe update strategy."""
 
 from __future__ import annotations

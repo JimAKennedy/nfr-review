@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Code debt marker collector — scans source files for TODO/FIXME/HACK markers."""
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from typing import Any
 
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
+from nfr_review.path_filter import iter_repo_files
 
 logger = logging.getLogger(__name__)
 
@@ -19,31 +22,6 @@ _MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_SKIP_DIRS = frozenset(
-    {
-        ".git",
-        ".hg",
-        ".svn",
-        "node_modules",
-        "vendor",
-        "third_party",
-        "third-party",
-        "__pycache__",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".tox",
-        ".nox",
-        "dist",
-        "build",
-        ".eggs",
-        "*.egg-info",
-        ".gsd",
-        ".venv",
-        "venv",
-        "env",
-        "target",
-    }
-)
 
 _SOURCE_SUFFIXES = frozenset(
     {
@@ -80,10 +58,6 @@ _SOURCE_SUFFIXES = frozenset(
 )
 
 
-def _should_skip_dir(name: str) -> bool:
-    return name in _SKIP_DIRS or name.endswith(".egg-info")
-
-
 def _scan_file(path: Path) -> Counter[str]:
     counts: Counter[str] = Counter()
     try:
@@ -104,16 +78,11 @@ class CodeDebtCollector:
         per_marker: Counter[str] = Counter()
         file_counts: list[dict[str, Any]] = []
 
-        for path in sorted(repo_path.rglob("*")):
-            if not path.is_file():
-                continue
+        for path in iter_repo_files(repo_path):
             if path.suffix not in _SOURCE_SUFFIXES:
                 continue
 
             rel = path.relative_to(repo_path)
-            parts = rel.parts
-            if any(_should_skip_dir(p) for p in parts):
-                continue
 
             counts = _scan_file(path)
             if counts:

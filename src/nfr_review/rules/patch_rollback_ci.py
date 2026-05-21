@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-ROLL-002 — CI rollback stage presence check.
 
 Scans CI pipeline evidence for rollback/revert/canary-rollback job or step

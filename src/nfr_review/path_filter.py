@@ -1,10 +1,15 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Shared test-path detection and path exclusion logic."""
 
 from __future__ import annotations
 
 import fnmatch
 import logging
+import os
 import re
+import subprocess  # nosec B404 — args are hardcoded, not user input
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -44,12 +49,55 @@ _ALWAYS_SKIP_DIRS: frozenset[str] = frozenset(
 
 __all__ = [
     "ALWAYS_SKIP_DIRS",
+    "get_git_tracked_files",
+    "iter_repo_files",
     "is_test_path",
     "should_exclude_path",
     "compile_exclude_patterns",
 ]
 
 ALWAYS_SKIP_DIRS = _ALWAYS_SKIP_DIRS
+
+
+def get_git_tracked_files(repo_path: Path) -> frozenset[str] | None:
+    """Return relative paths of files git considers part of the project.
+
+    Includes tracked files and untracked non-ignored files.
+    Returns ``None`` if *repo_path* is not a git repo or git is unavailable.
+    """
+    try:
+        result = subprocess.run(  # nosec B603 B607
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            return None
+        raw = result.stdout.rstrip("\0")
+        if not raw:
+            return frozenset()
+        return frozenset(raw.split("\0"))
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def iter_repo_files(repo_path: Path) -> list[Path]:
+    """Return files in a repo, respecting ``.gitignore`` when available.
+
+    Git repos: tracked + untracked-but-not-ignored files.
+    Non-git dirs: ``os.walk`` with ``_ALWAYS_SKIP_DIRS`` exclusion.
+    """
+    tracked = get_git_tracked_files(repo_path)
+    if tracked is not None:
+        return sorted(repo_path / rel for rel in tracked if (repo_path / rel).is_file())
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(repo_path):
+        dirnames[:] = [d for d in dirnames if d not in _ALWAYS_SKIP_DIRS]
+        for fname in filenames:
+            files.append(Path(dirpath) / fname)
+    return sorted(files)
 
 
 def _in_skipped_dir(path: str) -> bool:

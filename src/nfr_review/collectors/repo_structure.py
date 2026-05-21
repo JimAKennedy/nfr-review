@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Repository structure collector — emits a single Evidence record describing
 the top-level layout of the target repo (files, directories, presence of
 common project markers).

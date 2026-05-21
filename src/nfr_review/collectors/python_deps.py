@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Python dependency collector — parses requirements.txt and pyproject.toml,
 enriches each dependency with version metadata from deps.dev.
 """

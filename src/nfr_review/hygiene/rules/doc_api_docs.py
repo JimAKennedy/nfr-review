@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-DOC-003: API documentation hint, py.typed, and classifier checks."""
 
 from __future__ import annotations

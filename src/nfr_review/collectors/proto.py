@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Protobuf collector — parses .proto files via regex and emits per-file
 Evidence with structured payload for downstream NFR rules.
 

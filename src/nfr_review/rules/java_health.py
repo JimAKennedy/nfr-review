@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: health-endpoint-missing — checks for health endpoint in Spring controllers."""
 
 from __future__ import annotations

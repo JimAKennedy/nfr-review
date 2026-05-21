@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Istio collector — parses Istio CRDs from YAML files and emits structured
 evidence about service mesh configuration.
 

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-LIC-001: Copyleft license detection.
 
 Flags GPL/AGPL/LGPL licenses found in source files or dependency evidence.
@@ -15,6 +17,14 @@ from nfr_review.protocols import Band
 
 _STRONG_COPYLEFT = frozenset({"gpl", "agpl"})
 _WEAK_COPYLEFT = frozenset({"lgpl", "mpl"})
+
+_LICENSE_INFRA_SUFFIXES = (
+    "lic_copyleft.py",
+    "lic_spdx.py",
+    "lic_notice.py",
+    "lic_headers.py",
+    "license_scan.py",
+)
 
 
 def _classify_license(spdx_key: str) -> str | None:
@@ -51,14 +61,23 @@ class CopyleftDetectionRule:
             )
 
         findings: list[Finding] = []
+        seen: set[tuple[str, str]] = set()
 
         for ev in per_file:
+            if any(ev.locator.endswith(s) for s in _LICENSE_INFRA_SUFFIXES):
+                continue
+
             licenses = ev.payload.get("licenses", [])
             for lic in licenses:
                 spdx = lic.get("spdx_key", "")
                 family = _classify_license(spdx)
                 if family is None:
                     continue
+
+                dedup_key = (ev.locator, spdx)
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
 
                 if family in _STRONG_COPYLEFT:
                     rag: RAG = "red"

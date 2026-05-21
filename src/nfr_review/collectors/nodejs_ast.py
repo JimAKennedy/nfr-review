@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Node.js/TypeScript AST collector — parses .js/.ts/.jsx/.tsx files using
 tree-sitter's TypeScript grammar (which parses plain JS as a superset).
 

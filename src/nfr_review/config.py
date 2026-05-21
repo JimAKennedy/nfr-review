@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Per-project configuration loader for nfr-review.yaml.
 
 Parses YAML with ruamel.yaml's safe loader and validates structure with
@@ -63,6 +65,7 @@ class Config(BaseModel):
     severity_threshold: Severity | None = None
     exclude_paths: list[str] = Field(default_factory=list)
     exclude_test_paths: bool = True
+    target: Path | None = Field(default=None, exclude=True)
 
 
 def _format_validation_error(exc: ValidationError) -> str:

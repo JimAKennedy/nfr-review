@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Dockerfile collector — parses Dockerfiles using tree-sitter and emits
 per-file Evidence with structured payload for downstream NFR rules.
 

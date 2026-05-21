@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """PDF report generator using weasyprint.
 
 Composes an HTML document from scan results, optional executive summary,

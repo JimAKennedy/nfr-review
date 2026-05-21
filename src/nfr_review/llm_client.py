@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Thin wrapper around the Anthropic SDK for Band 2 LLM-augmented rules."""
 
 from __future__ import annotations

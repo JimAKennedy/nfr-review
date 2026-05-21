@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Render Mermaid and DOT diagram text to PNG image files.
 
 Uses external tools (mmdc for Mermaid, dot for Graphviz) via subprocess.

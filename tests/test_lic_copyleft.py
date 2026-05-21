@@ -232,6 +232,41 @@ class TestMultipleLicenses:
 # ---------------------------------------------------------------------------
 
 
+class TestInfraFileFiltering:
+    def test_license_infra_files_are_skipped(self) -> None:
+        ev = _make_evidence(
+            locator="src/nfr_review/hygiene/rules/lic_copyleft.py",
+            licenses=[_lic("GPL-3.0-only"), _lic("AGPL-3.0-or-later")],
+        )
+        rule = CopyleftDetectionRule()
+        result = rule.evaluate([ev, _make_summary()], None)
+
+        assert all(f.rag == "green" for f in result.findings)
+
+    def test_license_scan_collector_skipped(self) -> None:
+        ev = _make_evidence(
+            locator="src/nfr_review/hygiene/collectors/license_scan.py",
+            licenses=[_lic("GPL-2.0-only")],
+        )
+        rule = CopyleftDetectionRule()
+        result = rule.evaluate([ev, _make_summary()], None)
+
+        assert all(f.rag == "green" for f in result.findings)
+
+
+class TestDeduplication:
+    def test_duplicate_spdx_per_file_deduplicated(self) -> None:
+        ev = _make_evidence(
+            locator="src/app.py",
+            licenses=[_lic("GPL-3.0-only"), _lic("GPL-3.0-only")],
+        )
+        rule = CopyleftDetectionRule()
+        result = rule.evaluate([ev, _make_summary()], None)
+
+        gpl_findings = [f for f in result.findings if f.rag == "red"]
+        assert len(gpl_findings) == 1
+
+
 class TestSummaryOnly:
     def test_summary_only_produces_green(self) -> None:
         summary = _make_summary(unique_licenses=["Apache-2.0"])

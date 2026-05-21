@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Community health file collector — checks for README, CONTRIBUTING,
 CODE_OF_CONDUCT, SECURITY, CHANGELOG, and CODEOWNERS.
 """

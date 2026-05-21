@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """PATCH-SCOPE rules — patch class scoping configuration detection.
 
 PATCH-SCOPE-001: Patch class soak configuration detection.

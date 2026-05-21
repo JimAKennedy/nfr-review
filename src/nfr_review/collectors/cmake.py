@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """CMake collector — parses CMakeLists.txt files and emits structured
 evidence for downstream CMAKE-* rules.
 

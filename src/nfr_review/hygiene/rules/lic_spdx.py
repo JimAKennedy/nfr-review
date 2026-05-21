@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HYG-LIC-004: SPDX license expression validation.
 
 Reads the license field from pyproject.toml, package.json, and pom.xml
@@ -170,8 +172,43 @@ _DEPRECATED_SPDX = frozenset(
 
 _SPDX_OPERATORS = re.compile(r"\b(AND|OR|WITH)\b")
 
+_COMMON_NAME_MAP: dict[str, str] = {
+    "mit license": "MIT",
+    "the mit license": "MIT",
+    "the mit license (mit)": "MIT",
+    "apache license 2.0": "Apache-2.0",
+    "apache license, version 2.0": "Apache-2.0",
+    "the apache software license, version 2.0": "Apache-2.0",
+    "the apache license, version 2.0": "Apache-2.0",
+    "bsd license": "BSD-3-Clause",
+    "bsd 2-clause license": "BSD-2-Clause",
+    "bsd 3-clause license": "BSD-3-Clause",
+    "the 2-clause bsd license": "BSD-2-Clause",
+    "the 3-clause bsd license": "BSD-3-Clause",
+    "isc license": "ISC",
+    "mozilla public license 2.0": "MPL-2.0",
+    "mozilla public license, version 2.0": "MPL-2.0",
+    "eclipse public license 1.0": "EPL-1.0",
+    "eclipse public license - v 1.0": "EPL-1.0",
+    "eclipse public license 2.0": "EPL-2.0",
+    "eclipse public license - v 2.0": "EPL-2.0",
+    "common development and distribution license 1.0": "CDDL-1.0",
+    "gnu general public license v2.0 only": "GPL-2.0-only",
+    "gnu general public license v3.0 only": "GPL-3.0-only",
+    "gnu lesser general public license v2.1 only": "LGPL-2.1-only",
+    "gnu lesser general public license v3.0 only": "LGPL-3.0-only",
+    "the unlicense": "Unlicense",
+    "public domain": "Unlicense",
+}
+
+
+def _normalize_license_name(raw: str) -> str:
+    mapped = _COMMON_NAME_MAP.get(raw.strip().lower())
+    return mapped if mapped else raw
+
 
 def _extract_identifiers(expression: str) -> list[str]:
+    expression = _normalize_license_name(expression)
     cleaned = expression.replace("(", " ").replace(")", " ")
     tokens = _SPDX_OPERATORS.split(cleaned)
     ids = []

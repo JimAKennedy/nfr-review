@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Resolvelib-based dependency constraint solver.
 
 Resolves a set of package dependencies to the most up-to-date compatible

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Shared infrastructure for cross-language AST rules (D021).
 
 GenericASTRule sets required_collectors=[] and required_tech=[] so the engine

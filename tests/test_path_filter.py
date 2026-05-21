@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import logging
 import re
+import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from nfr_review.path_filter import (
     compile_exclude_patterns,
+    get_git_tracked_files,
     is_test_path,
+    iter_repo_files,
     should_exclude_path,
 )
 
@@ -184,3 +188,130 @@ class TestCompileExcludePatterns:
             patterns = compile_exclude_patterns(["*.pyc"])
         assert len(patterns) == 0
         assert "Skipping invalid exclude pattern" in caplog.text
+
+
+# -- get_git_tracked_files --
+
+
+class TestGetGitTrackedFiles:
+    def test_returns_tracked_files_in_git_repo(self, tmp_path: Path) -> None:
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "tracked.py").write_text("x = 1\n")
+        (tmp_path / ".gitignore").write_text("ignored/\n")
+        (tmp_path / "ignored").mkdir()
+        (tmp_path / "ignored" / "junk.py").write_text("y = 2\n")
+        subprocess.run(
+            ["git", "add", "tracked.py", ".gitignore"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        result = get_git_tracked_files(tmp_path)
+        assert result is not None
+        assert "tracked.py" in result
+        assert ".gitignore" in result
+        assert "ignored/junk.py" not in result
+
+    def test_includes_untracked_non_ignored_files(self, tmp_path: Path) -> None:
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        (tmp_path / "new_file.py").write_text("z = 3\n")
+
+        result = get_git_tracked_files(tmp_path)
+        assert result is not None
+        assert "new_file.py" in result
+
+    def test_returns_none_for_non_git_dir(self, tmp_path: Path) -> None:
+        (tmp_path / "file.py").write_text("x = 1\n")
+        result = get_git_tracked_files(tmp_path)
+        assert result is None
+
+    def test_returns_none_when_git_unavailable(self, tmp_path: Path) -> None:
+        with patch(
+            "nfr_review.path_filter.subprocess.run",
+            side_effect=FileNotFoundError("git not found"),
+        ):
+            result = get_git_tracked_files(tmp_path)
+        assert result is None
+
+    def test_returns_none_on_timeout(self, tmp_path: Path) -> None:
+        with patch(
+            "nfr_review.path_filter.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("git", 30),
+        ):
+            result = get_git_tracked_files(tmp_path)
+        assert result is None
+
+
+# -- iter_repo_files --
+
+
+class TestIterRepoFiles:
+    def test_git_repo_excludes_gitignored(self, tmp_path: Path) -> None:
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path,
+            capture_output=True,
+        )
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("x = 1\n")
+        (tmp_path / ".gitignore").write_text("node_modules/\n.venv/\n")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "pkg.js").write_text("// vendored\n")
+        (tmp_path / ".venv").mkdir()
+        (tmp_path / ".venv" / "lib.py").write_text("# venv\n")
+        subprocess.run(
+            ["git", "add", "src/main.py", ".gitignore"],
+            cwd=tmp_path,
+            capture_output=True,
+            check=True,
+        )
+
+        files = iter_repo_files(tmp_path)
+        rel_paths = {str(f.relative_to(tmp_path)) for f in files}
+        assert "src/main.py" in rel_paths
+        assert ".gitignore" in rel_paths
+        assert "node_modules/pkg.js" not in rel_paths
+        assert ".venv/lib.py" not in rel_paths
+
+    def test_non_git_dir_uses_fallback(self, tmp_path: Path) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("x = 1\n")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "pkg.js").write_text("// vendored\n")
+        (tmp_path / "__pycache__").mkdir()
+        (tmp_path / "__pycache__" / "mod.pyc").write_bytes(b"\x00")
+
+        files = iter_repo_files(tmp_path)
+        rel_paths = {str(f.relative_to(tmp_path)) for f in files}
+        assert "src/main.py" in rel_paths
+        assert "node_modules/pkg.js" not in rel_paths
+        assert "__pycache__/mod.pyc" not in rel_paths
+
+    def test_returns_sorted(self, tmp_path: Path) -> None:
+        (tmp_path / "b.txt").write_text("b\n")
+        (tmp_path / "a.txt").write_text("a\n")
+        files = iter_repo_files(tmp_path)
+        assert files == sorted(files)

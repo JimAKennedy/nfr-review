@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: otel-sampling — flags OTel Collector configs without sampling/rate-limiting."""
 
 from __future__ import annotations

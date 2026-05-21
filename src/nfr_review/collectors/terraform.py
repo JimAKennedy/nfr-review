@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Terraform collector — parses .tf files using tree-sitter HCL and emits
 per-file Evidence with structured payload for downstream NFR rules.
 

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Privacy collector — scans source files for PII patterns, internal
 organization references, and hardcoded tracking/analytics IDs.
 """
@@ -10,22 +12,7 @@ from typing import Any
 
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
-
-_SKIP_DIRS = frozenset(
-    {
-        ".git",
-        "node_modules",
-        "__pycache__",
-        ".venv",
-        "venv",
-        ".tox",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".eggs",
-        "dist",
-        "build",
-    }
-)
+from nfr_review.path_filter import iter_repo_files
 
 _FALSE_POSITIVE_FILES = frozenset(
     {
@@ -232,11 +219,7 @@ class PrivacyCollector:
         tracking_ids: list[dict[str, Any]] = []
         files_scanned = 0
 
-        for path in sorted(repo_path.rglob("*")):
-            if not path.is_file():
-                continue
-            if any(part in _SKIP_DIRS for part in path.parts):
-                continue
+        for path in iter_repo_files(repo_path):
             if _is_binary(path):
                 continue
 

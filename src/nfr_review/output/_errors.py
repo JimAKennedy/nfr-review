@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Internal error types for output formatters.
 
 Lives in its own module so ``csv.py`` and ``jsonl.py`` can import without a

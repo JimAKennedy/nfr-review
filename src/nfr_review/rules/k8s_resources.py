@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: resource-limits-missing — checks K8s workload containers for resource limits."""
 
 from __future__ import annotations

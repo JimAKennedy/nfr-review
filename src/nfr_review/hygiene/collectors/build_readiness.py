@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Build readiness collector — checks for build system, version strategy,
 and entry point configuration in Python packages.
 """

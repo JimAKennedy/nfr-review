@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Sample band-1 rule: README presence check.
 
 Emits a green finding if the repo has any README* file at the root, amber

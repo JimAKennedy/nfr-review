@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: bare-except-catch-all — cross-language detection of bare/broad exception catches.
 
 Uses D021 ANY-match semantics: required_collectors=[] and required_tech=[]

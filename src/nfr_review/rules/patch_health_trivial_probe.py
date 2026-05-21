@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-HEALTH-002 — detects trivial or fragile readiness probe configurations."""
 
 from __future__ import annotations

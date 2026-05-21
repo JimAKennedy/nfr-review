@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Shared infrastructure for language-specific AST collectors.
 
 BaseASTCollector handles file discovery (by extension), hidden-directory

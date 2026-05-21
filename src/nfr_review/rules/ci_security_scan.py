@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: ci-security-scan-missing — checks CI pipelines include security scanning."""
 
 from __future__ import annotations

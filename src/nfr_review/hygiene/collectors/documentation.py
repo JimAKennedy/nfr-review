@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Documentation collector — checks package metadata and docs infrastructure."""
 
 from __future__ import annotations

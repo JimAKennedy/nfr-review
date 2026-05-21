@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: architectural-drift-from-adr — Band 2 LLM-only ADR drift rule."""
 
 from __future__ import annotations

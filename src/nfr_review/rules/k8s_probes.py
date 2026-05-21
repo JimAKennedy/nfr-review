@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: probes-missing — checks K8s workload containers for liveness/readiness probes."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Helm collector — renders charts via ``helm template`` and emits per-chart
 Evidence with structured payload for downstream NFR rules.
 

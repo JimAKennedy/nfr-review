@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: proto-field-numbering — flags field numbering gaps
 not covered by reserved declarations."""
 

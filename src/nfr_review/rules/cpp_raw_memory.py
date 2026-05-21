@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: CPP-001 — detects raw new/delete and malloc/free usage."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: csharp-disposable-no-using — detects IDisposable creation without using statement."""
 
 from __future__ import annotations

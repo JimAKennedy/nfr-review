@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """HTTP client for the deps.dev API (v3alpha).
 
 Provides version metadata, version detail, and dependency lookups for

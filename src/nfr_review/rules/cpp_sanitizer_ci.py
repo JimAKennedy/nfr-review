@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: CPP-TOOL-003 — checks CI workflows for sanitizer jobs (asan, ubsan, tsan)."""
 
 from __future__ import annotations

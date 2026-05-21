@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: go-defer-in-loop — detects defer statements inside loop bodies."""
 
 from __future__ import annotations

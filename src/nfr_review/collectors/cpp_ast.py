@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """C++ AST collector — parses .cpp/.cc/.cxx/.h/.hpp/.hxx files using
 tree-sitter-cpp and emits per-file Evidence with structured payload for
 downstream CPP-* rules.

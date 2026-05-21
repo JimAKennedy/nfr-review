@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """ADR collector — scans markdown Architecture Decision Records and emits
 per-file Evidence with structured payload for downstream NFR rules.
 

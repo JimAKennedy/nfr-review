@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: PATCH-HEALTH-003 — startup probe presence for patching safety.
 
 Checks that workloads with multiple replicas have a startupProbe configured.

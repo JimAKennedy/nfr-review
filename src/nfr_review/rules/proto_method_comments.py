@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: proto-method-comments — flags service methods without preceding comments."""
 
 from __future__ import annotations

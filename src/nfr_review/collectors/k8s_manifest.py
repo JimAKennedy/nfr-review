@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Kubernetes manifest collector — parses K8s YAML files and emits structured
 evidence about workloads, probes, resource limits, security contexts,
 network policies, and patching readiness signals.

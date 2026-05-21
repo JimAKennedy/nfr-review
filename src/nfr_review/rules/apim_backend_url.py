@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: apim-hardcoded-backend-url -- checks APIM policies for hardcoded backend URLs."""
 
 from __future__ import annotations

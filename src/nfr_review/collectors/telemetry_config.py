@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Telemetry config collector — deep extraction of OTel collector pipeline topology,
 resource attributes, exporter targets, SDK instrumentation patterns, and synthetic
 test configurations.

@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: thread-pool-misconfiguration — unbounded thread pools without rejection policy."""
 
 from __future__ import annotations

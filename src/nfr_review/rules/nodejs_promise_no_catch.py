@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """Rule: nodejs-promise-no-catch — detects .then() chains without .catch() error handling."""
 
 from __future__ import annotations

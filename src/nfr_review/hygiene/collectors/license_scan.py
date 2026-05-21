@@ -1,3 +1,5 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
 """License scan collector — uses scancode-toolkit to detect licenses and
 copyrights in source files.  Gracefully skips when scancode is not installed.
 """
@@ -5,12 +7,12 @@ copyrights in source files.  Gracefully skips when scancode is not installed.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
+from nfr_review.path_filter import iter_repo_files
 
 logger = logging.getLogger(__name__)
 
@@ -54,36 +56,10 @@ _SOURCE_EXTENSIONS = frozenset(
     }
 )
 
-_SKIP_DIRS = frozenset(
-    {
-        ".git",
-        ".hg",
-        ".svn",
-        "node_modules",
-        "__pycache__",
-        ".tox",
-        ".nox",
-        ".eggs",
-        ".mypy_cache",
-        ".ruff_cache",
-        "venv",
-        ".venv",
-        "env",
-        ".env",
-    }
-)
-
 
 def _iter_source_files(repo_path: Path) -> list[Path]:
-    """Walk repo and return source files, skipping common non-source dirs."""
-    files: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(repo_path):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-        for fname in filenames:
-            p = Path(dirpath) / fname
-            if p.suffix in _SOURCE_EXTENSIONS:
-                files.append(p)
-    return sorted(files)
+    """Return source files in the repo, respecting .gitignore when available."""
+    return [p for p in iter_repo_files(repo_path) if p.suffix in _SOURCE_EXTENSIONS]
 
 
 class LicenseScanCollector:
