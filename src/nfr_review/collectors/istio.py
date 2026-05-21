@@ -22,6 +22,7 @@ from typing import Any
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.models import Evidence
+from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.istio")
@@ -37,6 +38,8 @@ class IstioCollector:
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         evidence: list[Evidence] = []
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         yaml = YAML(typ="safe")
 
         for yaml_file in sorted(repo_path.rglob("*.y*ml")):
@@ -44,6 +47,10 @@ class IstioCollector:
             if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
                 continue
             if yaml_file.suffix not in (".yaml", ".yml"):
+                continue
+            if should_exclude_path(
+                str(rel), exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
+            ):
                 continue
 
             try:

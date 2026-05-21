@@ -85,6 +85,18 @@ else
   fi
 fi
 
+# --- Mermaid CLI (mmdc) ---
+if command -v mmdc &>/dev/null; then
+  info "mmdc already installed: $(mmdc --version 2>/dev/null || echo 'unknown')"
+elif command -v npm &>/dev/null; then
+  info "Installing @mermaid-js/mermaid-cli via npm"
+  npm install -g @mermaid-js/mermaid-cli --quiet 2>/dev/null || {
+    warn "npm install of @mermaid-js/mermaid-cli failed — Mermaid diagrams will not render"
+  }
+else
+  MISSING_BINS+=("mmdc (@mermaid-js/mermaid-cli — requires npm)")
+fi
+
 # --- Source validation ---
 info "Validating install"
 
