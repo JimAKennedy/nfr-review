@@ -40,7 +40,7 @@ class CmakeMinimumVersionRule:
                         rule_id=self.id,
                         rag="red",
                         severity="high",
-                        summary=f"cmake_minimum_required is missing in {file_path}",
+                        summary="cmake_minimum_required is missing",
                         recommendation=(
                             "Add cmake_minimum_required(VERSION 3.21) or later "
                             "to ensure reproducible builds."
@@ -64,8 +64,7 @@ class CmakeMinimumVersionRule:
                             rag="amber",
                             severity="medium",
                             summary=(
-                                f"cmake_minimum_required is {version_str} in "
-                                f"{file_path} — pre-modern CMake"
+                                f"cmake_minimum_required is {version_str} — pre-modern CMake"
                             ),
                             recommendation=(
                                 "Upgrade to cmake_minimum_required(VERSION 3.14) "

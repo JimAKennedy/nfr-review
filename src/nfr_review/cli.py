@@ -293,7 +293,7 @@ def run_cmd(
     run_logger.info("Detecting technologies in %s", target)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -720,7 +720,7 @@ def report_cmd(
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -779,10 +779,12 @@ def report_cmd(
                 progress_callback=_progress,
             )
             deps_section = render_deps_section(deps_reports)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
-            deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
+            deps_section = (
+                f"## Appendix A — Dependency Tree\n\nDependency analysis failed: {exc}\n"
+            )
         _phase_done("Dependency analysis", t0, quiet=quiet)
 
     # Build diagram sections
@@ -901,11 +903,11 @@ def report_cmd(
                 hygiene_result=hygiene_result,
                 exec_summary=exec_summary,
                 pytest_result=pytest_result,
-                deps_section_html=deps_section.replace("\n", "<br/>") if deps_section else "",
+                deps_section_md=deps_section,
                 diagram_paths=diagram_image_paths,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None
 
@@ -1032,7 +1034,7 @@ def deps_cmd(
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -1050,7 +1052,7 @@ def deps_cmd(
             resolve_transitive=not no_tree,
             progress_callback=_progress,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         click.echo(f"error: dependency analysis failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
     _phase_done("Dependency analysis", t0, quiet=quiet)

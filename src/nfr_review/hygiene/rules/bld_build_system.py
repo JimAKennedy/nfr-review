@@ -46,8 +46,7 @@ class BuildSystemRule:
             backend = info.get("backend", "unknown")
             rag = "green"
             severity = "info"
-            path = info.get("path", "unknown")
-            summary = f"Build system configured via {path} (backend: {backend})."
+            summary = f"Build system configured (backend: {backend})."
             recommendation = "No action required."
 
         finding = Finding(

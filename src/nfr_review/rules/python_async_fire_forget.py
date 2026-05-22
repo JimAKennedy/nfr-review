@@ -41,9 +41,7 @@ class PythonAsyncFireForgetRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"Fire-and-forget {call['call']}() at line {call['line']}"
-                            ),
+                            summary=f"Fire-and-forget {call['call']}()",
                             recommendation=(
                                 "Store Task reference and add done_callback"
                                 " for error handling; GC can collect unstored tasks."

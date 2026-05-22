@@ -40,7 +40,7 @@ class CSharpBlockingAsyncRule:
                         rule_id=self.id,
                         rag="red",
                         severity="high",
-                        summary=(f"Blocking call {call['call_type']} at line {call['line']}"),
+                        summary=f"Blocking call {call['call_type']}",
                         recommendation=(
                             "Use await instead of blocking synchronously on async"
                             " operations. Blocking risks thread pool starvation"

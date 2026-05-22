@@ -72,7 +72,8 @@ class TestEngineIntegration:
     def result(self) -> RunResult:
         cregistry, rregistry = _fresh_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        return engine.run(target=FIXTURE, config=Config())
+        config = Config(tech={"java": True, "kubernetes": True, "ci": True})
+        return engine.run(target=FIXTURE, config=config)
 
     def test_evidence_from_all_collectors(self, result: RunResult) -> None:
         collector_names = {e.collector_name for e in self._all_evidence(result)}
@@ -139,7 +140,8 @@ class TestFaultIsolation:
         cregistry, rregistry = _fresh_registries()
         cregistry.register("failing-collector", _FailingCollector())
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=FIXTURE, config=Config())
+        config = Config(tech={"java": True, "kubernetes": True, "ci": True})
+        result = engine.run(target=FIXTURE, config=config)
 
         assert any("failing-collector" in w for w in result.warnings)
         assert set(result.run_metadata.rules_run) == ALL_RULE_IDS
@@ -159,7 +161,8 @@ class TestFaultIsolation:
 
         rregistry.register("needs-failing", _NeedsFailingRule())
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=FIXTURE, config=Config())
+        config = Config(tech={"java": True, "kubernetes": True, "ci": True})
+        result = engine.run(target=FIXTURE, config=config)
 
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
         assert "needs-failing" in skipped_ids

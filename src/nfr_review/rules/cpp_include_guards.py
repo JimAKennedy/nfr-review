@@ -51,7 +51,7 @@ class CppIncludeGuardsRule:
                         rule_id=self.id,
                         rag="red",
                         severity="medium",
-                        summary=f"Header {file_path} has no include guard or #pragma once",
+                        summary="Header missing include guard or #pragma once",
                         recommendation=(
                             "Add #pragma once or traditional #ifndef/#define include guards."
                         ),

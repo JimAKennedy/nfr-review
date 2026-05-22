@@ -37,8 +37,7 @@ class CmakeBuildConfigRule:
                         rag="amber",
                         severity="medium",
                         summary=(
-                            f"Global CMAKE_CXX_FLAGS used in {file_path} — "
-                            f"prefer target_compile_options"
+                            "Global CMAKE_CXX_FLAGS used — prefer target_compile_options"
                         ),
                         recommendation=(
                             "Replace set(CMAKE_CXX_FLAGS ...) with "
@@ -61,10 +60,7 @@ class CmakeBuildConfigRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="low",
-                        summary=(
-                            f"No target_compile_features or target_compile_options "
-                            f"in {file_path}"
-                        ),
+                        summary=("No target_compile_features or target_compile_options found"),
                         recommendation=(
                             "Use target_compile_features(mylib PUBLIC cxx_std_17) "
                             "to specify C++ standard requirements per target."
@@ -83,7 +79,7 @@ class CmakeBuildConfigRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="low",
-                        summary=f"project() missing VERSION in {file_path}",
+                        summary="project() missing VERSION",
                         recommendation=(
                             "Add VERSION to project() call for proper versioning: "
                             "project(MyProject VERSION 1.0.0)"

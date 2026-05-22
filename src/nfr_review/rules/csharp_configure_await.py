@@ -41,10 +41,7 @@ class CSharpConfigureAwaitRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"await without ConfigureAwait(false)"
-                                f" at line {await_expr['line']}"
-                            ),
+                            summary="await without ConfigureAwait(false)",
                             recommendation=(
                                 "Add .ConfigureAwait(false) to avoid capturing the"
                                 " synchronization context in library code."

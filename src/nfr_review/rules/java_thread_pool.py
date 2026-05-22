@@ -44,11 +44,7 @@ class ThreadPoolMisconfigurationRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"{pool['class_name']} at"
-                                f" line {pool['line']} has"
-                                f" {', '.join(issues)}."
-                            ),
+                            summary=(f"{pool['class_name']} has {', '.join(issues)}"),
                             recommendation=(
                                 "Use a bounded queue (e.g."
                                 " ArrayBlockingQueue) and set a"

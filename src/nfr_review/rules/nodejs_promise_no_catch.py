@@ -41,9 +41,7 @@ class NodejsPromiseNoCatchRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f".then() chain without .catch() at line {chain['line']}"
-                            ),
+                            summary=".then() chain without .catch()",
                             recommendation=(
                                 "Add .catch() to the promise chain or convert"
                                 " to async/await with try/catch for proper"

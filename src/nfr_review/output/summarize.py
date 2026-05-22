@@ -9,6 +9,8 @@ import logging
 from collections import Counter
 from typing import TYPE_CHECKING
 
+import pydantic
+
 from nfr_review.llm_client import ClaudeClient, LlmUnavailableError
 from nfr_review.output.summary_models import ExecSummary
 
@@ -159,7 +161,7 @@ def generate_executive_summary(
         )
     except LlmUnavailableError:
         return None
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.exception("LLM call failed during executive summary generation")
         return None
 
@@ -176,7 +178,7 @@ def generate_executive_summary(
 
     try:
         return ExecSummary.model_validate(parsed)
-    except Exception:
+    except pydantic.ValidationError:
         logger.warning("LLM response failed ExecSummary validation", exc_info=True)
         return None
 

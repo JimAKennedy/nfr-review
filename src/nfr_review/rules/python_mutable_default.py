@@ -46,7 +46,7 @@ class PythonMutableDefaultRule:
                                 severity="medium",
                                 summary=(
                                     f"Mutable default argument ({default['default_type']})"
-                                    f" in {func['name']}() at line {default['line']}"
+                                    f" in {func['name']}()"
                                 ),
                                 recommendation=(
                                     "Use None as default and initialize in function body:"

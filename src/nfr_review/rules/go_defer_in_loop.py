@@ -39,10 +39,7 @@ class GoDeferInLoopRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"Defer inside loop at line {stmt['line']}"
-                                f" accumulates deferred calls"
-                            ),
+                            summary="Defer inside loop accumulates deferred calls",
                             recommendation=(
                                 "Extract the loop body to a separate function"
                                 " or use explicit close instead of defer."

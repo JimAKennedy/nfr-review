@@ -32,7 +32,7 @@ class CodeownersPresenceRule:
         if exists:
             rag: RAG = "green"
             severity: Severity = "info"
-            summary = f"CODEOWNERS found at {info.get('path')}."
+            summary = "CODEOWNERS file found."
             recommendation = "No action required."
         else:
             rag = "amber"

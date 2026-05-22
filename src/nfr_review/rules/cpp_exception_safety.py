@@ -37,10 +37,7 @@ class CppExceptionSafetyRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"catch(...) without rethrow at line {block['line']} "
-                                f"in {block['file']}"
-                            ),
+                            summary="catch(...) without rethrow",
                             recommendation=(
                                 "Catch specific exception types or rethrow with 'throw;' "
                                 "to avoid silently swallowing errors."

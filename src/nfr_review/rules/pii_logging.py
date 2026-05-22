@@ -190,8 +190,8 @@ class PiiInLogStatementsRule:
                     rag=cast(RAG, rag),
                     severity="high" if rag == "red" else "medium",
                     summary=(
-                        f"Potential PII in log statement at line {hit['line']}: "
-                        f"matched {', '.join(hit['matched_patterns'])}{note}"
+                        f"Potential PII in log statement:"
+                        f" matched {', '.join(hit['matched_patterns'])}{note}"
                     ),
                     recommendation=(
                         "Remove or mask PII data before logging. "

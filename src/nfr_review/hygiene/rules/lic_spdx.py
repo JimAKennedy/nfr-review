@@ -256,10 +256,7 @@ class SpdxValidationRule:
                         rule_id=self.id,
                         rag="red",
                         severity="high",
-                        summary=(
-                            f"Invalid SPDX identifier(s) in {source_file}: "
-                            f"{', '.join(invalid)}"
-                        ),
+                        summary=(f"Invalid SPDX identifier(s): {', '.join(invalid)}"),
                         recommendation=(
                             "Use a valid SPDX license identifier from "
                             "https://spdx.org/licenses/"
@@ -277,10 +274,7 @@ class SpdxValidationRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=(
-                            f"Deprecated SPDX identifier(s) in {source_file}: "
-                            f"{', '.join(deprecated)}"
-                        ),
+                        summary=(f"Deprecated SPDX identifier(s): {', '.join(deprecated)}"),
                         recommendation=(
                             "Update to the current SPDX identifier form "
                             "(e.g., GPL-3.0 → GPL-3.0-only)."
@@ -298,7 +292,7 @@ class SpdxValidationRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=f"Valid SPDX expression in {source_file}: {expr}",
+                        summary=f"Valid SPDX expression: {expr}",
                         recommendation="No action required.",
                         evidence_locator=source_file,
                         collector_name="spdx-validation",

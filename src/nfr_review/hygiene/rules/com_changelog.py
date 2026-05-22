@@ -82,7 +82,7 @@ class ChangelogPresenceRule:
                 rule_id=self.id,
                 rag="green",
                 severity="info",
-                summary=f"Changelog found at {info.get('path')}.",
+                summary="Changelog found.",
                 recommendation="No action required.",
                 evidence_locator=locator,
                 collector_name=ev.collector_name,

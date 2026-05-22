@@ -48,9 +48,7 @@ class HelmChartMetadataRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=(
-                            f"Chart '{chart_path}' is missing a description in Chart.yaml."
-                        ),
+                        summary="Helm chart is missing a description in Chart.yaml.",
                         recommendation="Add a meaningful 'description' field to Chart.yaml.",
                         evidence_locator=f"{chart_path}/Chart.yaml",
                         collector_name=ev.collector_name,
@@ -66,7 +64,7 @@ class HelmChartMetadataRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=f"Chart '{chart_path}' is missing 'appVersion' in Chart.yaml.",
+                        summary="Helm chart is missing 'appVersion' in Chart.yaml.",
                         recommendation=(
                             "Add an 'appVersion' field to Chart.yaml to track"
                             " the application version deployed by this chart."
@@ -87,8 +85,7 @@ class HelmChartMetadataRule:
                         rag="amber",
                         severity="medium",
                         summary=(
-                            f"Chart '{chart_path}' version '{chart_version}'"
-                            " does not follow SemVer."
+                            f"Helm chart version '{chart_version}' does not follow SemVer."
                         ),
                         recommendation=(
                             "Use Semantic Versioning (e.g. 1.2.3) for the"
@@ -109,9 +106,7 @@ class HelmChartMetadataRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="low",
-                        summary=(
-                            f"Chart '{chart_path}' has no maintainers listed in Chart.yaml."
-                        ),
+                        summary="Helm chart has no maintainers listed in Chart.yaml.",
                         recommendation=(
                             "Add a 'maintainers' section to Chart.yaml with"
                             " at least one contact."

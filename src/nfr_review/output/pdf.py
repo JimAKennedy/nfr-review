@@ -83,6 +83,12 @@ _CSS = (  # noqa: E501
     ".finding-red { border-left-color: #dc3545; }\n"
     ".finding-amber { border-left-color: #fd7e14; }\n"
     ".finding-green { border-left-color: #28a745; }\n"
+    ".location-table { margin: 4px 0 0 0; width: auto; }\n"
+    ".location-table th { background: none; border: none;"
+    " padding: 2px 8px; font-weight: 600; font-size: 8pt;"
+    " color: #666; }\n"
+    ".location-table td { border: none; border-top: 1px solid #eee;"
+    " padding: 2px 8px; font-size: 8pt; }\n"
     ".provenance { font-size: 9pt; color: #666; }\n"
     ".provenance code { background: #f5f5f5; padding: 1px 4px;"
     " border-radius: 2px; }\n"
@@ -209,14 +215,34 @@ def _findings_html(findings: list[Finding], title: str) -> str:
         if not group:
             continue
         parts.append(f"<h3>{_h(rag.upper())} ({len(group)})</h3>")
+
+        issue_groups: dict[tuple[str, str], list[Finding]] = {}
         for f in group:
+            key = (f.rule_id, f.summary)
+            issue_groups.setdefault(key, []).append(f)
+
+        for (rule_id, summary), occurrences in issue_groups.items():
+            representative = occurrences[0]
             parts.append(
-                f'<div class="finding finding-{f.rag}">'
-                f"<strong>[{_h(f.rule_id)}]</strong> {_h(f.summary)}<br/>"
-                f"Severity: {_h(f.severity)} | Confidence: {f.confidence:.0%} | "
-                f"Location: <code>{_h(f.evidence_locator)}</code><br/>"
-                f"Recommendation: {_h(f.recommendation)}</div>"
+                f'<div class="finding finding-{representative.rag}">'
+                f"<strong>[{_h(rule_id)}]</strong> {_h(summary)}<br/>"
+                f"Recommendation: {_h(representative.recommendation)}"
             )
+            parts.append('<table class="location-table">')
+            parts.append(
+                "<thead><tr>"
+                "<th>Location</th><th>Severity</th><th>Confidence</th>"
+                "</tr></thead><tbody>"
+            )
+            for occ in occurrences:
+                parts.append(
+                    f"<tr>"
+                    f"<td><code>{_h(occ.evidence_locator)}</code></td>"
+                    f"<td>{_h(occ.severity)}</td>"
+                    f"<td>{occ.confidence:.0%}</td>"
+                    f"</tr>"
+                )
+            parts.append("</tbody></table></div>")
 
     return "\n".join(parts)
 
@@ -277,6 +303,69 @@ def _test_results_html(pytest_result: PytestResult | None) -> str:
 </table>"""
 
 
+def _inline_md(text: str) -> str:
+    """Convert inline markdown (bold, code) to HTML."""
+    import re
+
+    escaped = _h(text)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"`(.+?)`", r"<code>\1</code>", escaped)
+    return escaped
+
+
+def _md_deps_to_html(md: str) -> str:
+    """Convert the markdown dependency section to proper HTML tables."""
+    lines = md.split("\n")
+    parts: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        if line.startswith("## "):
+            parts.append(f"<h2>{_h(line[3:].strip())}</h2>")
+        elif line.startswith("### "):
+            parts.append(f"<h3>{_h(line[4:].strip())}</h3>")
+        elif line.startswith("#### "):
+            parts.append(f"<h4>{_h(line[5:].strip())}</h4>")
+        elif line.startswith("| ") and i + 1 < len(lines) and lines[i + 1].startswith("|--"):
+            headers = [c.strip() for c in line.split("|")[1:-1]]
+            parts.append("<table><thead><tr>")
+            parts.append("".join(f"<th>{_h(h)}</th>" for h in headers))
+            parts.append("</tr></thead><tbody>")
+            i += 2  # skip separator
+            while i < len(lines) and lines[i].startswith("| "):
+                cells = [c.strip() for c in lines[i].split("|")[1:-1]]
+                parts.append("<tr>")
+                parts.append("".join(f"<td>{_h(c)}</td>" for c in cells))
+                parts.append("</tr>")
+                i += 1
+            parts.append("</tbody></table>")
+            continue
+        elif line.startswith("```"):
+            i += 1
+            code_lines = []
+            while i < len(lines) and not lines[i].startswith("```"):
+                code_lines.append(lines[i])
+                i += 1
+            parts.append(
+                f'<pre style="font-size:8pt;background:#f5f5f5;'
+                f'padding:8px;border-radius:4px;overflow-x:auto">'
+                f"<code>{_h(chr(10).join(code_lines))}</code></pre>"
+            )
+        elif line.startswith("> "):
+            parts.append(
+                f'<blockquote style="border-left:3px solid #dc3545;'
+                f'padding:4px 8px;margin:0.5em 0;color:#721c24">'
+                f"{_h(line[2:])}</blockquote>"
+            )
+        elif line.strip():
+            parts.append(f"<p>{_inline_md(line)}</p>")
+
+        i += 1
+
+    return "\n".join(parts)
+
+
 def render_pdf(
     *,
     nfr_result: RunResult,
@@ -284,7 +373,7 @@ def render_pdf(
     hygiene_result: RunResult | None = None,
     exec_summary: ExecSummary | None = None,
     pytest_result: PytestResult | None = None,
-    deps_section_html: str = "",
+    deps_section_md: str = "",
     diagram_paths: dict[str, Path] | None = None,
     title: str = "NFR Review Report",
 ) -> Path:
@@ -329,12 +418,17 @@ def render_pdf(
 
     sections.append(_test_results_html(pytest_result))
 
-    if deps_section_html:
-        sections.append(deps_section_html)
-
     sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(source_findings, "Source Code Findings"))
     sections.append(_findings_html(test_findings, "Test Code Findings"))
+
+    if deps_section_md:
+        sections.append('<div class="section-break"></div>')
+        deps_body = deps_section_md
+        if deps_body.startswith("## "):
+            deps_body = deps_body.split("\n", 1)[1] if "\n" in deps_body else ""
+        sections.append("<h2>Appendix A &mdash; Dependency Tree</h2>")
+        sections.append(_md_deps_to_html(deps_body))
 
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">

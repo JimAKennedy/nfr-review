@@ -41,10 +41,7 @@ class CSharpAsyncVoidRule:
                             rule_id=self.id,
                             rag="red",
                             severity="high",
-                            summary=(
-                                f"async void method '{method['name']}'"
-                                f" at line {method['line']}"
-                            ),
+                            summary=f"async void method '{method['name']}'",
                             recommendation=(
                                 "Change return type to async Task. async void"
                                 " silently swallows exceptions and cannot be awaited."

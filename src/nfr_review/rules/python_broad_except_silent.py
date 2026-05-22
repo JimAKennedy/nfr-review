@@ -49,8 +49,7 @@ class PythonBroadExceptSilentRule:
                             severity="high",
                             summary=(
                                 f"Silent catch({block['caught_type']})"
-                                f" without logging or rethrow"
-                                f" at line {block['line']}"
+                                " without logging or rethrow"
                             ),
                             recommendation=(
                                 "At minimum log the exception; prefer re-raising"

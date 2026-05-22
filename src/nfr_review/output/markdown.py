@@ -193,10 +193,6 @@ def render_markdown_report(
     # Test results
     sections.append(_test_results_section(pytest_result))
 
-    # Dependency analysis
-    if deps_section:
-        sections.append(deps_section)
-
     # Findings by region
     sections.append(_findings_section(source_findings, "Source Code Findings"))
     sections.append(_findings_section(test_findings, "Test Code Findings"))
@@ -205,5 +201,9 @@ def render_markdown_report(
     skipped_section = _skipped_rules_section(nfr_result, hygiene_result)
     if skipped_section:
         sections.append(skipped_section)
+
+    # Dependency analysis (appendix)
+    if deps_section:
+        sections.append(deps_section)
 
     return "\n".join(sections)

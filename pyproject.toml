@@ -66,6 +66,9 @@ nfr-review = "nfr_review.cli:cli"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+nfr_review = ["py.typed"]
+
 [tool.setuptools.package-dir]
 "" = "src"
 

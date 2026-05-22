@@ -16,6 +16,7 @@ class ProbesMissingRule:
 
     id = "probes-missing"
     band: Band = 1
+    required_tech: list[str] = ["kubernetes"]
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:

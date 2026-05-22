@@ -38,7 +38,7 @@ class CppRawMemoryRule:
                         rule_id=self.id,
                         rag="amber" if has_smart_ptrs else "red",
                         severity="medium" if has_smart_ptrs else "high",
-                        summary=f"Raw new at line {expr['line']} in {expr['file']}",
+                        summary="Raw new expression detected",
                         recommendation=(
                             "Use std::make_unique or std::make_shared instead of raw new."
                         ),
@@ -56,7 +56,7 @@ class CppRawMemoryRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=f"Raw delete at line {expr['line']} in {expr['file']}",
+                        summary="Raw delete expression detected",
                         recommendation=(
                             "Use smart pointers (unique_ptr/shared_ptr) "
                             "for automatic lifetime management."
@@ -76,9 +76,7 @@ class CppRawMemoryRule:
                             rule_id=self.id,
                             rag="red",
                             severity="high",
-                            summary=(
-                                f"{call['call']}() at line {call['line']} in {call['file']}"
-                            ),
+                            summary=f"{call['call']}() usage detected",
                             recommendation=(
                                 "Use C++ allocation (new/make_unique) "
                                 "instead of C-style malloc."

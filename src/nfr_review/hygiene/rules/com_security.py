@@ -32,7 +32,7 @@ class SecurityPresenceRule:
         if exists:
             rag: RAG = "green"
             severity: Severity = "info"
-            summary = f"Security policy found at {info.get('path')}."
+            summary = "Security policy found."
             recommendation = "No action required."
         else:
             rag = "red"

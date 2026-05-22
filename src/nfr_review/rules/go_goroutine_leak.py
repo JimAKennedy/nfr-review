@@ -38,10 +38,7 @@ class GoGoroutineLeakRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=(
-                            f"Goroutine launch at line {launch['line']}"
-                            f" may leak without lifecycle management"
-                        ),
+                        summary="Goroutine launch may leak without lifecycle management",
                         recommendation=(
                             "Use context.Context, sync.WaitGroup, or errgroup"
                             " for goroutine lifecycle management."

@@ -41,9 +41,7 @@ class NodejsFloatingPromiseRule:
                             rule_id=self.id,
                             rag="red",
                             severity="high",
-                            summary=(
-                                f"Floating promise without .catch() at line {chain['line']}"
-                            ),
+                            summary="Floating promise without .catch()",
                             recommendation=(
                                 "Add .catch() or use try/await to handle"
                                 " rejection. Unhandled promise rejections crash"

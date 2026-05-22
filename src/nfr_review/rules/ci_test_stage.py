@@ -46,7 +46,7 @@ class CiTestStageMissingRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=(f"Test step found in: {', '.join(pipelines_with[:3])}"),
+                        summary="CI pipeline includes a test step.",
                         recommendation="No action required — test step is present.",
                         evidence_locator=pipelines_with[0],
                         collector_name="ci-artifact",

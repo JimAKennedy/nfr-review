@@ -69,7 +69,7 @@ class BareExceptCatchAllRule:
                                 rule_id=self.id,
                                 rag="amber",
                                 severity="medium",
-                                summary=f"Bare except catch-all at line {block['line']}",
+                                summary="Bare except catch-all",
                                 recommendation=(
                                     "Catch specific exception types to avoid masking"
                                     " unexpected errors."
@@ -87,10 +87,7 @@ class BareExceptCatchAllRule:
                                 rule_id=self.id,
                                 rag="red",
                                 severity="high",
-                                summary=(
-                                    f"Broad catch({caught}) without rethrow"
-                                    f" at line {block['line']}"
-                                ),
+                                summary=f"Broad catch({caught}) without rethrow",
                                 recommendation=(
                                     "Catch specific exception types or rethrow to"
                                     " preserve stack trace visibility."

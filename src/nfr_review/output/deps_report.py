@@ -81,9 +81,9 @@ def render_upgrade_table(upgrades: list[DepUpgradeInfo]) -> str:
 def render_deps_section(reports: list[EcosystemDepsReport]) -> str:
     """Render a complete dependency analysis section for the markdown report."""
     if not reports:
-        return "## Dependency Analysis\n\nNo dependency manifests detected.\n"
+        return "## Appendix A — Dependency Tree\n\nNo dependency manifests detected.\n"
 
-    sections: list[str] = ["## Dependency Analysis", ""]
+    sections: list[str] = ["## Appendix A — Dependency Tree", ""]
 
     for report in reports:
         sections.append(f"### {report.ecosystem.upper()} Dependencies")

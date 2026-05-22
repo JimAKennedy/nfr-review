@@ -116,7 +116,7 @@ def _collect_dep_evidence(
         try:
             produced = collector.collect(target, config)
             evidence.extend(produced)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("collector %s failed during deps analysis", cid, exc_info=True)
     return evidence
 

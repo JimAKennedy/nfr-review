@@ -55,22 +55,22 @@ class PkgMetadataRule:
                 rag: RAG = "amber"
                 severity: Severity = "medium"
                 summary = (
-                    f"{manifest['path']}: missing {len(key_missing)} key fields "
-                    f"({', '.join(key_missing)})."
+                    f"Missing {len(key_missing)} key metadata fields"
+                    f" ({', '.join(key_missing)})."
                 )
                 recommendation = f"Add missing fields to {manifest['path']}."
             elif key_missing:
                 rag = "green"
                 severity = "info"
                 summary = (
-                    f"{manifest['path']}: {len(key_missing)} non-critical field(s) missing "
-                    f"({', '.join(key_missing)})."
+                    f"{len(key_missing)} non-critical metadata field(s) missing"
+                    f" ({', '.join(key_missing)})."
                 )
                 recommendation = "No urgent action required."
             else:
                 rag = "green"
                 severity = "info"
-                summary = f"{manifest['path']}: all key metadata fields present."
+                summary = "All key metadata fields present."
                 recommendation = "No action required."
 
             findings.append(
