@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from nfr_review.rules import adr_drift as adr_drift  # noqa: F401
+from nfr_review.rules import adr_gap as adr_gap  # noqa: F401
 from nfr_review.rules import adr_lifecycle as adr_lifecycle  # noqa: F401
 from nfr_review.rules import apim_auth as apim_auth  # noqa: F401
 from nfr_review.rules import apim_backend_url as apim_backend_url  # noqa: F401
@@ -90,6 +91,11 @@ from nfr_review.rules import java_exception as java_exception  # noqa: F401
 from nfr_review.rules import java_health as java_health  # noqa: F401
 from nfr_review.rules import java_resilience as java_resilience  # noqa: F401
 from nfr_review.rules import java_thread_pool as java_thread_pool  # noqa: F401
+from nfr_review.rules import jdepend_cycle as jdepend_cycle  # noqa: F401
+from nfr_review.rules import jdepend_distance as jdepend_distance  # noqa: F401
+from nfr_review.rules import (
+    jdepend_instability as jdepend_instability,  # noqa: F401
+)
 from nfr_review.rules import k8s_network as k8s_network  # noqa: F401
 from nfr_review.rules import k8s_probes as k8s_probes  # noqa: F401
 from nfr_review.rules import k8s_resources as k8s_resources  # noqa: F401
@@ -197,6 +203,7 @@ __all__ = [
     "ast_bare_except",
     "ast_logging_stdout",
     "adr_drift",
+    "adr_gap",
     "adr_lifecycle",
     "apim_auth",
     "apim_backend_url",
@@ -234,6 +241,9 @@ __all__ = [
     "istio_traffic_policy",
     "java_exception",
     "java_health",
+    "jdepend_cycle",
+    "jdepend_distance",
+    "jdepend_instability",
     "java_resilience",
     "java_thread_pool",
     "nodejs_callback_error_ignored",

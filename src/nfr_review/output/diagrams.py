@@ -132,7 +132,80 @@ def _emit_mermaid_tree_nodes(
         _emit_mermaid_tree_nodes(eco, child, lines, seen)
 
 
+def render_jdepend_metrics_table(packages: list[dict]) -> str:
+    """Render a markdown table of JDepend package metrics sorted by distance."""
+    if not packages:
+        return ""
+
+    sorted_pkgs = sorted(packages, key=lambda p: p.get("D", 0.0), reverse=True)
+
+    lines = [
+        "### JDepend Package Metrics",
+        "",
+        "| Package | Ca | Ce | A | I | D | Classes |",
+        "|---------|----|----|-----|-----|-----|---------|",
+    ]
+    for pkg in sorted_pkgs:
+        name = pkg.get("name", "unknown")
+        ca = pkg.get("Ca", 0)
+        ce = pkg.get("Ce", 0)
+        a = pkg.get("A", 0.0)
+        i = pkg.get("I", 0.0)
+        d = pkg.get("D", 0.0)
+        total = pkg.get("TotalClasses", pkg.get("total_classes", "-"))
+        lines.append(f"| `{name}` | {ca} | {ce} | {a:.2f} | {i:.2f} | {d:.2f} | {total} |")
+
+    lines.append("")
+    lines.append(
+        "*Ca=Afferent Coupling, Ce=Efferent Coupling,"
+        " A=Abstractness, I=Instability, D=Distance from Main Sequence*"
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_jdepend_dot(packages: list[dict]) -> str:
+    """Render a DOT digraph of JDepend package dependencies.
+
+    Uses DependsUpon data from the evidence payload when available.
+    Nodes are colored by distance from the main sequence.
+    """
+    if not packages:
+        return ""
+
+    lines = [
+        "digraph jdepend {",
+        "  rankdir=LR;",
+        "  node [shape=box, style=filled, fontsize=10];",
+    ]
+
+    for pkg in packages:
+        name = pkg.get("name", "unknown")
+        node_id = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        d = pkg.get("D", 0.0)
+        if d > 0.5:
+            color = "#ffcccc"
+        elif d > 0.3:
+            color = "#fff3cc"
+        else:
+            color = "#ccffcc"
+        label = f"{name}\\nD={d:.2f}"
+        lines.append(f'  {node_id} [label="{label}", fillcolor="{color}"];')
+
+    for pkg in packages:
+        name = pkg.get("name", "unknown")
+        node_id = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        for dep in pkg.get("depends_upon", []):
+            dep_id = re.sub(r"[^a-zA-Z0-9_]", "_", dep)
+            lines.append(f"  {node_id} -> {dep_id};")
+
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
 __all__ = [
+    "render_jdepend_dot",
+    "render_jdepend_metrics_table",
     "render_mermaid_dep_graph",
     "render_mermaid_severity_pie",
     "render_mermaid_tech_overview",
