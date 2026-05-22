@@ -40,6 +40,7 @@ class RunResult:
     rule_results: list[RuleResult] = field(default_factory=list)
     run_metadata: RunMetadata | None = None
     warnings: list[str] = field(default_factory=list)
+    evidence: list[Evidence] = field(default_factory=list)
 
 
 def _select_collectors(registry: Registry[Collector], skip: list[str]) -> list[Collector]:
@@ -241,6 +242,7 @@ class Engine:
             rule_results=rule_results,
             run_metadata=run_metadata,
             warnings=warnings,
+            evidence=evidence,
         )
 
 

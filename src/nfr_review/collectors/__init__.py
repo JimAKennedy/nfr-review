@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from nfr_review.collectors import adr as adr  # noqa: F401
+from nfr_review.collectors import adr_derive as adr_derive  # noqa: F401
 from nfr_review.collectors import apim_policy as apim_policy  # noqa: F401
 from nfr_review.collectors import ci_artifact as ci_artifact  # noqa: F401
 from nfr_review.collectors import cmake as cmake  # noqa: F401
@@ -18,6 +19,7 @@ from nfr_review.collectors import helm as helm  # noqa: F401
 from nfr_review.collectors import istio as istio  # noqa: F401
 from nfr_review.collectors import java_ast as java_ast  # noqa: F401
 from nfr_review.collectors import java_deps as java_deps  # noqa: F401
+from nfr_review.collectors import jdepend as jdepend  # noqa: F401
 from nfr_review.collectors import k8s_manifest as k8s_manifest  # noqa: F401
 from nfr_review.collectors import nodejs_ast as nodejs_ast  # noqa: F401
 from nfr_review.collectors import nodejs_deps as nodejs_deps  # noqa: F401
@@ -34,6 +36,7 @@ from nfr_review.collectors import terraform as terraform  # noqa: F401
 
 __all__ = [
     "adr",
+    "adr_derive",
     "apim_policy",
     "ci_artifact",
     "cmake",
@@ -47,6 +50,7 @@ __all__ = [
     "istio",
     "java_ast",
     "java_deps",
+    "jdepend",
     "k8s_manifest",
     "nodejs_ast",
     "nodejs_deps",

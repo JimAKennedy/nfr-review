@@ -667,6 +667,10 @@ def report_cmd(
     test_timeout: int,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
+    from nfr_review.output.jdepend_section import (
+        build_derived_adrs_section,
+        build_jdepend_section,
+    )
     from nfr_review.output.markdown import render_markdown_report
     from nfr_review.output.pytest_runner import run_pytest
 
@@ -810,6 +814,10 @@ def report_cmd(
         if not no_deps and deps_reports:
             diagrams["Dependency Graph"] = render_mermaid_dep_graph(deps_reports)
 
+    # Build evidence-aware report sections
+    jdepend_section = build_jdepend_section(nfr_result.evidence)
+    derived_adrs_section = build_derived_adrs_section(nfr_result.evidence)
+
     # Generate report
     _phase("Rendering Markdown report", quiet=quiet)
     md_content = render_markdown_report(
@@ -817,6 +825,8 @@ def report_cmd(
         hygiene_result=hygiene_result,
         pytest_result=pytest_result,
         deps_section=deps_section,
+        jdepend_section=jdepend_section,
+        derived_adrs_section=derived_adrs_section,
         diagrams=diagrams,
     )
 
