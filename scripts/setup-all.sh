@@ -85,6 +85,55 @@ else
   fi
 fi
 
+# --- JDepend (Java structural analysis) ---
+JDEPEND_VERSION="2.10"
+JDEPEND_DIR="$PROJECT_ROOT/.tools/jdepend"
+if command -v jdepend &>/dev/null; then
+  info "jdepend already installed: $(jdepend 2>&1 | head -1 || echo 'unknown')"
+elif command -v java &>/dev/null; then
+  info "Installing JDepend $JDEPEND_VERSION"
+  mkdir -p "$JDEPEND_DIR"
+  JDEPEND_URL="https://github.com/clarkware/jdepend/releases/download/$JDEPEND_VERSION/jdepend-$JDEPEND_VERSION.zip"
+  if command -v curl &>/dev/null; then
+    curl -fsSL "$JDEPEND_URL" -o "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
+      warn "Failed to download JDepend — JDepend analysis will be skipped"
+      MISSING_BINS+=("jdepend (download failed)")
+    }
+  elif command -v wget &>/dev/null; then
+    wget -q "$JDEPEND_URL" -O "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
+      warn "Failed to download JDepend — JDepend analysis will be skipped"
+      MISSING_BINS+=("jdepend (download failed)")
+    }
+  else
+    MISSING_BINS+=("jdepend (no curl or wget)")
+  fi
+
+  if [[ -f "$JDEPEND_DIR/jdepend.zip" ]]; then
+    unzip -qo "$JDEPEND_DIR/jdepend.zip" -d "$JDEPEND_DIR" 2>/dev/null || {
+      warn "Failed to extract JDepend archive"
+      MISSING_BINS+=("jdepend (extraction failed)")
+    }
+    # Create a wrapper script on PATH
+    JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
+    if [[ -n "$JDEPEND_JAR" ]]; then
+      WRAPPER="$VENV_DIR/bin/jdepend"
+      cat > "$WRAPPER" << JDWRAPPER
+#!/usr/bin/env bash
+exec java -cp "$JDEPEND_JAR" jdepend.xmlui.JDepend "\$@"
+JDWRAPPER
+      chmod +x "$WRAPPER"
+      success "JDepend installed at $WRAPPER"
+    else
+      warn "JDepend jar not found after extraction"
+      MISSING_BINS+=("jdepend (jar not found)")
+    fi
+    rm -f "$JDEPEND_DIR/jdepend.zip"
+  fi
+else
+  warn "Java not found — JDepend requires a JRE. Skipping JDepend install."
+  MISSING_BINS+=("jdepend (requires java)")
+fi
+
 # --- Mermaid CLI (mmdc) ---
 if command -v mmdc &>/dev/null; then
   info "mmdc already installed: $(mmdc --version 2>/dev/null || echo 'unknown')"
@@ -228,6 +277,7 @@ if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   warn "  helm:     https://helm.sh/docs/intro/install/"
   warn "  graphviz: https://graphviz.org/download/"
   warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
+  warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
 fi
 
 if [[ ${#MISSING_PKGS[@]} -eq 0 ]] && [[ ${#MISSING_BINS[@]} -eq 0 ]]; then
