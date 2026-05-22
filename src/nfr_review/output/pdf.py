@@ -374,6 +374,9 @@ def render_pdf(
     exec_summary: ExecSummary | None = None,
     pytest_result: PytestResult | None = None,
     deps_section_md: str = "",
+    jdepend_section_md: str = "",
+    adr_section_md: str = "",
+    derived_adrs_section_md: str = "",
     diagram_paths: dict[str, Path] | None = None,
     title: str = "NFR Review Report",
 ) -> Path:
@@ -421,6 +424,30 @@ def render_pdf(
     sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(source_findings, "Source Code Findings"))
     sections.append(_findings_html(test_findings, "Test Code Findings"))
+
+    if adr_section_md:
+        sections.append('<div class="section-break"></div>')
+        adr_body = adr_section_md
+        if adr_body.startswith("## "):
+            adr_body = adr_body.split("\n", 1)[1] if "\n" in adr_body else ""
+        sections.append("<h2>Architecture Decision Records</h2>")
+        sections.append(_md_deps_to_html(adr_body))
+
+    if jdepend_section_md:
+        sections.append('<div class="section-break"></div>')
+        jdepend_body = jdepend_section_md
+        if jdepend_body.startswith("## "):
+            jdepend_body = jdepend_body.split("\n", 1)[1] if "\n" in jdepend_body else ""
+        sections.append("<h2>JDepend Structural Analysis</h2>")
+        sections.append(_md_deps_to_html(jdepend_body))
+
+    if derived_adrs_section_md:
+        sections.append('<div class="section-break"></div>')
+        derived_body = derived_adrs_section_md
+        if derived_body.startswith("## "):
+            derived_body = derived_body.split("\n", 1)[1] if "\n" in derived_body else ""
+        sections.append("<h2>Derived Architecture Decision Records</h2>")
+        sections.append(_md_deps_to_html(derived_body))
 
     if deps_section_md:
         sections.append('<div class="section-break"></div>')

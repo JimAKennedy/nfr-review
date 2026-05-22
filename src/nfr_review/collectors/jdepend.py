@@ -26,6 +26,15 @@ _BYTECODE_PATTERNS = [
     "build/classes",
 ]
 
+_BUILD_CONFIGS = {
+    "pom.xml": (
+        ["mvn", "compile", "-DskipTests", "-Denforcer.skip=true"],
+        "target/classes",
+    ),
+    "build.gradle": (["gradle", "classes", "-x", "test"], "build/classes/java/main"),
+    "build.gradle.kts": (["gradle", "classes", "-x", "test"], "build/classes/java/main"),
+}
+
 
 def _find_bytecode_dirs(repo_path: Path) -> list[Path]:
     """Search repo_path for directories matching known bytecode locations."""
@@ -38,6 +47,46 @@ def _find_bytecode_dirs(repo_path: Path) -> list[Path]:
                 continue
             found.append(match)
     return found
+
+
+def _try_compile_java(repo_path: Path) -> str | None:
+    """Attempt to compile Java sources if a build config exists.
+
+    Returns None on success or an error message on failure.
+    """
+    for config_file, (cmd, _expected_dir) in _BUILD_CONFIGS.items():
+        if (repo_path / config_file).exists():
+            tool_name = cmd[0]
+            logger.info(
+                "No bytecode found but %s detected — running '%s'",
+                config_file,
+                " ".join(cmd),
+            )
+            try:
+                result = subprocess.run(  # nosec B603 B607
+                    cmd,
+                    cwd=str(repo_path),
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+            except FileNotFoundError:
+                return (
+                    f"{tool_name} not found on PATH — "
+                    f"install {tool_name} to enable auto-compile"
+                )
+            except subprocess.SubprocessError as exc:
+                return f"{tool_name} compile failed: {exc}"
+
+            if result.returncode != 0:
+                error_output = result.stderr or result.stdout or ""
+                snippet = error_output.strip()[-500:]
+                return f"{tool_name} compile exited with code {result.returncode}: {snippet}"
+
+            logger.info("Auto-compile via %s succeeded", tool_name)
+            return None
+
+    return "no pom.xml or build.gradle found — cannot auto-compile"
 
 
 def _parse_package_stats(pkg_el: ET.Element) -> dict[str, Any]:
@@ -151,7 +200,56 @@ class JDependCollector:
                 filtered_dirs.append(bd)
 
         if not filtered_dirs:
-            return []
+            has_java = any(repo_path.rglob("*.java"))
+            if not has_java:
+                return []
+
+            compile_err = _try_compile_java(repo_path)
+            if compile_err:
+                logger.warning(
+                    "JDepend skipped: Java sources found but no bytecode — %s",
+                    compile_err,
+                )
+                return [
+                    Evidence(
+                        collector_name=self.name,
+                        collector_version=self.version,
+                        locator=".",
+                        kind="jdepend-skip",
+                        payload={
+                            "reason": f"Java sources found but no compiled bytecode. "
+                            f"Auto-compile failed: {compile_err}. "
+                            f"Run 'mvn compile' or 'gradle classes' manually."
+                        },
+                    )
+                ]
+
+            filtered_dirs = _find_bytecode_dirs(repo_path)
+            filtered_dirs = [
+                bd
+                for bd in filtered_dirs
+                if not should_exclude_path(
+                    str(bd.relative_to(repo_path)),
+                    exclude_test_paths=exclude_test,
+                    exclude_patterns=exclude_pats,
+                )
+            ]
+            if not filtered_dirs:
+                logger.warning(
+                    "JDepend skipped: auto-compile succeeded but no bytecode directories found"
+                )
+                return [
+                    Evidence(
+                        collector_name=self.name,
+                        collector_version=self.version,
+                        locator=".",
+                        kind="jdepend-skip",
+                        payload={
+                            "reason": "Auto-compile succeeded but no bytecode "
+                            "directories were produced"
+                        },
+                    )
+                ]
 
         evidences: list[Evidence] = []
 
@@ -160,7 +258,7 @@ class JDependCollector:
 
             try:
                 result = subprocess.run(  # nosec B603 B607
-                    ["jdepend", "-xml", str(bytecode_dir)],
+                    ["jdepend", str(bytecode_dir)],
                     capture_output=True,
                     text=True,
                     timeout=120,

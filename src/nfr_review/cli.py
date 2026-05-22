@@ -668,6 +668,7 @@ def report_cmd(
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from nfr_review.output.jdepend_section import (
+        build_adr_section,
         build_derived_adrs_section,
         build_jdepend_section,
     )
@@ -817,6 +818,7 @@ def report_cmd(
     # Build evidence-aware report sections
     jdepend_section = build_jdepend_section(nfr_result.evidence)
     derived_adrs_section = build_derived_adrs_section(nfr_result.evidence)
+    adr_section = build_adr_section(nfr_result.evidence)
 
     # Generate report
     _phase("Rendering Markdown report", quiet=quiet)
@@ -826,6 +828,7 @@ def report_cmd(
         pytest_result=pytest_result,
         deps_section=deps_section,
         jdepend_section=jdepend_section,
+        adr_section=adr_section,
         derived_adrs_section=derived_adrs_section,
         diagrams=diagrams,
     )
@@ -914,6 +917,9 @@ def report_cmd(
                 exec_summary=exec_summary,
                 pytest_result=pytest_result,
                 deps_section_md=deps_section,
+                jdepend_section_md=jdepend_section,
+                adr_section_md=adr_section,
+                derived_adrs_section_md=derived_adrs_section,
                 diagram_paths=diagram_image_paths,
             )
             _phase_done("PDF generation", t0, quiet=quiet)

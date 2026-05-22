@@ -51,10 +51,10 @@ class JDepDistanceRule:
 
             for pkg in ev.payload.get("packages", []):
                 checked_any = True
-                distance = pkg.get("D", 0.0)
+                distance = pkg.get("d", pkg.get("D", 0.0))
                 name = pkg.get("name", "unknown")
-                abstractness = pkg.get("A", 0.0)
-                instability = pkg.get("I", 0.0)
+                abstractness = pkg.get("a", pkg.get("A", 0.0))
+                instability = pkg.get("i", pkg.get("I", 0.0))
 
                 if distance > _DISTANCE_THRESHOLD:
                     if abstractness > instability:

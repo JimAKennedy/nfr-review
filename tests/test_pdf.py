@@ -574,3 +574,57 @@ class TestRenderPdfContentIntegration:
         assert "Executive Summary" not in html
         assert "Overall Summary" in html
         assert "Source Code Findings" in html
+
+    def test_jdepend_section_rendered(self, tmp_path: Path) -> None:
+        """JDepend markdown section is converted to HTML in the PDF."""
+        jdepend_md = (
+            "## JDepend Structural Analysis\n\n"
+            "| Package | Ca | Ce | A | I | D | Classes |\n"
+            "|---------|----|----|---|---|---|---------|\n"
+            "| com.example | 3 | 5 | 0.2 | 0.63 | 0.17 | 10 |\n"
+        )
+        html = _capture_pdf_html(tmp_path, jdepend_section_md=jdepend_md)
+        assert "JDepend Structural Analysis" in html
+        assert "com.example" in html
+
+    def test_adr_section_rendered(self, tmp_path: Path) -> None:
+        """ADR markdown section is converted to HTML in the PDF."""
+        adr_md = (
+            "## Architecture Decision Records\n\n"
+            "**2 ADRs** found in repository.\n\n"
+            "| # | Title | Status | Superseded By |\n"
+            "|---|-------|--------|---------------|\n"
+            "| 1 | Use Spring Boot | accepted | — |\n"
+        )
+        html = _capture_pdf_html(tmp_path, adr_section_md=adr_md)
+        assert "Architecture Decision Records" in html
+        assert "Use Spring Boot" in html
+
+    def test_derived_adrs_section_rendered(self, tmp_path: Path) -> None:
+        """Derived ADRs markdown section is converted to HTML in the PDF."""
+        derived_md = (
+            "## Derived Architecture Decision Records\n\n"
+            "| # | Decision | Category | Confidence |\n"
+            "|---|----------|----------|------------|\n"
+            "| 1 | Use Redis | infrastructure | 85% |\n"
+        )
+        html = _capture_pdf_html(tmp_path, derived_adrs_section_md=derived_md)
+        assert "Derived Architecture Decision Records" in html
+        assert "Use Redis" in html
+
+    def test_all_new_sections_rendered_in_order(self, tmp_path: Path) -> None:
+        """ADR, JDepend, Derived ADR, and Deps sections appear in correct order."""
+        html = _capture_pdf_html(
+            tmp_path,
+            adr_section_md="## Architecture Decision Records\n\nADR content\n",
+            jdepend_section_md="## JDepend Structural Analysis\n\nJDepend content\n",
+            derived_adrs_section_md=(
+                "## Derived Architecture Decision Records\n\nDerived content\n"
+            ),
+            deps_section_md="## Dependency Analysis\n\nDeps content\n",
+        )
+        adr_pos = html.index("Architecture Decision Records")
+        jdepend_pos = html.index("JDepend Structural Analysis")
+        derived_pos = html.index("Derived Architecture Decision Records")
+        deps_pos = html.index("Appendix A")
+        assert adr_pos < jdepend_pos < derived_pos < deps_pos

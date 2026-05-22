@@ -137,7 +137,7 @@ def render_jdepend_metrics_table(packages: list[dict]) -> str:
     if not packages:
         return ""
 
-    sorted_pkgs = sorted(packages, key=lambda p: p.get("D", 0.0), reverse=True)
+    sorted_pkgs = sorted(packages, key=lambda p: p.get("d", p.get("D", 0.0)), reverse=True)
 
     lines = [
         "### JDepend Package Metrics",
@@ -147,12 +147,12 @@ def render_jdepend_metrics_table(packages: list[dict]) -> str:
     ]
     for pkg in sorted_pkgs:
         name = pkg.get("name", "unknown")
-        ca = pkg.get("Ca", 0)
-        ce = pkg.get("Ce", 0)
-        a = pkg.get("A", 0.0)
-        i = pkg.get("I", 0.0)
-        d = pkg.get("D", 0.0)
-        total = pkg.get("TotalClasses", pkg.get("total_classes", "-"))
+        ca = pkg.get("ca", pkg.get("Ca", 0))
+        ce = pkg.get("ce", pkg.get("Ce", 0))
+        a = pkg.get("a", pkg.get("A", 0.0))
+        i = pkg.get("i", pkg.get("I", 0.0))
+        d = pkg.get("d", pkg.get("D", 0.0))
+        total = pkg.get("total_classes", pkg.get("TotalClasses", "-"))
         lines.append(f"| `{name}` | {ca} | {ce} | {a:.2f} | {i:.2f} | {d:.2f} | {total} |")
 
     lines.append("")
@@ -182,7 +182,7 @@ def render_jdepend_dot(packages: list[dict]) -> str:
     for pkg in packages:
         name = pkg.get("name", "unknown")
         node_id = re.sub(r"[^a-zA-Z0-9_]", "_", name)
-        d = pkg.get("D", 0.0)
+        d = pkg.get("d", pkg.get("D", 0.0))
         if d > 0.5:
             color = "#ffcccc"
         elif d > 0.3:
