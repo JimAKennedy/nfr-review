@@ -91,7 +91,7 @@ class TestRegexMatchNoLlm:
             log_statements=[
                 {
                     "method": "logger.info",
-                    "arguments_text": '("User SSN: 123-45-6789", userId)',
+                    "arguments_text": '("User SSN: 987-65-4320", userId)',
                     "line": 10,
                 }
             ]
@@ -126,7 +126,7 @@ class TestRegexMatchNoLlm:
             log_statements=[
                 {
                     "method": "logger.warn",
-                    "arguments_text": '("Card: 4111-1111-1111-1111")',
+                    "arguments_text": '("Card: 4242-4242-4242-4242")',
                     "line": 7,
                 }
             ]
@@ -158,7 +158,7 @@ class TestLlmConfirms:
             log_statements=[
                 {
                     "method": "logger.info",
-                    "arguments_text": '("User SSN: 123-45-6789", ssn)',
+                    "arguments_text": '("User SSN: 987-65-4320", ssn)',
                     "line": 10,
                 }
             ]
@@ -218,7 +218,7 @@ class TestMultipleFiles:
             log_statements=[
                 {
                     "method": "logger.info",
-                    "arguments_text": '("User SSN: 123-45-6789")',
+                    "arguments_text": '("User SSN: 987-65-4320")',
                     "line": 10,
                 }
             ],
@@ -249,7 +249,7 @@ class TestLlmErrorFallback:
             log_statements=[
                 {
                     "method": "logger.info",
-                    "arguments_text": '("User SSN: 123-45-6789")',
+                    "arguments_text": '("User SSN: 987-65-4320")',
                     "line": 10,
                 }
             ]
@@ -267,7 +267,7 @@ class TestLlmErrorFallback:
             log_statements=[
                 {
                     "method": "logger.info",
-                    "arguments_text": '("User SSN: 123-45-6789")',
+                    "arguments_text": '("User SSN: 987-65-4320")',
                     "line": 10,
                 }
             ]

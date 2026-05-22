@@ -112,13 +112,13 @@ class TestPrivacyCollector:
         assert any(m["pattern_type"] == "email" for m in pii)
 
     def test_ssn_detected(self, tmp_path: Path) -> None:
-        _write_file(tmp_path, "data.py", "ssn = '123-45-6789'\n")
+        _write_file(tmp_path, "data.py", "ssn = '219-09-9999'\n")
         evs = PrivacyCollector().collect(tmp_path, None)
         pii = evs[0].payload["pii_matches"]
         assert any(m["pattern_type"] == "ssn" for m in pii)
 
     def test_credit_card_detected(self, tmp_path: Path) -> None:
-        _write_file(tmp_path, "pay.py", "cc = '4111-1111-1111-1111'\n")
+        _write_file(tmp_path, "pay.py", "cc = '1234-5678-9012-3456'\n")
         evs = PrivacyCollector().collect(tmp_path, None)
         pii = evs[0].payload["pii_matches"]
         assert any(m["pattern_type"] == "credit_card" for m in pii)
@@ -182,8 +182,38 @@ class TestPrivacyCollector:
         tracking = evs[0].payload["tracking_ids"]
         assert tracking == []
 
+    def test_reserved_ssn_not_flagged(self, tmp_path: Path) -> None:
+        _write_file(tmp_path, "data.py", "ssn = '987-65-4320'\n")
+        evs = PrivacyCollector().collect(tmp_path, None)
+        pii = evs[0].payload["pii_matches"]
+        assert not any(m["pattern_type"] == "ssn" for m in pii)
+
+    def test_reserved_ssn_area_000_not_flagged(self, tmp_path: Path) -> None:
+        _write_file(tmp_path, "data.py", "ssn = '000-12-3456'\n")
+        evs = PrivacyCollector().collect(tmp_path, None)
+        pii = evs[0].payload["pii_matches"]
+        assert not any(m["pattern_type"] == "ssn" for m in pii)
+
+    def test_reserved_ssn_area_666_not_flagged(self, tmp_path: Path) -> None:
+        _write_file(tmp_path, "data.py", "ssn = '666-12-3456'\n")
+        evs = PrivacyCollector().collect(tmp_path, None)
+        pii = evs[0].payload["pii_matches"]
+        assert not any(m["pattern_type"] == "ssn" for m in pii)
+
+    def test_reserved_ssn_area_900_not_flagged(self, tmp_path: Path) -> None:
+        _write_file(tmp_path, "data.py", "ssn = '900-12-3456'\n")
+        evs = PrivacyCollector().collect(tmp_path, None)
+        pii = evs[0].payload["pii_matches"]
+        assert not any(m["pattern_type"] == "ssn" for m in pii)
+
+    def test_test_credit_card_not_flagged(self, tmp_path: Path) -> None:
+        _write_file(tmp_path, "pay.py", "cc = '4242-4242-4242-4242'\n")
+        evs = PrivacyCollector().collect(tmp_path, None)
+        pii = evs[0].payload["pii_matches"]
+        assert not any(m["pattern_type"] == "credit_card" for m in pii)
+
     def test_binary_files_skipped(self, tmp_path: Path) -> None:
-        _write_file(tmp_path, "image.png", "ssn = '123-45-6789'\n")
+        _write_file(tmp_path, "image.png", "ssn = '987-65-4320'\n")
         evs = PrivacyCollector().collect(tmp_path, None)
         assert evs[0].payload["files_scanned"] == 0
         assert evs[0].payload["pii_matches"] == []

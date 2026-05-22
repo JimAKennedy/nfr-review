@@ -208,7 +208,7 @@ class TestBand2PiiRuleWithMock:
             "    private static final Logger logger ="
             " LoggerFactory.getLogger(UserService.class);\n"
             "    public void processUser(String ssn) {\n"
-            '        logger.info("Processing SSN: 123-45-6789", ssn);\n'
+            '        logger.info("Processing SSN: 987-65-4320", ssn);\n'
             "    }\n"
             "}\n"
         )

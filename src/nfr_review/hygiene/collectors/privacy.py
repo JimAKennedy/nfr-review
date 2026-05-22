@@ -93,7 +93,32 @@ _FB_PIXEL_RE = re.compile(r"(?:fbq\s*\(\s*['\"]init['\"]|\bFB_PIXEL_ID\b)")
 _SEGMENT_RE = re.compile(r"\bwriteKey\s*[:=]\s*['\"][a-zA-Z0-9]{20,}['\"]")
 _MIXPANEL_RE = re.compile(r"\bmixpanel\.init\s*\(\s*['\"][a-f0-9]{20,}['\"]")
 
+_TEST_CARD_NUMBERS = frozenset(
+    {
+        "4242424242424242",
+        "5555555555554444",
+        "5105105105105100",
+        "4000056000000002",
+        "4111111111111111",
+    }
+)
+
 _SNIPPET_MAX = 40
+
+
+def _is_reserved_ssn(value: str) -> bool:
+    digits = value.replace("-", "")
+    area = int(digits[:3])
+    if area == 0 or area == 666 or 900 <= area <= 999:
+        return True
+    if digits.startswith("98765432"):
+        return True
+    return False
+
+
+def _is_test_card(value: str) -> bool:
+    digits = value.replace("-", "").replace(" ", "")
+    return digits in _TEST_CARD_NUMBERS
 
 
 def _truncate(text: str) -> str:
@@ -122,23 +147,25 @@ def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[dict[str, An
 
     for i, line in enumerate(text.splitlines(), 1):
         for _m in _SSN_RE.finditer(line):
-            matches.append(
-                {
-                    "file": rel_path,
-                    "line": i,
-                    "pattern_type": "ssn",
-                    "snippet": _truncate(line.strip()),
-                }
-            )
+            if not _is_reserved_ssn(_m.group()):
+                matches.append(
+                    {
+                        "file": rel_path,
+                        "line": i,
+                        "pattern_type": "ssn",
+                        "snippet": _truncate(line.strip()),
+                    }
+                )
         for _m in _CC_RE.finditer(line):
-            matches.append(
-                {
-                    "file": rel_path,
-                    "line": i,
-                    "pattern_type": "credit_card",
-                    "snippet": _truncate(line.strip()),
-                }
-            )
+            if not _is_test_card(_m.group()):
+                matches.append(
+                    {
+                        "file": rel_path,
+                        "line": i,
+                        "pattern_type": "credit_card",
+                        "snippet": _truncate(line.strip()),
+                    }
+                )
         if not is_config:
             for _m in _EMAIL_RE.finditer(line):
                 matches.append(
