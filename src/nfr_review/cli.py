@@ -293,7 +293,7 @@ def run_cmd(
     run_logger.info("Detecting technologies in %s", target)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -720,7 +720,7 @@ def report_cmd(
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -779,7 +779,7 @@ def report_cmd(
                 progress_callback=_progress,
             )
             deps_section = render_deps_section(deps_reports)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
             deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
@@ -905,7 +905,7 @@ def report_cmd(
                 diagram_paths=diagram_image_paths,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None
 
@@ -1032,7 +1032,7 @@ def deps_cmd(
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
@@ -1050,7 +1050,7 @@ def deps_cmd(
             resolve_transitive=not no_tree,
             progress_callback=_progress,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         click.echo(f"error: dependency analysis failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
     _phase_done("Dependency analysis", t0, quiet=quiet)

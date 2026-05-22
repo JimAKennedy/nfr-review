@@ -8,6 +8,8 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from nfr_review.path_filter import should_exclude_path
+
 logger = logging.getLogger(__name__)
 
 ALL_TECH_KEYS: list[str] = [
@@ -81,9 +83,10 @@ def _safe_glob(base: Path, pattern: str) -> list[Path]:
 
 def _safe_rglob(base: Path, pattern: str) -> list[Path]:
     try:
-        return list(base.rglob(pattern))
+        results = list(base.rglob(pattern))
     except OSError:
         return []
+    return [p for p in results if not should_exclude_path(str(p.relative_to(base)))]
 
 
 def _detect_java(repo: Path) -> bool:
@@ -109,15 +112,19 @@ def _detect_spring_boot(repo: Path) -> bool:
 
 
 def _detect_kubernetes(repo: Path) -> bool:
-    if _safe_exists(repo / "kustomization.yaml"):
+    if _safe_rglob(repo, "kustomization.yaml"):
         return True
-    for prefix in ("k8s", "kubernetes"):
-        for f in _safe_glob(repo / prefix, "**/*.yaml"):
-            content = _safe_read_text(f)
-            if content:
-                for kind in _K8S_RESOURCE_TYPES:
-                    if f"kind: {kind}" in content or f"kind:{kind}" in content:
-                        return True
+    for prefix in ("k8s", "kubernetes", "kubernetes-manifests", "deploy", "manifests"):
+        d = repo / prefix
+        if not _safe_is_dir(d):
+            continue
+        for ext in ("**/*.yaml", "**/*.yml"):
+            for f in _safe_glob(d, ext):
+                content = _safe_read_text(f)
+                if content:
+                    for kind in _K8S_RESOURCE_TYPES:
+                        if f"kind: {kind}" in content or f"kind:{kind}" in content:
+                            return True
     return False
 
 
@@ -283,7 +290,7 @@ def detect_technologies(repo_path: Path) -> dict[str, bool]:
     for key in ALL_TECH_KEYS:
         try:
             result[key] = _DETECTORS[key](repo_path)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.debug("Detector '%s' failed for %s: %s", key, repo_path, e)
             result[key] = False
     detected = [k for k, v in result.items() if v]

@@ -3,10 +3,10 @@
 
 # PII patterns
 ADMIN_EMAIL = "admin@example.com"
-SUPPORT_CONTACT = "support@mycompany.corp"
+SUPPORT_CONTACT = "support@test.example"
 
 # Internal org reference
-API_BASE = "https://api.internal.corp/v2"
+API_BASE = "https://api.test.example/v2"
 
 # Tracking IDs
 ANALYTICS_ID = "UA-12345-1"
