@@ -901,7 +901,7 @@ def report_cmd(
                 hygiene_result=hygiene_result,
                 exec_summary=exec_summary,
                 pytest_result=pytest_result,
-                deps_section_html=deps_section.replace("\n", "<br/>") if deps_section else "",
+                deps_section_md=deps_section,
                 diagram_paths=diagram_image_paths,
             )
             _phase_done("PDF generation", t0, quiet=quiet)

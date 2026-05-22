@@ -8,7 +8,7 @@ import pytest
 
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.pdf import _png_dimensions, render_pdf
+from nfr_review.output.pdf import _md_deps_to_html, _png_dimensions, render_pdf
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
 
 weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
@@ -199,3 +199,65 @@ class TestRenderPdf:
         )
         assert result == out
         assert out.stat().st_size > 1000
+
+    def test_grouped_findings_in_pdf(self, tmp_path: Path) -> None:
+        """Duplicate findings are grouped by rule_id+summary with locations listed."""
+        findings = [
+            _make_finding("CPP-001", "high", "red", locator="src/a.cpp:10"),
+            _make_finding("CPP-001", "high", "red", locator="src/b.cpp:20"),
+            _make_finding("CPP-001", "high", "red", locator="src/c.cpp:30"),
+        ]
+        out = tmp_path / "grouped.pdf"
+        result = render_pdf(nfr_result=_make_run_result(findings), output_path=out)
+        assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"
+
+    def test_deps_section_renders_html_tables(self, tmp_path: Path) -> None:
+        """Markdown deps section is converted to proper HTML tables in PDF."""
+        deps_md = (
+            "## Dependency Analysis\n\n"
+            "### PYPI Dependencies\n\n"
+            "#### Upgrade Summary\n\n"
+            "| # | Package | Current | Latest |\n"
+            "|---|---------|---------|--------|\n"
+            "| 1 | click | 8.1.0 | 8.3.0 |\n"
+            "| 2 | pydantic | 2.0.0 | 2.5.0 |\n"
+        )
+        out = tmp_path / "deps.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            deps_section_md=deps_md,
+        )
+        assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"
+
+
+class TestMdDepsToHtml:
+    def test_headings_converted(self) -> None:
+        result = _md_deps_to_html("## Main Heading\n### Sub Heading\n#### Detail")
+        assert "<h2>Main Heading</h2>" in result
+        assert "<h3>Sub Heading</h3>" in result
+        assert "<h4>Detail</h4>" in result
+
+    def test_table_converted(self) -> None:
+        md = "| Name | Version |\n|------|---------|\n| click | 8.3 |\n| ruff | 0.5 |\n"
+        result = _md_deps_to_html(md)
+        assert "<table>" in result
+        assert "<th>Name</th>" in result
+        assert "<td>click</td>" in result
+        assert "<td>ruff</td>" in result
+
+    def test_code_block_converted(self) -> None:
+        md = "```\nclick  8.1 → 8.3\npydantic  2.0\n```\n"
+        result = _md_deps_to_html(md)
+        assert "<pre" in result
+        assert "<code>" in result
+
+    def test_empty_input(self) -> None:
+        assert _md_deps_to_html("") == ""
+
+    def test_blockquote_converted(self) -> None:
+        result = _md_deps_to_html("> Resolution failed")
+        assert "<blockquote" in result
+        assert "Resolution failed" in result
