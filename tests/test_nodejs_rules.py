@@ -72,7 +72,7 @@ class TestNodejsFloatingPromiseRule:
         f = result.findings[0]
         assert f.rag == "red"
         assert f.severity == "high"
-        assert "line 10" in f.summary
+        assert "Floating promise" in f.summary
         assert f.pattern_tag == "nodejs-floating-promise"
 
     def test_clean_promise_with_catch(self) -> None:

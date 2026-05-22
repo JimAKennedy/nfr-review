@@ -42,10 +42,7 @@ class GoHttpNoTimeoutRule:
                             rule_id=self.id,
                             rag="red",
                             severity="high",
-                            summary=(
-                                f"{call_name}() uses DefaultClient with no timeout"
-                                f" at line {call['line']}"
-                            ),
+                            summary=(f"{call_name}() uses DefaultClient with no timeout"),
                             recommendation=(
                                 "Use an http.Client with an explicit Timeout"
                                 " instead of the package-level convenience functions."
@@ -63,7 +60,7 @@ class GoHttpNoTimeoutRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(f"http.Client without Timeout at line {call['line']}"),
+                            summary="http.Client without Timeout",
                             recommendation=(
                                 "Set an explicit Timeout on the http.Client"
                                 " to prevent indefinite hangs."

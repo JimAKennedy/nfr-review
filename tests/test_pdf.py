@@ -8,7 +8,16 @@ import pytest
 
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.pdf import _md_deps_to_html, _png_dimensions, render_pdf
+from nfr_review.output.pdf import (
+    _exec_summary_html,
+    _findings_html,
+    _md_deps_to_html,
+    _png_dimensions,
+    _provenance_html,
+    _summary_table_html,
+    _test_results_html,
+    render_pdf,
+)
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
 
 weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
@@ -261,3 +270,307 @@ class TestMdDepsToHtml:
         result = _md_deps_to_html("> Resolution failed")
         assert "<blockquote" in result
         assert "Resolution failed" in result
+
+
+class TestExecSummaryHtml:
+    """Verify exec summary HTML contains all required sections."""
+
+    def test_verdict_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "Conditional" in html
+        assert "verdict-box" in html
+
+    def test_overall_score_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "62/100" in html
+        assert "verdict-score" in html
+
+    def test_verdict_explanation_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "moderate issues requiring attention" in html
+
+    def test_risk_highlights_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "Key Risks" in html
+        assert "Outdated deps with CVEs" in html
+        assert "Missing license headers" in html
+        assert "risk-item" in html
+
+    def test_remediation_priorities_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "Remediation Priorities" in html
+        assert "Update vulnerable deps" in html
+        assert "immediate" in html
+        assert "Add license headers" in html
+        assert "short-term" in html
+        assert "Critical CVEs in 3 dependencies" in html
+
+    def test_production_risks_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "Production Risks" in html
+        assert "outdated dependencies" in html
+
+    def test_open_source_readiness_rendered(self) -> None:
+        summary = _make_exec_summary()
+        html = _exec_summary_html(summary)
+        assert "Open-Source Readiness" in html
+        assert "needs license work" in html
+
+    def test_fit_verdict_uses_green(self) -> None:
+        summary = ExecSummary(
+            verdict="fit",
+            verdict_explanation="All clear.",
+            risk_highlights=[],
+            remediation_priorities=[],
+            production_risks="None.",
+            open_source_readiness="Ready.",
+            overall_score=95,
+        )
+        html = _exec_summary_html(summary)
+        assert "Fit for Purpose" in html
+        assert "#28a745" in html
+        assert "95/100" in html
+
+    def test_unfit_verdict_uses_red(self) -> None:
+        summary = ExecSummary(
+            verdict="unfit",
+            verdict_explanation="Critical issues.",
+            risk_highlights=["Fatal flaw"],
+            remediation_priorities=[],
+            production_risks="Major.",
+            open_source_readiness="Not ready.",
+            overall_score=15,
+        )
+        html = _exec_summary_html(summary)
+        assert "Not Fit for Purpose" in html
+        assert "#dc3545" in html
+        assert "15/100" in html
+
+
+class TestSummaryTableHtml:
+    """Verify the RAG x severity summary table is rendered correctly."""
+
+    def test_table_has_all_severity_columns(self) -> None:
+        findings = [_make_finding("A", "critical", "red")]
+        html = _summary_table_html(findings, "Test Summary")
+        assert "<h3>Test Summary</h3>" in html
+        for col in ("Critical", "High", "Medium", "Low", "Info", "Total"):
+            assert f"<th>{col}</th>" in html
+
+    def test_table_has_all_rag_rows(self) -> None:
+        findings = [
+            _make_finding("A", "critical", "red"),
+            _make_finding("B", "medium", "amber"),
+            _make_finding("C", "low", "green"),
+        ]
+        html = _summary_table_html(findings, "All RAGs")
+        assert "RED" in html
+        assert "AMBER" in html
+        assert "GREEN" in html
+
+    def test_table_counts_correct(self) -> None:
+        findings = [
+            _make_finding("A", "critical", "red"),
+            _make_finding("B", "critical", "red"),
+            _make_finding("C", "medium", "amber"),
+        ]
+        html = _summary_table_html(findings, "Counts")
+        assert "<strong>3</strong>" in html
+
+
+class TestFindingsHtml:
+    """Verify findings HTML grouping and content."""
+
+    def test_findings_grouped_by_rule_and_summary(self) -> None:
+        findings = [
+            _make_finding("CPP-001", "high", "red", "src/a.cpp:10"),
+            _make_finding("CPP-001", "high", "red", "src/b.cpp:20"),
+            _make_finding("CPP-001", "high", "red", "src/c.cpp:30"),
+        ]
+        html = _findings_html(findings, "Source Code Findings")
+        assert html.count("[CPP-001]") == 1
+        assert "src/a.cpp:10" in html
+        assert "src/b.cpp:20" in html
+        assert "src/c.cpp:30" in html
+        assert "location-table" in html
+
+    def test_findings_preserves_severity_and_confidence(self) -> None:
+        findings = [_make_finding("SEC-001", "critical", "red", "src/app.py:5")]
+        html = _findings_html(findings, "Findings")
+        assert "<th>Severity</th>" in html
+        assert "<th>Confidence</th>" in html
+        assert "<td>critical</td>" in html
+        assert "<td>80%</td>" in html
+
+    def test_findings_preserves_recommendation(self) -> None:
+        findings = [_make_finding("DOC-001", "medium", "amber")]
+        html = _findings_html(findings, "Findings")
+        assert "Recommendation: Fix it" in html
+
+    def test_findings_empty(self) -> None:
+        html = _findings_html([], "Empty Findings")
+        assert "No findings." in html
+
+    def test_findings_rag_sections(self) -> None:
+        findings = [
+            _make_finding("A", "critical", "red"),
+            _make_finding("B", "medium", "amber"),
+            _make_finding("C", "low", "green"),
+        ]
+        html = _findings_html(findings, "All")
+        assert "RED (1)" in html
+        assert "AMBER (1)" in html
+        assert "GREEN (1)" in html
+
+    def test_grouped_findings_show_per_location_severity(self) -> None:
+        """Each occurrence row shows its own severity and confidence."""
+        f1 = Finding(
+            rule_id="CPP-001",
+            rag="red",
+            severity="high",
+            summary="Test finding for CPP-001",
+            recommendation="Fix it",
+            evidence_locator="src/a.cpp:10",
+            collector_name="test-collector",
+            collector_version="1.0",
+            confidence=0.9,
+            pattern_tag="test",
+        )
+        f2 = Finding(
+            rule_id="CPP-001",
+            rag="red",
+            severity="medium",
+            summary="Test finding for CPP-001",
+            recommendation="Fix it",
+            evidence_locator="src/b.cpp:20",
+            collector_name="test-collector",
+            collector_version="1.0",
+            confidence=0.7,
+            pattern_tag="test",
+        )
+        html = _findings_html([f1, f2], "Findings")
+        assert html.count("[CPP-001]") == 1
+        assert "<td>high</td>" in html
+        assert "<td>90%</td>" in html
+        assert "<td>medium</td>" in html
+        assert "<td>70%</td>" in html
+
+    def test_location_table_has_three_columns(self) -> None:
+        """Location table includes Location, Severity, and Confidence headers."""
+        findings = [_make_finding("SEC-001", "critical", "red", "src/app.py:5")]
+        html = _findings_html(findings, "Findings")
+        assert "<th>Location</th>" in html
+        assert "<th>Severity</th>" in html
+        assert "<th>Confidence</th>" in html
+
+    def test_distinct_rules_get_separate_blocks(self) -> None:
+        findings = [
+            _make_finding("SEC-001", "critical", "red", "src/a.py:1"),
+            _make_finding("SEC-002", "high", "red", "src/b.py:2"),
+        ]
+        html = _findings_html(findings, "Findings")
+        assert "[SEC-001]" in html
+        assert "[SEC-002]" in html
+
+
+class TestProvenanceHtml:
+    """Verify provenance metadata section."""
+
+    def test_provenance_includes_repo_and_sha(self) -> None:
+        result = _make_run_result()
+        html = _provenance_html(result)
+        assert "test-repo" in html
+        assert "abc1234" in html
+        assert "main" in html
+        assert "0.1.0" in html
+
+    def test_provenance_empty_without_metadata(self) -> None:
+        result = RunResult(findings=[], rule_results=[])
+        html = _provenance_html(result)
+        assert html == ""
+
+
+class TestTestResultsHtml:
+    """Verify test results section rendering."""
+
+    def test_passing_results(self) -> None:
+        from nfr_review.output.pytest_runner import PytestResult
+
+        pr = PytestResult(passed=10, failed=0, skipped=1, errors=0, duration_seconds=3.5)
+        html = _test_results_html(pr)
+        assert "PASSED" in html
+        assert "#28a745" in html
+        assert "<td>10</td>" in html
+
+    def test_failing_results(self) -> None:
+        from nfr_review.output.pytest_runner import PytestResult
+
+        pr = PytestResult(passed=8, failed=2, skipped=0, errors=1, duration_seconds=5.0)
+        html = _test_results_html(pr)
+        assert "FAILED" in html
+        assert "#dc3545" in html
+        assert "<td>2</td>" in html
+
+    def test_no_test_results(self) -> None:
+        html = _test_results_html(None)
+        assert "not performed" in html
+
+
+def _capture_pdf_html(tmp_path: Path, **kwargs: object) -> str:
+    """Render PDF with a mock weasyprint and return the HTML string."""
+    import sys
+    from types import ModuleType
+
+    captured: dict[str, str] = {}
+    fake_wp = ModuleType("weasyprint")
+
+    class FakeHTML:
+        def __init__(self, string: str = "", **kw: object) -> None:
+            captured["html"] = string
+
+        def write_pdf(self, path: str) -> None:
+            Path(path).write_bytes(b"%PDF-fake")
+
+    fake_wp.HTML = FakeHTML  # type: ignore[attr-defined]
+    original = sys.modules.get("weasyprint")
+    sys.modules["weasyprint"] = fake_wp
+    try:
+        out = tmp_path / "verify.pdf"
+        render_pdf(
+            nfr_result=kwargs.pop("nfr_result", _make_run_result()), output_path=out, **kwargs
+        )  # type: ignore[arg-type]
+    finally:
+        if original is not None:
+            sys.modules["weasyprint"] = original
+        else:
+            sys.modules.pop("weasyprint", None)
+    return captured["html"]
+
+
+class TestRenderPdfContentIntegration:
+    """Integration tests verifying the full HTML passed to weasyprint."""
+
+    def test_exec_summary_present_in_full_pdf(self, tmp_path: Path) -> None:
+        """When exec_summary is provided, the PDF HTML includes it."""
+        html = _capture_pdf_html(tmp_path, exec_summary=_make_exec_summary())
+        assert "Executive Summary" in html
+        assert "62/100" in html
+        assert "Conditional" in html
+        assert "Key Risks" in html
+        assert "Remediation Priorities" in html
+        assert "Overall Summary" in html
+        assert "Source Code Summary" in html
+        assert "Source Code Findings" in html
+
+    def test_no_exec_summary_omits_section(self, tmp_path: Path) -> None:
+        """When exec_summary is None, the exec summary section is absent."""
+        html = _capture_pdf_html(tmp_path, exec_summary=None)
+        assert "Executive Summary" not in html
+        assert "Overall Summary" in html
+        assert "Source Code Findings" in html

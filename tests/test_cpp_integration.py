@@ -113,7 +113,7 @@ class TestCppPipelineEndToEnd:
         findings = [f for f in result.findings if f.rule_id == "cpp-include-guards"]
         missing = [f for f in findings if f.pattern_tag == "cpp-missing-include-guard"]
         assert len(missing) >= 1
-        assert any("legacy" in f.summary.lower() for f in missing)
+        assert any("legacy" in f.evidence_locator.lower() for f in missing)
 
     def test_exception_safety_catch_all(self, result: RunResult) -> None:
         findings = [f for f in result.findings if f.rule_id == "cpp-exception-safety"]

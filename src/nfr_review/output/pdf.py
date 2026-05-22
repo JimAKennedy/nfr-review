@@ -226,14 +226,22 @@ def _findings_html(findings: list[Finding], title: str) -> str:
             parts.append(
                 f'<div class="finding finding-{representative.rag}">'
                 f"<strong>[{_h(rule_id)}]</strong> {_h(summary)}<br/>"
-                f"Severity: {_h(representative.severity)} "
-                f"| Confidence: {representative.confidence:.0%}<br/>"
                 f"Recommendation: {_h(representative.recommendation)}"
             )
             parts.append('<table class="location-table">')
-            parts.append("<thead><tr><th>Location</th></tr></thead><tbody>")
+            parts.append(
+                "<thead><tr>"
+                "<th>Location</th><th>Severity</th><th>Confidence</th>"
+                "</tr></thead><tbody>"
+            )
             for occ in occurrences:
-                parts.append(f"<tr><td><code>{_h(occ.evidence_locator)}</code></td></tr>")
+                parts.append(
+                    f"<tr>"
+                    f"<td><code>{_h(occ.evidence_locator)}</code></td>"
+                    f"<td>{_h(occ.severity)}</td>"
+                    f"<td>{occ.confidence:.0%}</td>"
+                    f"</tr>"
+                )
             parts.append("</tbody></table></div>")
 
     return "\n".join(parts)
