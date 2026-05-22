@@ -434,6 +434,14 @@ class TestTerminationGracePeriodRule004:
         assert result.findings[0].rag == "amber"
         assert "default" in result.findings[0].summary.lower()
 
+    def test_none_grace_period_treated_as_default(self) -> None:
+        """Payload may contain termination_grace_period=None (parsed but unset)."""
+        ev = _k8s_ev(containers=[_container()])
+        ev.payload["termination_grace_period"] = None
+        result = self.rule.evaluate([ev], None)
+        assert result.findings[0].rag == "amber"
+        assert "default" in result.findings[0].summary.lower()
+
     def test_sufficient_grace_with_prestop_green(self) -> None:
         ev = _k8s_ev(
             termination_grace_period=60,

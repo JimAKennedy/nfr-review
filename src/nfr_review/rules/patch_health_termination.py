@@ -48,8 +48,9 @@ class TerminationGracePeriodRule:
             file_path = ev.payload.get("file_path", ev.locator)
             containers = ev.payload.get("containers", [])
 
-            # termination_grace_period is at the pod level
-            grace_period = ev.payload.get("termination_grace_period", _DEFAULT_GRACE_PERIOD)
+            # termination_grace_period is at the pod level; treat None as default
+            raw_grace = ev.payload.get("termination_grace_period")
+            grace_period = raw_grace if raw_grace is not None else _DEFAULT_GRACE_PERIOD
 
             # Check if any container has a preStop hook
             has_pre_stop = any(
