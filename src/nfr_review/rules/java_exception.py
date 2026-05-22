@@ -41,11 +41,7 @@ class ExceptionHandlingAntipatternRule:
                             rule_id=self.id,
                             rag="red",
                             severity="high",
-                            summary=(
-                                f"Broad catch({block['caught_type']})"
-                                f" without rethrow at"
-                                f" line {block['line']}"
-                            ),
+                            summary=(f"Broad catch({block['caught_type']}) without rethrow"),
                             recommendation=(
                                 "Catch specific exception types or"
                                 " rethrow to preserve stack trace"

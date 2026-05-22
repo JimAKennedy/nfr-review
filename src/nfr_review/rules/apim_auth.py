@@ -41,7 +41,7 @@ class ApimAuthPolicyMissingRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=f"Authentication policy is configured in {file_path}.",
+                        summary="Authentication policy is configured.",
                         recommendation="No action required -- authentication is present.",
                         evidence_locator=file_path,
                         collector_name=ev.collector_name,
@@ -57,8 +57,7 @@ class ApimAuthPolicyMissingRule:
                         rag="red",
                         severity="critical",
                         summary=(
-                            f"No authentication policy found in {file_path}."
-                            " API endpoints are unprotected."
+                            "No authentication policy found. API endpoints are unprotected."
                         ),
                         recommendation=(
                             "Add a <validate-jwt> or"

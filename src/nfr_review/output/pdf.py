@@ -418,12 +418,17 @@ def render_pdf(
 
     sections.append(_test_results_html(pytest_result))
 
-    if deps_section_md:
-        sections.append(_md_deps_to_html(deps_section_md))
-
     sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(source_findings, "Source Code Findings"))
     sections.append(_findings_html(test_findings, "Test Code Findings"))
+
+    if deps_section_md:
+        sections.append('<div class="section-break"></div>')
+        deps_body = deps_section_md
+        if deps_body.startswith("## "):
+            deps_body = deps_body.split("\n", 1)[1] if "\n" in deps_body else ""
+        sections.append("<h2>Appendix A &mdash; Dependency Tree</h2>")
+        sections.append(_md_deps_to_html(deps_body))
 
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">

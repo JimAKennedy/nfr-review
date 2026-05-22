@@ -40,9 +40,7 @@ class NodejsSyncFsApiRule:
                         rule_id=self.id,
                         rag="amber",
                         severity="medium",
-                        summary=(
-                            f"Synchronous call {call['method']}() at line {call['line']}"
-                        ),
+                        summary=f"Synchronous call {call['method']}()",
                         recommendation=(
                             "Use the async equivalent to avoid blocking the"
                             " event loop in production code."

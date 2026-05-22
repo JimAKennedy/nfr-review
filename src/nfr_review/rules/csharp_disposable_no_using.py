@@ -57,10 +57,7 @@ class CSharpDisposableNoUsingRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"{creation['type_name']} created without using"
-                                f" at line {creation['line']}"
-                            ),
+                            summary=f"{creation['type_name']} created without using statement",
                             recommendation=(
                                 "Wrap IDisposable objects in a using statement or"
                                 " using declaration to ensure proper resource cleanup."

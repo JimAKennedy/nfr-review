@@ -43,7 +43,6 @@ class NodejsCallbackErrorIgnoredRule:
                             severity="medium",
                             summary=(
                                 f"Callback ignores error parameter '{cb['callback_param']}'"
-                                f" at line {cb['line']}"
                             ),
                             recommendation=(
                                 "Check the error parameter and handle or propagate"

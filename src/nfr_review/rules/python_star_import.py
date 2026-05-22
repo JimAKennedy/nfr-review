@@ -41,9 +41,7 @@ class PythonStarImportRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"Star import from {imp['module']} at line {imp['line']}"
-                            ),
+                            summary=f"Star import from {imp['module']}",
                             recommendation=(
                                 "Use explicit imports to make dependencies"
                                 " visible and avoid namespace pollution."

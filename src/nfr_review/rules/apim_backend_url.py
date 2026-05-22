@@ -53,8 +53,7 @@ class ApimHardcodedBackendUrlRule:
                         rag="amber",
                         severity="medium",
                         summary=(
-                            f"Hardcoded backend URL(s) in {file_path}:"
-                            f" {', '.join(hardcoded)}."
+                            f"Hardcoded backend URL(s): {', '.join(hardcoded)}."
                             " Environment-specific values should use named values."
                         ),
                         recommendation=(
@@ -75,7 +74,7 @@ class ApimHardcodedBackendUrlRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=(f"All backend URLs in {file_path} use named values."),
+                        summary="All backend URLs use named values.",
                         recommendation="No action required -- named values are used.",
                         evidence_locator=file_path,
                         collector_name=ev.collector_name,

@@ -87,10 +87,7 @@ class LoggingToStdoutRule:
                                 rule_id=self.id,
                                 rag="amber",
                                 severity="medium",
-                                summary=(
-                                    f"Logging to stdout via {stmt['method']}()"
-                                    f" at line {stmt['line']}"
-                                ),
+                                summary=f"Logging to stdout via {stmt['method']}()",
                                 recommendation=(
                                     "Use a structured logging framework instead of"
                                     " direct stdout/stderr writes."

@@ -782,7 +782,9 @@ def report_cmd(
         except Exception as exc:  # noqa: BLE001
             logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
             click.echo(f"warning: dependency analysis failed: {exc}", err=True)
-            deps_section = f"## Dependency Analysis\n\nDependency analysis failed: {exc}\n"
+            deps_section = (
+                f"## Appendix A — Dependency Tree\n\nDependency analysis failed: {exc}\n"
+            )
         _phase_done("Dependency analysis", t0, quiet=quiet)
 
     # Build diagram sections

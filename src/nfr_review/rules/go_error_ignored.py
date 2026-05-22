@@ -39,9 +39,7 @@ class GoErrorIgnoredRule:
                             rule_id=self.id,
                             rag="amber",
                             severity="medium",
-                            summary=(
-                                f"Ignored error from {entry['call']}() at line {entry['line']}"
-                            ),
+                            summary=f"Ignored error from {entry['call']}()",
                             recommendation=(
                                 "Handle the error or explicitly document why"
                                 " it is safe to ignore."

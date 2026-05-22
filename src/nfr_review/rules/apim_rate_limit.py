@@ -41,7 +41,7 @@ class ApimRateLimitMissingRule:
                         rule_id=self.id,
                         rag="green",
                         severity="info",
-                        summary=f"Rate limiting is configured in {file_path}.",
+                        summary="Rate limiting is configured.",
                         recommendation="No action required -- rate limiting is present.",
                         evidence_locator=file_path,
                         collector_name=ev.collector_name,
@@ -57,7 +57,7 @@ class ApimRateLimitMissingRule:
                         rag="red",
                         severity="high",
                         summary=(
-                            f"No rate limiting policy found in {file_path}."
+                            "No rate limiting policy found."
                             " API is unprotected against request flooding."
                         ),
                         recommendation=(
