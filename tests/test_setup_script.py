@@ -95,3 +95,7 @@ class TestSetupAllScriptStructure:
 
     def test_skips_prompt_when_not_tty(self, all_script_text: str) -> None:
         assert "-t 0" in all_script_text
+
+    def test_installs_jdepend(self, all_script_text: str) -> None:
+        assert "jdepend" in all_script_text
+        assert "JDEPEND_VERSION" in all_script_text

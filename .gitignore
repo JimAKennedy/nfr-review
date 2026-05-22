@@ -36,6 +36,7 @@ nfr-review.jsonl
 hygiene-report.csv
 hygiene-report.jsonl
 .regression-repos/
+.tools/
 package.json
 package-lock.json
 reports/
