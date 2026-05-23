@@ -217,10 +217,62 @@ class TestBytecodeDiscovery:
         dirs = _find_bytecode_dirs(tmp_path)
         assert len(dirs) == 0
 
-    def test_no_bytecode_dirs_returns_empty(self, tmp_path: Path) -> None:
+    def test_no_bytecode_dirs_no_java_returns_empty(self, tmp_path: Path) -> None:
         collector = JDependCollector()
         evidences = collector.collect(tmp_path, None)
         assert evidences == []
+
+    @patch("nfr_review.collectors.jdepend.subprocess.run")
+    def test_no_bytecode_with_java_and_pom_triggers_compile(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
+        (tmp_path / "src/main/java/App.java").write_text("class App {}")
+        (tmp_path / "pom.xml").write_text("<project/>")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        collector = JDependCollector()
+        collector.collect(tmp_path, None)
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[0] == "mvn"
+
+    @patch("nfr_review.collectors.jdepend.subprocess.run")
+    def test_no_bytecode_compile_failure_returns_skip(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
+        (tmp_path / "src/main/java/App.java").write_text("class App {}")
+        (tmp_path / "pom.xml").write_text("<project/>")
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "BUILD FAILURE"
+        mock_run.return_value = mock_result
+
+        collector = JDependCollector()
+        evidences = collector.collect(tmp_path, None)
+        assert len(evidences) == 1
+        assert evidences[0].kind == "jdepend-skip"
+        assert "Auto-compile failed" in evidences[0].payload["reason"]
+
+    @patch("nfr_review.collectors.jdepend.subprocess.run")
+    def test_no_bytecode_no_build_config_returns_skip(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
+        (tmp_path / "src/main/java/App.java").write_text("class App {}")
+
+        collector = JDependCollector()
+        evidences = collector.collect(tmp_path, None)
+        assert len(evidences) == 1
+        assert evidences[0].kind == "jdepend-skip"
+        assert "no pom.xml" in evidences[0].payload["reason"]
 
 
 # ---------------------------------------------------------------------------

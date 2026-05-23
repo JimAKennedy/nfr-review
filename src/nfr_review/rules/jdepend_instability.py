@@ -49,8 +49,8 @@ class JDepInstabilityRule:
 
             for pkg in ev.payload.get("packages", []):
                 checked_any = True
-                instability = pkg.get("I", 0.0)
-                abstractness = pkg.get("A", 0.0)
+                instability = pkg.get("i", pkg.get("I", 0.0))
+                abstractness = pkg.get("a", pkg.get("A", 0.0))
                 name = pkg.get("name", "unknown")
 
                 if (

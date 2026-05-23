@@ -128,6 +128,7 @@ def render_markdown_report(
     pytest_result: PytestResult | None = None,
     deps_section: str = "",
     jdepend_section: str = "",
+    adr_section: str = "",
     derived_adrs_section: str = "",
     title: str = "NFR Review Report",
     diagrams: dict[str, str] | None = None,
@@ -203,6 +204,10 @@ def render_markdown_report(
     skipped_section = _skipped_rules_section(nfr_result, hygiene_result)
     if skipped_section:
         sections.append(skipped_section)
+
+    # Architecture Decision Records
+    if adr_section:
+        sections.append(adr_section)
 
     # JDepend structural analysis
     if jdepend_section:

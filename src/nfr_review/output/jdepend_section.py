@@ -91,4 +91,41 @@ def build_derived_adrs_section(evidence: list[Evidence]) -> str:
     return "\n".join(lines)
 
 
-__all__ = ["build_derived_adrs_section", "build_jdepend_section"]
+def build_adr_section(evidence: list[Evidence]) -> str:
+    """Build an ADR summary section from adr-document and adr-summary evidence."""
+    docs = [e for e in evidence if e.kind == "adr-document"]
+    if not docs:
+        return ""
+
+    summary_ev = next((e for e in evidence if e.kind == "adr-summary"), None)
+
+    lines = ["## Architecture Decision Records", ""]
+
+    if summary_ev:
+        total = summary_ev.payload.get("total_adrs", len(docs))
+        statuses = summary_ev.payload.get("statuses", {})
+        has_lifecycle = summary_ev.payload.get("has_lifecycle_tracking", False)
+        lines.append(f"**{total} ADRs** found in repository.")
+        if has_lifecycle:
+            status_parts = [f"{v} {k}" for k, v in sorted(statuses.items())]
+            lines.append(f"Status breakdown: {', '.join(status_parts)}.")
+        lines.append("")
+
+    lines.extend(
+        [
+            "| # | Title | Status | Superseded By |",
+            "|---|-------|--------|---------------|",
+        ]
+    )
+
+    for i, ev in enumerate(docs, 1):
+        title = ev.payload.get("title") or ev.payload.get("file_path", "Unknown")
+        status = ev.payload.get("status") or "—"
+        superseded = ev.payload.get("superseded_by") or "—"
+        lines.append(f"| {i} | {title} | {status} | {superseded} |")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+__all__ = ["build_adr_section", "build_derived_adrs_section", "build_jdepend_section"]
