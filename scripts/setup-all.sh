@@ -104,51 +104,101 @@ fi
 # --- JDepend (Java structural analysis) ---
 JDEPEND_VERSION="2.10"
 JDEPEND_DIR="$PROJECT_ROOT/.tools/jdepend"
-if command -v jdepend &>/dev/null; then
-  info "jdepend already installed: $(jdepend 2>&1 | head -1 || echo 'unknown')"
-elif java -version &>/dev/null 2>&1; then
-  info "Installing JDepend $JDEPEND_VERSION"
-  mkdir -p "$JDEPEND_DIR"
-  JDEPEND_URL="https://github.com/clarkware/jdepend/releases/download/$JDEPEND_VERSION/jdepend-$JDEPEND_VERSION.zip"
-  if command -v curl &>/dev/null; then
-    curl -fsSL "$JDEPEND_URL" -o "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
-      warn "Failed to download JDepend — JDepend analysis will be skipped"
-      MISSING_BINS+=("jdepend (download failed)")
-    }
-  elif command -v wget &>/dev/null; then
-    wget -q "$JDEPEND_URL" -O "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
-      warn "Failed to download JDepend — JDepend analysis will be skipped"
-      MISSING_BINS+=("jdepend (download failed)")
-    }
-  else
-    MISSING_BINS+=("jdepend (no curl or wget)")
-  fi
 
-  if [[ -f "$JDEPEND_DIR/jdepend.zip" ]]; then
-    unzip -qo "$JDEPEND_DIR/jdepend.zip" -d "$JDEPEND_DIR" 2>/dev/null || {
-      warn "Failed to extract JDepend archive"
-      MISSING_BINS+=("jdepend (extraction failed)")
-    }
-    # Create a wrapper script on PATH
-    JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
-    JAVA_BIN="$(command -v java)"
-    if [[ -n "$JDEPEND_JAR" ]] && [[ -n "$JAVA_BIN" ]]; then
-      WRAPPER="$VENV_DIR/bin/jdepend"
-      cat > "$WRAPPER" << JDWRAPPER
-#!/usr/bin/env bash
-exec "$JAVA_BIN" -cp "$JDEPEND_JAR" jdepend.xmlui.JDepend "\$@"
-JDWRAPPER
-      chmod +x "$WRAPPER"
-      success "JDepend installed at $WRAPPER"
-    else
-      warn "JDepend jar not found after extraction"
-      MISSING_BINS+=("jdepend (jar not found)")
+# Resolve a working java binary — prefer brew's keg-only openjdk over PATH.
+# macOS ships /usr/bin/java which looks present but fails at runtime.
+find_java_bin() {
+  if command -v brew &>/dev/null; then
+    local brew_java
+    brew_java="$(brew --prefix openjdk@21 2>/dev/null)/bin/java"
+    if [[ -x "$brew_java" ]] && "$brew_java" -version &>/dev/null 2>&1; then
+      echo "$brew_java"
+      return
     fi
-    rm -f "$JDEPEND_DIR/jdepend.zip"
   fi
-else
-  warn "Java not found — JDepend requires a JRE. Skipping JDepend install."
-  MISSING_BINS+=("jdepend (requires java)")
+  local sys_java
+  sys_java="$(command -v java 2>/dev/null)"
+  if [[ -n "$sys_java" ]] && "$sys_java" -version &>/dev/null 2>&1; then
+    echo "$sys_java"
+    return
+  fi
+  return 1
+}
+
+# Write (or rewrite) the jdepend wrapper with the given java path.
+write_jdepend_wrapper() {
+  local java_bin="$1"
+  local jar="$2"
+  local wrapper="$VENV_DIR/bin/jdepend"
+  cat > "$wrapper" << JDWRAPPER
+#!/usr/bin/env bash
+exec "$java_bin" -cp "$jar" jdepend.xmlui.JDepend "\$@"
+JDWRAPPER
+  chmod +x "$wrapper"
+  success "JDepend wrapper installed at $wrapper (java: $java_bin)"
+}
+
+JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
+JDEPEND_NEEDS_INSTALL=true
+JDEPEND_NEEDS_WRAPPER=false
+
+# If wrapper exists, verify it actually works (java binary may have moved/vanished).
+if command -v jdepend &>/dev/null && jdepend 2>&1 | grep -qi 'usage\|jdepend' &>/dev/null; then
+  info "jdepend already installed and working"
+  JDEPEND_NEEDS_INSTALL=false
+elif [[ -n "$JDEPEND_JAR" ]]; then
+  info "JDepend jar found but wrapper is missing or broken — regenerating"
+  JDEPEND_NEEDS_INSTALL=false
+  JDEPEND_NEEDS_WRAPPER=true
+fi
+
+if $JDEPEND_NEEDS_INSTALL; then
+  if JAVA_BIN="$(find_java_bin)"; then
+    info "Installing JDepend $JDEPEND_VERSION"
+    mkdir -p "$JDEPEND_DIR"
+    JDEPEND_URL="https://github.com/clarkware/jdepend/releases/download/$JDEPEND_VERSION/jdepend-$JDEPEND_VERSION.zip"
+    if command -v curl &>/dev/null; then
+      curl -fsSL "$JDEPEND_URL" -o "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
+        warn "Failed to download JDepend — JDepend analysis will be skipped"
+        MISSING_BINS+=("jdepend (download failed)")
+      }
+    elif command -v wget &>/dev/null; then
+      wget -q "$JDEPEND_URL" -O "$JDEPEND_DIR/jdepend.zip" 2>/dev/null || {
+        warn "Failed to download JDepend — JDepend analysis will be skipped"
+        MISSING_BINS+=("jdepend (download failed)")
+      }
+    else
+      MISSING_BINS+=("jdepend (no curl or wget)")
+    fi
+
+    if [[ -f "$JDEPEND_DIR/jdepend.zip" ]]; then
+      unzip -qo "$JDEPEND_DIR/jdepend.zip" -d "$JDEPEND_DIR" 2>/dev/null || {
+        warn "Failed to extract JDepend archive"
+        MISSING_BINS+=("jdepend (extraction failed)")
+      }
+      JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
+      if [[ -n "$JDEPEND_JAR" ]]; then
+        write_jdepend_wrapper "$JAVA_BIN" "$JDEPEND_JAR"
+      else
+        warn "JDepend jar not found after extraction"
+        MISSING_BINS+=("jdepend (jar not found)")
+      fi
+      rm -f "$JDEPEND_DIR/jdepend.zip"
+    fi
+  else
+    warn "Java not found — JDepend requires a JRE. Skipping JDepend install."
+    MISSING_BINS+=("jdepend (requires java)")
+  fi
+fi
+
+# Regenerate wrapper when jar exists but wrapper is broken (e.g. stale java path).
+if $JDEPEND_NEEDS_WRAPPER && [[ -n "$JDEPEND_JAR" ]]; then
+  if JAVA_BIN="$(find_java_bin)"; then
+    write_jdepend_wrapper "$JAVA_BIN" "$JDEPEND_JAR"
+  else
+    warn "Java not found — cannot regenerate JDepend wrapper"
+    MISSING_BINS+=("jdepend (requires java)")
+  fi
 fi
 
 # --- Mermaid CLI (mmdc) ---
