@@ -230,6 +230,7 @@ class K8sManifestCollector:
                             "termination_grace_period": pod_spec.get(
                                 "terminationGracePeriodSeconds"
                             ),
+                            "security_context": pod_spec.get("securityContext") or None,
                             "containers": containers,
                         },
                     )
