@@ -274,6 +274,48 @@ class TestBytecodeDiscovery:
         assert evidences[0].kind == "jdepend-skip"
         assert "no pom.xml" in evidences[0].payload["reason"]
 
+    @patch("nfr_review.collectors.jdepend.subprocess.run")
+    def test_prefers_mvnw_wrapper_over_system_mvn(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
+        (tmp_path / "src/main/java/App.java").write_text("class App {}")
+        (tmp_path / "pom.xml").write_text("<project/>")
+        (tmp_path / "mvnw").write_text('#!/bin/sh\nexec mvn "$@"')
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        collector = JDependCollector()
+        collector.collect(tmp_path, None)
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[0] == str(tmp_path / "mvnw")
+
+    @patch("nfr_review.collectors.jdepend.subprocess.run")
+    def test_prefers_gradlew_wrapper_over_system_gradle(
+        self, mock_run: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
+        (tmp_path / "src/main/java/App.java").write_text("class App {}")
+        (tmp_path / "build.gradle").write_text("apply plugin: 'java'")
+        (tmp_path / "gradlew").write_text('#!/bin/sh\nexec gradle "$@"')
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+        mock_run.return_value = mock_result
+
+        collector = JDependCollector()
+        collector.collect(tmp_path, None)
+        mock_run.assert_called_once()
+        args = mock_run.call_args[0][0]
+        assert args[0] == str(tmp_path / "gradlew")
+
 
 # ---------------------------------------------------------------------------
 # JDepend not installed
