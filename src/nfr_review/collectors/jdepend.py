@@ -49,6 +49,18 @@ def _find_bytecode_dirs(repo_path: Path) -> list[Path]:
     return found
 
 
+def _resolve_build_cmd(repo_path: Path, config_file: str, cmd: list[str]) -> list[str]:
+    """Prefer project-local wrapper scripts over system binaries."""
+    tool = cmd[0]
+    wrappers = {"mvn": "mvnw", "gradle": "gradlew"}
+    wrapper_name = wrappers.get(tool)
+    if wrapper_name:
+        wrapper_path = repo_path / wrapper_name
+        if wrapper_path.is_file():
+            return [str(wrapper_path)] + cmd[1:]
+    return cmd
+
+
 def _try_compile_java(repo_path: Path) -> str | None:
     """Attempt to compile Java sources if a build config exists.
 
@@ -56,15 +68,16 @@ def _try_compile_java(repo_path: Path) -> str | None:
     """
     for config_file, (cmd, _expected_dir) in _BUILD_CONFIGS.items():
         if (repo_path / config_file).exists():
-            tool_name = cmd[0]
+            resolved_cmd = _resolve_build_cmd(repo_path, config_file, cmd)
+            tool_name = resolved_cmd[0]
             logger.info(
                 "No bytecode found but %s detected — running '%s'",
                 config_file,
-                " ".join(cmd),
+                " ".join(resolved_cmd),
             )
             try:
                 result = subprocess.run(  # nosec B603 B607
-                    cmd,
+                    resolved_cmd,
                     cwd=str(repo_path),
                     capture_output=True,
                     text=True,
@@ -73,7 +86,7 @@ def _try_compile_java(repo_path: Path) -> str | None:
             except FileNotFoundError:
                 return (
                     f"{tool_name} not found on PATH — "
-                    f"install {tool_name} to enable auto-compile"
+                    f"install {tool_name} or add a wrapper script to enable auto-compile"
                 )
             except subprocess.SubprocessError as exc:
                 return f"{tool_name} compile failed: {exc}"
