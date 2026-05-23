@@ -99,6 +99,14 @@ class TestSetupAllScriptStructure:
     def test_installs_java(self, all_script_text: str) -> None:
         assert "brew install openjdk@21" in all_script_text
 
+    def test_finds_java_via_brew_prefix(self, all_script_text: str) -> None:
+        assert "brew --prefix openjdk@21" in all_script_text
+        assert "find_java_bin" in all_script_text
+
+    def test_regenerates_broken_jdepend_wrapper(self, all_script_text: str) -> None:
+        assert "JDEPEND_NEEDS_WRAPPER" in all_script_text
+        assert "write_jdepend_wrapper" in all_script_text
+
     def test_installs_jdepend(self, all_script_text: str) -> None:
         assert "jdepend" in all_script_text
         assert "JDEPEND_VERSION" in all_script_text
