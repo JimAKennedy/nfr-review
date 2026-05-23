@@ -14,6 +14,7 @@ from nfr_review.output._errors import OutputError
 from nfr_review.output.classify import Region, classify_region, partition_findings
 from nfr_review.output.csv import CSV_HEADER, write_csv
 from nfr_review.output.jsonl import write_jsonl
+from nfr_review.output.sarif import write_sarif
 
 __all__ = [
     "OutputError",
@@ -23,4 +24,5 @@ __all__ = [
     "CSV_HEADER",
     "write_csv",
     "write_jsonl",
+    "write_sarif",
 ]

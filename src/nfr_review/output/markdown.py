@@ -14,6 +14,7 @@ from nfr_review.output.classify import partition_findings
 if TYPE_CHECKING:
     from nfr_review.engine import RunResult
     from nfr_review.output.pytest_runner import PytestResult
+    from nfr_review.scoring import MaturityScore, ScoreTrend
 
 _RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
 _SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
@@ -121,6 +122,60 @@ def _skipped_rules_section(nfr_result: RunResult, hygiene_result: RunResult | No
     return "\n".join(lines)
 
 
+def render_score_section(score: MaturityScore, trend: ScoreTrend | None = None) -> str:
+    """Render a Design Maturity Score section as Markdown.
+
+    Parameters
+    ----------
+    score:
+        The computed maturity score.
+    trend:
+        Optional trend comparison against a baseline.
+
+    Returns
+    -------
+    str
+        Markdown fragment for the score section.
+    """
+    lines = [
+        "## Design Maturity Score",
+        "",
+        f"**Overall: {score.overall}/100 (Grade: {score.grade})**",
+        "",
+        f"Rules Coverage: {score.rules_coverage:.0%}",
+        "",
+    ]
+
+    if score.category_scores:
+        lines.append("### Category Breakdown")
+        lines.append("")
+        lines.append("| Category | Score |")
+        lines.append("|----------|-------|")
+        for cat in sorted(score.category_scores):
+            cat_score = score.category_scores[cat]
+            lines.append(f"| {cat} | {cat_score}/100 |")
+        lines.append("")
+
+    if trend is not None:
+        lines.append("### Trend (vs baseline)")
+        lines.append("")
+        label = trend.direction.capitalize()
+        lines.append(f"{label}: {trend.delta:+d} points (was {trend.baseline_score})")
+        lines.append("")
+
+        if trend.category_deltas:
+            lines.append("| Category | Current | Baseline | Delta |")
+            lines.append("|----------|---------|----------|-------|")
+            for cat in sorted(trend.category_deltas):
+                cur = score.category_scores.get(cat, 100)
+                bl = cur - trend.category_deltas[cat]
+                delta = trend.category_deltas[cat]
+                lines.append(f"| {cat} | {cur} | {bl} | {delta:+d} |")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def render_markdown_report(
     *,
     nfr_result: RunResult,
@@ -132,6 +187,7 @@ def render_markdown_report(
     derived_adrs_section: str = "",
     title: str = "NFR Review Report",
     diagrams: dict[str, str] | None = None,
+    score_section: str = "",
 ) -> str:
     """Render a complete Markdown report from scan results.
 
@@ -178,6 +234,10 @@ def render_markdown_report(
     sections.append(_summary_table(all_findings, "Overall Summary"))
     sections.append(_summary_table(source_findings, "Source Code Summary"))
     sections.append(_summary_table(test_findings, "Test Code Summary"))
+
+    # Design maturity score
+    if score_section:
+        sections.append(score_section)
 
     # Diagrams
     if diagrams:

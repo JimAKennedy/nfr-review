@@ -239,6 +239,20 @@ def cli() -> None:
     default=None,
     help="Path to a prior JSONL file. Suppress known findings; exit on regressions.",
 )
+@click.option(
+    "--sarif",
+    "sarif_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output path for SARIF 2.1.0 findings file.",
+)
+@click.option(
+    "--score",
+    "show_score",
+    is_flag=True,
+    default=False,
+    help="Compute and display design maturity score.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -249,6 +263,8 @@ def run_cmd(
     jsonl_path: Path | None,
     include_tests: bool,
     baseline_path: Path | None = None,
+    sarif_path: Path | None = None,
+    show_score: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     if verbose and quiet:
@@ -343,6 +359,40 @@ def run_cmd(
             evidence=result.evidence,
         )
 
+    if show_score:
+        from nfr_review.scoring import (
+            compute_maturity_score,
+            compute_trend,
+            load_baseline_score,
+        )
+
+        score = compute_maturity_score(
+            result.findings,
+            result.run_metadata.rules_run if result.run_metadata else [],
+            result.run_metadata.rules_skipped if result.run_metadata else [],
+        )
+        click.echo("", err=True)
+        click.echo(
+            f"Design Maturity Score: {score.overall}/100 (Grade: {score.grade})", err=True
+        )
+        click.echo(f"Rules Coverage: {score.rules_coverage:.0%}", err=True)
+        if score.category_scores:
+            click.echo("Category Scores:", err=True)
+            for cat, cat_score in sorted(score.category_scores.items()):
+                click.echo(f"  {cat}: {cat_score}/100", err=True)
+
+        if baseline_path is not None:
+            bl_findings, bl_rules_run, bl_rules_skipped = load_baseline_score(baseline_path)
+            trend = compute_trend(score, bl_findings, bl_rules_run, bl_rules_skipped)
+            arrow = (
+                "↑"
+                if trend.direction == "improved"
+                else "↓"
+                if trend.direction == "regressed"
+                else "→"
+            )
+            click.echo(f"Trend: {arrow} {trend.direction} (delta: {trend.delta:+d})", err=True)
+
     t0 = _phase("Writing output files", quiet=quiet)
     run_logger.info("Writing output files")
     try:
@@ -358,14 +408,28 @@ def run_cmd(
     rules_skipped = len(metadata.rules_skipped) if metadata is not None else 0
     files_emitted = 2  # csv + jsonl
 
+    if sarif_path is not None:
+        from nfr_review.output.sarif import write_sarif
+
+        try:
+            write_sarif(result, sarif_path)
+            files_emitted += 1
+        except OutputError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+
+    summary_parts = [
+        f"nfr-review: tech_detected={tech_detected}",
+        f"collectors_run={collectors_run}",
+        f"rules_run={rules_run} rules_skipped={rules_skipped}",
+        f"findings={len(result.findings)} files_emitted={files_emitted}",
+        f"csv={csv_path} jsonl={jsonl_path}",
+    ]
+    if sarif_path is not None:
+        summary_parts.append(f"sarif={sarif_path}")
+
     click.echo(
-        (
-            f"nfr-review: tech_detected={tech_detected} "
-            f"collectors_run={collectors_run} "
-            f"rules_run={rules_run} rules_skipped={rules_skipped} "
-            f"findings={len(result.findings)} files_emitted={files_emitted} "
-            f"csv={csv_path} jsonl={jsonl_path}"
-        ),
+        " ".join(summary_parts),
         err=True,
     )
     for warning in result.warnings:
@@ -712,6 +776,20 @@ def hygiene_cmd(
     show_default=True,
     help="Maximum seconds to wait for pytest to complete (default: 300).",
 )
+@click.option(
+    "--sarif",
+    "sarif_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output path for SARIF 2.1.0 findings file.",
+)
+@click.option(
+    "--score",
+    "show_score",
+    is_flag=True,
+    default=False,
+    help="Compute and display design maturity score in the report.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -726,6 +804,8 @@ def report_cmd(
     pdf: bool,
     no_summary: bool,
     test_timeout: int,
+    sarif_path: Path | None = None,
+    show_score: bool = False,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     from nfr_review.output.jdepend_section import (
@@ -881,6 +961,21 @@ def report_cmd(
     derived_adrs_section = build_derived_adrs_section(nfr_result.evidence)
     adr_section = build_adr_section(nfr_result.evidence)
 
+    # Compute maturity score section for report
+    score_section = ""
+    if show_score:
+        from nfr_review.output.markdown import render_score_section
+        from nfr_review.scoring import compute_maturity_score
+
+        all_report_findings = list(nfr_result.findings) + list(hygiene_result.findings)
+        nfr_meta = nfr_result.run_metadata
+        score = compute_maturity_score(
+            all_report_findings,
+            nfr_meta.rules_run if nfr_meta else [],
+            nfr_meta.rules_skipped if nfr_meta else [],
+        )
+        score_section = render_score_section(score)
+
     # Generate report
     _phase("Rendering Markdown report", quiet=quiet)
     md_content = render_markdown_report(
@@ -892,6 +987,7 @@ def report_cmd(
         adr_section=adr_section,
         derived_adrs_section=derived_adrs_section,
         diagrams=diagrams,
+        score_section=score_section,
     )
 
     # Write output files
@@ -915,6 +1011,10 @@ def report_cmd(
         )
         write_csv(combined_result, csv_path)
         write_jsonl(combined_result, jsonl_path)
+        if sarif_path is not None:
+            from nfr_review.output.sarif import write_sarif
+
+            write_sarif(combined_result, sarif_path)
     except (OSError, OutputError) as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
@@ -997,6 +1097,8 @@ def report_cmd(
     ]
     if pdf_path:
         summary_parts.append(f"pdf={pdf_path}")
+    if sarif_path is not None:
+        summary_parts.append(f"sarif={sarif_path}")
     click.echo(" ".join(summary_parts), err=True)
 
 
