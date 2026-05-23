@@ -74,7 +74,9 @@ if command -v brew &>/dev/null; then
     info "libmagic already installed"
   fi
 
-  if ! command -v java &>/dev/null; then
+  # macOS ships a /usr/bin/java stub that passes `command -v` but doesn't work.
+  # Test with `java -version` to detect a real JRE.
+  if ! java -version &>/dev/null 2>&1; then
     info "Installing OpenJDK 21 via Homebrew (required by JDepend)"
     brew install openjdk@21
     # openjdk is keg-only — add to PATH for the rest of this script
@@ -94,7 +96,7 @@ else
   if ! python -c "from typecode.magic2 import load_lib; load_lib()" 2>/dev/null; then
     MISSING_BINS+=("libmagic (required by scancode-toolkit)")
   fi
-  if ! command -v java &>/dev/null; then
+  if ! java -version &>/dev/null 2>&1; then
     MISSING_BINS+=("java (OpenJDK 21+ — required by JDepend)")
   fi
 fi
@@ -104,7 +106,7 @@ JDEPEND_VERSION="2.10"
 JDEPEND_DIR="$PROJECT_ROOT/.tools/jdepend"
 if command -v jdepend &>/dev/null; then
   info "jdepend already installed: $(jdepend 2>&1 | head -1 || echo 'unknown')"
-elif command -v java &>/dev/null; then
+elif java -version &>/dev/null 2>&1; then
   info "Installing JDepend $JDEPEND_VERSION"
   mkdir -p "$JDEPEND_DIR"
   JDEPEND_URL="https://github.com/clarkware/jdepend/releases/download/$JDEPEND_VERSION/jdepend-$JDEPEND_VERSION.zip"
