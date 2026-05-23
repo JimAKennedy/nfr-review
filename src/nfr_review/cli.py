@@ -232,6 +232,13 @@ def cli() -> None:
     default=False,
     help="Include test and fixture directories in analysis.",
 )
+@click.option(
+    "--baseline",
+    "baseline_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to a prior JSONL file. Suppress known findings; exit on regressions.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -241,6 +248,7 @@ def run_cmd(
     csv_path: Path | None,
     jsonl_path: Path | None,
     include_tests: bool,
+    baseline_path: Path | None = None,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     if verbose and quiet:
@@ -314,6 +322,27 @@ def run_cmd(
         raise click.exceptions.Exit(1) from exc
     _phase_done("NFR scan", t0, quiet=quiet)
 
+    if baseline_path is not None:
+        from nfr_review.baseline import filter_new_findings, load_baseline
+
+        baseline = load_baseline(baseline_path)
+        new_findings = filter_new_findings(result.findings, baseline)
+        click.echo(
+            f"  Baseline loaded: {baseline.finding_count} findings",
+            err=True,
+        )
+        click.echo(
+            f"  New findings: {len(new_findings)} (was {len(result.findings)})",
+            err=True,
+        )
+        result = RunResult(
+            findings=new_findings,
+            rule_results=result.rule_results,
+            run_metadata=result.run_metadata,
+            warnings=result.warnings,
+            evidence=result.evidence,
+        )
+
     t0 = _phase("Writing output files", quiet=quiet)
     run_logger.info("Writing output files")
     try:
@@ -342,6 +371,16 @@ def run_cmd(
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
 
+    if metadata is not None and metadata.rules_skipped:
+        click.echo(
+            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)",
+            err=True,
+        )
+        for skip in metadata.rules_skipped:
+            run_logger.info("rule %s skipped (%s)", skip["rule_id"], skip["reason"])
+
+    if baseline_path is not None and len(result.findings) > 0:
+        raise click.exceptions.Exit(1)
     if _exceeds_threshold(result, config.severity_threshold):
         raise click.exceptions.Exit(2)
 
@@ -484,7 +523,7 @@ def hygiene_cmd(
         repo,
         target,
         options=opts or None,
-        phases=["config", "collect+evaluate", "output"],
+        phases=["config", "detect", "collect+evaluate", "output"],
         quiet=quiet,
     )
 
@@ -501,8 +540,21 @@ def hygiene_cmd(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    t0 = _phase("Detecting technologies", quiet=quiet)
+    try:
+        detected = detect_technologies(target)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Technology detection failed for %s: %s", target, e)
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    config = config.model_copy(update={"tech": merged_tech})
+
     if include_tests:
         config = config.model_copy(update={"exclude_test_paths": False})
+
+    active_tech = [k for k, v in merged_tech.items() if v]
+    if active_tech and not quiet:
+        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
 
     from nfr_review.protocols import Rule as RuleProtocol
 
@@ -567,6 +619,15 @@ def hygiene_cmd(
     )
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
+
+    if metadata is not None and metadata.rules_skipped:
+        click.echo(
+            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)",
+            err=True,
+        )
+        hygiene_logger = logging.getLogger("nfr_review")
+        for skip in metadata.rules_skipped:
+            hygiene_logger.info("rule %s skipped (%s)", skip["rule_id"], skip["reason"])
 
     if severity_threshold is not None:
         threshold: Severity = severity_threshold  # type: ignore[assignment]
@@ -1122,6 +1183,63 @@ def deps_cmd(
         f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}",
         err=True,
     )
+
+
+@cli.command("init", help="Detect technologies and generate an nfr-review.yaml config.")
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Print generated config to stdout instead of writing a file.",
+)
+def init_cmd(target: Path, dry_run: bool) -> None:
+    """Detect technologies in TARGET and write an nfr-review.yaml config."""
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    click.echo("Detecting technologies...", err=True)
+    try:
+        detected = detect_technologies(target)
+    except Exception as e:  # noqa: BLE001
+        click.echo(f"error: technology detection failed: {e}", err=True)
+        raise click.exceptions.Exit(1) from e
+
+    active_tech = {k: True for k, v in detected.items() if v}
+
+    config_data: dict[str, Any] = {"version": 1}
+    if active_tech:
+        config_data["tech"] = active_tech
+
+    from io import StringIO
+
+    from ruamel.yaml import YAML
+
+    yaml = YAML()
+    yaml.default_flow_style = False
+    buf = StringIO()
+    yaml.dump(config_data, buf)
+    yaml_text = buf.getvalue()
+
+    if dry_run:
+        click.echo(yaml_text, nl=False)
+    else:
+        out_path = target / "nfr-review.yaml"
+        out_path.write_text(yaml_text, encoding="utf-8")
+        click.echo(f"Wrote {out_path}", err=True)
+
+    # Summary of detected technologies
+    if active_tech:
+        click.echo(
+            f"Detected: {', '.join(sorted(active_tech.keys()))}",
+            err=True,
+        )
+    else:
+        click.echo("No technologies detected.", err=True)
 
 
 @cli.command("version", help="Print the nfr-review version and exit.")
