@@ -73,6 +73,17 @@ if command -v brew &>/dev/null; then
   else
     info "libmagic already installed"
   fi
+
+  if ! command -v java &>/dev/null; then
+    info "Installing OpenJDK 21 via Homebrew (required by JDepend)"
+    brew install openjdk@21
+    # openjdk is keg-only — add to PATH for the rest of this script
+    if [[ -d "$(brew --prefix openjdk@21)/bin" ]]; then
+      export PATH="$(brew --prefix openjdk@21)/bin:$PATH"
+    fi
+  else
+    info "java already installed: $(java -version 2>&1 | head -1)"
+  fi
 else
   if ! command -v helm &>/dev/null; then
     MISSING_BINS+=("helm")
@@ -82,6 +93,9 @@ else
   fi
   if ! python -c "from typecode.magic2 import load_lib; load_lib()" 2>/dev/null; then
     MISSING_BINS+=("libmagic (required by scancode-toolkit)")
+  fi
+  if ! command -v java &>/dev/null; then
+    MISSING_BINS+=("java (OpenJDK 21+ — required by JDepend)")
   fi
 fi
 
@@ -115,11 +129,12 @@ elif command -v java &>/dev/null; then
     }
     # Create a wrapper script on PATH
     JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
-    if [[ -n "$JDEPEND_JAR" ]]; then
+    JAVA_BIN="$(command -v java)"
+    if [[ -n "$JDEPEND_JAR" ]] && [[ -n "$JAVA_BIN" ]]; then
       WRAPPER="$VENV_DIR/bin/jdepend"
       cat > "$WRAPPER" << JDWRAPPER
 #!/usr/bin/env bash
-exec java -cp "$JDEPEND_JAR" jdepend.xmlui.JDepend "\$@"
+exec "$JAVA_BIN" -cp "$JDEPEND_JAR" jdepend.xmlui.JDepend "\$@"
 JDWRAPPER
       chmod +x "$WRAPPER"
       success "JDepend installed at $WRAPPER"
@@ -277,6 +292,7 @@ if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   warn "  helm:     https://helm.sh/docs/intro/install/"
   warn "  graphviz: https://graphviz.org/download/"
   warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
+  warn "  java:     brew install openjdk@21 (macOS) or apt-get install openjdk-21-jre (Debian/Ubuntu)"
   warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
 fi
 
