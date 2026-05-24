@@ -424,6 +424,7 @@ def resolve_dependencies(
     ecosystem: str,
     *,
     resolve_transitive: bool = False,
+    max_rounds: int = 2000,
 ) -> ResolveResult:
     """Resolve a set of dependencies to compatible versions.
 
@@ -433,6 +434,7 @@ def resolve_dependencies(
         ecosystem: Package ecosystem (e.g. 'pypi', 'npm').
         resolve_transitive: If True, fetch and resolve transitive dependencies.
             Defaults to False to avoid excessive API calls for large dependency trees.
+        max_rounds: Maximum backtracking iterations for the resolver (default: 2000).
 
     Returns:
         ResolveResult with the optimal version set or unsolvable diagnostics.
@@ -461,7 +463,7 @@ def resolve_dependencies(
     resolver = resolvelib.Resolver(provider, reporter)
 
     try:
-        result = resolver.resolve(requirements, max_rounds=200)
+        result = resolver.resolve(requirements, max_rounds=max_rounds)
     except resolvelib.ResolutionImpossible as exc:
         constraints: list[str] = []
         for cause in exc.causes:

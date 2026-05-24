@@ -204,10 +204,10 @@ nfr-review run /tmp/uat-target -v --log-file /tmp/nfr.log
 | `/tmp/nfr.log` created | Contains log output |
 | stderr | Minimal (summary only, logs redirected to file) |
 
-### 2.8 Path exclusion — --include-tests
+### 2.8 Path exclusion — --exclude-tests
 
 By default, `nfr-review` excludes findings from test/fixture paths. The
-`--include-tests` flag disables this filter.
+`--exclude-tests` flag enables this filter, excluding test/fixture paths.
 
 ```bash
 # Default — test-path findings excluded
@@ -216,13 +216,13 @@ nfr-review run /tmp/uat-target
 
 ```bash
 # With flag — test-path findings included
-nfr-review run /tmp/uat-target --include-tests
+nfr-review run /tmp/uat-target --exclude-tests
 ```
 
 | Check | Expected |
 |-------|----------|
 | Default run finding count | Findings from `tests/` or `*_test.*` paths absent |
-| `--include-tests` finding count | More findings than default — test-path findings appear |
+| `--exclude-tests` finding count | Fewer findings than default — test-path findings excluded |
 | Exit code (both) | 0 |
 
 ### 2.9 Path exclusion — exclude_paths config
@@ -446,10 +446,10 @@ echo $?
 | Exit code | 2 (threshold exceeded, if any findings present) |
 | Findings still written | Output files created before exit |
 
-### 4.11 Hygiene --include-tests
+### 4.11 Hygiene --exclude-tests
 
 ```bash
-nfr-review hygiene /tmp/uat-target --include-tests
+nfr-review hygiene /tmp/uat-target --exclude-tests
 ```
 
 | Check | Expected |
@@ -497,16 +497,16 @@ nfr-review report /tmp/uat-target --no-deps --output-dir /tmp/report-nodeps
 | No dependency section | Markdown report omits deps analysis |
 | No API calls to deps.dev | Faster execution, no network dependency |
 
-### 5.4 Report with --include-tests
+### 5.4 Report with --exclude-tests
 
 ```bash
-nfr-review report /tmp/uat-target --include-tests --output-dir /tmp/report-include-tests
+nfr-review report /tmp/uat-target --exclude-tests --output-dir /tmp/report-exclude-tests
 ```
 
 | Check | Expected |
 |-------|----------|
-| Test-path findings in report | Markdown and CSV include findings from `tests/` paths |
-| More findings than default | Finding count exceeds a report without `--include-tests` |
+| Test-path findings excluded from report | Markdown and CSV omit findings from `tests/` paths |
+| Fewer findings than default | Finding count is less than a report without `--exclude-tests` |
 | Exit code | 0 |
 
 ### 5.5 Skip diagrams
@@ -815,10 +815,10 @@ rm -f nfr-review.csv nfr-review.jsonl
 |---|------|-----------|--------|
 | 0 | Environment setup | Clean venv via setup.sh, verify install | |
 | 1 | Informational commands | list-rules, explain (valid + invalid) | |
-| 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file, --include-tests, exclude_paths config | |
+| 2 | Core scan | no-config, config-driven, custom paths, threshold, verbosity, log-file, --exclude-tests, exclude_paths config | |
 | 3 | Tech filtering | spring gating, rules.skip, include_only, kustomize | |
-| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip, severity threshold, --include-tests | |
-| 5 | Report | full, no-tests, no-deps, --include-tests, --no-diagrams | |
+| 4 | Hygiene | list-checks, full scan, format, category, clean/dirty repos, license (copyleft/NOTICE/headers/SPDX), scancode graceful skip, severity threshold, --exclude-tests | |
+| 5 | Report | full, no-tests, no-deps, --exclude-tests, --no-diagrams | |
 | 6 | Deps | basic, file output, no-tree, multi-ecosystem, DOT graph | |
 | 7 | Fault tolerance | missing target, invalid config, collector failure, no helm | |
 | 8 | Band 2 LLM | with key, without key | |

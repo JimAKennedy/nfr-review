@@ -127,7 +127,7 @@ class TestDiagramsInReport:
             nfr_result=result,
             diagrams=diagrams,
         )
-        summary_pos = md.index("Overall Summary")
+        summary_pos = md.index("Findings Summary")
         diagram_pos = md.index("## Diagrams")
         findings_pos = md.index("Source Code Findings")
         assert summary_pos < diagram_pos < findings_pos
@@ -137,4 +137,4 @@ class TestDiagramsInReport:
         md = render_markdown_report(nfr_result=result)
         assert "## Diagrams" not in md
         assert "```mermaid" not in md
-        assert "Overall Summary" in md
+        assert "Findings Summary" in md

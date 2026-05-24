@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nfr_review.models import RAG, Finding, Severity
 from nfr_review.output.classify import partition_findings
+from nfr_review.scoring import _extract_category
 
 if TYPE_CHECKING:
     from nfr_review.engine import RunResult
@@ -20,26 +21,39 @@ _RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
 _SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
 
 
-def _summary_table(findings: list[Finding], title: str) -> str:
-    """Render a RAG x severity count table."""
-    counts: Counter[tuple[RAG, Severity]] = Counter()
+def _category_severity_table(findings: list[Finding], title: str) -> str:
+    """Render a category x severity count table."""
+    counts: dict[str, Counter[Severity]] = defaultdict(Counter)
     for f in findings:
-        counts[(f.rag, f.severity)] += 1
+        cat = _extract_category(f.rule_id)
+        counts[cat][f.severity] += 1
 
-    lines = [f"### {title}", "", "| RAG | Critical | High | Medium | Low | Info | Total |"]
-    lines.append("|-----|----------|------|--------|-----|------|-------|")
+    categories = sorted(counts.keys())
+    col_totals: Counter[Severity] = Counter()
 
-    for rag in _RAG_ORDER:
+    lines = [
+        f"### {title}",
+        "",
+        "| Category | Critical | High | Medium | Low | Info | Total |",
+    ]
+    lines.append("|----------|----------|------|--------|-----|------|-------|")
+
+    for cat in categories:
         row_total = 0
         cells = []
         for sev in _SEVERITY_ORDER:
-            n = counts.get((rag, sev), 0)
+            n = counts[cat].get(sev, 0)
             row_total += n
+            col_totals[sev] += n
             cells.append(str(n) if n else "-")
-        lines.append(f"| {rag} | {' | '.join(cells)} | {row_total} |")
+        lines.append(f"| {cat} | {' | '.join(cells)} | {row_total} |")
 
-    total = len(findings)
-    lines.append(f"| **Total** | | | | | | **{total}** |")
+    grand_total = sum(col_totals.values())
+    total_cells = []
+    for sev in _SEVERITY_ORDER:
+        n = col_totals.get(sev, 0)
+        total_cells.append(f"**{n}**" if n else "-")
+    lines.append(f"| **Total** | {' | '.join(total_cells)} | **{grand_total}** |")
     lines.append("")
     return "\n".join(lines)
 
@@ -122,6 +136,241 @@ def _skipped_rules_section(nfr_result: RunResult, hygiene_result: RunResult | No
     return "\n".join(lines)
 
 
+def _methodology_appendix() -> str:
+    """Render the scoring methodology appendix as Markdown."""
+    lines: list[str] = []
+    _a = lines.append
+
+    _a("## Appendix — Scoring Methodology")
+    _a("")
+    _a("### RAG x Severity Matrix")
+    _a("")
+    _a("Each finding is classified along two independent axes:")
+    _a("")
+    _a(
+        "- **RAG (Red / Amber / Green):** indicates whether"
+        " the finding meets, partially meets, or fails the"
+        " requirement."
+    )
+    _a(
+        "- **Severity (Critical / High / Medium / Low / Info):**"
+        " indicates the potential impact if the finding is left"
+        " unaddressed."
+    )
+    _a("")
+    _a(
+        "The summary table at the top of the report shows"
+        " findings grouped by category and severity, providing"
+        " a quick view of which areas have the most findings"
+        " and their urgency."
+    )
+    _a("")
+    _a("### Design Maturity Score")
+    _a("")
+    _a(
+        "The Design Maturity Score is a deterministic metric"
+        " computed from the scan findings."
+        " It is **not** an AI-generated opinion."
+    )
+    _a("")
+    _a("**Per-category scoring**")
+    _a("")
+    _a(
+        "Every finding's rule ID is mapped to a category"
+        " (e.g. *security*, *observability*, *performance*,"
+        " *ops*, or a hygiene/patching prefix). Each finding"
+        " deducts points from the category's starting score"
+        " of 100, weighted by severity:"
+    )
+    _a("")
+    _a("| Severity | Deduction |")
+    _a("|----------|-----------|")
+    _a("| Critical | −15 |")
+    _a("| High | −8 |")
+    _a("| Medium | −3 |")
+    _a("| Low | −1 |")
+    _a("| Info | 0 |")
+    _a("")
+    _a("The category score is clamped to a minimum of 0.")
+    _a("")
+    _a("**Overall score**")
+    _a("")
+    _a(
+        "The overall Design Maturity Score is the arithmetic"
+        " mean of all category scores. Categories with many"
+        " findings will pull the average down; categories"
+        " with few or no findings score 100."
+    )
+    _a("")
+    _a("**Grade scale**")
+    _a("")
+    _a("| Grade | Score Range |")
+    _a("|-------|------------|")
+    _a("| A | 90 – 100 |")
+    _a("| B | 75 – 89 |")
+    _a("| C | 60 – 74 |")
+    _a("| D | 45 – 59 |")
+    _a("| F | 0 – 44 |")
+    _a("")
+    _a("**Rules Coverage**")
+    _a("")
+    _a(
+        "The fraction of available rules that were executed"
+        " during the scan. Rules may be skipped when their"
+        " prerequisites are absent (e.g. no Dockerfile means"
+        " Dockerfile rules are skipped). A lower coverage"
+        " percentage does not indicate a worse score — it"
+        " means fewer rule categories were applicable to"
+        " the scanned repository."
+    )
+    _a("")
+    _a("### Category Definitions")
+    _a("")
+    _a(
+        "Categories are assigned automatically from each"
+        " rule's ID. There are three groups: core NFR"
+        " categories (from keyword matching), repository"
+        " hygiene (prefix `HYG-`), and patching readiness"
+        " (prefix `PATCH-`)."
+    )
+
+    def _cat_table(
+        heading: str,
+        rows: list[tuple[str, str, str]],
+    ) -> None:
+        _a("")
+        _a(f"#### {heading}")
+        _a("")
+        _a("| Category | Scope | What maturity looks like |")
+        _a("|----------|-------|-------------------------|")
+        for cat, scope, maturity in rows:
+            _a(f"| {cat} | {scope} | {maturity} |")
+
+    _cat_table(
+        "Core NFR Categories",
+        [
+            (
+                "**security**",
+                "Auth, secrets, supply-chain pinning, PII, container user directives",
+                "No leaked secrets, pinned images/providers, no PII in logs, least-privilege",
+            ),
+            (
+                "**observability**",
+                "Tracing (OTel), structured logging, correlation IDs, health probes",
+                "Full trace pipeline, structured logs with "
+                "correlation IDs, separate health/readiness",
+            ),
+            (
+                "**performance**",
+                "Timeouts, thread pools, goroutine leaks, async correctness, dep instability",
+                "Explicit timeouts, bounded pools, no fire-and-forget async, stable dep graph",
+            ),
+            (
+                "**ops**",
+                "Containers, K8s, Helm, CI, service-mesh, "
+                "Terraform, build tooling, ADR governance",
+                "Multi-stage Dockerfiles, resource limits, "
+                "network policies, CI gates, current ADRs",
+            ),
+        ],
+    )
+
+    _cat_table(
+        "Repository Hygiene Categories (HYG-)",
+        [
+            (
+                "**HYG-BLD**",
+                "Build system, versioning, entry points, pre-commit, code debt",
+                "Reproducible build, pinned deps, semver, lint + format hooks",
+            ),
+            (
+                "**HYG-CI**",
+                "CI pipeline, test/lint/SAST stages, coverage gates, action pinning",
+                "All quality gates present, SHA-pinned actions, coverage enforced",
+            ),
+            (
+                "**HYG-COM**",
+                "README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, CODEOWNERS",
+                "All community health files present with substantive content",
+            ),
+            (
+                "**HYG-DOC**",
+                "API docs, docs directory, package metadata",
+                "Published API docs, guides, complete metadata (description, license, URLs)",
+            ),
+            (
+                "**HYG-LIC**",
+                "Copyleft risk, license headers, NOTICE, SPDX identifiers",
+                "No unexpected copyleft, consistent headers, machine-readable SPDX",
+            ),
+            (
+                "**HYG-PRV**",
+                "PII patterns, internal reference leaks, tracking IDs",
+                "No PII in source, no internal URLs leaked, no tracking IDs in public code",
+            ),
+        ],
+    )
+
+    _cat_table(
+        "Patching Readiness Categories (PATCH-)",
+        [
+            (
+                "**PATCH-ARCH**",
+                "Singleton avoidance, graceful shutdown, PDB config, update strategy",
+                "No single-replica deploys, shutdown handlers, PDBs, rolling updates",
+            ),
+            (
+                "**PATCH-DEPS**",
+                "Version pinning, vuln scanning, automated update paths",
+                "Pinned deps with lock files, vuln scanning in CI, clear upgrade path",
+            ),
+            (
+                "**PATCH-HEALTH**",
+                "Probe separation, startup probes, trivial-probe detection, termination",
+                "Distinct startup probes, non-trivial health checks, pre-stop hooks",
+            ),
+            (
+                "**PATCH-ROLL**",
+                "Rollback docs, CI rollback tests, forward migration support",
+                "Documented rollback, tested in CI, forward-compatible migrations",
+            ),
+            (
+                "**PATCH-SCOPE**",
+                "Change-set sizing, blast-radius analysis",
+                "Small focused changesets with clear scope boundaries",
+            ),
+            (
+                "**PATCH-TELEM**",
+                "Deployment metrics, canary signals, rollout observability",
+                "Deploy success/failure metrics, canary signals, real-time dashboards",
+            ),
+            (
+                "**PATCH-TRAFFIC**",
+                "Traffic shifting, circuit breakers, rate limiting",
+                "Progressive traffic shifting, circuit breakers, rate limiting configured",
+            ),
+        ],
+    )
+
+    _a("")
+    _a("### Executive Summary (PDF only)")
+    _a("")
+    _a(
+        "When an Anthropic API key is configured, the PDF"
+        " report includes an AI-generated Executive Summary"
+        " with its own overall score (0–100). This score is"
+        " a holistic LLM assessment of project fitness and"
+        " **may differ from the deterministic Design Maturity"
+        " Score**. It considers factors beyond individual rule"
+        " findings, such as the overall pattern of issues,"
+        " test coverage, and dependency health. The verdict"
+        " (Fit / Conditional / Unfit) reflects a go/no-go"
+        " recommendation."
+    )
+
+    return "\n".join(lines) + "\n"
+
+
 def render_score_section(score: MaturityScore, trend: ScoreTrend | None = None) -> str:
     """Render a Design Maturity Score section as Markdown.
 
@@ -141,6 +390,14 @@ def render_score_section(score: MaturityScore, trend: ScoreTrend | None = None) 
         "## Design Maturity Score",
         "",
         f"**Overall: {score.overall}/100 (Grade: {score.grade})**",
+        "",
+        (
+            "The overall score is the arithmetic mean of the category scores below."
+            " Each category starts at 100 and is reduced by severity-weighted"
+            " deductions (critical −15, high −8, medium −3, low −1, info 0),"
+            " clamped to a floor of 0."
+            " See **Appendix — Scoring Methodology** for full details."
+        ),
         "",
         f"Rules Coverage: {score.rules_coverage:.0%}",
         "",
@@ -230,10 +487,8 @@ def render_markdown_report(
             sections.append(f"| **Git error** | {meta.git_error} |")
         sections.append("")
 
-    # Summary tables
-    sections.append(_summary_table(all_findings, "Overall Summary"))
-    sections.append(_summary_table(source_findings, "Source Code Summary"))
-    sections.append(_summary_table(test_findings, "Test Code Summary"))
+    # Summary table
+    sections.append(_category_severity_table(all_findings, "Findings Summary"))
 
     # Design maturity score
     if score_section:
@@ -280,5 +535,9 @@ def render_markdown_report(
     # Dependency analysis (appendix)
     if deps_section:
         sections.append(deps_section)
+
+    # Scoring methodology appendix (always included when scores are present)
+    if score_section:
+        sections.append(_methodology_appendix())
 
     return "\n".join(sections)

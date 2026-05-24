@@ -243,7 +243,7 @@ class TestBytecodeDiscovery:
         assert args[0] == "mvn"
 
     @patch("nfr_review.collectors.jdepend.subprocess.run")
-    def test_no_bytecode_compile_failure_returns_skip(
+    def test_no_bytecode_compile_failure_returns_empty(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
         (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
@@ -257,12 +257,10 @@ class TestBytecodeDiscovery:
 
         collector = JDependCollector()
         evidences = collector.collect(tmp_path, None)
-        assert len(evidences) == 1
-        assert evidences[0].kind == "jdepend-skip"
-        assert "Auto-compile failed" in evidences[0].payload["reason"]
+        assert evidences == []
 
     @patch("nfr_review.collectors.jdepend.subprocess.run")
-    def test_no_bytecode_no_build_config_returns_skip(
+    def test_no_bytecode_no_build_config_returns_empty(
         self, mock_run: MagicMock, tmp_path: Path
     ) -> None:
         (tmp_path / "src/main/java/App.java").parent.mkdir(parents=True)
@@ -270,9 +268,7 @@ class TestBytecodeDiscovery:
 
         collector = JDependCollector()
         evidences = collector.collect(tmp_path, None)
-        assert len(evidences) == 1
-        assert evidences[0].kind == "jdepend-skip"
-        assert "no pom.xml" in evidences[0].payload["reason"]
+        assert evidences == []
 
     @patch("nfr_review.collectors.jdepend.subprocess.run")
     def test_prefers_mvnw_wrapper_over_system_mvn(

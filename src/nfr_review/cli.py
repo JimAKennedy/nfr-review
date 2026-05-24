@@ -82,9 +82,13 @@ def _timestamp() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def _phase(name: str, *, quiet: bool = False) -> float:
+def _ts_echo(msg: str, *, quiet: bool = False) -> None:
     if not quiet:
-        click.echo(f"[{_timestamp()}] {name}", err=True)
+        click.echo(f"[{_timestamp()}] {msg}", err=True)
+
+
+def _phase(name: str, *, quiet: bool = False) -> float:
+    _ts_echo(name, quiet=quiet)
     return time.monotonic()
 
 
@@ -159,7 +163,11 @@ def _configure_logging(verbose: int, quiet: bool, log_file: Path | None) -> None
     logger.handlers.clear()
     logger.setLevel(level)
 
-    formatter = logging.Formatter("%(levelname)s: %(name)s: %(message)s")
+    formatter = logging.Formatter(
+        "[%(asctime)s UTC] %(levelname)s: %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    formatter.converter = time.gmtime
 
     if log_file is not None:
         try:
@@ -227,10 +235,10 @@ def cli() -> None:
     help="Output path for the R018 JSONL run record. [default: {repo}-nfr-review.jsonl]",
 )
 @click.option(
-    "--include-tests",
+    "--exclude-tests",
     is_flag=True,
     default=False,
-    help="Include test and fixture directories in analysis.",
+    help="Exclude test and fixture directories from analysis.",
 )
 @click.option(
     "--baseline",
@@ -261,12 +269,13 @@ def run_cmd(
     config_path: Path | None,
     csv_path: Path | None,
     jsonl_path: Path | None,
-    include_tests: bool,
+    exclude_tests: bool,
     baseline_path: Path | None = None,
     sarif_path: Path | None = None,
     show_score: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
+    include_tests = not exclude_tests
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
@@ -284,8 +293,8 @@ def run_cmd(
         raise click.exceptions.Exit(1)
 
     opts: dict[str, str] = {}
-    if include_tests:
-        opts["include_tests"] = "true"
+    if not include_tests:
+        opts["exclude_tests"] = "true"
     if config_path:
         opts["config"] = str(config_path)
     _banner(
@@ -322,12 +331,11 @@ def run_cmd(
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
-    if include_tests:
-        config = config.model_copy(update={"exclude_test_paths": False})
+    config = config.model_copy(update={"exclude_test_paths": not include_tests})
     tech_detected = sum(1 for v in detected.values() if v)
     active_tech = [k for k, v in merged_tech.items() if v]
-    if active_tech and not quiet:
-        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
+    if active_tech:
+        _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
 
     t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     run_logger.info("Starting NFR engine scan")
@@ -343,14 +351,8 @@ def run_cmd(
 
         baseline = load_baseline(baseline_path)
         new_findings = filter_new_findings(result.findings, baseline)
-        click.echo(
-            f"  Baseline loaded: {baseline.finding_count} findings",
-            err=True,
-        )
-        click.echo(
-            f"  New findings: {len(new_findings)} (was {len(result.findings)})",
-            err=True,
-        )
+        _ts_echo(f"Baseline loaded: {baseline.finding_count} findings")
+        _ts_echo(f"New findings: {len(new_findings)} (was {len(result.findings)})")
         result = RunResult(
             findings=new_findings,
             rule_results=result.rule_results,
@@ -372,12 +374,10 @@ def run_cmd(
             result.run_metadata.rules_skipped if result.run_metadata else [],
         )
         click.echo("", err=True)
-        click.echo(
-            f"Design Maturity Score: {score.overall}/100 (Grade: {score.grade})", err=True
-        )
-        click.echo(f"Rules Coverage: {score.rules_coverage:.0%}", err=True)
+        _ts_echo(f"Design Maturity Score: {score.overall}/100 (Grade: {score.grade})")
+        _ts_echo(f"Rules Coverage: {score.rules_coverage:.0%}")
         if score.category_scores:
-            click.echo("Category Scores:", err=True)
+            _ts_echo("Category Scores:")
             for cat, cat_score in sorted(score.category_scores.items()):
                 click.echo(f"  {cat}: {cat_score}/100", err=True)
 
@@ -391,7 +391,7 @@ def run_cmd(
                 if trend.direction == "regressed"
                 else "→"
             )
-            click.echo(f"Trend: {arrow} {trend.direction} (delta: {trend.delta:+d})", err=True)
+            _ts_echo(f"Trend: {arrow} {trend.direction} (delta: {trend.delta:+d})")
 
     t0 = _phase("Writing output files", quiet=quiet)
     run_logger.info("Writing output files")
@@ -428,17 +428,13 @@ def run_cmd(
     if sarif_path is not None:
         summary_parts.append(f"sarif={sarif_path}")
 
-    click.echo(
-        " ".join(summary_parts),
-        err=True,
-    )
+    _ts_echo(" ".join(summary_parts))
     for warning in result.warnings:
-        click.echo(f"warning: {warning}", err=True)
+        _ts_echo(f"warning: {warning}")
 
     if metadata is not None and metadata.rules_skipped:
-        click.echo(
-            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)",
-            err=True,
+        _ts_echo(
+            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)"
         )
         for skip in metadata.rules_skipped:
             run_logger.info("rule %s skipped (%s)", skip["rule_id"], skip["reason"])
@@ -534,10 +530,10 @@ def explain_cmd(rule_id: str) -> None:
     help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
 )
 @click.option(
-    "--include-tests",
+    "--exclude-tests",
     is_flag=True,
     default=False,
-    help="Include test and fixture directories in analysis.",
+    help="Exclude test and fixture directories from analysis.",
 )
 def hygiene_cmd(
     target: Path | None,
@@ -550,9 +546,10 @@ def hygiene_cmd(
     severity_threshold: str | None,
     category: str | None,
     config_path: Path | None,
-    include_tests: bool,
+    exclude_tests: bool,
 ) -> None:
     """Hygiene command — run hygiene collectors and rules, emit output."""
+    include_tests = not exclude_tests
     if list_checks:
         for rule in hygiene_rule_registry.all():
             cat = getattr(rule, "category", "uncategorized")
@@ -578,8 +575,8 @@ def hygiene_cmd(
     opts: dict[str, str] = {}
     if category:
         opts["category"] = category
-    if include_tests:
-        opts["include_tests"] = "true"
+    if not include_tests:
+        opts["exclude_tests"] = "true"
     if output_format != "both":
         opts["format"] = output_format
     _banner(
@@ -613,12 +610,11 @@ def hygiene_cmd(
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
 
-    if include_tests:
-        config = config.model_copy(update={"exclude_test_paths": False})
+    config = config.model_copy(update={"exclude_test_paths": not include_tests})
 
     active_tech = [k for k, v in merged_tech.items() if v]
-    if active_tech and not quiet:
-        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
+    if active_tech:
+        _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
 
     from nfr_review.protocols import Rule as RuleProtocol
 
@@ -672,22 +668,18 @@ def hygiene_cmd(
     if output_format in ("jsonl", "both"):
         output_paths.append(str(output_dir / jsonl_name))
 
-    click.echo(
-        (
-            f"nfr-review hygiene: collectors_run={collectors_run} "
-            f"rules_run={rules_run} rules_skipped={rules_skipped} "
-            f"findings={len(result.findings)} files_emitted={files_emitted} "
-            f"output={', '.join(output_paths)}"
-        ),
-        err=True,
+    _ts_echo(
+        f"nfr-review hygiene: collectors_run={collectors_run} "
+        f"rules_run={rules_run} rules_skipped={rules_skipped} "
+        f"findings={len(result.findings)} files_emitted={files_emitted} "
+        f"output={', '.join(output_paths)}"
     )
     for warning in result.warnings:
-        click.echo(f"warning: {warning}", err=True)
+        _ts_echo(f"warning: {warning}")
 
     if metadata is not None and metadata.rules_skipped:
-        click.echo(
-            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)",
-            err=True,
+        _ts_echo(
+            f"WARNING: {len(metadata.rules_skipped)} rules skipped (use -v to see details)"
         )
         hygiene_logger = logging.getLogger("nfr_review")
         for skip in metadata.rules_skipped:
@@ -699,7 +691,12 @@ def hygiene_cmd(
             raise click.exceptions.Exit(2)
 
 
-@cli.command("report", help="Run NFR + hygiene scans and produce a timestamped report.")
+@cli.command(
+    "report",
+    help="Run NFR + hygiene scans and produce a timestamped report. "
+    "All features (PDF, score, test-path inclusion) are enabled by default; "
+    "use --no-* / --exclude-* flags to opt out.",
+)
 @click.argument("target", type=click.Path(file_okay=False, path_type=Path))
 @click.option(
     "-v",
@@ -752,16 +749,16 @@ def hygiene_cmd(
     help="Suppress Mermaid diagram sections in the report.",
 )
 @click.option(
-    "--include-tests",
+    "--exclude-tests",
     is_flag=True,
     default=False,
-    help="Include test and fixture directories in analysis.",
+    help="Exclude test and fixture directories from analysis.",
 )
 @click.option(
-    "--pdf",
+    "--no-pdf",
     is_flag=True,
     default=False,
-    help="Generate a PDF report with rendered diagrams and executive summary.",
+    help="Skip PDF report generation.",
 )
 @click.option(
     "--no-summary",
@@ -784,11 +781,16 @@ def hygiene_cmd(
     help="Output path for SARIF 2.1.0 findings file.",
 )
 @click.option(
-    "--score",
-    "show_score",
+    "--no-score",
     is_flag=True,
     default=False,
-    help="Compute and display design maturity score in the report.",
+    help="Skip design maturity score computation.",
+)
+@click.option(
+    "--max-resolve-rounds",
+    type=int,
+    default=None,
+    help="Maximum resolver iterations for dependency analysis (default: 2000).",
 )
 def report_cmd(
     target: Path,
@@ -800,14 +802,19 @@ def report_cmd(
     no_tests: bool,
     no_deps: bool,
     no_diagrams: bool,
-    include_tests: bool,
-    pdf: bool,
+    exclude_tests: bool,
+    no_pdf: bool,
     no_summary: bool,
     test_timeout: int,
     sarif_path: Path | None = None,
-    show_score: bool = False,
+    no_score: bool = False,
+    max_resolve_rounds: int | None = None,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
+    pdf = not no_pdf
+    show_score = not no_score
+    include_tests = not exclude_tests
+
     from nfr_review.output.jdepend_section import (
         build_adr_section,
         build_derived_adrs_section,
@@ -846,8 +853,8 @@ def report_cmd(
         if not no_summary:
             phases.append("llm-summary")
     phases.append("output")
-    if include_tests:
-        opts["include_tests"] = "true"
+    if not include_tests:
+        opts["exclude_tests"] = "true"
     _banner("report", repo, target, options=opts or None, phases=phases, quiet=quiet)
 
     _phase("Loading configuration", quiet=quiet)
@@ -871,11 +878,10 @@ def report_cmd(
         detected = {}
     merged_tech = {**detected, **config.tech}
     config = config.model_copy(update={"tech": merged_tech})
-    if include_tests:
-        config = config.model_copy(update={"exclude_test_paths": False})
+    config = config.model_copy(update={"exclude_test_paths": not include_tests})
     active_tech = [k for k, v in merged_tech.items() if v]
-    if active_tech and not quiet:
-        click.echo(f"  Technologies: {', '.join(sorted(active_tech))}", err=True)
+    if active_tech:
+        _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
 
     # NFR scan
     t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
@@ -915,7 +921,7 @@ def report_cmd(
         t0 = _phase("Analyzing dependencies", quiet=quiet)
 
         def _progress(msg: str) -> None:
-            click.echo(msg, err=True)
+            _ts_echo(msg)
 
         try:
             deps_reports = analyze_deps(
@@ -923,11 +929,12 @@ def report_cmd(
                 config,
                 resolve_transitive=True,
                 progress_callback=_progress,
+                max_resolve_rounds=max_resolve_rounds,
             )
             deps_section = render_deps_section(deps_reports)
         except Exception as exc:  # noqa: BLE001
             logger.debug("Dependency analysis failed: %s", exc, exc_info=True)
-            click.echo(f"warning: dependency analysis failed: {exc}", err=True)
+            _ts_echo(f"warning: dependency analysis failed: {exc}")
             deps_section = (
                 f"## Appendix A — Dependency Tree\n\nDependency analysis failed: {exc}\n"
             )
@@ -1050,6 +1057,11 @@ def report_cmd(
                     png = render_dot_to_png(dot_text, img_dir / f"{slug}.png")
                 if png is not None:
                     diagram_image_paths[dtitle] = png
+                elif not quiet:
+                    _ts_echo(
+                        f"warning: diagram '{dtitle}' could not be rendered"
+                        " (mmdc/dot failed or not installed)"
+                    )
 
         # Generate executive summary
         exec_summary = None
@@ -1061,10 +1073,7 @@ def report_cmd(
                 nfr_result, hygiene_result, pytest_result, deps_section
             )
             if exec_summary is None:
-                click.echo(
-                    "  skipped (ANTHROPIC_API_KEY not set or LLM error)",
-                    err=True,
-                )
+                _ts_echo("skipped (ANTHROPIC_API_KEY not set or LLM error)")
             else:
                 _phase_done("Executive summary", t0, quiet=quiet)
 
@@ -1100,7 +1109,7 @@ def report_cmd(
         summary_parts.append(f"pdf={pdf_path}")
     if sarif_path is not None:
         summary_parts.append(f"sarif={sarif_path}")
-    click.echo(" ".join(summary_parts), err=True)
+    _ts_echo(" ".join(summary_parts))
 
 
 @cli.command("deps", help="Analyze dependency tree and show upgrade recommendations.")
@@ -1156,6 +1165,12 @@ def report_cmd(
     default=False,
     help="Render DOT graph to SVG (requires graphviz).",
 )
+@click.option(
+    "--max-resolve-rounds",
+    type=int,
+    default=None,
+    help="Maximum resolver iterations for dependency analysis (default: 2000).",
+)
 def deps_cmd(
     target: Path,
     verbose: int,
@@ -1166,6 +1181,7 @@ def deps_cmd(
     output_path: Path | None,
     dot_path: Path | None,
     render_diagrams: bool,
+    max_resolve_rounds: int | None = None,
 ) -> None:
     """Analyze dependencies: upgrade summary table and transitive tree."""
     from nfr_review.deps_analysis import analyze_deps
@@ -1223,7 +1239,7 @@ def deps_cmd(
     t0 = _phase("Analyzing dependencies", quiet=quiet)
 
     def _progress(msg: str) -> None:
-        click.echo(msg, err=True)
+        _ts_echo(msg)
 
     try:
         reports = analyze_deps(
@@ -1231,6 +1247,7 @@ def deps_cmd(
             config,
             resolve_transitive=not no_tree,
             progress_callback=_progress,
+            max_resolve_rounds=max_resolve_rounds,
         )
     except Exception as exc:  # noqa: BLE001
         click.echo(f"error: dependency analysis failed: {exc}", err=True)
@@ -1282,10 +1299,182 @@ def deps_cmd(
 
     total_deps = sum(len(r.upgrades) for r in reports)
     ecosystems = len(reports)
-    click.echo(
-        f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}",
-        err=True,
+    _ts_echo(f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}")
+
+
+@cli.command(
+    "issues",
+    help="File GitHub issues for red/high-severity findings from an NFR scan.",
+)
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview issues without filing to GitHub.",
+)
+@click.option(
+    "--repo",
+    default=None,
+    help="GitHub owner/repo (e.g. org/repo). Auto-detected from git remote if omitted.",
+)
+@click.option(
+    "--severity-threshold",
+    type=click.Choice(["critical", "high", "medium", "low", "info"]),
+    default="high",
+    show_default=True,
+    help="Minimum severity for filing issues.",
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+def issues_cmd(
+    target: Path,
+    dry_run: bool,
+    repo: str | None,
+    severity_threshold: str,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    config_path: Path | None,
+) -> None:
+    """Run an NFR scan and file GitHub issues for red/high-severity findings."""
+    import subprocess  # nosec B404 — args are hardcoded, not user input
+
+    from nfr_review.issues import file_issues, filter_findings
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    # Resolve repo from git remote if not supplied
+    if repo is None and not dry_run:
+        try:
+            gh_result = subprocess.run(  # nosec B603 B607
+                ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(target),
+                check=False,
+            )
+            if gh_result.returncode == 0 and gh_result.stdout.strip():
+                repo = gh_result.stdout.strip()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        if not repo:
+            click.echo(
+                "error: could not detect GitHub repo"
+                " — pass --repo owner/repo or use --dry-run",
+                err=True,
+            )
+            raise click.exceptions.Exit(1)
+
+    repo_name = _repo_name(target)
+    _banner(
+        "issues",
+        repo_name,
+        target,
+        options={"dry_run": str(dry_run), "threshold": severity_threshold},
+        phases=["config", "detect", "scan", "issues"],
+        quiet=quiet,
     )
+
+    # Load config
+    _phase("Loading configuration", quiet=quiet)
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    # Detect technologies
+    _phase("Detecting technologies", quiet=quiet)
+    try:
+        detected = detect_technologies(target)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Technology detection failed for %s: %s", target, e)
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    config = config.model_copy(update={"tech": merged_tech})
+
+    # Run NFR scan
+    t0 = _phase("Running NFR scan", quiet=quiet)
+    try:
+        result = Engine().run(target, config)
+    except EngineError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+    _phase_done("NFR scan", t0, quiet=quiet)
+
+    # Convert findings to dicts for issue filing
+    finding_dicts = [f.model_dump() for f in result.findings]
+    filtered = filter_findings(finding_dicts, severity_threshold)
+
+    if not filtered:
+        _ts_echo(f"No findings at severity >= {severity_threshold} — nothing to file.")
+        return
+
+    _ts_echo(f"Found {len(filtered)} findings at severity >= {severity_threshold}")
+
+    # File or preview issues
+    t0 = _phase("Filing issues" if not dry_run else "Previewing issues", quiet=quiet)
+    issue_results = file_issues(
+        finding_dicts,
+        repo or "",
+        dry_run=dry_run,
+        severity_threshold=severity_threshold,
+    )
+
+    filed = sum(1 for r in issue_results if r["status"] == "filed")
+    skipped = sum(1 for r in issue_results if r["status"] == "skipped")
+    dry_count = sum(1 for r in issue_results if r["status"] == "dry_run")
+    errors = sum(1 for r in issue_results if r["status"] == "error")
+
+    for r in issue_results:
+        status = r["status"]
+        url = f" {r['url']}" if r.get("url") else ""
+        _ts_echo(f"  [{status}] {r['title']}{url}")
+
+    if dry_run:
+        _ts_echo(f"dry run: {dry_count} issue(s) would be filed")
+    else:
+        _ts_echo(f"filed={filed} skipped={skipped} errors={errors}")
 
 
 @cli.command("init", help="Detect technologies and generate an nfr-review.yaml config.")

@@ -102,17 +102,15 @@ class TestRenderMarkdownReport:
         test_section = md.split("## Test Code Findings")[1]
         assert "tests/test_engine.py" in test_section
 
-    def test_summary_tables_present(self) -> None:
+    def test_summary_table_present(self) -> None:
         findings = [
             _finding(rag="red", severity="high"),
             _finding(rag="amber", severity="medium"),
         ]
         result = FakeRunResult(findings=findings, run_metadata=_metadata())
         md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
-        assert "### Overall Summary" in md
-        assert "### Source Code Summary" in md
-        assert "### Test Code Summary" in md
-        assert "| RAG | Critical | High | Medium | Low | Info | Total |" in md
+        assert "### Findings Summary" in md
+        assert "| Category | Critical | High | Medium | Low | Info | Total |" in md
 
     def test_test_results_passed(self) -> None:
         result = FakeRunResult(run_metadata=_metadata())

@@ -91,7 +91,7 @@ This will:
 | `--config PATH` | `./nfr-review.yaml` (if present) | Path to configuration file |
 | `--csv PATH` | `{repo}-nfr-review.csv` | Output path for CSV findings |
 | `--jsonl PATH` | `{repo}-nfr-review.jsonl` | Output path for JSONL run record |
-| `--include-tests` | off | Include test and fixture directories in analysis |
+| `--exclude-tests` | off | Exclude test and fixture directories from analysis |
 | `-v` / `--verbose` | off | Increase verbosity (`-v` for INFO, `-vv` for DEBUG) |
 | `-q` / `--quiet` | off | Suppress warnings (ERROR level only) |
 | `--log-file PATH` | stderr | Write diagnostics to FILE instead of stderr |
@@ -137,11 +137,11 @@ Without the `[scancode]` extra installed, license rules are skipped with an info
 # Run NFR + hygiene + pytest + deps and produce timestamped files in reports/
 nfr-review report /path/to/target/repo
 
-# Also generate a PDF with an LLM executive summary and rendered diagrams
-nfr-review report --pdf /path/to/target/repo
+# Skip PDF generation
+nfr-review report --no-pdf /path/to/target/repo
 
 # Skip LLM summary (PDF still generated, without summary section)
-nfr-review report --pdf --no-summary /path/to/target/repo
+nfr-review report --no-summary /path/to/target/repo
 ```
 
 This produces timestamped files under `reports/`:
@@ -161,7 +161,7 @@ This produces timestamped files under `reports/`:
 | `--no-tests` | off | Skip pytest execution |
 | `--no-deps` | off | Skip dependency tree analysis |
 | `--no-diagrams` | off | Suppress Mermaid diagram sections in the report |
-| `--include-tests` | off | Include test and fixture directories in analysis |
+| `--exclude-tests` | off | Exclude test and fixture directories from analysis |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
 ### Analyze dependencies
