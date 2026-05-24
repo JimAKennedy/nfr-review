@@ -213,7 +213,7 @@ runs:
     # ── 8. Post / update sticky PR comment ──────────────────────────────
     - name: Post PR comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
-      uses: peter-evans/create-or-update-comment@v4
+      uses: peter-evans/create-or-update-comment@v5
       with:
         issue-number: ${{ github.event.pull_request.number }}
         body-path: ${{ steps.comment-body.outputs.body-path }}
