@@ -1,0 +1,49 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Example workflow: run nfr-review on every pull request and post a
+# sticky comment with a RAG summary.  Red findings fail the check.
+#
+# Usage — copy this file to .github/workflows/nfr-review.yml in the
+# repository you want to scan and adjust the `with:` inputs below.
+
+name: NFR Review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write  # required only if sarif-upload is true
+
+jobs:
+  nfr-review:
+    name: NFR Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run NFR Review
+        id: nfr
+        uses: your-org/nfr-review@main
+        with:
+          target: .
+          fail-on-red: "true"
+          sarif-upload: "true"
+          comment: "true"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## NFR Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Findings | ${{ steps.nfr.outputs.findings-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY

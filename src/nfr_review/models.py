@@ -43,6 +43,11 @@ class Finding(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     pattern_tag: str
 
+    @property
+    def identity_key(self) -> tuple[str, str, str]:
+        """Stable identity for baseline diffing: (rule_id, evidence_locator, pattern_tag)."""
+        return (self.rule_id, self.evidence_locator, self.pattern_tag)
+
 
 class RuleResult(BaseModel):
     """Result of evaluating a single rule against collected evidence."""

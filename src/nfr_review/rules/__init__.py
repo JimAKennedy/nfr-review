@@ -21,6 +21,7 @@ from nfr_review.rules import (
 from nfr_review.rules import (
     cmake_minimum_version as cmake_minimum_version,  # noqa: F401
 )
+from nfr_review.rules import correlation_id as correlation_id  # noqa: F401
 from nfr_review.rules import cpp_clang_format as cpp_clang_format  # noqa: F401
 from nfr_review.rules import cpp_clang_tidy as cpp_clang_tidy  # noqa: F401
 from nfr_review.rules import (
@@ -50,12 +51,21 @@ from nfr_review.rules import dep_upgrade_path as dep_upgrade_path  # noqa: F401
 from nfr_review.rules import (
     dockerfile_base_pinning as dockerfile_base_pinning,  # noqa: F401
 )
+from nfr_review.rules import (
+    dockerfile_k8s_image_drift as dockerfile_k8s_image_drift,  # noqa: F401
+)
+from nfr_review.rules import (
+    dockerfile_k8s_user_conflict as dockerfile_k8s_user_conflict,  # noqa: F401
+)
 from nfr_review.rules import dockerfile_multistage as dockerfile_multistage  # noqa: F401
 from nfr_review.rules import (
     dockerfile_secret_leakage as dockerfile_secret_leakage,  # noqa: F401
 )
 from nfr_review.rules import (
     dockerfile_user_directive as dockerfile_user_directive,  # noqa: F401
+)
+from nfr_review.rules import (
+    gatling_performance as gatling_performance,  # noqa: F401
 )
 from nfr_review.rules import (
     go_defer_in_loop as go_defer_in_loop,  # noqa: F401
@@ -68,6 +78,9 @@ from nfr_review.rules import (
 )
 from nfr_review.rules import (
     go_http_no_timeout as go_http_no_timeout,  # noqa: F401
+)
+from nfr_review.rules import (
+    health_probe_separation as health_probe_separation,  # noqa: F401
 )
 from nfr_review.rules import (
     helm_chart_metadata as helm_chart_metadata,  # noqa: F401
@@ -87,6 +100,10 @@ from nfr_review.rules import (
 from nfr_review.rules import (
     istio_traffic_policy as istio_traffic_policy,  # noqa: F401
 )
+from nfr_review.rules import (
+    jacoco_coverage as jacoco_coverage,  # noqa: F401
+)
+from nfr_review.rules import jacoco_threshold as jacoco_threshold  # noqa: F401
 from nfr_review.rules import java_exception as java_exception  # noqa: F401
 from nfr_review.rules import java_health as java_health  # noqa: F401
 from nfr_review.rules import java_resilience as java_resilience  # noqa: F401
@@ -219,10 +236,12 @@ __all__ = [
     "cpp_sanitizer_ci",
     "ci_security_scan",
     "ci_test_stage",
+    "correlation_id",
     "csharp_async_void",
     "csharp_blocking_async",
     "csharp_configure_await",
     "csharp_disposable_no_using",
+    "gatling_performance",
     "go_defer_in_loop",
     "go_error_ignored",
     "go_goroutine_leak",
@@ -230,17 +249,22 @@ __all__ = [
     "dep_freshness",
     "dep_upgrade_path",
     "dockerfile_base_pinning",
+    "dockerfile_k8s_image_drift",
+    "dockerfile_k8s_user_conflict",
     "dockerfile_multistage",
     "dockerfile_secret_leakage",
     "dockerfile_user_directive",
     "helm_chart_metadata",
     "helm_secret_leakage",
     "helm_values_validation",
+    "health_probe_separation",
     "istio_circuit_breaker",
     "istio_mtls_strict",
     "istio_traffic_policy",
     "java_exception",
     "java_health",
+    "jacoco_coverage",
+    "jacoco_threshold",
     "jdepend_cycle",
     "jdepend_distance",
     "jdepend_instability",

@@ -13,10 +13,12 @@ from nfr_review.collectors import cpp_ast as cpp_ast  # noqa: F401
 from nfr_review.collectors import csharp_ast as csharp_ast  # noqa: F401
 from nfr_review.collectors import csharp_deps as csharp_deps  # noqa: F401
 from nfr_review.collectors import dockerfile as dockerfile  # noqa: F401
+from nfr_review.collectors import gatling as gatling  # noqa: F401
 from nfr_review.collectors import go_ast as go_ast  # noqa: F401
 from nfr_review.collectors import go_deps as go_deps  # noqa: F401
 from nfr_review.collectors import helm as helm  # noqa: F401
 from nfr_review.collectors import istio as istio  # noqa: F401
+from nfr_review.collectors import jacoco_report as jacoco_report  # noqa: F401
 from nfr_review.collectors import java_ast as java_ast  # noqa: F401
 from nfr_review.collectors import java_deps as java_deps  # noqa: F401
 from nfr_review.collectors import jdepend as jdepend  # noqa: F401
@@ -44,10 +46,12 @@ __all__ = [
     "csharp_ast",
     "csharp_deps",
     "dockerfile",
+    "gatling",
     "go_ast",
     "go_deps",
     "helm",
     "istio",
+    "jacoco_report",
     "java_ast",
     "java_deps",
     "jdepend",
