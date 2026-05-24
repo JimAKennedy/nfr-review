@@ -1,0 +1,89 @@
+{
+  "type": "GROUP",
+  "name": "Global Information",
+  "path": "",
+  "count": 500,
+  "percentage": 100,
+  "stats": {
+    "name": "Global Information",
+    "numberOfRequests": {
+      "total": 500,
+      "ok": 450,
+      "ko": 50
+    },
+    "minResponseTime": {
+      "total": 500,
+      "ok": 500,
+      "ko": 8000
+    },
+    "maxResponseTime": {
+      "total": 12000,
+      "ok": 8000,
+      "ko": 12000
+    },
+    "meanResponseTime": {
+      "total": 3500,
+      "ok": 3000,
+      "ko": 9500
+    },
+    "standardDeviation": {
+      "total": 2000,
+      "ok": 1500,
+      "ko": 1200
+    },
+    "percentiles1": {
+      "name": "50th percentile",
+      "total": 2800,
+      "ok": 2500,
+      "ko": 9000
+    },
+    "percentiles2": {
+      "name": "75th percentile",
+      "total": 4500,
+      "ok": 4000,
+      "ko": 10000
+    },
+    "percentiles3": {
+      "name": "95th percentile",
+      "total": 7500,
+      "ok": 6500,
+      "ko": 11500
+    },
+    "percentiles4": {
+      "name": "99th percentile",
+      "total": 10000,
+      "ok": 7800,
+      "ko": 11900
+    },
+    "group1": {
+      "name": "t < 800 ms",
+      "htmlName": "t < 800 ms",
+      "count": 50,
+      "percentage": 10
+    },
+    "group2": {
+      "name": "800 ms <= t < 1200 ms",
+      "htmlName": "t >= 800 ms <br> t < 1200 ms",
+      "count": 100,
+      "percentage": 20
+    },
+    "group3": {
+      "name": "t >= 1200 ms",
+      "htmlName": "t >= 1200 ms",
+      "count": 300,
+      "percentage": 60
+    },
+    "group4": {
+      "name": "failed",
+      "htmlName": "failed",
+      "count": 50,
+      "percentage": 10
+    },
+    "meanNumberOfRequestsPerSecond": {
+      "total": 10.0,
+      "ok": 9.0,
+      "ko": 1.0
+    }
+  },
+  "contents": {}
+}
