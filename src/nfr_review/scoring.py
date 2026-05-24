@@ -59,12 +59,88 @@ def _grade(score: int) -> str:
     return "F"
 
 
+_CATEGORY_KEYWORDS: dict[str, str] = {
+    "security": "security",
+    "secret": "security",  # nosec B105
+    "auth": "security",
+    "pii": "security",
+    "iam": "security",
+    "base-pinning": "security",
+    "provider-pinning": "security",
+    "fetchcontent-pinning": "security",
+    "user-directive": "security",
+    "otel": "observability",
+    "logging": "observability",
+    "log-statement": "observability",
+    "correlation-id": "observability",
+    "telem": "observability",
+    "health": "observability",
+    "probe": "observability",
+    "timeout": "performance",
+    "thread-pool": "performance",
+    "goroutine": "performance",
+    "defer-in-loop": "performance",
+    "sync-fs": "performance",
+    "async-void": "performance",
+    "blocking-async": "performance",
+    "configure-await": "performance",
+    "async-fire": "performance",
+    "promise-no-catch": "performance",
+    "instability": "performance",
+    "resource-limits": "ops",
+    "ci-": "ops",
+    "jacoco": "ops",
+    "sanitizer-ci": "ops",
+    "dockerfile": "ops",
+    "k8s-": "ops",
+    "helm-": "ops",
+    "istio-": "ops",
+    "skaffold": "ops",
+    "terraform-state": "ops",
+    "spring-profile": "ops",
+    "cmake-": "ops",
+    "dep-upgrade": "ops",
+    "adr-": "ops",
+    "architectural": "ops",
+    "exception": "ops",
+    "broad-except": "ops",
+    "star-import": "ops",
+    "mutable-default": "ops",
+    "raw-memory": "ops",
+    "include-guards": "ops",
+    "disposable": "ops",
+    "clang-format": "ops",
+    "multistage": "ops",
+    "resilience": "ops",
+    "circuit-breaker": "ops",
+    "rate-limit": "ops",
+    "proto-service": "ops",
+    "traffic-policy": "ops",
+    "image-drift": "ops",
+    "user-conflict": "ops",
+    "chart-metadata": "ops",
+    "values-validation": "ops",
+    "build-config": "ops",
+    "minimum-version": "ops",
+    "coverage-actual": "ops",
+    "profile-config": "ops",
+}
+
+
 def _extract_category(rule_id: str) -> str:
-    """Extract category prefix from a rule_id (e.g. 'SEC-001' -> 'SEC')."""
+    """Map a rule_id to one of the 5 NFR categories.
+
+    Handles two formats: prefix-based (``SEC-001``) preserves the prefix,
+    descriptive (``dockerfile-secret-leakage``) uses keyword matching.
+    """
     parts = rule_id.rsplit("-", 1)
     if len(parts) == 2 and parts[1].isdigit():
         return parts[0]
-    return rule_id
+    lower = rule_id.lower()
+    for keyword, category in _CATEGORY_KEYWORDS.items():
+        if keyword in lower:
+            return category
+    return "ops"
 
 
 def compute_maturity_score(
