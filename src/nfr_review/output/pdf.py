@@ -450,15 +450,19 @@ def render_pdf(
     sections.append(_provenance_html(nfr_result))
 
     if exec_summary:
+        sections.append('<div class="section-break"></div>')
         sections.append("<h2>Executive Summary (AI-generated)</h2>")
         sections.append(_exec_summary_html(exec_summary))
 
+    sections.append('<div class="section-break"></div>')
     sections.append(_category_severity_table_html(all_findings, "Findings Summary"))
 
     if score_section_md:
+        sections.append('<div class="section-break"></div>')
         sections.append(_md_deps_to_html(score_section_md))
 
     if diagram_paths:
+        sections.append('<div class="section-break"></div>')
         sections.append("<h2>Diagrams</h2>")
         for diagram_title, path in diagram_paths.items():
             if path.exists():
@@ -468,10 +472,13 @@ def render_pdf(
                     f"{_embed_image(path)}</div>"
                 )
 
+    sections.append('<div class="section-break"></div>')
     sections.append(_test_results_html(pytest_result))
 
     sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(source_findings, "Source Code Findings"))
+
+    sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(test_findings, "Test Code Findings"))
 
     if adr_section_md:

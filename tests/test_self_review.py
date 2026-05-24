@@ -1,8 +1,8 @@
 """CLI-level self-review tests proving M012 milestone success criteria.
 
 Runs nfr-review against the actual repo root to verify that path filtering
-works end-to-end at the CLI level: test/fixture paths are included by default
-and excluded with --exclude-tests.
+works end-to-end at the CLI level: test/fixture paths are excluded by default
+and included with --include-tests.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def _parse_findings(jsonl_path: Path) -> list[dict]:
 
 
 @pytest.mark.slow
-def test_self_review_default_includes_fixture_findings(tmp_path: Path) -> None:
+def test_self_review_default_excludes_fixture_findings(tmp_path: Path) -> None:
     csv_path = tmp_path / "nfr-review.csv"
     jsonl_path = tmp_path / "nfr-review.jsonl"
 
@@ -49,14 +49,15 @@ def test_self_review_default_includes_fixture_findings(tmp_path: Path) -> None:
         f for f in findings if "tests/fixtures/" in f.get("evidence_locator", "")
     ]
 
-    assert len(fixture_findings) >= 1, (
-        "Expected at least 1 finding from tests/fixtures/ by default, "
-        f"got {len(fixture_findings)}. Total findings: {len(findings)}"
+    assert len(fixture_findings) == 0, (
+        "Expected zero findings from tests/fixtures/ by default, "
+        f"got {len(fixture_findings)}: "
+        f"{[f['evidence_locator'] for f in fixture_findings]}"
     )
 
 
 @pytest.mark.slow
-def test_self_review_exclude_tests_removes_fixture_findings(tmp_path: Path) -> None:
+def test_self_review_include_tests_adds_fixture_findings(tmp_path: Path) -> None:
     csv_path = tmp_path / "nfr-review.csv"
     jsonl_path = tmp_path / "nfr-review.jsonl"
 
@@ -66,7 +67,7 @@ def test_self_review_exclude_tests_removes_fixture_findings(tmp_path: Path) -> N
         [
             "run",
             str(_REPO_ROOT),
-            "--exclude-tests",
+            "--include-tests",
             "--csv",
             str(csv_path),
             "--jsonl",
@@ -84,19 +85,9 @@ def test_self_review_exclude_tests_removes_fixture_findings(tmp_path: Path) -> N
         f for f in findings if "tests/fixtures/" in f.get("evidence_locator", "")
     ]
 
-    regression_findings = [
-        f for f in findings if "tests/regression/" in f.get("evidence_locator", "")
-    ]
-
-    assert len(fixture_findings) == 0, (
-        f"Expected zero findings from tests/fixtures/ with --exclude-tests, "
-        f"got {len(fixture_findings)}: "
-        f"{[f['evidence_locator'] for f in fixture_findings]}"
-    )
-    assert len(regression_findings) == 0, (
-        f"Expected zero findings from tests/regression/ with --exclude-tests, "
-        f"got {len(regression_findings)}: "
-        f"{[f['evidence_locator'] for f in regression_findings]}"
+    assert len(fixture_findings) >= 1, (
+        "Expected at least 1 finding from tests/fixtures/ with --include-tests, "
+        f"got {len(fixture_findings)}. Total findings: {len(findings)}"
     )
 
 

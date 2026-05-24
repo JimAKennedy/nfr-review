@@ -54,6 +54,7 @@ def test_regression_snapshot(
             "nfr_review.cli",
             "run",
             str(clone_dir),
+            "--include-tests",
             "--jsonl",
             str(jsonl_out),
             "--csv",
@@ -97,14 +98,22 @@ def test_regression_snapshot(
     if normalized != baseline:
         added = [f for f in normalized if f not in baseline]
         removed = [f for f in baseline if f not in normalized]
+
+        _UPSTREAM_DRIFT_RULES = {"dep-freshness", "dep-upgrade-path"}
+        added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
+        removed_stable = [f for f in removed if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
+
+        if not added_stable and not removed_stable:
+            return
+
         parts = [f"Snapshot mismatch for {repo_name}:"]
-        if added:
-            parts.append(f"  +{len(added)} new finding(s):")
-            for f in added[:5]:
+        if added_stable:
+            parts.append(f"  +{len(added_stable)} new finding(s):")
+            for f in added_stable[:5]:
                 parts.append(f"    + {f.get('rule_id')}: {f.get('summary', '')[:80]}")
-        if removed:
-            parts.append(f"  -{len(removed)} removed finding(s):")
-            for f in removed[:5]:
+        if removed_stable:
+            parts.append(f"  -{len(removed_stable)} removed finding(s):")
+            for f in removed_stable[:5]:
                 parts.append(f"    - {f.get('rule_id')}: {f.get('summary', '')[:80]}")
         parts.append("Run with --update-snapshots to accept the new baseline.")
         pytest.fail("\n".join(parts))
