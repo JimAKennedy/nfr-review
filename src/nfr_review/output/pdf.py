@@ -177,6 +177,10 @@ def _exec_summary_html(summary: ExecSummary) -> str:
         f'<span class="verdict-score">{summary.overall_score}/100</span>',
         f'<span class="verdict-label" style="color:{color}">{_h(label)}</span>',
         f"<p>{_h(summary.verdict_explanation)}</p>",
+        '<p style="font-size:8pt;color:#666;margin-top:4px">'
+        "This score is an AI-generated holistic assessment and may differ from"
+        " the deterministic Design Maturity Score. See the Scoring Methodology"
+        " appendix for details.</p>",
         "</div>",
     ]
 
@@ -346,13 +350,13 @@ def _md_deps_to_html(md: str) -> str:
         elif line.startswith("| ") and i + 1 < len(lines) and lines[i + 1].startswith("|--"):
             headers = [c.strip() for c in line.split("|")[1:-1]]
             parts.append("<table><thead><tr>")
-            parts.append("".join(f"<th>{_h(h)}</th>" for h in headers))
+            parts.append("".join(f"<th>{_inline_md(h)}</th>" for h in headers))
             parts.append("</tr></thead><tbody>")
             i += 2  # skip separator
             while i < len(lines) and lines[i].startswith("| "):
                 cells = [c.strip() for c in lines[i].split("|")[1:-1]]
                 parts.append("<tr>")
-                parts.append("".join(f"<td>{_h(c)}</td>" for c in cells))
+                parts.append("".join(f"<td>{_inline_md(c)}</td>" for c in cells))
                 parts.append("</tr>")
                 i += 1
             parts.append("</tbody></table>")
@@ -432,7 +436,7 @@ def render_pdf(
     sections.append(_provenance_html(nfr_result))
 
     if exec_summary:
-        sections.append("<h2>Executive Summary</h2>")
+        sections.append("<h2>Executive Summary (AI-generated)</h2>")
         sections.append(_exec_summary_html(exec_summary))
 
     sections.append(_summary_table_html(all_findings, "Overall Summary"))
@@ -489,6 +493,20 @@ def render_pdf(
             deps_body = deps_body.split("\n", 1)[1] if "\n" in deps_body else ""
         sections.append("<h2>Appendix A &mdash; Dependency Tree</h2>")
         sections.append(_md_deps_to_html(deps_body))
+
+    if score_section_md:
+        from nfr_review.output.markdown import _methodology_appendix
+
+        sections.append('<div class="section-break"></div>')
+        methodology_md = _methodology_appendix()
+        methodology_body = methodology_md
+        if methodology_body.startswith("## "):
+            methodology_body = (
+                methodology_body.split("\n", 1)[1] if "\n" in methodology_body else ""
+            )
+        appendix_label = "B" if deps_section_md else "A"
+        sections.append(f"<h2>Appendix {appendix_label} &mdash; Scoring Methodology</h2>")
+        sections.append(_md_deps_to_html(methodology_body))
 
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">
