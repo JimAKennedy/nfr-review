@@ -141,7 +141,7 @@ class TestTechOverview:
 class TestDepGraph:
     def test_empty_reports(self) -> None:
         result = render_mermaid_dep_graph([])
-        assert result.startswith("graph LR")
+        assert result.startswith("graph TD")
         assert "subgraph" not in result
 
     def test_single_ecosystem_flat(self) -> None:
@@ -203,7 +203,7 @@ class TestDepGraph:
         )
         r2 = _make_report("npm", upgrades=[("react", "18.0")])
         result = render_mermaid_dep_graph([r1, r2])
-        assert result.strip().splitlines()[0] == "graph LR"
+        assert result.strip().splitlines()[0] == "graph TD"
         open_count = result.count("subgraph")
         close_count = result.count("    end")
         assert open_count == close_count

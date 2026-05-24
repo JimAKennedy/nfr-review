@@ -87,7 +87,7 @@ def _render_mermaid_tree_edges(
 def render_mermaid_dep_graph(reports: list[EcosystemDepsReport]) -> str:
     """Render a Mermaid graph showing dependencies grouped by ecosystem."""
     lines: list[str] = []
-    lines.append("graph LR")
+    lines.append("graph TD")
 
     if not reports:
         return "\n".join(lines) + "\n"
@@ -207,8 +207,36 @@ def render_jdepend_dot(packages: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_jdepend_mermaid(packages: list[dict]) -> str:
+    """Render a Mermaid flowchart of JDepend package dependencies."""
+    if not packages:
+        return ""
+
+    lines = ["graph TD"]
+
+    pkg_ids: dict[str, str] = {}
+    for pkg in packages:
+        name = pkg.get("name", "unknown")
+        node_id = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        pkg_ids[name] = node_id
+        d = pkg.get("d", pkg.get("D", 0.0))
+        short = name.rsplit(".", 1)[-1] if "." in name else name
+        label = f"{short} D={d:.2f}"
+        lines.append(f"    {node_id}[{_quote_label(label)}]")
+
+    for pkg in packages:
+        name = pkg.get("name", "unknown")
+        node_id = pkg_ids[name]
+        for dep in pkg.get("depends_upon", []):
+            dep_id = re.sub(r"[^a-zA-Z0-9_]", "_", dep)
+            lines.append(f"    {node_id} --> {dep_id}")
+
+    return "\n".join(lines) + "\n"
+
+
 __all__ = [
     "render_jdepend_dot",
+    "render_jdepend_mermaid",
     "render_jdepend_metrics_table",
     "render_mermaid_dep_graph",
     "render_mermaid_severity_pie",

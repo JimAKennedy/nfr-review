@@ -5,7 +5,10 @@
 from __future__ import annotations
 
 from nfr_review.models import Evidence
-from nfr_review.output.diagrams import render_jdepend_dot, render_jdepend_metrics_table
+from nfr_review.output.diagrams import (
+    render_jdepend_mermaid,
+    render_jdepend_metrics_table,
+)
 
 
 def build_jdepend_section(evidence: list[Evidence]) -> str:
@@ -37,12 +40,12 @@ def build_jdepend_section(evidence: list[Evidence]) -> str:
                 lines.append(f"- {cycle_str}")
             lines.append("")
 
-        dot = render_jdepend_dot(packages)
-        if dot:
+        mermaid = render_jdepend_mermaid(packages)
+        if mermaid:
             lines.append("### Package Dependency Diagram")
             lines.append("")
-            lines.append("```dot")
-            lines.append(dot.rstrip())
+            lines.append("```mermaid")
+            lines.append(mermaid.rstrip())
             lines.append("```")
             lines.append("")
 
