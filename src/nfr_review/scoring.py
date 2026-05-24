@@ -171,12 +171,6 @@ def compute_maturity_score(
     for f in findings:
         severity_counts[f.severity] = severity_counts.get(f.severity, 0) + 1
 
-    # Overall score
-    total_deduction = 0
-    for f in findings:
-        total_deduction += abs(_SEVERITY_WEIGHTS.get(f.severity, 0))
-    overall = max(0, min(100, 100 - total_deduction))
-
     # Category scores
     category_findings: dict[str, list[Finding]] = {}
     for f in findings:
@@ -189,6 +183,12 @@ def compute_maturity_score(
         for f in cat_findings:
             cat_deduction += abs(_SEVERITY_WEIGHTS.get(f.severity, 0))
         category_scores[cat] = max(0, 100 - cat_deduction)
+
+    # Overall score: weighted average of category scores (100 when no findings)
+    if category_scores:
+        overall = round(sum(category_scores.values()) / len(category_scores))
+    else:
+        overall = 100
 
     # Rules coverage
     total_rules = len(rules_run) + len(rules_skipped)
