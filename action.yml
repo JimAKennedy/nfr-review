@@ -31,6 +31,14 @@ inputs:
     description: "Whether to post a PR comment with results"
     required: false
     default: "true"
+  file-issues:
+    description: "Whether to file GitHub issues for red findings"
+    required: false
+    default: "false"
+  issue-severity:
+    description: "Minimum severity for issue filing (critical, high, medium, low, info)"
+    required: false
+    default: "high"
   python-version:
     description: "Python version to use"
     required: false
@@ -52,6 +60,9 @@ outputs:
   exit-code:
     description: "Exit code of the nfr-review run (0=pass, 2=threshold exceeded)"
     value: ${{ steps.scan.outputs.exit-code }}
+  issues-filed:
+    description: "Number of GitHub issues filed for red findings"
+    value: ${{ steps.file-issues.outputs.issues-filed }}
 
 runs:
   using: "composite"
@@ -208,7 +219,27 @@ runs:
         body-path: ${{ steps.comment-body.outputs.body-path }}
         comment-tag: nfr-review-comment
 
-    # ── 9. Fail on red findings ─────────────────────────────────────────
+    # ── 9. File GitHub issues for red findings ────────────────────────────
+    - name: File remediation issues
+      if: inputs.file-issues == 'true'
+      id: file-issues
+      shell: bash
+      env:
+        NFR_ISSUE_SEVERITY_THRESHOLD: ${{ inputs.issue-severity }}
+      run: |
+        JSONL_PATH="${{ steps.scan.outputs.jsonl-path }}"
+        if [ ! -f "$JSONL_PATH" ]; then
+          echo "issues-filed=0" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        OUTPUT=$(python "${{ github.action_path }}/scripts/action_issues.py" "$JSONL_PATH" 2>&1)
+        echo "$OUTPUT"
+
+        FILED=$(echo "$OUTPUT" | grep -c '^\[filed\]' || true)
+        echo "issues-filed=${FILED}" >> "$GITHUB_OUTPUT"
+
+    # ── 10. Fail on red findings ────────────────────────────────────────
     - name: Check for red findings
       if: inputs.fail-on-red == 'true'
       shell: bash
