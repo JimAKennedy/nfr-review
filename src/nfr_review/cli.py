@@ -235,10 +235,9 @@ def cli() -> None:
     help="Output path for the R018 JSONL run record. [default: {repo}-nfr-review.jsonl]",
 )
 @click.option(
-    "--exclude-tests",
-    is_flag=True,
-    default=False,
-    help="Exclude test and fixture directories from analysis.",
+    "--exclude-tests/--include-tests",
+    default=True,
+    help="Exclude test and fixture directories from analysis (default: exclude).",
 )
 @click.option(
     "--baseline",
@@ -530,10 +529,9 @@ def explain_cmd(rule_id: str) -> None:
     help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
 )
 @click.option(
-    "--exclude-tests",
-    is_flag=True,
-    default=False,
-    help="Exclude test and fixture directories from analysis.",
+    "--exclude-tests/--include-tests",
+    default=True,
+    help="Exclude test and fixture directories from analysis (default: exclude).",
 )
 def hygiene_cmd(
     target: Path | None,
@@ -749,10 +747,9 @@ def hygiene_cmd(
     help="Suppress Mermaid diagram sections in the report.",
 )
 @click.option(
-    "--exclude-tests",
-    is_flag=True,
-    default=False,
-    help="Exclude test and fixture directories from analysis.",
+    "--exclude-tests/--include-tests",
+    default=True,
+    help="Exclude test and fixture directories from analysis (default: exclude).",
 )
 @click.option(
     "--no-pdf",
