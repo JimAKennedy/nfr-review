@@ -1,0 +1,221 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
+name: "NFR Review"
+description: "Run nfr-review on a repository and post a RAG summary to the PR"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  target:
+    description: "Path to the repository to scan"
+    required: false
+    default: "."
+  config:
+    description: "Path to nfr-review.yaml config file"
+    required: false
+    default: ""
+  baseline:
+    description: "Path to baseline JSONL for diff mode"
+    required: false
+    default: ""
+  fail-on-red:
+    description: "Whether to fail the check when red findings are present"
+    required: false
+    default: "true"
+  sarif-upload:
+    description: "Whether to upload SARIF to GitHub Security tab"
+    required: false
+    default: "false"
+  comment:
+    description: "Whether to post a PR comment with results"
+    required: false
+    default: "true"
+  python-version:
+    description: "Python version to use"
+    required: false
+    default: "3.12"
+
+outputs:
+  findings-count:
+    description: "Total number of findings"
+    value: ${{ steps.parse.outputs.findings-count }}
+  red-count:
+    description: "Number of red findings"
+    value: ${{ steps.parse.outputs.red-count }}
+  amber-count:
+    description: "Number of amber findings"
+    value: ${{ steps.parse.outputs.amber-count }}
+  green-count:
+    description: "Number of green findings"
+    value: ${{ steps.parse.outputs.green-count }}
+  exit-code:
+    description: "Exit code of the nfr-review run (0=pass, 2=threshold exceeded)"
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: "composite"
+  steps:
+    # ── 1. Set up Python ────────────────────────────────────────────────
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # ── 2. Install nfr-review from the action's own repository ──────────
+    - name: Install nfr-review
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    # ── 3. Run nfr-review scan ──────────────────────────────────────────
+    - name: Run nfr-review scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+
+        ARGS=("run" "${{ inputs.target }}")
+
+        if [ -n "${{ inputs.config }}" ]; then
+          ARGS+=("--config" "${{ inputs.config }}")
+        fi
+
+        JSONL_PATH="${{ runner.temp }}/nfr-review-output.jsonl"
+        ARGS+=("--jsonl" "$JSONL_PATH")
+
+        nfr-review "${ARGS[@]}"
+        EXIT_CODE=$?
+
+        echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
+        echo "jsonl-path=${JSONL_PATH}" >> "$GITHUB_OUTPUT"
+
+        # Always succeed here — we gate on red findings in a later step.
+        exit 0
+
+    # ── 4. Generate SARIF (if requested) ────────────────────────────────
+    - name: Generate SARIF
+      if: inputs.sarif-upload == 'true'
+      id: sarif
+      shell: bash
+      run: |
+        SARIF_PATH="${{ runner.temp }}/nfr-review.sarif"
+        ARGS=("run" "${{ inputs.target }}" "--jsonl" "/dev/null")
+
+        if [ -n "${{ inputs.config }}" ]; then
+          ARGS+=("--config" "${{ inputs.config }}")
+        fi
+
+        # The report command supports --sarif; for the action we re-run
+        # with SARIF output.  A future version may add --sarif to run.
+        # For now, generate from the existing JSONL.
+        python -c "
+        import json, sys
+        from pathlib import Path
+        # Minimal SARIF from JSONL — the full sarif.py module can be used
+        # once it is wired to the run command.
+        jsonl = Path('${{ steps.scan.outputs.jsonl-path }}')
+        sarif = {
+            '\$schema': 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
+            'version': '2.1.0',
+            'runs': [{
+                'tool': {'driver': {'name': 'nfr-review', 'version': '0.1.0', 'rules': []}},
+                'results': []
+            }]
+        }
+        if jsonl.exists():
+            for line in jsonl.read_text().splitlines():
+                rec = json.loads(line)
+                if rec.get('record_type') != 'finding' or rec.get('rag') == 'skipped':
+                    continue
+                level_map = {'red': 'error', 'amber': 'warning', 'green': 'note'}
+                sarif['runs'][0]['results'].append({
+                    'ruleId': rec.get('rule_id', ''),
+                    'level': level_map.get(rec.get('rag', ''), 'note'),
+                    'message': {'text': rec.get('summary', '')},
+                    'locations': [{'physicalLocation': {
+                        'artifactLocation': {'uri': rec.get('evidence_locator', 'unknown')},
+                    }}],
+                })
+        Path('${SARIF_PATH}').write_text(json.dumps(sarif, indent=2))
+        "
+
+        echo "sarif-path=${SARIF_PATH}" >> "$GITHUB_OUTPUT"
+
+    # ── 5. Upload SARIF ─────────────────────────────────────────────────
+    - name: Upload SARIF
+      if: inputs.sarif-upload == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.sarif.outputs.sarif-path }}
+
+    # ── 6. Parse JSONL and set output counts ────────────────────────────
+    - name: Parse results
+      id: parse
+      shell: bash
+      run: |
+        JSONL_PATH="${{ steps.scan.outputs.jsonl-path }}"
+        if [ ! -f "$JSONL_PATH" ]; then
+          echo "findings-count=0" >> "$GITHUB_OUTPUT"
+          echo "red-count=0" >> "$GITHUB_OUTPUT"
+          echo "amber-count=0" >> "$GITHUB_OUTPUT"
+          echo "green-count=0" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        python -c "
+        import json
+        from pathlib import Path
+
+        counts = {'red': 0, 'amber': 0, 'green': 0}
+        for line in Path('${JSONL_PATH}').read_text().splitlines():
+            rec = json.loads(line)
+            if rec.get('record_type') == 'finding' and rec.get('rag') in counts:
+                counts[rec['rag']] += 1
+
+        total = sum(counts.values())
+        print(f'findings-count={total}')
+        print(f'red-count={counts[\"red\"]}')
+        print(f'amber-count={counts[\"amber\"]}')
+        print(f'green-count={counts[\"green\"]}')
+        " >> "$GITHUB_OUTPUT"
+
+    # ── 7. Generate PR comment ──────────────────────────────────────────
+    - name: Generate comment body
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      id: comment-body
+      shell: bash
+      run: |
+        JSONL_PATH="${{ steps.scan.outputs.jsonl-path }}"
+        BODY_PATH="${{ runner.temp }}/nfr-review-comment.md"
+
+        if [ -f "$JSONL_PATH" ]; then
+          python "${{ github.action_path }}/scripts/action_comment.py" "$JSONL_PATH" > "$BODY_PATH"
+        else
+          echo "<!-- nfr-review-comment -->" > "$BODY_PATH"
+          echo "## NFR Review Results" >> "$BODY_PATH"
+          echo "" >> "$BODY_PATH"
+          echo "No findings generated (scan may have failed)." >> "$BODY_PATH"
+        fi
+
+        echo "body-path=${BODY_PATH}" >> "$GITHUB_OUTPUT"
+
+    # ── 8. Post / update sticky PR comment ──────────────────────────────
+    - name: Post PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: ${{ steps.comment-body.outputs.body-path }}
+        comment-tag: nfr-review-comment
+
+    # ── 9. Fail on red findings ─────────────────────────────────────────
+    - name: Check for red findings
+      if: inputs.fail-on-red == 'true'
+      shell: bash
+      run: |
+        RED_COUNT="${{ steps.parse.outputs.red-count }}"
+        if [ "${RED_COUNT}" -gt 0 ]; then
+          echo "::error::nfr-review found ${RED_COUNT} red finding(s) — failing the check"
+          exit 1
+        fi
+        echo "No red findings — check passed"

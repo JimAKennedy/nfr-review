@@ -65,6 +65,9 @@ from nfr_review.rules import (
     dockerfile_user_directive as dockerfile_user_directive,  # noqa: F401
 )
 from nfr_review.rules import (
+    gatling_performance as gatling_performance,  # noqa: F401
+)
+from nfr_review.rules import (
     go_defer_in_loop as go_defer_in_loop,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -96,6 +99,9 @@ from nfr_review.rules import (
 )
 from nfr_review.rules import (
     istio_traffic_policy as istio_traffic_policy,  # noqa: F401
+)
+from nfr_review.rules import (
+    jacoco_coverage as jacoco_coverage,  # noqa: F401
 )
 from nfr_review.rules import jacoco_threshold as jacoco_threshold  # noqa: F401
 from nfr_review.rules import java_exception as java_exception  # noqa: F401
@@ -235,6 +241,7 @@ __all__ = [
     "csharp_blocking_async",
     "csharp_configure_await",
     "csharp_disposable_no_using",
+    "gatling_performance",
     "go_defer_in_loop",
     "go_error_ignored",
     "go_goroutine_leak",
@@ -256,6 +263,7 @@ __all__ = [
     "istio_traffic_policy",
     "java_exception",
     "java_health",
+    "jacoco_coverage",
     "jacoco_threshold",
     "jdepend_cycle",
     "jdepend_distance",

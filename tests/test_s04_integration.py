@@ -143,7 +143,18 @@ class TestTwentyRulesRegistered:
 
 
 class TestListRulesShowsTwenty:
+    @staticmethod
+    def _ensure_all_registered() -> None:
+        import importlib
+        import sys as _sys
+
+        for name in nfr_review.rules.__all__:
+            mod_name = f"nfr_review.rules.{name}"
+            if mod_name in _sys.modules:
+                importlib.reload(_sys.modules[mod_name])
+
     def test_list_rules_shows_twenty(self) -> None:
+        self._ensure_all_registered()
         result = subprocess.run(
             [sys.executable, "-m", "nfr_review.cli", "list-rules"],
             capture_output=True,
