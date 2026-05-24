@@ -109,17 +109,17 @@ class TestTechOverview:
 
     def test_single_tech(self) -> None:
         result = render_mermaid_tech_overview({"java": True})
-        assert "scan --> java[Java]" in result
+        assert 'scan --> java["Java"]' in result
 
     def test_multiple_techs(self) -> None:
         result = render_mermaid_tech_overview({"java": True, "python": True, "go": False})
-        assert "java[Java]" in result
-        assert "python[Python]" in result
+        assert 'java["Java"]' in result
+        assert 'python["Python"]' in result
         assert "go" not in result.split("scan[NFR Review Scan]")[1].split("\n")[0]
 
     def test_snake_case_labels(self) -> None:
         result = render_mermaid_tech_overview({"spring_boot": True})
-        assert "spring_boot[Spring Boot]" in result
+        assert 'spring_boot["Spring Boot"]' in result
 
     def test_flowchart_syntax(self) -> None:
         result = render_mermaid_tech_overview({"helm": True})
@@ -148,8 +148,8 @@ class TestDepGraph:
         report = _make_report("maven", upgrades=[("spring-core", "5.3.0"), ("guava", "31.1")])
         result = render_mermaid_dep_graph([report])
         assert "subgraph maven" in result
-        assert "spring-core@5.3.0" in result
-        assert "guava@31.1" in result
+        assert '"spring-core@5.3.0"' in result
+        assert '"guava@31.1"' in result
         assert "-->" not in result
 
     def test_single_ecosystem_tree(self) -> None:
@@ -165,8 +165,8 @@ class TestDepGraph:
         report = _make_report("maven", tree=tree)
         result = render_mermaid_dep_graph([report])
         assert "-->" in result
-        assert "spring-core@5.3.0" in result
-        assert "spring-jcl@5.3.0" in result
+        assert '"spring-core@5.3.0"' in result
+        assert '"spring-jcl@5.3.0"' in result
 
     def test_multi_ecosystem(self) -> None:
         r1 = _make_report("maven", upgrades=[("spring-core", "5.3.0")])
@@ -180,13 +180,13 @@ class TestDepGraph:
         report = _make_report("npm", upgrades=[("@scope/pkg", "1.0.0")])
         result = render_mermaid_dep_graph([report])
         assert "npm___scope_pkg" in result
-        assert "@scope/pkg@1.0.0" in result
+        assert '"@scope/pkg@1.0.0"' in result
 
     def test_dotted_package_name(self) -> None:
         report = _make_report("maven", upgrades=[("org.springframework.boot", "3.1.0")])
         result = render_mermaid_dep_graph([report])
         assert "maven__org_springframework_boot" in result
-        assert "org.springframework.boot@3.1.0" in result
+        assert '"org.springframework.boot@3.1.0"' in result
 
     def test_graph_syntax(self) -> None:
         r1 = _make_report(
@@ -244,7 +244,7 @@ class TestDepGraph:
     def test_flat_dep_without_version(self) -> None:
         report = _make_report("pypi", upgrades=[("unknown-pkg", "")])
         result = render_mermaid_dep_graph([report])
-        assert "pypi__unknown_pkg[unknown-pkg]" in result
+        assert 'pypi__unknown_pkg["unknown-pkg"]' in result
         pkg_line = [ln for ln in result.splitlines() if "unknown_pkg" in ln][0]
         assert "@" not in pkg_line
 
@@ -254,4 +254,4 @@ class TestDepGraph:
         result = render_mermaid_dep_graph([report])
         node_lines = [ln for ln in result.splitlines() if "pypi__root[" in ln]
         assert len(node_lines) == 1
-        assert "root]" in node_lines[0]
+        assert '"root"]' in node_lines[0]

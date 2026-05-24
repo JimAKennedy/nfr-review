@@ -27,6 +27,10 @@ def _safe_id(ecosystem: str, pkg_name: str) -> str:
     return _MERMAID_ID_RE.sub("_", f"{ecosystem}__{pkg_name}")
 
 
+def _quote_label(text: str) -> str:
+    return '"' + text.replace('"', "#quot;") + '"'
+
+
 def _to_title_case(key: str) -> str:
     return key.replace("_", " ").title()
 
@@ -59,7 +63,7 @@ def render_mermaid_tech_overview(tech_dict: dict[str, bool]) -> str:
     for key in sorted(detected):
         node_id = _MERMAID_ID_RE.sub("_", key)
         label = _to_title_case(key)
-        lines.append(f"    scan --> {node_id}[{label}]")
+        lines.append(f"    scan --> {node_id}[{_quote_label(label)}]")
 
     return "\n".join(lines) + "\n"
 
@@ -101,9 +105,9 @@ def render_mermaid_dep_graph(reports: list[EcosystemDepsReport]) -> str:
                 nid = _safe_id(eco, upgrade.name)
                 ver = upgrade.declared_version or ""
                 if ver:
-                    lines.append(f"        {nid}[{upgrade.name}@{ver}]")
+                    lines.append(f"        {nid}[{_quote_label(f'{upgrade.name}@{ver}')}]")
                 else:
-                    lines.append(f"        {nid}[{upgrade.name}]")
+                    lines.append(f"        {nid}[{_quote_label(upgrade.name)}]")
 
         lines.append("    end")
 
@@ -125,9 +129,9 @@ def _emit_mermaid_tree_nodes(
     if nid not in seen:
         seen.add(nid)
         if node.version:
-            lines.append(f"        {nid}[{node.name}@{node.version}]")
+            lines.append(f"        {nid}[{_quote_label(f'{node.name}@{node.version}')}]")
         else:
-            lines.append(f"        {nid}[{node.name}]")
+            lines.append(f"        {nid}[{_quote_label(node.name)}]")
     for child in node.children:
         _emit_mermaid_tree_nodes(eco, child, lines, seen)
 
