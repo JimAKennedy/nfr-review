@@ -12,6 +12,7 @@ import base64
 import html
 import logging
 import struct
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -313,6 +314,21 @@ def _inline_md(text: str) -> str:
     return escaped
 
 
+def _render_mermaid_inline(mermaid_text: str) -> str | None:
+    """Render Mermaid text to a base64-embedded ``<img>`` tag, or ``None``."""
+    from nfr_review.output.render import render_mermaid_to_png
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        result = render_mermaid_to_png(mermaid_text, tmp_path)
+        if result is None:
+            return None
+        return f'<div class="diagram-container">{_embed_image(tmp_path)}</div>'
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def _md_deps_to_html(md: str) -> str:
     """Convert the markdown dependency section to proper HTML tables."""
     lines = md.split("\n")
@@ -342,16 +358,29 @@ def _md_deps_to_html(md: str) -> str:
             parts.append("</tbody></table>")
             continue
         elif line.startswith("```"):
+            lang = line.lstrip("`").strip().lower()
             i += 1
             code_lines = []
             while i < len(lines) and not lines[i].startswith("```"):
                 code_lines.append(lines[i])
                 i += 1
-            parts.append(
-                f'<pre style="font-size:8pt;background:#f5f5f5;'
-                f'padding:8px;border-radius:4px;overflow-x:auto">'
-                f"<code>{_h(chr(10).join(code_lines))}</code></pre>"
-            )
+            code_text = chr(10).join(code_lines)
+            if lang == "mermaid" and code_text.strip():
+                img_html = _render_mermaid_inline(code_text)
+                if img_html:
+                    parts.append(img_html)
+                else:
+                    parts.append(
+                        f'<pre style="font-size:8pt;background:#f5f5f5;'
+                        f'padding:8px;border-radius:4px;overflow-x:auto">'
+                        f"<code>{_h(code_text)}</code></pre>"
+                    )
+            else:
+                parts.append(
+                    f'<pre style="font-size:8pt;background:#f5f5f5;'
+                    f'padding:8px;border-radius:4px;overflow-x:auto">'
+                    f"<code>{_h(code_text)}</code></pre>"
+                )
         elif line.startswith("> "):
             parts.append(
                 f'<blockquote style="border-left:3px solid #dc3545;'
@@ -378,6 +407,7 @@ def render_pdf(
     adr_section_md: str = "",
     derived_adrs_section_md: str = "",
     diagram_paths: dict[str, Path] | None = None,
+    score_section_md: str = "",
     title: str = "NFR Review Report",
 ) -> Path:
     """Render a complete PDF report from scan results.
@@ -408,6 +438,9 @@ def render_pdf(
     sections.append(_summary_table_html(all_findings, "Overall Summary"))
     sections.append(_summary_table_html(source_findings, "Source Code Summary"))
     sections.append(_summary_table_html(test_findings, "Test Code Summary"))
+
+    if score_section_md:
+        sections.append(_md_deps_to_html(score_section_md))
 
     if diagram_paths:
         sections.append("<h2>Diagrams</h2>")

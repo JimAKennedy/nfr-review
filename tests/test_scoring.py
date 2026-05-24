@@ -142,6 +142,22 @@ def test_category_breakdown() -> None:
     assert "PATCH" in score.category_scores
     assert score.category_scores["SEC"] == 89
     assert score.category_scores["PATCH"] == 99
+    # Overall is the mean of category scores: (89 + 99) / 2 = 94
+    assert score.overall == 94
+
+
+def test_overall_is_category_average_across_many_categories() -> None:
+    findings = [
+        _finding(rule_id="SEC-001", severity="critical"),  # SEC: 85
+        _finding(rule_id="OBS-001", severity="high"),  # OBS: 92
+        _finding(rule_id="PERF-001", severity="medium"),  # PERF: 97
+        _finding(rule_id="OPS-001", severity="low"),  # OPS: 99
+    ]
+    score = compute_maturity_score(findings, ["R001"], [])
+    assert score.category_scores == {"SEC": 85, "OBS": 92, "PERF": 97, "OPS": 99}
+    # (85 + 92 + 97 + 99) / 4 = 93.25 → 93
+    assert score.overall == 93
+    assert score.grade == "A"
 
 
 def test_rules_coverage() -> None:
