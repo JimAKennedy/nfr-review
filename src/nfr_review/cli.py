@@ -1082,6 +1082,7 @@ def report_cmd(
                 adr_section_md=adr_section,
                 derived_adrs_section_md=derived_adrs_section,
                 diagram_paths=diagram_image_paths,
+                score_section_md=score_section,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
         except Exception as exc:  # noqa: BLE001
