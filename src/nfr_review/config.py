@@ -65,6 +65,7 @@ class Config(BaseModel):
     severity_threshold: Severity | None = None
     exclude_paths: list[str] = Field(default_factory=list)
     exclude_test_paths: bool = True
+    max_resolve_rounds: int = 2000
     target: Path | None = Field(default=None, exclude=True)
 
 

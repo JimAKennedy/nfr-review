@@ -1,4 +1,4 @@
-"""E2E tests for the --pdf flag on the report command."""
+"""E2E tests for PDF generation in the report command (default on, --no-pdf to skip)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,6 @@ class TestReportPdfFlag:
                 str(tmp_path),
                 "--no-tests",
                 "--no-deps",
-                "--pdf",
                 "--no-summary",
             ],
         )
@@ -57,14 +56,13 @@ class TestReportPdfFlag:
                 "--no-tests",
                 "--no-deps",
                 "--no-diagrams",
-                "--pdf",
                 "--no-summary",
             ],
         )
         assert result.exit_code == 0
         assert "pdf=" in result.output
 
-    def test_report_without_pdf_flag(self, tmp_path: Path, fixture_repo: Path) -> None:
+    def test_report_with_no_pdf_flag(self, tmp_path: Path, fixture_repo: Path) -> None:
         runner = CliRunner()
         result = runner.invoke(
             cli,
@@ -76,6 +74,7 @@ class TestReportPdfFlag:
                 "--no-tests",
                 "--no-deps",
                 "--no-diagrams",
+                "--no-pdf",
             ],
         )
         assert result.exit_code == 0

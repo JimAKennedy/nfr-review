@@ -150,13 +150,22 @@ def analyze_deps(
     *,
     resolve_transitive: bool = True,
     progress_callback: Callable[[str], None] | None = None,
+    max_resolve_rounds: int | None = None,
 ) -> list[EcosystemDepsReport]:
     """Run dependency analysis on a target repository.
 
     Runs only the dependency collectors, resolves each ecosystem's deps,
     and returns structured reports with upgrade recommendations and
     optional dependency trees.
+
+    Args:
+        max_resolve_rounds: Maximum resolver iterations.  When *None*
+            (the default), falls back to ``config.max_resolve_rounds``.
     """
+    effective_max_rounds = (
+        max_resolve_rounds if max_resolve_rounds is not None else config.max_resolve_rounds
+    )
+
     if progress_callback:
         progress_callback("Collecting dependency manifests...")
 
@@ -184,6 +193,7 @@ def analyze_deps(
             client,
             ecosystem,
             resolve_transitive=resolve_transitive,
+            max_rounds=effective_max_rounds,
         )
 
         upgrades: list[DepUpgradeInfo] = []

@@ -9,12 +9,12 @@ import pytest
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
 from nfr_review.output.pdf import (
+    _category_severity_table_html,
     _exec_summary_html,
     _findings_html,
     _md_deps_to_html,
     _png_dimensions,
     _provenance_html,
-    _summary_table_html,
     _test_results_html,
     render_pdf,
 )
@@ -353,34 +353,34 @@ class TestExecSummaryHtml:
         assert "15/100" in html
 
 
-class TestSummaryTableHtml:
-    """Verify the RAG x severity summary table is rendered correctly."""
+class TestCategorySeverityTableHtml:
+    """Verify the category x severity summary table is rendered correctly."""
 
     def test_table_has_all_severity_columns(self) -> None:
-        findings = [_make_finding("A", "critical", "red")]
-        html = _summary_table_html(findings, "Test Summary")
+        findings = [_make_finding("SEC-001", "critical", "red")]
+        html = _category_severity_table_html(findings, "Test Summary")
         assert "<h3>Test Summary</h3>" in html
-        for col in ("Critical", "High", "Medium", "Low", "Info", "Total"):
+        for col in ("Category", "Critical", "High", "Medium", "Low", "Info", "Total"):
             assert f"<th>{col}</th>" in html
 
-    def test_table_has_all_rag_rows(self) -> None:
+    def test_table_has_category_rows(self) -> None:
         findings = [
-            _make_finding("A", "critical", "red"),
-            _make_finding("B", "medium", "amber"),
-            _make_finding("C", "low", "green"),
+            _make_finding("SEC-001", "critical", "red"),
+            _make_finding("OBS-001", "medium", "amber"),
+            _make_finding("HYG-BLD-001", "low", "green"),
         ]
-        html = _summary_table_html(findings, "All RAGs")
-        assert "RED" in html
-        assert "AMBER" in html
-        assert "GREEN" in html
+        html = _category_severity_table_html(findings, "By Category")
+        assert "HYG-BLD" in html
+        assert "OBS" in html
+        assert "SEC" in html
 
     def test_table_counts_correct(self) -> None:
         findings = [
-            _make_finding("A", "critical", "red"),
-            _make_finding("B", "critical", "red"),
-            _make_finding("C", "medium", "amber"),
+            _make_finding("SEC-001", "critical", "red"),
+            _make_finding("SEC-002", "critical", "red"),
+            _make_finding("OBS-001", "medium", "amber"),
         ]
-        html = _summary_table_html(findings, "Counts")
+        html = _category_severity_table_html(findings, "Counts")
         assert "<strong>3</strong>" in html
 
 
@@ -564,15 +564,14 @@ class TestRenderPdfContentIntegration:
         assert "Conditional" in html
         assert "Key Risks" in html
         assert "Remediation Priorities" in html
-        assert "Overall Summary" in html
-        assert "Source Code Summary" in html
+        assert "Findings Summary" in html
         assert "Source Code Findings" in html
 
     def test_no_exec_summary_omits_section(self, tmp_path: Path) -> None:
         """When exec_summary is None, the exec summary section is absent."""
         html = _capture_pdf_html(tmp_path, exec_summary=None)
         assert "Executive Summary" not in html
-        assert "Overall Summary" in html
+        assert "Findings Summary" in html
         assert "Source Code Findings" in html
 
     def test_jdepend_section_rendered(self, tmp_path: Path) -> None:

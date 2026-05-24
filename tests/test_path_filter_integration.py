@@ -1,8 +1,8 @@
 """Integration tests for the path-exclusion pipeline.
 
 Verifies end-to-end: engine with real collectors on fixtures produces zero
-findings from test paths by default, and --include-tests (exclude_test_paths=False)
-restores them.
+findings from test paths by default, and --exclude-tests (exclude_test_paths=True)
+excludes them.
 """
 
 from __future__ import annotations

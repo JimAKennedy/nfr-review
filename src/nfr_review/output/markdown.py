@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nfr_review.models import RAG, Finding, Severity
 from nfr_review.output.classify import partition_findings
+from nfr_review.scoring import _extract_category
 
 if TYPE_CHECKING:
     from nfr_review.engine import RunResult
@@ -20,26 +21,39 @@ _RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
 _SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
 
 
-def _summary_table(findings: list[Finding], title: str) -> str:
-    """Render a RAG x severity count table."""
-    counts: Counter[tuple[RAG, Severity]] = Counter()
+def _category_severity_table(findings: list[Finding], title: str) -> str:
+    """Render a category x severity count table."""
+    counts: dict[str, Counter[Severity]] = defaultdict(Counter)
     for f in findings:
-        counts[(f.rag, f.severity)] += 1
+        cat = _extract_category(f.rule_id)
+        counts[cat][f.severity] += 1
 
-    lines = [f"### {title}", "", "| RAG | Critical | High | Medium | Low | Info | Total |"]
-    lines.append("|-----|----------|------|--------|-----|------|-------|")
+    categories = sorted(counts.keys())
+    col_totals: Counter[Severity] = Counter()
 
-    for rag in _RAG_ORDER:
+    lines = [
+        f"### {title}",
+        "",
+        "| Category | Critical | High | Medium | Low | Info | Total |",
+    ]
+    lines.append("|----------|----------|------|--------|-----|------|-------|")
+
+    for cat in categories:
         row_total = 0
         cells = []
         for sev in _SEVERITY_ORDER:
-            n = counts.get((rag, sev), 0)
+            n = counts[cat].get(sev, 0)
             row_total += n
+            col_totals[sev] += n
             cells.append(str(n) if n else "-")
-        lines.append(f"| {rag} | {' | '.join(cells)} | {row_total} |")
+        lines.append(f"| {cat} | {' | '.join(cells)} | {row_total} |")
 
-    total = len(findings)
-    lines.append(f"| **Total** | | | | | | **{total}** |")
+    grand_total = sum(col_totals.values())
+    total_cells = []
+    for sev in _SEVERITY_ORDER:
+        n = col_totals.get(sev, 0)
+        total_cells.append(f"**{n}**" if n else "-")
+    lines.append(f"| **Total** | {' | '.join(total_cells)} | **{grand_total}** |")
     lines.append("")
     return "\n".join(lines)
 
@@ -145,9 +159,10 @@ def _methodology_appendix() -> str:
     )
     _a("")
     _a(
-        "The summary tables at the top of the report"
-        " cross-tabulate these two axes so readers can quickly"
-        " gauge both the volume and urgency of findings."
+        "The summary table at the top of the report shows"
+        " findings grouped by category and severity, providing"
+        " a quick view of which areas have the most findings"
+        " and their urgency."
     )
     _a("")
     _a("### Design Maturity Score")
@@ -472,10 +487,8 @@ def render_markdown_report(
             sections.append(f"| **Git error** | {meta.git_error} |")
         sections.append("")
 
-    # Summary tables
-    sections.append(_summary_table(all_findings, "Overall Summary"))
-    sections.append(_summary_table(source_findings, "Source Code Summary"))
-    sections.append(_summary_table(test_findings, "Test Code Summary"))
+    # Summary table
+    sections.append(_category_severity_table(all_findings, "Findings Summary"))
 
     # Design maturity score
     if score_section:

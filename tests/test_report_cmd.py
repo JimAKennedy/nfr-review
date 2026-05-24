@@ -107,7 +107,14 @@ class TestReportCommand:
             runner = CliRunner()
             result = runner.invoke(
                 cli,
-                ["report", str(fixture), "--output-dir", str(output_dir)],
+                [
+                    "report",
+                    str(fixture),
+                    "--output-dir",
+                    str(output_dir),
+                    "--no-pdf",
+                    "--no-score",
+                ],
             )
 
         assert result.exit_code == 0
@@ -145,6 +152,8 @@ class TestReportCommand:
                     str(output_dir),
                     "--test-timeout",
                     "60",
+                    "--no-pdf",
+                    "--no-score",
                 ],
             )
 

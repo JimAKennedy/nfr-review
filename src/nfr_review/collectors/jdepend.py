@@ -219,23 +219,11 @@ class JDependCollector:
 
             compile_err = _try_compile_java(repo_path)
             if compile_err:
-                logger.warning(
+                logger.info(
                     "JDepend skipped: Java sources found but no bytecode — %s",
                     compile_err,
                 )
-                return [
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=".",
-                        kind="jdepend-skip",
-                        payload={
-                            "reason": f"Java sources found but no compiled bytecode. "
-                            f"Auto-compile failed: {compile_err}. "
-                            f"Run 'mvn compile' or 'gradle classes' manually."
-                        },
-                    )
-                ]
+                return []
 
             filtered_dirs = _find_bytecode_dirs(repo_path)
             filtered_dirs = [

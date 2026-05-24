@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cpp-clang-format`, `cpp-clang-tidy`, `cpp-exception-safety`,
   `cpp-include-guards`, `cpp-raw-memory`, `cpp-sanitizer-ci`.
   C++ build readiness also covered in hygiene audits.
-- **PDF report generation** — `report --pdf` produces a PDF with rendered
+- **PDF report generation** — `report` produces a PDF by default (skip with `--no-pdf`) with rendered
   Mermaid diagrams and an LLM-generated executive summary (`output/pdf.py`,
   `output/render.py`, `output/summarize.py`, `output/summary_models.py`).
   Use `--no-summary` to omit the summary section. Requires `[pdf]` extra
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   analysis.
 - **`dep-freshness`** and **`dep-upgrade-path`** rules for dependency currency
   checks.
-- **Path filtering** — `--include-tests` flag on `run`, `hygiene`, and `report`
+- **Path filtering** — `--exclude-tests` flag on `run`, `hygiene`, and `report`
   commands; `exclude_paths` and `exclude_test_paths` config fields; built-in
   auto-exclusion of infrastructure directories (`.venv`, `node_modules`,
   `.regression-repos`, etc.).
