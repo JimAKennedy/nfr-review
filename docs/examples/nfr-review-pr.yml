@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  issues: write           # required if create-issues is true
   pull-requests: write
   security-events: write  # required only if sarif-upload is true
 
@@ -31,10 +32,14 @@ jobs:
         id: nfr
         uses: your-org/nfr-review@main
         with:
-          target: .
-          fail-on-red: "true"
+          path: .
+          fail-on: "red"           # "red" (default), "red+amber", or "never"
           sarif-upload: "true"
           comment: "true"
+          create-issues: "false"   # set "true" to sync issues for findings
+          # extra-labels: "team:platform,sprint:23"
+          # first-run-cap: "25"
+          # rag-min: "amber"
 
       - name: Summary
         if: always()
@@ -47,3 +52,5 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SARIF | ${{ steps.nfr.outputs.sarif-path }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues created | ${{ steps.nfr.outputs.issues-created }} |" >> $GITHUB_STEP_SUMMARY
