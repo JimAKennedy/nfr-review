@@ -1,13 +1,19 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Example workflow: run nfr-review on every pull request and post a
-# sticky comment with a RAG summary.  Red findings fail the check.
+# Example workflow: run nfr-review using the pre-built Docker image.
+#
+# Container mode skips Python setup and pip install — the scan runs
+# inside the ghcr.io/jimakennedy/nfr-review image, which includes all
+# extras (pdf, diagrams) and the gh CLI for issue sync.
+#
+# This is faster for repeated runs (image layers are cached) and avoids
+# pip dependency resolution on every invocation.
 #
 # Usage — copy this file to .github/workflows/nfr-review.yml in the
 # repository you want to scan and adjust the `with:` inputs below.
 
-name: NFR Review
+name: NFR Review (container)
 
 on:
   pull_request:
@@ -32,16 +38,15 @@ jobs:
         id: nfr
         uses: your-org/nfr-review@main
         with:
+          execution: "container"
+          # image: "ghcr.io/jimakennedy/nfr-review:1.2.3"  # pin a version
           path: .
-          fail-on: "red"           # "red" (default), "red+amber", or "never"
+          fail-on: "red"
           sarif-upload: "true"
           comment: "true"
-          create-issues: "false"   # set "true" to sync issues for findings
-          # execution: "container"   # "pip" (default) or "container"
-          # image: "ghcr.io/jimakennedy/nfr-review:latest"
-          # extra-labels: "team:platform,sprint:23"
-          # first-run-cap: "25"
-          # rag-min: "amber"
+          create-issues: "true"
+          rag-min: "amber"
+          first-run-cap: "25"
 
       - name: Summary
         if: always()
@@ -54,5 +59,6 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| SARIF | ${{ steps.nfr.outputs.sarif-path }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Issues created | ${{ steps.nfr.outputs.issues-created }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues updated | ${{ steps.nfr.outputs.issues-updated }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues closed | ${{ steps.nfr.outputs.issues-closed }} |" >> $GITHUB_STEP_SUMMARY
