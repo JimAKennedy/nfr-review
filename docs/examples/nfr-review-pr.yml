@@ -28,6 +28,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write           # required if create-issues is true
   pull-requests: write
   security-events: write         # required only if sarif-upload is true
   actions: read                  # required to download nightly artifact
@@ -57,18 +58,13 @@ jobs:
         uses: JimAKennedy/nfr-review@v1
         with:
           path: .
-          fail-on: "red"               # "red" (default), "red+amber", or "never"
-          baseline: ${{ steps.baseline.outcome == 'success' && format('{0}/baseline/nfr-review-output.jsonl', runner.temp) || '' }}
+          fail-on: "red"           # "red" (default), "red+amber", or "never"
           sarif-upload: "true"
           comment: "true"
-          create-issues: "false"        # set "true" to sync issues from PR scans
-          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # enables LLM features
-          # execution: "container"      # "pip" (default) or "container"
-          # image: "ghcr.io/jimakennedy/nfr-review:latest"
+          create-issues: "false"   # set "true" to sync issues for findings
           # extra-labels: "team:platform,sprint:23"
           # first-run-cap: "25"
           # rag-min: "amber"
-          # config: ".nfr-review.yaml"
 
       # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload PR scan results
@@ -91,6 +87,5 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| SARIF | ${{ steps.nfr.outputs.sarif-path }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Issues created | ${{ steps.nfr.outputs.issues-created }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Issues updated | ${{ steps.nfr.outputs.issues-updated }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Issues closed | ${{ steps.nfr.outputs.issues-closed }} |" >> $GITHUB_STEP_SUMMARY
