@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import re
 import struct
 import tempfile
 from collections import Counter, defaultdict
@@ -35,6 +36,14 @@ _RAG_COLORS = {
     "amber": "#fd7e14",
     "green": "#28a745",
     "skipped": "#6c757d",
+}
+
+_SEVERITY_COLORS: dict[Severity, str] = {
+    "critical": "#dc3545",
+    "high": "#dc3545",
+    "medium": "#fd7e14",
+    "low": "#28a745",
+    "info": "#28a745",
 }
 
 _VERDICT_STYLES = {
@@ -62,7 +71,7 @@ _CSS = (  # noqa: E501
     " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
     " font-size: 9pt; }\n"
     "th, td { border: 1px solid #ddd; padding: 4px 8px;"
-    " text-align: left; }\n"
+    " text-align: left; overflow-wrap: anywhere; }\n"
     "th { background: #f5f5f5; font-weight: 600; }\n"
     "tr:nth-child(even) { background: #fafafa; }\n"
     ".verdict-box { padding: 12px 16px; border-radius: 6px;"
@@ -117,11 +126,9 @@ def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
 
 def _embed_image(path: Path) -> str:
     raw = path.read_bytes()
-    data = base64.b64encode(raw).decode("ascii")
     suffix = path.suffix.lstrip(".")
-    mime = {"png": "image/png", "svg": "image/svg+xml", "jpg": "image/jpeg"}.get(
-        suffix, "image/png"
-    )
+    data = base64.b64encode(raw).decode("ascii")
+    mime = {"png": "image/png", "jpg": "image/jpeg"}.get(suffix, "image/png")
 
     dims = _png_dimensions(raw) if suffix == "png" else None
     style = ""
@@ -176,9 +183,14 @@ def _category_severity_table_html(findings: list[Finding], title: str) -> str:
         f"{''.join(total_cells)}<td><strong>{grand_total}</strong></td></tr>"
     )
 
+    sev_headers = "".join(
+        f'<th style="color:{_SEVERITY_COLORS[sev]}">{sev.capitalize()}</th>'
+        for sev in _SEVERITY_ORDER
+    )
+
     return f"""<h3>{_h(title)}</h3>
 <table>
-<thead><tr><th>Category</th><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Info</th><th>Total</th></tr></thead>
+<thead><tr><th>Category</th>{sev_headers}<th>Total</th></tr></thead>
 <tbody>{"".join(rows)}</tbody>
 </table>"""
 
@@ -324,7 +336,6 @@ def _test_results_html(pytest_result: PytestResult | None) -> str:
 
 def _inline_md(text: str) -> str:
     """Convert inline markdown (bold, code) to HTML."""
-    import re
 
     escaped = _h(text)
     escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
@@ -333,13 +344,13 @@ def _inline_md(text: str) -> str:
 
 
 def _render_mermaid_inline(mermaid_text: str) -> str | None:
-    """Render Mermaid text to a base64-embedded ``<img>`` tag, or ``None``."""
+    """Render Mermaid text to an inline high-res PNG, or ``None``."""
     from nfr_review.output.render import render_mermaid_to_png
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        result = render_mermaid_to_png(mermaid_text, tmp_path)
+        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=3)
         if result is None:
             return None
         return f'<div class="diagram-container">{_embed_image(tmp_path)}</div>'

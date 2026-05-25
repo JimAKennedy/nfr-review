@@ -107,18 +107,17 @@ _GREEN_FINDING: dict[str, Any] = {
 
 
 class TestLoadFindings:
-    def test_only_red_findings_loaded(self, tmp_path: Path) -> None:
+    def test_all_findings_loaded(self, tmp_path: Path) -> None:
         p = _write_jsonl(tmp_path, [_METADATA, _RED_CRITICAL, _AMBER_FINDING, _GREEN_FINDING])
         findings = action_issues._load_findings(p)
-        assert len(findings) == 1
-        assert findings[0]["rule_id"] == "R001"
+        assert len(findings) == 3
 
     def test_multiple_reds(self, tmp_path: Path) -> None:
         p = _write_jsonl(tmp_path, [_METADATA, _RED_CRITICAL, _RED_HIGH])
         findings = action_issues._load_findings(p)
         assert len(findings) == 2
 
-    def test_empty_jsonl(self, tmp_path: Path) -> None:
+    def test_metadata_excluded(self, tmp_path: Path) -> None:
         p = _write_jsonl(tmp_path, [_METADATA])
         findings = action_issues._load_findings(p)
         assert findings == []
@@ -151,24 +150,26 @@ class TestFilterFindings:
 class TestGenerateIssueTitle:
     def test_basic_title(self) -> None:
         title = action_issues.generate_issue_title(_RED_CRITICAL)
-        assert title == "[NFR] R001: No circuit breaker configured"
+        assert title == "[nfr-review] R001: No circuit breaker configured"
 
-    def test_long_title_truncated(self) -> None:
+    def test_long_summary_truncated_at_60(self) -> None:
         finding = {**_RED_CRITICAL, "summary": "A" * 200}
         title = action_issues.generate_issue_title(finding)
-        assert len(title) <= 120
-        assert title.endswith("...")
+        summary_part = title.split(": ", 1)[1]
+        assert len(summary_part) <= 60
+        assert summary_part.endswith("...")
 
     def test_missing_fields(self) -> None:
         title = action_issues.generate_issue_title({"record_type": "finding"})
-        assert title.startswith("[NFR] UNKNOWN:")
+        assert title.startswith("[nfr-review] UNKNOWN:")
 
 
 class TestGenerateIssueBody:
-    def test_contains_dedup_marker(self) -> None:
+    def test_contains_key_marker(self) -> None:
         body = action_issues.generate_issue_body(_RED_CRITICAL)
-        assert "<!-- nfr-review:issue:" in body
-        assert " -->" in body
+        assert "<!-- nfr-review:key=" in body
+        assert "<!-- nfr-review:rule=" in body
+        assert "<!-- nfr-review:rag=" in body
 
     def test_contains_rule_id(self) -> None:
         body = action_issues.generate_issue_body(_RED_CRITICAL)
@@ -284,7 +285,7 @@ class TestFileIssuesDryRun:
 class TestFileIssuesDedup:
     def test_skips_existing(self) -> None:
         fp = action_issues._finding_fingerprint(_RED_CRITICAL)
-        with patch.object(action_issues, "find_existing_issues", return_value={fp}):
+        with patch("nfr_review.issues.find_existing_issues", return_value={fp}):
             results = action_issues.file_issues(
                 [_RED_CRITICAL, _RED_HIGH],
                 "owner/repo",
@@ -297,7 +298,7 @@ class TestFileIssuesDedup:
     def test_all_existing_skipped(self) -> None:
         fp1 = action_issues._finding_fingerprint(_RED_CRITICAL)
         fp2 = action_issues._finding_fingerprint(_RED_HIGH)
-        with patch.object(action_issues, "find_existing_issues", return_value={fp1, fp2}):
+        with patch("nfr_review.issues.find_existing_issues", return_value={fp1, fp2}):
             results = action_issues.file_issues(
                 [_RED_CRITICAL, _RED_HIGH],
                 "owner/repo",
@@ -307,11 +308,11 @@ class TestFileIssuesDedup:
 
 class TestFindExistingIssues:
     def test_no_gh_cli(self) -> None:
-        with patch("subprocess.run", side_effect=FileNotFoundError):
+        with patch("nfr_review.issues.subprocess.run", side_effect=FileNotFoundError):
             result = action_issues.find_existing_issues("owner/repo")
         assert result == set()
 
-    def test_parses_markers(self) -> None:
+    def test_parses_legacy_markers(self) -> None:
         fp = action_issues._finding_fingerprint(_RED_CRITICAL)
         body = f"<!-- nfr-review:issue:{fp} -->\nsome body text"
         mock_result = type(
@@ -319,21 +320,40 @@ class TestFindExistingIssues:
             (),
             {
                 "returncode": 0,
-                "stdout": json.dumps([{"body": body}]),
+                "stdout": json.dumps(
+                    [{"number": 1, "body": body, "state": "OPEN", "url": ""}]
+                ),
             },
         )()
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("nfr_review.issues.subprocess.run", return_value=mock_result):
+            result = action_issues.find_existing_issues("owner/repo")
+        assert fp in result
+
+    def test_parses_new_markers(self) -> None:
+        fp = action_issues._finding_fingerprint(_RED_CRITICAL)
+        body = f"<!-- nfr-review:key={fp} -->\n<!-- nfr-review:rule=R001 -->"
+        mock_result = type(
+            "R",
+            (),
+            {
+                "returncode": 0,
+                "stdout": json.dumps(
+                    [{"number": 1, "body": body, "state": "OPEN", "url": ""}]
+                ),
+            },
+        )()
+        with patch("nfr_review.issues.subprocess.run", return_value=mock_result):
             result = action_issues.find_existing_issues("owner/repo")
         assert fp in result
 
     def test_gh_failure(self) -> None:
         mock_result = type("R", (), {"returncode": 1, "stdout": ""})()
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("nfr_review.issues.subprocess.run", return_value=mock_result):
             result = action_issues.find_existing_issues("owner/repo")
         assert result == set()
 
     def test_invalid_json(self) -> None:
         mock_result = type("R", (), {"returncode": 0, "stdout": "not json"})()
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("nfr_review.issues.subprocess.run", return_value=mock_result):
             result = action_issues.find_existing_issues("owner/repo")
         assert result == set()

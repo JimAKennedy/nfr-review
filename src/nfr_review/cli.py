@@ -766,9 +766,9 @@ def hygiene_cmd(
 @click.option(
     "--test-timeout",
     type=int,
-    default=300,
+    default=420,
     show_default=True,
-    help="Maximum seconds to wait for pytest to complete (default: 300).",
+    help="Maximum seconds to wait for pytest to complete (default: 420).",
 )
 @click.option(
     "--sarif",
@@ -1046,14 +1046,14 @@ def report_cmd(
             diagram_image_paths = {}
             for dtitle, mermaid_text in diagrams.items():
                 slug = dtitle.lower().replace(" ", "-")
-                png = render_mermaid_to_png(mermaid_text, img_dir / f"{slug}.png")
-                if png is None and dtitle == "Dependency Graph" and deps_reports:
+                img = render_mermaid_to_png(mermaid_text, img_dir / f"{slug}.png", scale=3)
+                if img is None and dtitle == "Dependency Graph" and deps_reports:
                     from nfr_review.output.dot import render_dot_dependency_graph
 
                     dot_text = render_dot_dependency_graph(deps_reports)
-                    png = render_dot_to_png(dot_text, img_dir / f"{slug}.png")
-                if png is not None:
-                    diagram_image_paths[dtitle] = png
+                    img = render_dot_to_png(dot_text, img_dir / f"{slug}.png", dpi=288)
+                if img is not None:
+                    diagram_image_paths[dtitle] = img
                 elif not quiet:
                     _ts_echo(
                         f"warning: diagram '{dtitle}' could not be rendered"
@@ -1299,9 +1299,34 @@ def deps_cmd(
     _ts_echo(f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}")
 
 
-@cli.command(
+class _IssuesGroup(click.Group):
+    """Issues group that falls back to 'scan' subcommand for backward compat.
+
+    ``nfr-review issues <dir>`` is rewritten to ``nfr-review issues scan <dir>``
+    so the old CLI keeps working after the command was promoted to a group.
+    """
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        if args:
+            positional = [a for a in args if not a.startswith("-")]
+            has_subcommand = any(a in self.commands for a in positional)
+            if not has_subcommand and positional:
+                args = ["scan", *args]
+        return super().parse_args(ctx, args)
+
+
+@cli.group(
     "issues",
-    help="File GitHub issues for red/high-severity findings from an NFR scan.",
+    cls=_IssuesGroup,
+    help="File or sync GitHub issues for NFR findings.",
+)
+def issues_group() -> None:
+    """Issue management group."""
+
+
+@issues_group.command(
+    "scan",
+    help="Run an NFR scan and file issues for red/high-severity findings (original behavior).",
 )
 @click.argument("target", type=click.Path(file_okay=False, path_type=Path))
 @click.option(
@@ -1347,7 +1372,7 @@ def deps_cmd(
     default=None,
     help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
 )
-def issues_cmd(
+def issues_scan_cmd(
     target: Path,
     dry_run: bool,
     repo: str | None,
@@ -1472,6 +1497,147 @@ def issues_cmd(
         _ts_echo(f"dry run: {dry_count} issue(s) would be filed")
     else:
         _ts_echo(f"filed={filed} skipped={skipped} errors={errors}")
+
+
+@issues_group.command(
+    "sync",
+    help="Sync GitHub issues from a JSONL scan file: create, update, and close.",
+)
+@click.option(
+    "--jsonl",
+    "jsonl_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to a JSONL file produced by 'nfr-review run'.",
+)
+@click.option(
+    "--repo",
+    required=True,
+    help="GitHub owner/repo (e.g. org/repo).",
+)
+@click.option(
+    "--label",
+    "extra_labels",
+    multiple=True,
+    help="Extra label(s) to apply (repeatable).",
+)
+@click.option(
+    "--rag-min",
+    type=click.Choice(["red", "amber", "green"]),
+    default="amber",
+    show_default=True,
+    help="Minimum RAG level for filing issues.",
+)
+@click.option(
+    "--severity-threshold",
+    type=click.Choice(["critical", "high", "medium", "low", "info"]),
+    default="high",
+    show_default=True,
+    help="Minimum severity for filing issues.",
+)
+@click.option(
+    "--first-run-cap",
+    type=int,
+    default=25,
+    show_default=True,
+    help="Max issues to create when no prior nfr-review issues exist.",
+)
+@click.option(
+    "--close-resolved/--no-close-resolved",
+    default=True,
+    show_default=True,
+    help="Close open issues whose findings are no longer present.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Preview create/update/close decisions without calling GitHub.",
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+def issues_sync_cmd(
+    jsonl_path: Path,
+    repo: str,
+    extra_labels: tuple[str, ...],
+    rag_min: str,
+    severity_threshold: str,
+    first_run_cap: int,
+    close_resolved: bool,
+    dry_run: bool,
+    verbose: int,
+    quiet: bool,
+) -> None:
+    """Sync GitHub issues from a JSONL scan file."""
+    import json as _json
+
+    from nfr_review.issues import sync_issues
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, None)
+
+    # Load findings from JSONL
+    findings: list[dict[str, Any]] = []
+    with jsonl_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            rec = _json.loads(line)
+            if rec.get("record_type") == "finding":
+                findings.append(rec)
+
+    _ts_echo(
+        f"Loaded {len(findings)} findings from {jsonl_path}",
+        quiet=quiet,
+    )
+
+    results = sync_issues(
+        findings,
+        repo,
+        dry_run=dry_run,
+        rag_min=rag_min,
+        severity_threshold=severity_threshold,
+        extra_labels=list(extra_labels) if extra_labels else None,
+        first_run_cap=first_run_cap,
+        close_resolved=close_resolved,
+    )
+
+    created = updated = closed = skipped = unchanged = errors = 0
+    for r in results:
+        action = r["action"]
+        url = f" {r['url']}" if r.get("url") else ""
+        reason = f" ({r['reason']})" if r.get("reason") else ""
+        _ts_echo(f"  [{action}] {r['title']}{url}{reason}", quiet=quiet)
+        if action == "create":
+            created += 1
+        elif action == "update":
+            updated += 1
+        elif action == "close":
+            closed += 1
+        elif action == "skip":
+            skipped += 1
+        elif action == "unchanged":
+            unchanged += 1
+        elif action == "error":
+            errors += 1
+
+    _ts_echo(
+        f"sync: created={created} updated={updated} closed={closed} "
+        f"skipped={skipped} unchanged={unchanged} errors={errors}",
+        quiet=quiet,
+    )
 
 
 @cli.command("init", help="Detect technologies and generate an nfr-review.yaml config.")
