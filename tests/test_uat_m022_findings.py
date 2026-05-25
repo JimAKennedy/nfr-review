@@ -213,15 +213,17 @@ class TestFinding7JDependNoWarning:
 
 
 class TestFinding9IssuesCommand:
-    """``nfr-review issues . --dry-run`` must be a recognised command."""
+    """``nfr-review issues`` is a group with ``scan`` and ``sync`` subcommands."""
 
-    def test_issues_command_registered(self) -> None:
+    def test_issues_group_registered(self) -> None:
         result = _runner().invoke(cli, ["issues", "--help"])
         assert result.exit_code == 0, result.output
-        assert "--dry-run" in result.output
+        assert "scan" in result.output
+        assert "sync" in result.output
 
-    def test_issues_help_shows_options(self) -> None:
-        result = _runner().invoke(cli, ["issues", "--help"])
+    def test_issues_scan_help_shows_options(self) -> None:
+        result = _runner().invoke(cli, ["issues", "scan", "--help"])
+        assert "--dry-run" in result.output
         assert "--repo" in result.output
         assert "--severity-threshold" in result.output
         assert "--config" in result.output

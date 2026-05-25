@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-from nfr_review.output.render import render_dot_to_png, render_mermaid_to_png
+from nfr_review.output.render import (
+    render_dot_to_png,
+    render_dot_to_svg,
+    render_mermaid_to_png,
+    render_mermaid_to_svg,
+)
 
 SAMPLE_MERMAID = """\
 pie title Severity Distribution
@@ -110,6 +115,59 @@ class TestRenderDotToPng:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             render_dot_to_png(SAMPLE_DOT, out)
         assert out.parent.exists()
+
+
+class TestRenderMermaidToSvg:
+    def test_empty_input_returns_none(self, tmp_path: Path) -> None:
+        assert render_mermaid_to_svg("", tmp_path / "out.svg") is None
+        assert render_mermaid_to_svg("   \n  ", tmp_path / "out.svg") is None
+
+    def test_missing_mmdc_returns_none(self, tmp_path: Path) -> None:
+        with patch("nfr_review.output.render.shutil.which", return_value=None):
+            result = render_mermaid_to_svg(SAMPLE_MERMAID, tmp_path / "out.svg")
+        assert result is None
+
+    def test_mmdc_failure_returns_none(self, tmp_path: Path) -> None:
+        with (
+            patch("nfr_review.output.render.shutil.which", return_value="/usr/bin/mmdc"),
+            patch(
+                "nfr_review.output.render.subprocess.run",
+                side_effect=subprocess.CalledProcessError(1, "mmdc", stderr=b"error"),
+            ),
+        ):
+            result = render_mermaid_to_svg(SAMPLE_MERMAID, tmp_path / "out.svg")
+        assert result is None
+
+    @pytest.mark.skipif(shutil.which("mmdc") is None, reason="mmdc not installed")
+    def test_real_mmdc_renders_svg(self, tmp_path: Path) -> None:
+        out = tmp_path / "severity.svg"
+        result = render_mermaid_to_svg(SAMPLE_MERMAID, out)
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 100
+        content = out.read_text()
+        assert "<svg" in content
+
+
+class TestRenderDotToSvg:
+    def test_empty_input_returns_none(self, tmp_path: Path) -> None:
+        assert render_dot_to_svg("", tmp_path / "out.svg") is None
+        assert render_dot_to_svg("   \n  ", tmp_path / "out.svg") is None
+
+    def test_missing_dot_returns_none(self, tmp_path: Path) -> None:
+        with patch("nfr_review.output.render.shutil.which", return_value=None):
+            result = render_dot_to_svg(SAMPLE_DOT, tmp_path / "out.svg")
+        assert result is None
+
+    @pytest.mark.skipif(shutil.which("dot") is None, reason="graphviz dot not installed")
+    def test_real_dot_renders_svg(self, tmp_path: Path) -> None:
+        out = tmp_path / "deps.svg"
+        result = render_dot_to_svg(SAMPLE_DOT, out)
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 100
+        content = out.read_text()
+        assert "<svg" in content
 
 
 @pytest.mark.skipif(shutil.which("mmdc") is None, reason="mmdc not installed")

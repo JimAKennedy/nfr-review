@@ -360,8 +360,10 @@ class TestCategorySeverityTableHtml:
         findings = [_make_finding("SEC-001", "critical", "red")]
         html = _category_severity_table_html(findings, "Test Summary")
         assert "<h3>Test Summary</h3>" in html
-        for col in ("Category", "Critical", "High", "Medium", "Low", "Info", "Total"):
-            assert f"<th>{col}</th>" in html
+        assert "<th>Category</th>" in html
+        assert "<th>Total</th>" in html
+        for sev in ("Critical", "High", "Medium", "Low", "Info"):
+            assert f">{sev}</th>" in html
 
     def test_table_has_category_rows(self) -> None:
         findings = [
@@ -551,6 +553,24 @@ def _capture_pdf_html(tmp_path: Path, **kwargs: object) -> str:
         else:
             sys.modules.pop("weasyprint", None)
     return captured["html"]
+
+
+class TestEmbedImage:
+    """Verify _embed_image handles PNG correctly."""
+
+    def test_png_gets_dimension_style(self, tmp_path: Path) -> None:
+        from nfr_review.output.pdf import _embed_image
+
+        png_path = tmp_path / "test.png"
+        png_path.write_bytes(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
+            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
+            b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
+            b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        result = _embed_image(png_path)
+        assert "image/png" in result
+        assert "width:" in result
 
 
 class TestRenderPdfContentIntegration:
