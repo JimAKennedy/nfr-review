@@ -11,6 +11,39 @@ Automated non-functional design reviews for software projects.
 
 ## Quick start
 
+### GitHub Action (CI integration)
+
+Add a single workflow file to start getting NFR feedback on pull requests:
+
+```yaml
+# .github/workflows/nfr-review.yml
+name: NFR Review
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+jobs:
+  nfr-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: JimAKennedy/nfr-review@v1
+        with:
+          fail-on: "red"
+          sarif-upload: "true"
+          comment: "true"
+```
+
+This scans the repo, uploads SARIF to the Security tab, posts a sticky PR
+comment, and fails the check on red findings. Add a [nightly workflow](docs/examples/nfr-review-nightly.yml) for baseline tracking and issue sync.
+
+See [docs/install.md](docs/install.md) for the full install guide (inputs, outputs, permissions, execution modes, troubleshooting) and [docs/continuous-compliance.md](docs/continuous-compliance.md) for compliance framework mappings.
+
+### Local CLI
+
 ```bash
 # Clone and install (requires Python 3.11+)
 git clone https://github.com/JimAKennedy/nfr-review.git
