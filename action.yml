@@ -79,10 +79,6 @@ inputs:
     description: "Docker image for container mode (default: ghcr.io/jimakennedy/nfr-review:latest)"
     required: false
     default: "ghcr.io/jimakennedy/nfr-review:latest"
-  anthropic-api-key:
-    description: "Anthropic API key for LLM-powered features (executive summary, ADR drift, PII detection). Omit to skip LLM features gracefully."
-    required: false
-    default: ""
 
 outputs:
   findings-count:
@@ -132,7 +128,13 @@ runs:
       shell: bash
       run: pip install "${{ github.action_path }}"
 
-    # ── 3. Resolve backward-compat inputs ───────────────────────────────
+    # ── 3. Pull container image (container mode only) ───────────────────
+    - name: Pull nfr-review image
+      if: inputs.execution == 'container'
+      shell: bash
+      run: docker pull "${{ inputs.image }}"
+
+    # ── 4. Resolve backward-compat inputs ───────────────────────────────
     - name: Resolve inputs
       id: resolve
       shell: bash
@@ -166,7 +168,7 @@ runs:
         fi
         echo "create-issues=${CREATE_ISSUES}" >> "$GITHUB_OUTPUT"
 
-    # ── 4. Run nfr-review scan ──────────────────────────────────────────
+    # ── 5. Run nfr-review scan ──────────────────────────────────────────
     - name: Run nfr-review scan
       id: scan
       shell: bash
@@ -176,19 +178,10 @@ runs:
         set +e
 
         SCAN_PATH="${{ steps.resolve.outputs.scan-path }}"
-        ARGS=("run" "${SCAN_PATH}")
-
-        if [ -n "${{ inputs.config }}" ]; then
-          ARGS+=("--config" "${{ inputs.config }}")
-        fi
-
-        if [ -n "${{ inputs.baseline }}" ]; then
-          ARGS+=("--baseline" "${{ inputs.baseline }}")
-        fi
 
         JSONL_PATH="${{ runner.temp }}/nfr-review-output.jsonl"
 
-        # SARIF generation via the real sarif.py module
+        # Determine SARIF path
         SARIF_PATH=""
         if [ "${{ inputs.sarif-upload }}" = "true" ] || [ -n "${{ inputs.sarif }}" ]; then
           if [ -n "${{ inputs.sarif }}" ]; then
@@ -196,11 +189,64 @@ runs:
           else
             SARIF_PATH="${{ runner.temp }}/nfr-review.sarif"
           fi
-          ARGS+=("--sarif" "$SARIF_PATH")
         fi
 
-        nfr-review "${ARGS[@]}"
-        EXIT_CODE=$?
+        if [ "${{ inputs.execution }}" = "container" ]; then
+          # ── Container mode ──────────────────────────────────────────
+          # Map host paths to container mount points:
+          #   $GITHUB_WORKSPACE -> /repo
+          #   $RUNNER_TEMP      -> /output
+          CONTAINER_SCAN="/repo"
+          if [ "$SCAN_PATH" != "." ] && [ "$SCAN_PATH" != "./" ]; then
+            CONTAINER_SCAN="/repo/${SCAN_PATH#./}"
+          fi
+
+          DOCKER_ARGS=("run" "--rm")
+          DOCKER_ARGS+=("--user" "$(id -u):$(id -g)")
+          DOCKER_ARGS+=("-e" "HOME=/tmp")
+          DOCKER_ARGS+=("-v" "${{ github.workspace }}:/repo")
+          DOCKER_ARGS+=("-v" "${{ runner.temp }}:/output")
+          DOCKER_ARGS+=("${{ inputs.image }}")
+          DOCKER_ARGS+=("run" "$CONTAINER_SCAN")
+          DOCKER_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+
+          if [ -n "${{ inputs.config }}" ]; then
+            DOCKER_ARGS+=("--config" "/repo/${{ inputs.config }}")
+          fi
+
+          if [ -n "${{ inputs.baseline }}" ]; then
+            DOCKER_ARGS+=("--baseline" "/repo/${{ inputs.baseline }}")
+          fi
+
+          if [ -n "$SARIF_PATH" ]; then
+            SARIF_BASENAME="$(basename "$SARIF_PATH")"
+            DOCKER_ARGS+=("--sarif" "/output/${SARIF_BASENAME}")
+            SARIF_PATH="${{ runner.temp }}/${SARIF_BASENAME}"
+          fi
+
+          docker "${DOCKER_ARGS[@]}"
+          EXIT_CODE=$?
+        else
+          # ── Pip mode ────────────────────────────────────────────────
+          ARGS=("run" "${SCAN_PATH}")
+
+          if [ -n "${{ inputs.config }}" ]; then
+            ARGS+=("--config" "${{ inputs.config }}")
+          fi
+
+          if [ -n "${{ inputs.baseline }}" ]; then
+            ARGS+=("--baseline" "${{ inputs.baseline }}")
+          fi
+
+          ARGS+=("--jsonl" "$JSONL_PATH")
+
+          if [ -n "$SARIF_PATH" ]; then
+            ARGS+=("--sarif" "$SARIF_PATH")
+          fi
+
+          nfr-review "${ARGS[@]}"
+          EXIT_CODE=$?
+        fi
 
         echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
         echo "jsonl-path=${JSONL_PATH}" >> "$GITHUB_OUTPUT"
@@ -209,7 +255,7 @@ runs:
         # Always succeed here — we gate on findings in a later step.
         exit 0
 
-    # ── 5. Upload SARIF ─────────────────────────────────────────────────
+    # ── 6. Upload SARIF ─────────────────────────────────────────────────
     - name: Upload SARIF
       if: inputs.sarif-upload == 'true'
       uses: github/codeql-action/upload-sarif@v4
@@ -276,11 +322,13 @@ runs:
         body-path: ${{ steps.comment-body.outputs.body-path }}
         comment-tag: nfr-review-comment
 
-    # ── 9. Sync GitHub issues ───────────────────────────────────────────
+    # ── 10. Sync GitHub issues ──────────────────────────────────────────
     - name: Sync remediation issues
       if: steps.resolve.outputs.create-issues == 'true'
       id: sync-issues
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         JSONL_PATH="${{ steps.scan.outputs.jsonl-path }}"
         if [ ! -f "$JSONL_PATH" ]; then
@@ -290,21 +338,50 @@ runs:
           exit 0
         fi
 
-        ARGS=("issues" "sync")
-        ARGS+=("--jsonl" "$JSONL_PATH")
-        ARGS+=("--repo" "${{ github.repository }}")
-        ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
-        ARGS+=("--rag-min" "${{ inputs.rag-min }}")
-        ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
+        SYNC_ARGS=("issues" "sync")
+        SYNC_ARGS+=("--jsonl" "$JSONL_PATH")
+        SYNC_ARGS+=("--repo" "${{ github.repository }}")
+        SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
+        SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
+        SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
 
         if [ -n "${{ inputs.extra-labels }}" ]; then
           IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
           for lbl in "${LABELS[@]}"; do
-            ARGS+=("--label" "$(echo "$lbl" | xargs)")
+            SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
           done
         fi
 
-        OUTPUT=$(nfr-review "${ARGS[@]}" 2>&1)
+        if [ "${{ inputs.execution }}" = "container" ]; then
+          # ── Container mode ──────────────────────────────────────────
+          DOCKER_ARGS=("run" "--rm")
+          DOCKER_ARGS+=("--user" "$(id -u):$(id -g)")
+          DOCKER_ARGS+=("-e" "HOME=/tmp")
+          DOCKER_ARGS+=("-e" "GITHUB_TOKEN")
+          DOCKER_ARGS+=("-v" "${{ runner.temp }}:/output:ro")
+          DOCKER_ARGS+=("${{ inputs.image }}")
+
+          # Remap JSONL path to container mount
+          CONTAINER_SYNC_ARGS=("issues" "sync")
+          CONTAINER_SYNC_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+          CONTAINER_SYNC_ARGS+=("--repo" "${{ github.repository }}")
+          CONTAINER_SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
+          CONTAINER_SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
+          CONTAINER_SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
+
+          if [ -n "${{ inputs.extra-labels }}" ]; then
+            IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
+            for lbl in "${LABELS[@]}"; do
+              CONTAINER_SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
+            done
+          fi
+
+          OUTPUT=$(docker "${DOCKER_ARGS[@]}" "${CONTAINER_SYNC_ARGS[@]}" 2>&1)
+        else
+          # ── Pip mode ────────────────────────────────────────────────
+          OUTPUT=$(nfr-review "${SYNC_ARGS[@]}" 2>&1)
+        fi
+
         echo "$OUTPUT"
 
         # Parse sync summary line: "sync: created=N updated=N closed=N ..."
@@ -316,7 +393,7 @@ runs:
         echo "issues-updated=${UPDATED}" >> "$GITHUB_OUTPUT"
         echo "issues-closed=${CLOSED}" >> "$GITHUB_OUTPUT"
 
-    # ── 10. Fail on findings threshold ──────────────────────────────────
+    # ── 11. Fail on findings threshold ──────────────────────────────────
     - name: Check findings threshold
       if: steps.resolve.outputs.fail-on != 'never'
       shell: bash

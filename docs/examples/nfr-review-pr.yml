@@ -62,6 +62,8 @@ jobs:
           sarif-upload: "true"
           comment: "true"
           create-issues: "false"   # set "true" to sync issues for findings
+          # execution: "container"   # "pip" (default) or "container"
+          # image: "ghcr.io/jimakennedy/nfr-review:latest"
           # extra-labels: "team:platform,sprint:23"
           # first-run-cap: "25"
           # rag-min: "amber"
