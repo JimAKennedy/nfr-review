@@ -6,7 +6,7 @@
 # Continuous Compliance with nfr-review
 
 This document explains how to use nfr-review as a continuous compliance tool:
-mapping its 130+ static-analysis rules to audit frameworks, producing
+mapping its 110+ static-analysis rules to audit frameworks, producing
 machine-readable evidence, managing exemptions, and tracking maturity over time.
 
 ---
