@@ -21,11 +21,30 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 _MERMAID_ID_RE = re.compile(r"[^a-zA-Z0-9_]")
+_MERMAID_RESERVED = frozenset(
+    {
+        "default",
+        "graph",
+        "subgraph",
+        "end",
+        "style",
+        "class",
+        "click",
+        "linkstyle",
+        "classDef",
+        "direction",
+    }
+)
+
+_MAX_NODES_PER_DIAGRAM = 60
 
 
 def _safe_id(raw: str) -> str:
     """Turn an arbitrary string into a Mermaid-safe node ID."""
-    return _MERMAID_ID_RE.sub("_", raw)
+    cleaned = _MERMAID_ID_RE.sub("_", raw)
+    if cleaned.lower() in _MERMAID_RESERVED:
+        cleaned = f"g_{cleaned}"
+    return cleaned
 
 
 def _quote_label(text: str) -> str:
@@ -184,6 +203,16 @@ def _package_boundary(comp: Component) -> str | None:
     return None
 
 
+def _cap_components(
+    components: list[Component],
+    limit: int = _MAX_NODES_PER_DIAGRAM,
+) -> tuple[list[Component], int]:
+    """Return at most *limit* components and the number omitted."""
+    if len(components) <= limit:
+        return components, 0
+    return components[:limit], len(components) - limit
+
+
 def _render_nodes_with_package_nesting(
     lines: list[str],
     group_key: str,
@@ -278,8 +307,9 @@ def render_c4_context(
         eid = _safe_id(ext.id)
         lines.append(f'    {eid}["{ext.name}<br/>external"]')
 
-    # Emit edges
+    # Emit edges (deduplicated — multiple internal components may connect to same external)
     internal_ids = {c.id for c in internal}
+    seen_edges: set[tuple[str, str]] = set()
     for integ in integrations:
         src = integ.source_component_id
         tgt = integ.target_component_id
@@ -287,12 +317,13 @@ def render_c4_context(
         tgt_internal = tgt in internal_ids
 
         if src_internal and tgt_internal:
-            # Both internal — skip at context level
             continue
 
         src_node = "sys_inner" if src_internal else _safe_id(src)
         tgt_node = "sys_inner" if tgt_internal else _safe_id(tgt)
-        lines.append(_edge(src_node, tgt_node, integ))
+        if (src_node, tgt_node) not in seen_edges:
+            seen_edges.add((src_node, tgt_node))
+            lines.append(_edge(src_node, tgt_node, integ))
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(
@@ -403,13 +434,15 @@ def render_c4_container(
             lines.append(f"        {cid}[{_quote_label(label)}]")
         lines.append("    end")
 
-    # Emit edges
+    # Emit edges (deduplicate — same pair may be discovered by multiple strategies)
+    seen_edges: set[tuple[str, str]] = set()
     for integ in integrations:
-        src_id = _safe_id(integ.source_component_id)
-        tgt_id = _safe_id(integ.target_component_id)
-        # Only emit if both endpoints exist in our component set
         if integ.source_component_id in comp_map and integ.target_component_id in comp_map:
-            lines.append(_edge(src_id, tgt_id, integ))
+            src_id = _safe_id(integ.source_component_id)
+            tgt_id = _safe_id(integ.target_component_id)
+            if (src_id, tgt_id) not in seen_edges:
+                seen_edges.add((src_id, tgt_id))
+                lines.append(_edge(src_id, tgt_id, integ))
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(
@@ -467,6 +500,7 @@ def render_c4_component(
     else:
         scoped = list(components)
 
+    scoped, omitted = _cap_components(scoped)
     scoped_ids = {c.id for c in scoped}
     lines: list[str] = ["flowchart TD"]
 
@@ -487,12 +521,19 @@ def render_c4_component(
         _render_nodes_with_package_nesting(lines, grp_name, grp_comps, "        ", _comp_node)
         lines.append("    end")
 
-    # Emit internal edges
+    if omitted:
+        lines.append(f"    truncated[{_quote_label(f'... +{omitted} more components')}]")
+        lines.append("    style truncated fill:#f5f5f5,stroke:#999,stroke-dasharray:5 5")
+
+    # Emit internal edges (deduplicated, only between shown components)
+    seen_edges: set[tuple[str, str]] = set()
     for integ in integrations:
         if integ.source_component_id in scoped_ids and integ.target_component_id in scoped_ids:
             src_id = _safe_id(integ.source_component_id)
             tgt_id = _safe_id(integ.target_component_id)
-            lines.append(_edge(src_id, tgt_id, integ))
+            if (src_id, tgt_id) not in seen_edges:
+                seen_edges.add((src_id, tgt_id))
+                lines.append(_edge(src_id, tgt_id, integ))
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(
@@ -580,7 +621,8 @@ def render_c4_component_detail(
     from other groups appear as collapsed single-node stubs.
     """
     groups = _group_components_by_boundary(components)
-    focus_comps = groups.get(focus_group, [])
+    focus_comps_all = groups.get(focus_group, [])
+    focus_comps, detail_omitted = _cap_components(focus_comps_all)
 
     display_name = _group_name(focus_group)
     title = title or f"Components — {display_name}"
@@ -632,6 +674,9 @@ def render_c4_component_detail(
     _render_nodes_with_package_nesting(
         lines, focus_group, focus_comps, "        ", _detail_node
     )
+    if detail_omitted:
+        lines.append(f"        truncated[{_quote_label(f'... +{detail_omitted} more')}]")
+        lines.append("        style truncated fill:#f5f5f5,stroke:#999,stroke-dasharray:5 5")
     lines.append("    end")
 
     for ext_grp in sorted(external_groups_needed):
@@ -642,10 +687,13 @@ def render_c4_component_detail(
         lines.append(f"    {gid}[{_quote_label(f'{ext_label} ({count})')}]")
         lines.append(f"    style {gid} fill:#f5f5f5,stroke:#999,stroke-dasharray:5 5")
 
+    seen_edges: set[tuple[str, str]] = set()
     for integ in internal_edges:
         src_id = _safe_id(integ.source_component_id)
         tgt_id = _safe_id(integ.target_component_id)
-        lines.append(_edge(src_id, tgt_id, integ))
+        if (src_id, tgt_id) not in seen_edges:
+            seen_edges.add((src_id, tgt_id))
+            lines.append(_edge(src_id, tgt_id, integ))
 
     for integ in cross_edges:
         src_in = integ.source_component_id in focus_ids
@@ -657,7 +705,9 @@ def render_c4_component_detail(
             src_grp = comp_to_group.get(integ.source_component_id, "")
             src_id = _safe_id(f"ext_{src_grp}")
             tgt_id = _safe_id(integ.target_component_id)
-        lines.append(_edge(src_id, tgt_id, integ))
+        if (src_id, tgt_id) not in seen_edges:
+            seen_edges.add((src_id, tgt_id))
+            lines.append(_edge(src_id, tgt_id, integ))
 
     mermaid = "\n".join(lines) + "\n"
     all_shown_ids = [c.id for c in focus_comps]
@@ -695,11 +745,12 @@ def render_c4_code(
             component_ids=[],
         )
 
+    capped, code_omitted = _cap_components(components)
     lines: list[str] = ["flowchart TD"]
 
     # Group by directory-level boundary paths
     dir_groups: dict[str, list[Component]] = {}
-    for c in components:
+    for c in capped:
         bp = _boundary_path(c)
         dir_groups.setdefault(bp, []).append(c)
 
@@ -716,6 +767,10 @@ def render_c4_code(
         lines.append(f"    subgraph {sg_id}[{_quote_label(_group_name(dir_path))}]")
         _render_nodes_with_package_nesting(lines, dir_path, grp_comps, "        ", _code_node)
         lines.append("    end")
+
+    if code_omitted:
+        lines.append(f"    truncated[{_quote_label(f'... +{code_omitted} more components')}]")
+        lines.append("    style truncated fill:#f5f5f5,stroke:#999,stroke-dasharray:5 5")
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(
@@ -763,6 +818,36 @@ def generate_all_diagrams(
             cls_name = _COVERAGE_CLASS.get(level)
             if cls_name:
                 extra_lines.append(f"    class {nid} {cls_name}")
+
+        # Coverage legend
+        used_levels: set[CoverageLevel] = set(cov_map.values())
+        _LEVEL_LABELS: dict[CoverageLevel, str] = {
+            "none": "None",
+            "minimal": "Minimal",
+            "partial": "Partial",
+            "adequate": "Adequate",
+            "comprehensive": "Comprehensive",
+        }
+        legend_order: list[CoverageLevel] = [
+            "comprehensive",
+            "adequate",
+            "partial",
+            "minimal",
+            "none",
+        ]
+        legend_lines: list[str] = [
+            '    subgraph legend["Test Coverage"]',
+            "        direction LR",
+        ]
+        for lvl in legend_order:
+            if lvl in used_levels:
+                lid = f"leg_{lvl}"
+                cls_name = _COVERAGE_CLASS[lvl]
+                legend_lines.append(
+                    f"        {lid}[{_quote_label(_LEVEL_LABELS[lvl])}]:::{cls_name}"
+                )
+        legend_lines.append("    end")
+        extra_lines.extend(legend_lines)
 
         annotated = container_diag.mermaid.rstrip("\n")
         annotated += "\n" + "\n".join(extra_lines) + "\n"

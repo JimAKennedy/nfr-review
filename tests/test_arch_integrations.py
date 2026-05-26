@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 
 from nfr_review.arch_integrations import (
+    _infer_env_from_compose_filename,
+    _infer_env_from_k8s_filepath,
+    _infer_env_from_k8s_namespace,
+    _infer_env_from_path_parts,
     _infer_environment,
     discover_integrations,
     discover_integrations_multi_repo,
@@ -2060,6 +2064,201 @@ class TestInferEnvironment:
         f = tmp_path / "application-custom.yml"
         f.touch()
         assert _infer_environment(f, tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Path-part environment inference
+# ---------------------------------------------------------------------------
+
+
+class TestInferEnvFromPathParts:
+    def test_prod_directory(self) -> None:
+        assert _infer_env_from_path_parts(["k8s", "prod", "deployment.yaml"]) == "prod"
+
+    def test_production_normalizes(self) -> None:
+        assert _infer_env_from_path_parts(["deploy", "production"]) == "prod"
+
+    def test_overlays_pattern(self) -> None:
+        assert _infer_env_from_path_parts(["kustomize", "overlays", "staging"]) == "staging"
+
+    def test_environments_pattern(self) -> None:
+        assert _infer_env_from_path_parts(["environments", "dev", "config.yaml"]) == "dev"
+
+    def test_no_env_returns_none(self) -> None:
+        assert _infer_env_from_path_parts(["k8s", "base", "deployment.yaml"]) is None
+
+    def test_uat_normalizes_to_staging(self) -> None:
+        assert _infer_env_from_path_parts(["overlays", "uat"]) == "staging"
+
+
+# ---------------------------------------------------------------------------
+# K8s namespace environment inference
+# ---------------------------------------------------------------------------
+
+
+class TestInferEnvFromK8sNamespace:
+    def test_production_namespace(self) -> None:
+        doc = {"metadata": {"namespace": "production"}}
+        assert _infer_env_from_k8s_namespace(doc) == "prod"
+
+    def test_staging_namespace(self) -> None:
+        doc = {"metadata": {"namespace": "staging"}}
+        assert _infer_env_from_k8s_namespace(doc) == "staging"
+
+    def test_dev_namespace(self) -> None:
+        doc = {"metadata": {"namespace": "dev"}}
+        assert _infer_env_from_k8s_namespace(doc) == "dev"
+
+    def test_default_namespace_returns_none(self) -> None:
+        doc = {"metadata": {"namespace": "default"}}
+        assert _infer_env_from_k8s_namespace(doc) is None
+
+    def test_custom_namespace_returns_none(self) -> None:
+        doc = {"metadata": {"namespace": "my-team"}}
+        assert _infer_env_from_k8s_namespace(doc) is None
+
+    def test_no_namespace_returns_none(self) -> None:
+        doc = {"metadata": {"name": "my-svc"}}
+        assert _infer_env_from_k8s_namespace(doc) is None
+
+    def test_missing_metadata_returns_none(self) -> None:
+        doc = {"kind": "Service"}
+        assert _infer_env_from_k8s_namespace(doc) is None
+
+
+# ---------------------------------------------------------------------------
+# K8s filepath environment inference
+# ---------------------------------------------------------------------------
+
+
+class TestInferEnvFromK8sFilepath:
+    def test_overlay_prod(self, tmp_path: Path) -> None:
+        f = tmp_path / "k8s" / "overlays" / "prod" / "deployment.yaml"
+        f.parent.mkdir(parents=True)
+        f.touch()
+        assert _infer_env_from_k8s_filepath(f, tmp_path) == "prod"
+
+    def test_env_directory(self, tmp_path: Path) -> None:
+        f = tmp_path / "deploy" / "staging" / "svc.yaml"
+        f.parent.mkdir(parents=True)
+        f.touch()
+        assert _infer_env_from_k8s_filepath(f, tmp_path) == "staging"
+
+    def test_no_env_directory(self, tmp_path: Path) -> None:
+        f = tmp_path / "k8s" / "base" / "deployment.yaml"
+        f.parent.mkdir(parents=True)
+        f.touch()
+        assert _infer_env_from_k8s_filepath(f, tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Compose filename environment inference
+# ---------------------------------------------------------------------------
+
+
+class TestInferEnvFromComposeFilename:
+    def test_docker_compose_prod_yml(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.prod.yml")) == "prod"
+
+    def test_docker_compose_dev_yaml(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.dev.yaml")) == "dev"
+
+    def test_compose_staging_yml(self) -> None:
+        assert _infer_env_from_compose_filename(Path("compose.staging.yml")) == "staging"
+
+    def test_compose_dash_production_yml(self) -> None:
+        assert _infer_env_from_compose_filename(Path("compose-production.yml")) == "prod"
+
+    def test_docker_compose_test_yaml(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.test.yaml")) == "test"
+
+    def test_base_compose_returns_none(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.yml")) is None
+
+    def test_override_returns_none(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.override.yml")) is None
+
+    def test_minimal_returns_none(self) -> None:
+        assert _infer_env_from_compose_filename(Path("docker-compose.minimal.yml")) is None
+
+
+# ---------------------------------------------------------------------------
+# K8s integration environment tagging
+# ---------------------------------------------------------------------------
+
+
+class TestK8sIntegrationEnvironment:
+    def test_k8s_svc_integration_tagged_from_namespace(self, tmp_repo: Path) -> None:
+        k8s_dir = tmp_repo / "k8s"
+        k8s_dir.mkdir()
+        (k8s_dir / "svc.yaml").write_text(
+            "apiVersion: v1\nkind: Service\nmetadata:\n  name: web\n"
+            "  namespace: production\nspec:\n  selector:\n    app: web\n"
+        )
+        (k8s_dir / "deploy.yaml").write_text(
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web-deploy\n"
+            "  namespace: production\n  labels:\n    app: web\n"
+            "spec:\n  template:\n    metadata:\n      labels:\n        app: web\n"
+        )
+        components = [
+            _make_component("web", boundary_path="."),
+            _make_component("web-deploy", boundary_path="."),
+        ]
+        integrations = discover_integrations(tmp_repo, components)
+        k8s_intg = [i for i in integrations if "K8s Service" in i.description]
+        assert len(k8s_intg) >= 1
+        assert k8s_intg[0].environment == "prod"
+
+    def test_k8s_env_var_integration_tagged_from_filepath(self, tmp_repo: Path) -> None:
+        prod_dir = tmp_repo / "k8s" / "prod"
+        prod_dir.mkdir(parents=True)
+        (prod_dir / "deploy.yaml").write_text(
+            "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: frontend\n"
+            "spec:\n  template:\n    metadata:\n      labels: {}\n    spec:\n"
+            "      containers:\n      - name: app\n        env:\n"
+            "        - name: BACKEND_ADDR\n          value: backend:8080\n"
+        )
+        components = [
+            _make_component("frontend", boundary_path="."),
+            _make_component("backend", boundary_path="."),
+        ]
+        integrations = discover_integrations(tmp_repo, components)
+        env_intg = [i for i in integrations if "env" in i.description.lower()]
+        assert len(env_intg) >= 1
+        assert env_intg[0].environment == "prod"
+
+
+# ---------------------------------------------------------------------------
+# Compose integration environment tagging
+# ---------------------------------------------------------------------------
+
+
+class TestComposeIntegrationEnvironment:
+    def test_compose_prod_file_tags_integrations(self, tmp_repo: Path) -> None:
+        (tmp_repo / "docker-compose.prod.yml").write_text(
+            "services:\n  web:\n    depends_on:\n      - db\n  db:\n    image: postgres\n"
+        )
+        components = [
+            _make_component("web", boundary_path="."),
+            _make_component("db", comp_type="database", boundary_path="."),
+        ]
+        integrations = discover_integrations(tmp_repo, components)
+        compose_intg = [i for i in integrations if "depends on" in i.description]
+        assert len(compose_intg) >= 1
+        assert compose_intg[0].environment == "prod"
+
+    def test_base_compose_no_environment(self, tmp_repo: Path) -> None:
+        (tmp_repo / "docker-compose.yml").write_text(
+            "services:\n  web:\n    depends_on:\n      - db\n  db:\n    image: postgres\n"
+        )
+        components = [
+            _make_component("web", boundary_path="."),
+            _make_component("db", comp_type="database", boundary_path="."),
+        ]
+        integrations = discover_integrations(tmp_repo, components)
+        compose_intg = [i for i in integrations if "depends on" in i.description]
+        assert len(compose_intg) >= 1
+        assert compose_intg[0].environment is None
 
 
 # ---------------------------------------------------------------------------
