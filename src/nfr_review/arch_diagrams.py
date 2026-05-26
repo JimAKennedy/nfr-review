@@ -210,7 +210,7 @@ def render_c4_context(
     # Emit external actors
     for ext in external:
         eid = _safe_id(ext.id)
-        lines.append(f"    {eid}[{_quote_label(ext.name + chr(10) + 'external')}]")
+        lines.append(f'    {eid}["{ext.name}<br/>external"]')
 
     # Emit edges
     internal_ids = {c.id for c in internal}
