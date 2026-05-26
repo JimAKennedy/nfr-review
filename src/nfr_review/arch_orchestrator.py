@@ -63,6 +63,7 @@ def run_arch_review(
     *,
     repo_names: list[str] | None = None,
     skip_llm: bool = False,
+    diagram_mode: str = "hierarchical",
     progress: ProgressCallback | None = None,
 ) -> ArchReport:
     """Run the full architecture review pipeline and return an ArchReport.
@@ -152,7 +153,9 @@ def run_arch_review(
 
     # --- C4 diagrams ---
     cb("Generating C4 diagrams...")
-    diagrams = generate_all_diagrams(components, integrations, test_coverage)
+    diagrams = generate_all_diagrams(
+        components, integrations, test_coverage, diagram_mode=diagram_mode
+    )
     cb(f"Generated {len(diagrams)} diagrams")
 
     # --- risk analysis ---

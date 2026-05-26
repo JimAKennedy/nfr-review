@@ -55,7 +55,14 @@ def render_mermaid_to_png(
         tmp.write(mermaid_text)
         tmp_path = Path(tmp.name)
 
-    cfg_path: Path | None = None
+    cmd = [mmdc, "-i", str(tmp_path), "-o", str(output_path), "-b", "transparent"]
+    if scale > 1:
+        cmd.extend(["-s", str(scale)])
+    if width is not None:
+        cmd.extend(["-w", str(width)])
+    if height is not None:
+        cmd.extend(["-H", str(height)])
+
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as cfg_tmp:
             json.dump(_MERMAID_CONFIG, cfg_tmp)

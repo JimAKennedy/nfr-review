@@ -161,8 +161,16 @@ def _embed_png(path: Path) -> tuple[str, bool]:
     return img_tag, landscape
 
 
-def _render_mermaid_to_img(mermaid_text: str) -> tuple[str, bool] | None:
+def _render_mermaid_to_img(
+    mermaid_text: str,
+    *,
+    width: int = 2400,
+    height: int = 1600,
+) -> tuple[str, bool] | None:
     """Render mermaid text to a high-res inline PNG.
+
+    Uses a wide viewport (default 2400×1600) so complex diagrams have
+    enough room for legible node layout before the scale factor is applied.
 
     Returns ``(html, is_landscape)`` or ``None`` on failure.
     """
@@ -171,7 +179,9 @@ def _render_mermaid_to_img(mermaid_text: str) -> tuple[str, bool] | None:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=4)
+        result = render_mermaid_to_png(
+            mermaid_text, tmp_path, scale=4, width=width, height=height
+        )
         if result is None:
             return None
         return _embed_png(tmp_path)
@@ -766,6 +776,15 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
     except ImportError:
         logger.warning("weasyprint not installed; skipping PDF generation")
         return None
+
+    # High-res diagram PNGs can exceed Pillow's default decompression-bomb
+    # threshold.  Raise it so weasyprint doesn't choke on large images.
+    try:
+        from PIL import Image as _PILImage  # type: ignore[import-not-found]
+
+        _PILImage.MAX_IMAGE_PIXELS = 300_000_000
+    except ImportError:
+        pass
 
     sections = [
         "<h1>Architecture Report</h1>",
