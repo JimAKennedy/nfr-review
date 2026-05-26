@@ -52,6 +52,8 @@ repos:
           - tree-sitter-typescript>=0.23
           - resolvelib>=1.0
           - packaging>=23.0
+          - PyYAML>=6.0
+          - types-PyYAML>=6.0
         args: [--config-file=pyproject.toml, src/]
         pass_filenames: false
         files: ^src/
