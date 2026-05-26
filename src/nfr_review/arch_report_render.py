@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import re
 import struct
 import tempfile
 from collections import defaultdict
@@ -43,6 +44,9 @@ _CSS = (
     "@page { size: A4; margin: 2cm 1.5cm;"
     " @bottom-center { content: counter(page) ' / ' counter(pages);"
     " font-size: 9pt; color: #666; } }\n"
+    "@page landscape { size: A4 landscape; margin: 1.5cm 2cm;"
+    " @bottom-center { content: counter(page) ' / ' counter(pages);"
+    " font-size: 9pt; color: #666; } }\n"
     "* { box-sizing: border-box; }\n"
     "body { font-family: -apple-system, 'Segoe UI', Roboto,"
     " Helvetica, Arial, sans-serif;"
@@ -74,11 +78,21 @@ _CSS = (
     ".risk-card { margin: 0.5em 0; padding: 8px 12px;"
     " border-left: 4px solid #ddd; background: #fafafa; }\n"
     ".section-break { page-break-before: always; }\n"
+    ".landscape-page { page: landscape; page-break-before: always; }\n"
     ".diagram-page { page-break-before: always; margin: 0; padding: 0; }\n"
+    ".diagram-page-landscape { page: landscape;"
+    " page-break-before: always; margin: 0; padding: 0; }\n"
     ".diagram-img { display: block; margin: 0.5em auto 0 auto; }\n"
     ".meta-table { width: auto; }\n"
     ".meta-table td { border: none; padding: 2px 12px 2px 0; }\n"
     ".meta-table td:first-child { font-weight: 600; color: #555; }\n"
+    ".wide-table th:first-child,"
+    " .wide-table td:first-child { min-width: 90px; white-space: nowrap; }\n"
+    ".wide-table th:nth-child(2),"
+    " .wide-table td:nth-child(2) { min-width: 75px; white-space: nowrap; }\n"
+    ".wide-table th:nth-child(3),"
+    " .wide-table td:nth-child(3) { min-width: 75px; white-space: nowrap; }\n"
+    ".wide-table td:last-child { word-break: break-word; }\n"
 )
 
 
@@ -87,9 +101,15 @@ def _h(text: str) -> str:
     return html.escape(str(text))
 
 
-_PAGE_CONTENT_W_MM = 210.0 - 30  # A4 width minus 1.5 cm margins each side
-_PAGE_CONTENT_H_MM = 297.0 - 40  # A4 height minus 2 cm margins top/bottom
+_PAGE_CONTENT_W_MM = 210.0 - 30  # A4 portrait: width minus 1.5 cm margins
+_PAGE_CONTENT_H_MM = 297.0 - 40  # A4 portrait: height minus 2 cm margins
 _DIAGRAM_MAX_H_MM = _PAGE_CONTENT_H_MM - 25  # room for heading + padding
+
+_LANDSCAPE_CONTENT_W_MM = 297.0 - 40  # A4 landscape: width minus 2 cm margins
+_LANDSCAPE_CONTENT_H_MM = 210.0 - 30  # A4 landscape: height minus 1.5 cm margins
+_LANDSCAPE_DIAGRAM_MAX_H_MM = _LANDSCAPE_CONTENT_H_MM - 25
+
+_WIDE_DIAGRAM_ASPECT_THRESHOLD = 1.8
 
 
 def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
@@ -99,35 +119,59 @@ def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
     return w, h
 
 
-def _embed_png(path: Path) -> str:
-    """Base64-embed a PNG, sized to fit within a single A4 page."""
+def _is_wide_diagram(img_w: int, img_h: int) -> bool:
+    """Return True if the diagram is wide enough to benefit from landscape."""
+    if img_h <= 0:
+        return False
+    aspect = img_w / img_h
+    return aspect >= _WIDE_DIAGRAM_ASPECT_THRESHOLD
+
+
+def _embed_png(path: Path) -> tuple[str, bool]:
+    """Base64-embed a PNG, sized to fit within a single A4 page.
+
+    Returns ``(html, is_landscape)`` where *is_landscape* is True when the
+    diagram is wide enough to warrant a landscape page.
+    """
     raw = path.read_bytes()
     data = base64.b64encode(raw).decode("ascii")
     dims = _png_dimensions(raw)
     style = ""
+    landscape = False
     if dims:
         img_w, img_h = dims
         if img_w > 0 and img_h > 0:
+            landscape = _is_wide_diagram(img_w, img_h)
+            if landscape:
+                cw = _LANDSCAPE_CONTENT_W_MM
+                ch = _LANDSCAPE_DIAGRAM_MAX_H_MM
+            else:
+                cw = _PAGE_CONTENT_W_MM
+                ch = _DIAGRAM_MAX_H_MM
             aspect = img_w / img_h
-            max_aspect = _PAGE_CONTENT_W_MM / _DIAGRAM_MAX_H_MM
+            max_aspect = cw / ch
             if aspect >= max_aspect:
-                fw = _PAGE_CONTENT_W_MM
+                fw = cw
                 fh = fw / aspect
             else:
-                fh = _DIAGRAM_MAX_H_MM
+                fh = ch
                 fw = fh * aspect
             style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
-    return f'<img class="diagram-img" src="data:image/png;base64,{data}"{style} />'
+    img_tag = f'<img class="diagram-img" src="data:image/png;base64,{data}"{style} />'
+    return img_tag, landscape
 
 
-def _render_mermaid_to_img(mermaid_text: str) -> str | None:
-    """Render mermaid text to a high-res inline PNG, or ``None`` on failure."""
+def _render_mermaid_to_img(mermaid_text: str) -> tuple[str, bool] | None:
+    """Render mermaid text to a high-res inline PNG.
+
+    Returns ``(html, is_landscape)`` or ``None`` on failure.
+    """
     from nfr_review.output.render import render_mermaid_to_png
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=3)
+        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=4)
         if result is None:
             return None
         return _embed_png(tmp_path)
@@ -474,7 +518,7 @@ def _pdf_executive_summary_html(report: ArchReport) -> str:
 
 
 def _pdf_components_html(report: ArchReport) -> str:
-    """Render components table as HTML."""
+    """Render components table as HTML on a landscape page."""
     if not report.components:
         return "<h2>Components</h2><p>No components discovered.</p>"
     rows = []
@@ -485,15 +529,16 @@ def _pdf_components_html(report: ArchReport) -> str:
             f"<td>{_h(comp.description)}</td></tr>"
         )
     return (
+        '<div class="landscape-page">'
         "<h2>Components</h2>"
-        "<table><thead><tr><th>ID</th><th>Name</th><th>Type</th>"
-        "<th>Description</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        '<table class="wide-table"><thead><tr><th>ID</th><th>Name</th>'
+        "<th>Type</th><th>Description</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
 
 def _pdf_integrations_html(report: ArchReport) -> str:
-    """Render integration points table as HTML."""
+    """Render integration points table as HTML on a landscape page."""
     if not report.integration_points:
         return "<h2>Integration Points</h2><p>No integration points discovered.</p>"
     rows = []
@@ -506,11 +551,12 @@ def _pdf_integrations_html(report: ArchReport) -> str:
             f"<td>{_h(ip.description)}</td></tr>"
         )
     return (
+        '<div class="landscape-page">'
         "<h2>Integration Points</h2>"
-        "<table><thead><tr><th>Source</th><th>Target</th>"
+        '<table class="wide-table"><thead><tr><th>Source</th><th>Target</th>'
         "<th>Style</th><th>Protocol</th><th>Description</th>"
         "</tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
 
@@ -520,12 +566,18 @@ def _pdf_diagrams_html(report: ArchReport) -> str:
         return ""
     parts: list[str] = []
     for diagram in report.diagrams:
-        parts.append('<div class="diagram-page">')
+        result = _render_mermaid_to_img(diagram.mermaid)
+        if result:
+            img_html, is_landscape = result
+            page_cls = "diagram-page-landscape" if is_landscape else "diagram-page"
+        else:
+            img_html = None
+            page_cls = "diagram-page"
+        parts.append(f'<div class="{page_cls}">')
         parts.append(f"<h2>{_h(diagram.title)}</h2>")
         if diagram.scope:
             parts.append(f"<p><em>Scope: {_h(diagram.scope)}</em></p>")
         parts.append(f"<p><em>Level: {_h(diagram.level)}</em></p>")
-        img_html = _render_mermaid_to_img(diagram.mermaid)
         if img_html:
             parts.append(img_html)
         else:
@@ -535,7 +587,7 @@ def _pdf_diagrams_html(report: ArchReport) -> str:
 
 
 def _pdf_test_coverage_html(report: ArchReport) -> str:
-    """Render test coverage table as HTML."""
+    """Render test coverage table as HTML on a landscape page."""
     if not report.test_coverage:
         return ""
     rows = []
@@ -548,10 +600,11 @@ def _pdf_test_coverage_html(report: ArchReport) -> str:
             f"<td>{gaps}</td></tr>"
         )
     return (
+        '<div class="landscape-page">'
         "<h2>Test Coverage</h2>"
-        "<table><thead><tr><th>Component</th><th>Functional</th>"
-        "<th>NFR</th><th>Gaps</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
+        '<table class="wide-table"><thead><tr><th>Component</th>'
+        "<th>Functional</th><th>NFR</th><th>Gaps</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
     )
 
 
@@ -621,9 +674,15 @@ def _pdf_domain_model_html(report: ArchReport) -> str:
                 parts.append(f"<p>Entities: {_h(', '.join(bc.entities))}</p>")
 
     if dm.context_map_mermaid:
-        parts.append('<div class="diagram-page">')
+        result = _render_mermaid_to_img(dm.context_map_mermaid)
+        if result:
+            img_html, is_landscape = result
+            page_cls = "diagram-page-landscape" if is_landscape else "diagram-page"
+        else:
+            img_html = None
+            page_cls = "diagram-page"
+        parts.append(f'<div class="{page_cls}">')
         parts.append("<h3>Context Map</h3>")
-        img_html = _render_mermaid_to_img(dm.context_map_mermaid)
         if img_html:
             parts.append(img_html)
         else:
@@ -749,6 +808,24 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
 # ---------------------------------------------------------------------------
 
 
+def _build_filename_prefix(report: ArchReport) -> str:
+    """Build a filename prefix like ``myrepo-2026-05-26T1230``."""
+    meta = report.metadata
+    repo_names = [r.name for r in meta.repos_analyzed] if meta.repos_analyzed else []
+    repo_part = "-".join(repo_names) if repo_names else "architecture"
+    repo_part = re.sub(r"[^\w\-.]", "_", repo_part)
+
+    ts = meta.timestamp
+    ts_match = re.search(r"(\d{4}-\d{2}-\d{2})\D+(\d{2})\D+(\d{2})", ts)
+    if ts_match:
+        date_part = ts_match.group(1)
+        time_part = f"T{ts_match.group(2)}{ts_match.group(3)}"
+    else:
+        date_part = "undated"
+        time_part = ""
+    return f"{repo_part}-{date_part}{time_part}"
+
+
 def render_arch_report(
     report: ArchReport,
     output_dir: Path,
@@ -760,12 +837,14 @@ def render_arch_report(
     weasyprint is importable (or if explicitly requested — in which case it
     will be ``None`` in the result when weasyprint is unavailable).
 
+    Filenames include the repo name(s) and generation timestamp, e.g.
+    ``opentelemetry-demo-2026-05-26T1230-architecture-report.pdf``.
+
     Returns a dict mapping format name to the output path (or ``None`` if the
     format could not be produced).
     """
     if formats is None:
         formats = ["json", "md"]
-        # Auto-include PDF if weasyprint is available
         try:
             import weasyprint  # type: ignore[import-not-found,import-untyped] # noqa: F401
 
@@ -774,17 +853,18 @@ def render_arch_report(
             pass
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = _build_filename_prefix(report)
     results: dict[str, Path | None] = {}
 
     for fmt in formats:
         if fmt == "json":
-            path = output_dir / "architecture-report.json"
+            path = output_dir / f"{prefix}-architecture-report.json"
             results["json"] = render_arch_json(report, path)
         elif fmt == "md":
-            path = output_dir / "architecture-report.md"
+            path = output_dir / f"{prefix}-architecture-report.md"
             results["md"] = render_arch_markdown(report, path)
         elif fmt == "pdf":
-            path = output_dir / "architecture-report.pdf"
+            path = output_dir / f"{prefix}-architecture-report.pdf"
             results["pdf"] = render_arch_pdf(report, path)
         else:
             logger.warning("Unknown format %r; skipping", fmt)
