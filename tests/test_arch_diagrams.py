@@ -450,7 +450,7 @@ class TestRenderC4Code:
 
     def test_no_boundary_uses_root(self, external_system: Component) -> None:
         result = render_c4_code([external_system])
-        assert "root" in result.mermaid
+        assert "Project Root" in result.mermaid
 
     def test_custom_title(self, api_service: Component) -> None:
         result = render_c4_code([api_service], title="Code Map")

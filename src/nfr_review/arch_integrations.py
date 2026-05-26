@@ -18,7 +18,12 @@ from typing import Any, Literal, cast
 
 from ruamel.yaml import YAML, YAMLError
 
-from nfr_review.arch_models import Component, IntegrationPoint, IntegrationStyle
+from nfr_review.arch_models import (
+    Component,
+    ComponentBoundary,
+    IntegrationPoint,
+    IntegrationStyle,
+)
 from nfr_review.path_filter import should_exclude_path
 
 logger = logging.getLogger(__name__)
@@ -31,6 +36,13 @@ ComponentType = Literal[
 # ---------------------------------------------------------------------------
 # Helpers (mirror arch_discovery patterns)
 # ---------------------------------------------------------------------------
+
+
+def _is_comment_line(text: str, pos: int) -> bool:
+    """Check whether *pos* sits on a comment line (``#`` or ``//``)."""
+    line_start = text.rfind("\n", 0, pos) + 1
+    prefix = text[line_start:pos].lstrip()
+    return prefix.startswith("#") or prefix.startswith("//")
 
 
 def _safe_read_text(path: Path) -> str | None:
@@ -766,6 +778,8 @@ def _discover_gradle_integrations(
 # Strategy 4: Config-file connection string discovery
 # ---------------------------------------------------------------------------
 
+_EMBEDDED_DB_TYPES = frozenset({"h2", "hsqldb", "derby", "sqlite"})
+
 # Patterns for connection strings in config files
 _JDBC_PATTERN = re.compile(r"jdbc:(\w+)://([^/\s:?]+)", re.IGNORECASE)
 _REDIS_PATTERN = re.compile(r"redis(?:s)?://([^/\s:?]+)", re.IGNORECASE)
@@ -875,10 +889,26 @@ _IGNORED_HOSTS = frozenset(
 )
 
 
+_IGNORED_DOMAINS = (
+    ".example.com",
+    ".example.org",
+    ".example.net",
+    ".test",
+    ".invalid",
+    ".localhost",
+    ".local",
+)
+
+
 def _is_ignorable_host(host: str) -> bool:
     """Return True if the host is a generic/non-meaningful target."""
     host_lower = host.lower()
-    return host_lower in _IGNORED_HOSTS or host_lower.startswith("$")
+    if host_lower in _IGNORED_HOSTS or host_lower.startswith("$"):
+        return True
+    for suffix in _IGNORED_DOMAINS:
+        if host_lower.endswith(suffix):
+            return True
+    return False
 
 
 def _extract_host_from_value(value: str) -> str | None:
@@ -977,6 +1007,9 @@ def _discover_config_integrations(
             host = match.group(2)
             if _is_ignorable_host(host):
                 host = db_type  # Use DB type as identifier for localhost
+            jdbc_env = env
+            if jdbc_env is None and db_type in _EMBEDDED_DB_TYPES:
+                jdbc_env = "dev"
             dedup_key = f"jdbc:{db_type}:{host}"
             if dedup_key in seen_keys:
                 continue
@@ -1001,7 +1034,7 @@ def _discover_config_integrations(
                     protocol=f"jdbc:{db_type}",
                     description=f"JDBC connection to {db_type} at '{host}'",
                     data_flow="bidirectional",
-                    environment=env,
+                    environment=jdbc_env,
                 )
             )
 
@@ -1256,6 +1289,9 @@ def _discover_config_integrations(
         for match in _HTTP_ENDPOINT_PATTERN.finditer(content):
             host = match.group(1)
             if _is_ignorable_host(host):
+                continue
+            # Skip matches inside comment lines
+            if _is_comment_line(content, match.start()):
                 continue
             # Skip schema/namespace URLs
             full_url = match.group(0)
@@ -2819,34 +2855,82 @@ def materialize_infra_components(
 
     This function scans all integration endpoints, finds IDs with no matching
     component, and creates lightweight Component stubs so diagrams can render
-    them.  Environment is inferred from the integration that references them.
+    them.  When the same infra target is referenced with different environments,
+    per-environment components are created and integration edges are rewritten
+    to point to the env-specific copy.
     """
     known_ids = {c.id for c in components}
-    new_components: dict[str, Component] = {}
 
-    for intg in integrations:
+    # Collect (infra_id, environment) -> [integration indices]
+    infra_envs: dict[str, dict[str | None, list[int]]] = {}
+    infra_meta: dict[str, tuple[str, ComponentType]] = {}
+
+    for idx, intg in enumerate(integrations):
         for target_id in (intg.source_component_id, intg.target_component_id):
-            if target_id in known_ids or target_id in new_components:
+            if target_id in known_ids:
                 continue
             if not target_id.startswith("infra-"):
                 continue
 
-            slug = target_id.split("-", 1)[1].rsplit("-", 1)[0]
-            name = slug.replace("-", " ").title()
+            if target_id not in infra_meta:
+                slug = target_id.split("-", 1)[1].rsplit("-", 1)[0]
+                name = slug.replace("-", " ").title()
+                comp_type: ComponentType = "database"
+                if intg.protocol:
+                    proto_key = intg.protocol.split(":")[0].lower()
+                    raw = _PROTOCOL_TO_COMPONENT_TYPE.get(proto_key, "external")
+                    comp_type = cast(ComponentType, raw)
+                infra_meta[target_id] = (name, comp_type)
 
-            comp_type: ComponentType = "database"
-            if intg.protocol:
-                proto_key = intg.protocol.split(":")[0].lower()
-                raw = _PROTOCOL_TO_COMPONENT_TYPE.get(proto_key, "external")
-                comp_type = cast(ComponentType, raw)
+            infra_envs.setdefault(target_id, {}).setdefault(intg.environment, []).append(idx)
 
-            new_components[target_id] = Component(
-                id=target_id,
+    new_components: dict[str, Component] = {}
+
+    for base_id, env_map in infra_envs.items():
+        name, comp_type = infra_meta[base_id]
+
+        # Auto-tag embedded/in-memory databases as dev when env is unknown
+        slug = base_id.split("-", 1)[1].rsplit("-", 1)[0]
+        if None in env_map and any(db in slug for db in _EMBEDDED_DB_TYPES):
+            indices = env_map.pop(None)
+            env_map.setdefault("dev", []).extend(indices)
+            for idx in indices:
+                integrations[idx] = integrations[idx].model_copy(update={"environment": "dev"})
+
+        envs = set(env_map.keys())
+
+        if len(envs) <= 1:
+            env = next(iter(envs))
+            new_components[base_id] = Component(
+                id=base_id,
                 name=name,
                 description=f"Infrastructure: {name}",
                 component_type=comp_type,
-                environment=intg.environment,
+                boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
+                environment=env,
             )
+        else:
+            for env, intg_indices in env_map.items():
+                env_suffix = env or "default"
+                env_id = f"{base_id}--{env_suffix}"
+                display = f"{name} ({env_suffix})" if env else name
+                new_components[env_id] = Component(
+                    id=env_id,
+                    name=display,
+                    description=f"Infrastructure: {display}",
+                    component_type=comp_type,
+                    boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
+                    environment=env,
+                )
+                for idx in intg_indices:
+                    intg = integrations[idx]
+                    updates: dict[str, str] = {}
+                    if intg.source_component_id == base_id:
+                        updates["source_component_id"] = env_id
+                    if intg.target_component_id == base_id:
+                        updates["target_component_id"] = env_id
+                    if updates:
+                        integrations[idx] = intg.model_copy(update=updates)
 
     if new_components:
         for comp in new_components.values():
