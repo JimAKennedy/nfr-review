@@ -1211,3 +1211,84 @@ class TestPackageNestingInCode:
         comp_b = _make_pkg_component("svc-b", "B", "services", package=None)
         result = render_c4_code([comp_a, comp_b])
         assert result.mermaid.count("subgraph") == 1
+
+
+# ---------------------------------------------------------------------------
+# Environment-based infrastructure grouping in container diagram
+# ---------------------------------------------------------------------------
+
+
+class TestContainerEnvironmentGrouping:
+    def test_infra_grouped_by_environment(self) -> None:
+        app = Component(
+            id="comp-app-001",
+            name="My App",
+            description="Main service",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path=".")],
+        )
+        prod_db = Component(
+            id="infra-prod-db-aaa",
+            name="Prod DB",
+            description="Production database",
+            component_type="database",
+            environment="prod",
+        )
+        dev_db = Component(
+            id="infra-dev-db-bbb",
+            name="Dev DB",
+            description="Development database",
+            component_type="database",
+            environment="dev",
+        )
+        intg = IntegrationPoint(
+            id="intg-001",
+            source_component_id=app.id,
+            target_component_id=prod_db.id,
+            style="shared_database",
+            protocol="postgresql",
+        )
+
+        result = render_c4_container([app, prod_db, dev_db], [intg])
+        assert "Production Infrastructure" in result.mermaid
+        assert "Development Infrastructure" in result.mermaid
+        assert prod_db.id.replace("-", "_") in _safe_id(prod_db.id)
+
+    def test_no_env_components_in_boundary_groups(self) -> None:
+        """Components without environment go into boundary groups, not infra groups."""
+        app = Component(
+            id="comp-app-001",
+            name="My App",
+            description="Main service",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+        )
+        result = render_c4_container([app], [])
+        assert "Infrastructure" not in result.mermaid
+        assert "services" in result.mermaid
+
+    def test_edges_render_with_materialized_infra(self) -> None:
+        """Edges to infra components render when both endpoints exist."""
+        app = Component(
+            id="comp-app-001",
+            name="My App",
+            description="Main service",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path=".")],
+        )
+        prod_db = Component(
+            id="infra-prod-db-aaa",
+            name="Prod DB",
+            description="Production database",
+            component_type="database",
+            environment="prod",
+        )
+        intg = IntegrationPoint(
+            id="intg-001",
+            source_component_id=app.id,
+            target_component_id=prod_db.id,
+            style="shared_database",
+            protocol="postgresql",
+        )
+        result = render_c4_container([app, prod_db], [intg])
+        assert "-->" in result.mermaid

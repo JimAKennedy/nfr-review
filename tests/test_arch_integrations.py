@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 
 from nfr_review.arch_integrations import (
+    _infer_environment,
     discover_integrations,
     discover_integrations_multi_repo,
+    materialize_infra_components,
 )
-from nfr_review.arch_models import Component, ComponentBoundary
+from nfr_review.arch_models import Component, ComponentBoundary, IntegrationPoint
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2004,3 +2006,160 @@ class TestDotNetDeps:
         protocols = {i.protocol for i in build_intg}
         assert "mongodb" in protocols
         assert "kafka" in protocols
+
+
+# ---------------------------------------------------------------------------
+# Environment inference
+# ---------------------------------------------------------------------------
+
+
+class TestInferEnvironment:
+    def test_spring_profile_dev(self, tmp_path: Path) -> None:
+        f = tmp_path / "application-dev.yml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "dev"
+
+    def test_spring_profile_prod(self, tmp_path: Path) -> None:
+        f = tmp_path / "application-prod.yml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "prod"
+
+    def test_spring_profile_production_normalizes(self, tmp_path: Path) -> None:
+        f = tmp_path / "application-production.properties"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "prod"
+
+    def test_spring_profile_test(self, tmp_path: Path) -> None:
+        f = tmp_path / "application-test.yaml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "test"
+
+    def test_appsettings_staging(self, tmp_path: Path) -> None:
+        f = tmp_path / "appsettings.Staging.json"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "staging"
+
+    def test_dotenv_production(self, tmp_path: Path) -> None:
+        f = tmp_path / ".env.production"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "prod"
+
+    def test_base_config_returns_none(self, tmp_path: Path) -> None:
+        f = tmp_path / "application.yml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) is None
+
+    def test_k8s_overlay_dir(self, tmp_path: Path) -> None:
+        overlay = tmp_path / "k8s" / "overlays" / "dev"
+        overlay.mkdir(parents=True)
+        f = overlay / "config.yaml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) == "dev"
+
+    def test_unknown_profile_ignored(self, tmp_path: Path) -> None:
+        f = tmp_path / "application-custom.yml"
+        f.touch()
+        assert _infer_environment(f, tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Config integration environment tagging
+# ---------------------------------------------------------------------------
+
+
+class TestConfigIntegrationEnvironment:
+    def test_jdbc_tagged_with_environment(self, tmp_repo: Path) -> None:
+        (tmp_repo / "application-prod.yml").write_text(
+            "spring:\n  datasource:\n    url: jdbc:postgresql://prod-db:5432/mydb\n"
+        )
+        components = [_make_component("myapp", boundary_path=".")]
+        integrations = discover_integrations(tmp_repo, components)
+        jdbc_intg = [i for i in integrations if i.protocol and "jdbc" in i.protocol]
+        assert len(jdbc_intg) >= 1
+        assert jdbc_intg[0].environment == "prod"
+
+    def test_base_config_has_no_environment(self, tmp_repo: Path) -> None:
+        (tmp_repo / "application.yml").write_text(
+            "spring:\n  datasource:\n    url: jdbc:postgresql://db:5432/mydb\n"
+        )
+        components = [_make_component("myapp", boundary_path=".")]
+        integrations = discover_integrations(tmp_repo, components)
+        jdbc_intg = [i for i in integrations if i.protocol and "jdbc" in i.protocol]
+        assert len(jdbc_intg) >= 1
+        assert jdbc_intg[0].environment is None
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure component materialization
+# ---------------------------------------------------------------------------
+
+
+class TestMaterializeInfraComponents:
+    def test_creates_missing_infra_component(self) -> None:
+        app = _make_component("myapp")
+        integrations = [
+            IntegrationPoint(
+                id="intg-test-001",
+                source_component_id=app.id,
+                target_component_id="infra-prod-db-abc123",
+                style="shared_database",
+                protocol="postgresql",
+                environment="prod",
+            )
+        ]
+        result = materialize_infra_components([app], integrations)
+        infra = [c for c in result if c.id == "infra-prod-db-abc123"]
+        assert len(infra) == 1
+        assert infra[0].component_type == "database"
+        assert infra[0].environment == "prod"
+
+    def test_does_not_duplicate_existing(self) -> None:
+        existing = Component(
+            id="infra-redis-abc123",
+            name="Redis",
+            description="Redis cache",
+            component_type="database",
+        )
+        integrations = [
+            IntegrationPoint(
+                id="intg-test-002",
+                source_component_id="comp-myapp-000000",
+                target_component_id="infra-redis-abc123",
+                style="shared_database",
+                protocol="redis",
+            )
+        ]
+        result = materialize_infra_components([existing], integrations)
+        assert len(result) == 1
+
+    def test_queue_protocol_yields_queue_type(self) -> None:
+        app = _make_component("myapp")
+        integrations = [
+            IntegrationPoint(
+                id="intg-test-003",
+                source_component_id=app.id,
+                target_component_id="infra-kafka-def456",
+                style="message_queue",
+                protocol="kafka",
+                environment="dev",
+            )
+        ]
+        result = materialize_infra_components([app], integrations)
+        kafka = [c for c in result if c.id == "infra-kafka-def456"]
+        assert len(kafka) == 1
+        assert kafka[0].component_type == "queue"
+        assert kafka[0].environment == "dev"
+
+    def test_end_to_end_with_discovery(self, tmp_repo: Path) -> None:
+        """Discovered config integrations are materialized into components."""
+        (tmp_repo / "application-dev.yml").write_text(
+            "spring:\n  redis:\n    host: dev-redis\n"
+        )
+        components = [_make_component("myapp", boundary_path=".")]
+        integrations = discover_integrations(tmp_repo, components)
+        materialize_infra_components(components, integrations)
+        infra_comps = [c for c in components if c.id.startswith("infra-")]
+        assert len(infra_comps) >= 1
+        redis = [c for c in infra_comps if "redis" in c.name.lower()]
+        assert len(redis) >= 1
+        assert redis[0].environment == "dev"
