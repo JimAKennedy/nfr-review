@@ -1,0 +1,736 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Multi-format architecture report renderer (JSON, Markdown, PDF)."""
+
+from __future__ import annotations
+
+import html
+import logging
+from collections import defaultdict
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from nfr_review.arch_models import ArchReport
+
+logger = logging.getLogger(__name__)
+
+# --- Severity / priority styling constants ---
+
+_SEVERITY_ORDER: list[str] = ["critical", "high", "medium", "low"]
+_PRIORITY_ORDER: list[str] = ["critical", "high", "medium", "low"]
+
+_SEVERITY_COLORS: dict[str, str] = {
+    "critical": "#dc3545",
+    "high": "#dc3545",
+    "medium": "#fd7e14",
+    "low": "#28a745",
+}
+
+_SEVERITY_EMOJI: dict[str, str] = {
+    "critical": "CRITICAL",
+    "high": "HIGH",
+    "medium": "MEDIUM",
+    "low": "LOW",
+}
+
+# --- CSS for PDF (follows existing pdf.py patterns) ---
+
+_CSS = (
+    "@page { size: A4; margin: 2cm 1.5cm;"
+    " @bottom-center { content: counter(page) ' / ' counter(pages);"
+    " font-size: 9pt; color: #666; } }\n"
+    "* { box-sizing: border-box; }\n"
+    "body { font-family: -apple-system, 'Segoe UI', Roboto,"
+    " Helvetica, Arial, sans-serif;"
+    " font-size: 10pt; line-height: 1.5; color: #1a1a1a; }\n"
+    "h1 { font-size: 20pt; color: #1a1a1a; margin-bottom: 0.2em;"
+    " border-bottom: 2px solid #333; padding-bottom: 0.3em; }\n"
+    "h2 { font-size: 14pt; color: #333; margin-top: 1.5em;"
+    " border-bottom: 1px solid #ccc; padding-bottom: 0.2em;"
+    " page-break-after: avoid; }\n"
+    "h3 { font-size: 12pt; color: #444; margin-top: 1em;"
+    " page-break-after: avoid; }\n"
+    "h4 { font-size: 10pt; color: #555; margin-top: 0.8em;"
+    " page-break-after: avoid; }\n"
+    "table { width: 100%; border-collapse: collapse;"
+    " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
+    " font-size: 9pt; }\n"
+    "th, td { border: 1px solid #ddd; padding: 4px 8px;"
+    " text-align: left; overflow-wrap: anywhere; }\n"
+    "th { background: #f5f5f5; font-weight: 600; }\n"
+    "tr:nth-child(even) { background: #fafafa; }\n"
+    "pre { font-size: 8pt; background: #f5f5f5;"
+    " padding: 8px; border-radius: 4px;"
+    " overflow-x: auto; white-space: pre-wrap; }\n"
+    "code { font-size: 8pt; background: #f5f5f5;"
+    " padding: 1px 4px; border-radius: 2px; }\n"
+    ".severity-badge { display: inline-block; padding: 2px 8px;"
+    " border-radius: 3px; color: white; font-weight: 600;"
+    " font-size: 8pt; }\n"
+    ".risk-card { margin: 0.5em 0; padding: 8px 12px;"
+    " border-left: 4px solid #ddd; background: #fafafa; }\n"
+    ".section-break { page-break-before: always; }\n"
+    ".meta-table { width: auto; }\n"
+    ".meta-table td { border: none; padding: 2px 12px 2px 0; }\n"
+    ".meta-table td:first-child { font-weight: 600; color: #555; }\n"
+)
+
+
+def _h(text: str) -> str:
+    """HTML-escape a string."""
+    return html.escape(str(text))
+
+
+# ---------------------------------------------------------------------------
+# JSON rendering
+# ---------------------------------------------------------------------------
+
+
+def render_arch_json(report: ArchReport, output_path: Path) -> Path:
+    """Serialize *report* as indented JSON and write to *output_path*."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report.model_dump_json(indent=2) + "\n")
+    logger.info("JSON report written to %s", output_path)
+    return output_path
+
+
+# ---------------------------------------------------------------------------
+# Markdown rendering
+# ---------------------------------------------------------------------------
+
+
+def _md_metadata(report: ArchReport) -> str:
+    """Render metadata section."""
+    meta = report.metadata
+    lines = [
+        "# Architecture Report",
+        "",
+        f"**Generated:** {meta.timestamp}  ",
+        f"**Tool version:** {meta.tool_version}  ",
+        f"**Schema version:** {meta.schema_version}  ",
+    ]
+    if meta.repos_analyzed:
+        repos = ", ".join(r.name for r in meta.repos_analyzed)
+        lines.append(f"**Repositories analyzed:** {repos}  ")
+    llm_status = f"Yes ({meta.llm_model})" if meta.llm_available else "No"
+    lines.append(f"**LLM available:** {llm_status}  ")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_executive_summary(report: ArchReport) -> str:
+    """Render executive summary section."""
+    lines = [
+        "## Executive Summary",
+        "",
+        f"- **Components:** {len(report.components)}",
+        f"- **Integration points:** {len(report.integration_points)}",
+        f"- **Dynamic scenarios:** {len(report.dynamic_scenarios)}",
+        f"- **C4 diagrams:** {len(report.diagrams)}",
+    ]
+
+    # Risk summary by severity
+    if report.risk_findings:
+        severity_counts: dict[str, int] = defaultdict(int)
+        for risk in report.risk_findings:
+            severity_counts[risk.severity] += 1
+        risk_parts = []
+        for sev in _SEVERITY_ORDER:
+            count = severity_counts.get(sev, 0)
+            if count:
+                risk_parts.append(f"{count} {sev}")
+        lines.append(f"- **Risk findings:** {', '.join(risk_parts)}")
+    else:
+        lines.append("- **Risk findings:** None")
+
+    lines.append(f"- **Recommendations:** {len(report.recommendations)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_components(report: ArchReport) -> str:
+    """Render components table."""
+    if not report.components:
+        return "## Components\n\nNo components discovered.\n"
+
+    lines = [
+        "## Components",
+        "",
+        "| ID | Name | Type | Description |",
+        "|---|---|---|---|",
+    ]
+    for comp in report.components:
+        lines.append(
+            f"| {comp.id} | {comp.name} | {comp.component_type} | {comp.description} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_integrations(report: ArchReport) -> str:
+    """Render integration points table."""
+    if not report.integration_points:
+        return "## Integration Points\n\nNo integration points discovered.\n"
+
+    lines = [
+        "## Integration Points",
+        "",
+        "| Source | Target | Style | Protocol | Description |",
+        "|---|---|---|---|---|",
+    ]
+    for ip in report.integration_points:
+        protocol = ip.protocol or "-"
+        lines.append(
+            f"| {ip.source_component_id} | {ip.target_component_id}"
+            f" | {ip.style} | {protocol} | {ip.description} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_diagrams(report: ArchReport) -> str:
+    """Render C4 diagrams section with mermaid code blocks."""
+    if not report.diagrams:
+        return ""
+
+    lines = ["## C4 Diagrams", ""]
+    for diagram in report.diagrams:
+        lines.append(f"### {diagram.title}")
+        if diagram.scope:
+            lines.append(f"\n*Scope: {diagram.scope}*")
+        lines.append(f"\n*Level: {diagram.level}*\n")
+        lines.append("```mermaid")
+        lines.append(diagram.mermaid)
+        lines.append("```")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _md_test_coverage(report: ArchReport) -> str:
+    """Render test coverage table."""
+    if not report.test_coverage:
+        return ""
+
+    lines = [
+        "## Test Coverage",
+        "",
+        "| Component | Functional | NFR | Gaps |",
+        "|---|---|---|---|",
+    ]
+    for tc in report.test_coverage:
+        gaps = "; ".join(tc.gaps) if tc.gaps else "-"
+        lines.append(
+            f"| {tc.component_id} | {tc.functional_coverage}"
+            f" | {tc.nonfunctional_coverage} | {gaps} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_risk_findings(report: ArchReport) -> str:
+    """Render risk findings grouped by severity."""
+    if not report.risk_findings:
+        return "## Risk Findings\n\nNo risks identified.\n"
+
+    by_severity: dict[str, list] = defaultdict(list)
+    for risk in report.risk_findings:
+        by_severity[risk.severity].append(risk)
+
+    lines = ["## Risk Findings", ""]
+    for sev in _SEVERITY_ORDER:
+        group = by_severity.get(sev, [])
+        if not group:
+            continue
+        lines.append(f"### {sev.upper()} ({len(group)})")
+        lines.append("")
+        for risk in group:
+            lines.append(f"**[{risk.id}] {risk.title}**  ")
+            lines.append(f"Category: {risk.category}  ")
+            lines.append(f"{risk.description}  ")
+            if risk.evidence:
+                lines.append(f"Evidence: {risk.evidence}  ")
+            if risk.recommendation:
+                lines.append(f"Recommendation: {risk.recommendation}  ")
+            if risk.affected_component_ids:
+                lines.append(
+                    f"Affected components: {', '.join(risk.affected_component_ids)}  "
+                )
+            lines.append("")
+    return "\n".join(lines)
+
+
+def _md_domain_model(report: ArchReport) -> str:
+    """Render domain model section (skip if None)."""
+    if report.domain_model is None:
+        return ""
+
+    dm = report.domain_model
+    lines = ["## Domain Model", ""]
+
+    if dm.entities:
+        lines.append("### Entities")
+        lines.append("")
+        lines.append("| Name | Description | Bounded Context | Attributes |")
+        lines.append("|---|---|---|---|")
+        for entity in dm.entities:
+            ctx = entity.bounded_context or "-"
+            attrs = ", ".join(entity.attributes) if entity.attributes else "-"
+            lines.append(f"| {entity.name} | {entity.description} | {ctx} | {attrs} |")
+        lines.append("")
+
+    if dm.bounded_contexts:
+        lines.append("### Bounded Contexts")
+        lines.append("")
+        for bc in dm.bounded_contexts:
+            lines.append(f"**{bc.name}** - {bc.description}  ")
+            if bc.entities:
+                lines.append(f"Entities: {', '.join(bc.entities)}  ")
+            if bc.upstream_contexts:
+                lines.append(f"Upstream: {', '.join(bc.upstream_contexts)}  ")
+            if bc.downstream_contexts:
+                lines.append(f"Downstream: {', '.join(bc.downstream_contexts)}  ")
+            lines.append("")
+
+    if dm.context_map_mermaid:
+        lines.append("### Context Map")
+        lines.append("")
+        lines.append("```mermaid")
+        lines.append(dm.context_map_mermaid)
+        lines.append("```")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _md_market_analysis(report: ArchReport) -> str:
+    """Render market analysis section (skip if None)."""
+    if report.market_analysis is None:
+        return ""
+
+    ma = report.market_analysis
+    lines = ["## Market Analysis", ""]
+
+    lines.append(f"**Overall maturity:** {ma.overall_maturity}  ")
+    if ma.maturity_rationale:
+        lines.append(f"**Rationale:** {ma.maturity_rationale}  ")
+    if ma.differentiation_summary:
+        lines.append(f"**Differentiation:** {ma.differentiation_summary}  ")
+    lines.append("")
+
+    if ma.comparisons:
+        lines.append("### Comparisons")
+        lines.append("")
+        lines.append("| Name | Description | Maturity | Positioning |")
+        lines.append("|---|---|---|---|")
+        for comp in ma.comparisons:
+            lines.append(
+                f"| {comp.name} | {comp.description}"
+                f" | {comp.maturity} | {comp.relative_positioning} |"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _md_recommendations(report: ArchReport) -> str:
+    """Render recommendations grouped by priority."""
+    if not report.recommendations:
+        return "## Recommendations\n\nNo recommendations.\n"
+
+    by_priority: dict[str, list] = defaultdict(list)
+    for rec in report.recommendations:
+        by_priority[rec.priority].append(rec)
+
+    lines = ["## Recommendations", ""]
+    for pri in _PRIORITY_ORDER:
+        group = by_priority.get(pri, [])
+        if not group:
+            continue
+        lines.append(f"### {pri.upper()} ({len(group)})")
+        lines.append("")
+        for rec in group:
+            lines.append(f"**[{rec.id}] {rec.title}**  ")
+            lines.append(f"Category: {rec.category}  ")
+            lines.append(f"{rec.description}  ")
+            lines.append(f"Rationale: {rec.rationale}  ")
+            if rec.affected_component_ids:
+                lines.append(f"Affected components: {', '.join(rec.affected_component_ids)}  ")
+            lines.append("")
+    return "\n".join(lines)
+
+
+def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
+    """Render *report* as a structured Markdown document."""
+    sections = [
+        _md_metadata(report),
+        _md_executive_summary(report),
+        _md_components(report),
+        _md_integrations(report),
+        _md_diagrams(report),
+        _md_test_coverage(report),
+        _md_risk_findings(report),
+        _md_domain_model(report),
+        _md_market_analysis(report),
+        _md_recommendations(report),
+    ]
+
+    content = "\n".join(s for s in sections if s)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content)
+    logger.info("Markdown report written to %s", output_path)
+    return output_path
+
+
+# ---------------------------------------------------------------------------
+# PDF rendering
+# ---------------------------------------------------------------------------
+
+
+def _pdf_metadata_html(report: ArchReport) -> str:
+    """Render metadata as an HTML table."""
+    meta = report.metadata
+    rows = [
+        f"<tr><td>Generated</td><td>{_h(meta.timestamp)}</td></tr>",
+        f"<tr><td>Tool version</td><td>{_h(meta.tool_version)}</td></tr>",
+        f"<tr><td>Schema version</td><td>{_h(meta.schema_version)}</td></tr>",
+    ]
+    if meta.repos_analyzed:
+        repos = ", ".join(_h(r.name) for r in meta.repos_analyzed)
+        rows.append(f"<tr><td>Repositories</td><td>{repos}</td></tr>")
+    llm_status = f"Yes ({_h(meta.llm_model or '')})" if meta.llm_available else "No"
+    rows.append(f"<tr><td>LLM available</td><td>{llm_status}</td></tr>")
+    return f'<table class="meta-table">{"".join(rows)}</table>'
+
+
+def _pdf_executive_summary_html(report: ArchReport) -> str:
+    """Render executive summary as HTML."""
+    parts = [
+        "<h2>Executive Summary</h2>",
+        "<table>",
+        "<tr><th>Metric</th><th>Count</th></tr>",
+        f"<tr><td>Components</td><td>{len(report.components)}</td></tr>",
+        f"<tr><td>Integration points</td><td>{len(report.integration_points)}</td></tr>",
+        f"<tr><td>Dynamic scenarios</td><td>{len(report.dynamic_scenarios)}</td></tr>",
+        f"<tr><td>C4 diagrams</td><td>{len(report.diagrams)}</td></tr>",
+        f"<tr><td>Risk findings</td><td>{len(report.risk_findings)}</td></tr>",
+        f"<tr><td>Recommendations</td><td>{len(report.recommendations)}</td></tr>",
+        "</table>",
+    ]
+    return "\n".join(parts)
+
+
+def _pdf_components_html(report: ArchReport) -> str:
+    """Render components table as HTML."""
+    if not report.components:
+        return "<h2>Components</h2><p>No components discovered.</p>"
+    rows = []
+    for comp in report.components:
+        rows.append(
+            f"<tr><td>{_h(comp.id)}</td><td>{_h(comp.name)}</td>"
+            f"<td>{_h(comp.component_type)}</td>"
+            f"<td>{_h(comp.description)}</td></tr>"
+        )
+    return (
+        "<h2>Components</h2>"
+        "<table><thead><tr><th>ID</th><th>Name</th><th>Type</th>"
+        "<th>Description</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _pdf_integrations_html(report: ArchReport) -> str:
+    """Render integration points table as HTML."""
+    if not report.integration_points:
+        return "<h2>Integration Points</h2><p>No integration points discovered.</p>"
+    rows = []
+    for ip in report.integration_points:
+        protocol = _h(ip.protocol) if ip.protocol else "-"
+        rows.append(
+            f"<tr><td>{_h(ip.source_component_id)}</td>"
+            f"<td>{_h(ip.target_component_id)}</td>"
+            f"<td>{_h(ip.style)}</td><td>{protocol}</td>"
+            f"<td>{_h(ip.description)}</td></tr>"
+        )
+    return (
+        "<h2>Integration Points</h2>"
+        "<table><thead><tr><th>Source</th><th>Target</th>"
+        "<th>Style</th><th>Protocol</th><th>Description</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _pdf_diagrams_html(report: ArchReport) -> str:
+    """Render C4 diagrams as HTML code blocks."""
+    if not report.diagrams:
+        return ""
+    parts = ["<h2>C4 Diagrams</h2>"]
+    for diagram in report.diagrams:
+        parts.append(f"<h3>{_h(diagram.title)}</h3>")
+        if diagram.scope:
+            parts.append(f"<p><em>Scope: {_h(diagram.scope)}</em></p>")
+        parts.append(f"<p><em>Level: {_h(diagram.level)}</em></p>")
+        parts.append(f"<pre><code>{_h(diagram.mermaid)}</code></pre>")
+    return "\n".join(parts)
+
+
+def _pdf_test_coverage_html(report: ArchReport) -> str:
+    """Render test coverage table as HTML."""
+    if not report.test_coverage:
+        return ""
+    rows = []
+    for tc in report.test_coverage:
+        gaps = _h("; ".join(tc.gaps)) if tc.gaps else "-"
+        rows.append(
+            f"<tr><td>{_h(tc.component_id)}</td>"
+            f"<td>{_h(tc.functional_coverage)}</td>"
+            f"<td>{_h(tc.nonfunctional_coverage)}</td>"
+            f"<td>{gaps}</td></tr>"
+        )
+    return (
+        "<h2>Test Coverage</h2>"
+        "<table><thead><tr><th>Component</th><th>Functional</th>"
+        "<th>NFR</th><th>Gaps</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _pdf_risk_findings_html(report: ArchReport) -> str:
+    """Render risk findings grouped by severity as HTML."""
+    if not report.risk_findings:
+        return "<h2>Risk Findings</h2><p>No risks identified.</p>"
+
+    by_severity: dict[str, list] = defaultdict(list)
+    for risk in report.risk_findings:
+        by_severity[risk.severity].append(risk)
+
+    parts = ["<h2>Risk Findings</h2>"]
+    for sev in _SEVERITY_ORDER:
+        group = by_severity.get(sev, [])
+        if not group:
+            continue
+        color = _SEVERITY_COLORS.get(sev, "#666")
+        parts.append(f"<h3>{_h(sev.upper())} ({len(group)})</h3>")
+        for risk in group:
+            parts.append(
+                f'<div class="risk-card" style="border-left-color:{color}">'
+                f"<strong>[{_h(risk.id)}] {_h(risk.title)}</strong><br/>"
+                f"Category: {_h(risk.category)}<br/>"
+                f"{_h(risk.description)}"
+            )
+            if risk.evidence:
+                parts.append(f"<br/>Evidence: {_h(risk.evidence)}")
+            if risk.recommendation:
+                parts.append(f"<br/>Recommendation: {_h(risk.recommendation)}")
+            if risk.affected_component_ids:
+                parts.append(f"<br/>Affected: {_h(', '.join(risk.affected_component_ids))}")
+            parts.append("</div>")
+    return "\n".join(parts)
+
+
+def _pdf_domain_model_html(report: ArchReport) -> str:
+    """Render domain model section as HTML."""
+    if report.domain_model is None:
+        return ""
+
+    dm = report.domain_model
+    parts = ['<div class="section-break"></div>', "<h2>Domain Model</h2>"]
+
+    if dm.entities:
+        rows = []
+        for entity in dm.entities:
+            ctx = _h(entity.bounded_context) if entity.bounded_context else "-"
+            attrs = _h(", ".join(entity.attributes)) if entity.attributes else "-"
+            rows.append(
+                f"<tr><td>{_h(entity.name)}</td>"
+                f"<td>{_h(entity.description)}</td>"
+                f"<td>{ctx}</td><td>{attrs}</td></tr>"
+            )
+        parts.append(
+            "<h3>Entities</h3>"
+            "<table><thead><tr><th>Name</th><th>Description</th>"
+            "<th>Bounded Context</th><th>Attributes</th>"
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        )
+
+    if dm.bounded_contexts:
+        parts.append("<h3>Bounded Contexts</h3>")
+        for bc in dm.bounded_contexts:
+            parts.append(f"<p><strong>{_h(bc.name)}</strong> &mdash; {_h(bc.description)}</p>")
+            if bc.entities:
+                parts.append(f"<p>Entities: {_h(', '.join(bc.entities))}</p>")
+
+    if dm.context_map_mermaid:
+        parts.append("<h3>Context Map</h3>")
+        parts.append(f"<pre><code>{_h(dm.context_map_mermaid)}</code></pre>")
+
+    return "\n".join(parts)
+
+
+def _pdf_market_analysis_html(report: ArchReport) -> str:
+    """Render market analysis section as HTML."""
+    if report.market_analysis is None:
+        return ""
+
+    ma = report.market_analysis
+    parts = ['<div class="section-break"></div>', "<h2>Market Analysis</h2>"]
+
+    parts.append(f"<p><strong>Overall maturity:</strong> {_h(ma.overall_maturity)}</p>")
+    if ma.maturity_rationale:
+        parts.append(f"<p><strong>Rationale:</strong> {_h(ma.maturity_rationale)}</p>")
+    if ma.differentiation_summary:
+        parts.append(
+            f"<p><strong>Differentiation:</strong> {_h(ma.differentiation_summary)}</p>"
+        )
+
+    if ma.comparisons:
+        rows = []
+        for comp in ma.comparisons:
+            rows.append(
+                f"<tr><td>{_h(comp.name)}</td><td>{_h(comp.description)}</td>"
+                f"<td>{_h(comp.maturity)}</td>"
+                f"<td>{_h(comp.relative_positioning)}</td></tr>"
+            )
+        parts.append(
+            "<h3>Comparisons</h3>"
+            "<table><thead><tr><th>Name</th><th>Description</th>"
+            "<th>Maturity</th><th>Positioning</th>"
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        )
+
+    return "\n".join(parts)
+
+
+def _pdf_recommendations_html(report: ArchReport) -> str:
+    """Render recommendations grouped by priority as HTML."""
+    if not report.recommendations:
+        return "<h2>Recommendations</h2><p>No recommendations.</p>"
+
+    by_priority: dict[str, list] = defaultdict(list)
+    for rec in report.recommendations:
+        by_priority[rec.priority].append(rec)
+
+    parts = ["<h2>Recommendations</h2>"]
+    for pri in _PRIORITY_ORDER:
+        group = by_priority.get(pri, [])
+        if not group:
+            continue
+        parts.append(f"<h3>{_h(pri.upper())} ({len(group)})</h3>")
+        for rec in group:
+            parts.append(
+                f'<div class="risk-card">'
+                f"<strong>[{_h(rec.id)}] {_h(rec.title)}</strong><br/>"
+                f"Category: {_h(rec.category)}<br/>"
+                f"{_h(rec.description)}<br/>"
+                f"Rationale: {_h(rec.rationale)}"
+            )
+            if rec.affected_component_ids:
+                parts.append(f"<br/>Affected: {_h(', '.join(rec.affected_component_ids))}")
+            parts.append("</div>")
+    return "\n".join(parts)
+
+
+def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
+    """Render *report* as a PDF document using weasyprint.
+
+    Returns the output path on success, or ``None`` if weasyprint is not
+    importable.
+    """
+    try:
+        import weasyprint  # type: ignore[import-not-found]
+    except ImportError:
+        logger.warning("weasyprint not installed; skipping PDF generation")
+        return None
+
+    sections = [
+        "<h1>Architecture Report</h1>",
+        _pdf_metadata_html(report),
+        _pdf_executive_summary_html(report),
+        '<div class="section-break"></div>',
+        _pdf_components_html(report),
+        '<div class="section-break"></div>',
+        _pdf_integrations_html(report),
+        _pdf_diagrams_html(report),
+        _pdf_test_coverage_html(report),
+        '<div class="section-break"></div>',
+        _pdf_risk_findings_html(report),
+        _pdf_domain_model_html(report),
+        _pdf_market_analysis_html(report),
+        '<div class="section-break"></div>',
+        _pdf_recommendations_html(report),
+    ]
+
+    html_doc = (
+        '<!DOCTYPE html>\n<html lang="en">\n'
+        '<head><meta charset="utf-8">'
+        "<title>Architecture Report</title>\n"
+        f"<style>{_CSS}</style></head>\n"
+        f"<body>{''.join(s for s in sections if s)}</body>\n</html>"
+    )
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    weasyprint.HTML(string=html_doc).write_pdf(str(output_path))
+    logger.info(
+        "PDF report written to %s (%d bytes)",
+        output_path,
+        output_path.stat().st_size,
+    )
+    return output_path
+
+
+# ---------------------------------------------------------------------------
+# Multi-format orchestrator
+# ---------------------------------------------------------------------------
+
+
+def render_arch_report(
+    report: ArchReport,
+    output_dir: Path,
+    formats: list[str] | None = None,
+) -> dict[str, Path | None]:
+    """Render *report* in multiple formats to *output_dir*.
+
+    *formats* defaults to ``["json", "md"]``.  ``"pdf"`` is included only if
+    weasyprint is importable (or if explicitly requested — in which case it
+    will be ``None`` in the result when weasyprint is unavailable).
+
+    Returns a dict mapping format name to the output path (or ``None`` if the
+    format could not be produced).
+    """
+    if formats is None:
+        formats = ["json", "md"]
+        # Auto-include PDF if weasyprint is available
+        try:
+            import weasyprint  # type: ignore[import-not-found] # noqa: F401
+
+            formats.append("pdf")
+        except ImportError:
+            pass
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, Path | None] = {}
+
+    for fmt in formats:
+        if fmt == "json":
+            path = output_dir / "architecture-report.json"
+            results["json"] = render_arch_json(report, path)
+        elif fmt == "md":
+            path = output_dir / "architecture-report.md"
+            results["md"] = render_arch_markdown(report, path)
+        elif fmt == "pdf":
+            path = output_dir / "architecture-report.pdf"
+            results["pdf"] = render_arch_pdf(report, path)
+        else:
+            logger.warning("Unknown format %r; skipping", fmt)
+            results[fmt] = None
+
+    return results
+
+
+__all__ = [
+    "render_arch_json",
+    "render_arch_markdown",
+    "render_arch_pdf",
+    "render_arch_report",
+]
