@@ -513,8 +513,8 @@ def generate_context_map_mermaid(contexts: list[BoundedContext]) -> str:
         node_id = f"ctx{i}"
         name_to_id[ctx.name] = node_id
         entity_count = len(ctx.entities)
-        label = f"{ctx.name}\\n({entity_count} entities)"
-        lines.append(f"    {node_id}[{label}]")
+        label = f"{ctx.name}<br/>({entity_count} entities)"
+        lines.append(f'    {node_id}["{label}"]')
 
     # Edges from upstream -> downstream
     seen_edges: set[tuple[str, str]] = set()
