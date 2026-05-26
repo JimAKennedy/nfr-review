@@ -22,6 +22,8 @@ _SEVERITY_ORDER: tuple[str, ...] = ("critical", "high", "medium", "low", "info")
 
 _MERMAID_ID_RE = re.compile(r"[^a-zA-Z0-9_]")
 
+_MAX_DEP_NODES = 80
+
 
 def _safe_id(ecosystem: str, pkg_name: str) -> str:
     return _MERMAID_ID_RE.sub("_", f"{ecosystem}__{pkg_name}")
@@ -68,20 +70,40 @@ def render_mermaid_tech_overview(tech_dict: dict[str, bool]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _count_unique_tree_nodes(roots: list[TreeNode]) -> int:
+    """Count unique node names across a tree forest."""
+    names: set[str] = set()
+
+    def _walk(node: TreeNode) -> None:
+        if node.name not in names:
+            names.add(node.name)
+            for child in node.children:
+                _walk(child)
+
+    for root in roots:
+        _walk(root)
+    return len(names)
+
+
 def _render_mermaid_tree_edges(
     ecosystem: str,
     node: TreeNode,
     lines: list[str],
     visited: set[tuple[str, str]],
+    rendered_nodes: set[str] | None = None,
 ) -> None:
     parent_id = _safe_id(ecosystem, node.name)
     for child in node.children:
         child_id = _safe_id(ecosystem, child.name)
+        if rendered_nodes is not None and (
+            parent_id not in rendered_nodes or child_id not in rendered_nodes
+        ):
+            continue
         edge_key = (parent_id, child_id)
         if edge_key not in visited:
             visited.add(edge_key)
             lines.append(f"        {parent_id} --> {child_id}")
-        _render_mermaid_tree_edges(ecosystem, child, lines, visited)
+        _render_mermaid_tree_edges(ecosystem, child, lines, visited, rendered_nodes)
 
 
 def render_mermaid_dep_graph(reports: list[EcosystemDepsReport]) -> str:
@@ -100,21 +122,34 @@ def render_mermaid_dep_graph(reports: list[EcosystemDepsReport]) -> str:
             seen: set[str] = set()
             for root in report.tree:
                 _emit_mermaid_tree_nodes(eco, root, lines, seen)
+            if len(seen) >= _MAX_DEP_NODES:
+                trunc_id = _safe_id(eco, "__truncated__")
+                total_unique = _count_unique_tree_nodes(report.tree)
+                remaining = total_unique - len(seen)
+                if remaining > 0:
+                    lines.append(
+                        f"        {trunc_id}[{_quote_label(f'... +{remaining} more')}]"
+                    )
         else:
-            for upgrade in report.upgrades:
+            shown = report.upgrades[:_MAX_DEP_NODES]
+            for upgrade in shown:
                 nid = _safe_id(eco, upgrade.name)
                 ver = upgrade.declared_version or ""
                 if ver:
                     lines.append(f"        {nid}[{_quote_label(f'{upgrade.name}@{ver}')}]")
                 else:
                     lines.append(f"        {nid}[{_quote_label(upgrade.name)}]")
+            remaining = len(report.upgrades) - len(shown)
+            if remaining > 0:
+                trunc_id = _safe_id(eco, "__truncated__")
+                lines.append(f"        {trunc_id}[{_quote_label(f'... +{remaining} more')}]")
 
         lines.append("    end")
 
         if report.tree:
             edge_visited: set[tuple[str, str]] = set()
             for root in report.tree:
-                _render_mermaid_tree_edges(eco, root, lines, edge_visited)
+                _render_mermaid_tree_edges(eco, root, lines, edge_visited, seen)
 
     return "\n".join(lines) + "\n"
 
@@ -124,7 +159,10 @@ def _emit_mermaid_tree_nodes(
     node: TreeNode,
     lines: list[str],
     seen: set[str],
+    max_nodes: int = _MAX_DEP_NODES,
 ) -> None:
+    if len(seen) >= max_nodes:
+        return
     nid = _safe_id(eco, node.name)
     if nid not in seen:
         seen.add(nid)
@@ -133,7 +171,7 @@ def _emit_mermaid_tree_nodes(
         else:
             lines.append(f"        {nid}[{_quote_label(node.name)}]")
     for child in node.children:
-        _emit_mermaid_tree_nodes(eco, child, lines, seen)
+        _emit_mermaid_tree_nodes(eco, child, lines, seen, max_nodes)
 
 
 def render_jdepend_metrics_table(packages: list[dict]) -> str:

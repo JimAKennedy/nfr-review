@@ -168,6 +168,73 @@ def _infer_environment(config_path: Path, repo_path: Path) -> str | None:
     return None
 
 
+def _normalize_env(raw: str) -> str | None:
+    """Normalize a raw environment token to a canonical name, or None if unknown."""
+    lower = raw.lower()
+    if lower in _KNOWN_ENVS:
+        return _ENV_NORMALIZE.get(lower, lower)
+    return None
+
+
+def _infer_env_from_path_parts(parts: list[str]) -> str | None:
+    """Infer environment from directory path segments (e.g. 'overlays/prod')."""
+    lower_parts = [p.lower() for p in parts]
+    for part in lower_parts:
+        if part in _KNOWN_ENVS:
+            return _ENV_NORMALIZE.get(part, part)
+        if part == "overlays":
+            idx = lower_parts.index(part)
+            if idx + 1 < len(lower_parts) and lower_parts[idx + 1] in _KNOWN_ENVS:
+                env = lower_parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+        if part == "environments":
+            idx = lower_parts.index(part)
+            if idx + 1 < len(lower_parts) and lower_parts[idx + 1] in _KNOWN_ENVS:
+                env = lower_parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+    return None
+
+
+def _infer_env_from_k8s_namespace(doc: dict[str, Any]) -> str | None:
+    """Infer environment from a K8s manifest's metadata.namespace field."""
+    metadata = doc.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return None
+    ns = metadata.get("namespace", "")
+    if not ns or not isinstance(ns, str):
+        return None
+    return _normalize_env(ns)
+
+
+def _infer_env_from_k8s_filepath(yaml_file: Path, repo_path: Path) -> str | None:
+    """Infer environment from a K8s manifest's file path."""
+    try:
+        rel = yaml_file.relative_to(repo_path)
+    except ValueError:
+        return None
+    return _infer_env_from_path_parts(list(rel.parts))
+
+
+_COMPOSE_ENV_RE = re.compile(
+    r"(?:docker-)?compose[.-](\w+)\.(?:yml|yaml)$",
+    re.IGNORECASE,
+)
+
+
+def _infer_env_from_compose_filename(compose_file: Path) -> str | None:
+    """Infer environment from compose filename variants.
+
+    Matches patterns like ``docker-compose.prod.yml``, ``compose-staging.yaml``,
+    ``docker-compose.dev.yml``.  Returns None for base filenames and non-env
+    variants (e.g. ``docker-compose.override.yml``).
+    """
+    m = _COMPOSE_ENV_RE.match(compose_file.name)
+    if m:
+        candidate = m.group(1).lower()
+        return _normalize_env(candidate)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Strategy 1: K8s Service -> Deployment mapping
 # ---------------------------------------------------------------------------
@@ -218,6 +285,10 @@ def _discover_k8s_integrations(
                 if not name:
                     continue
 
+                env = _infer_env_from_k8s_namespace(doc) or _infer_env_from_k8s_filepath(
+                    yaml_file, repo_path
+                )
+
                 if kind == "Service":
                     spec = doc.get("spec", {}) or {}
                     selector = spec.get("selector", {}) or {}
@@ -227,6 +298,7 @@ def _discover_k8s_integrations(
                                 "name": name,
                                 "selector": selector,
                                 "namespace": metadata.get("namespace", "default"),
+                                "environment": env,
                             }
                         )
                 elif kind in ("Deployment", "StatefulSet", "DaemonSet"):
@@ -238,7 +310,14 @@ def _discover_k8s_integrations(
                     pod_labels = tmpl_metadata.get("labels", {}) or {}
                     merged_labels = {**labels, **pod_labels}
 
-                    k8s_workloads.append({"name": name, "labels": merged_labels, "kind": kind})
+                    k8s_workloads.append(
+                        {
+                            "name": name,
+                            "labels": merged_labels,
+                            "kind": kind,
+                            "environment": env,
+                        }
+                    )
 
     # Match services to workloads via selector
     for svc in k8s_services:
@@ -258,6 +337,7 @@ def _discover_k8s_integrations(
                     wl_comp = _component_by_k8s_selector(components, workload["labels"])
 
                 if svc_comp and wl_comp and svc_comp.id != wl_comp.id:
+                    intg_env = svc.get("environment") or workload.get("environment")
                     intg_id = _make_id(
                         "intg",
                         f"{effective_name}/k8s/{svc['name']}->{workload['name']}",
@@ -273,6 +353,7 @@ def _discover_k8s_integrations(
                                 f"K8s Service '{svc['name']}' routes to "
                                 f"{workload['kind']} '{workload['name']}'"
                             ),
+                            environment=intg_env,
                         )
                     )
                 elif svc_comp is None and wl_comp:
@@ -299,6 +380,37 @@ _COMPOSE_FILENAMES = (
     "compose.yaml",
 )
 
+_COMPOSE_GLOB_PATTERNS = (
+    "docker-compose.*.yml",
+    "docker-compose.*.yaml",
+    "docker-compose-*.yml",
+    "docker-compose-*.yaml",
+    "compose.*.yml",
+    "compose.*.yaml",
+    "compose-*.yml",
+    "compose-*.yaml",
+)
+
+
+def _find_compose_files(repo_path: Path) -> list[Path]:
+    """Find all compose files, base names first, then env-variant files."""
+    found: list[Path] = []
+    seen: set[str] = set()
+    for name in _COMPOSE_FILENAMES:
+        candidate = repo_path / name
+        if candidate.is_file() and candidate.name not in seen:
+            found.append(candidate)
+            seen.add(candidate.name)
+    for pattern in _COMPOSE_GLOB_PATTERNS:
+        try:
+            for candidate in repo_path.glob(pattern):
+                if candidate.is_file() and candidate.name not in seen:
+                    found.append(candidate)
+                    seen.add(candidate.name)
+        except OSError:
+            continue
+    return found
+
 
 def _discover_compose_integrations(
     repo_path: Path,
@@ -309,11 +421,7 @@ def _discover_compose_integrations(
     integrations: list[IntegrationPoint] = []
     effective_name = repo_name or repo_path.name
 
-    for compose_name in _COMPOSE_FILENAMES:
-        compose_file = repo_path / compose_name
-        if not compose_file.is_file():
-            continue
-
+    for compose_file in _find_compose_files(repo_path):
         content = _safe_read_text(compose_file)
         if not content:
             continue
@@ -325,6 +433,8 @@ def _discover_compose_integrations(
         services = data.get("services", {})
         if not isinstance(services, dict):
             continue
+
+        compose_env = _infer_env_from_compose_filename(compose_file)
 
         seen_pairs: set[tuple[str, str]] = set()
 
@@ -364,6 +474,7 @@ def _discover_compose_integrations(
                         target_component_id=target_comp.id,
                         style="synchronous",
                         description=(f"Compose service '{svc_name}' depends on '{dep_name}'"),
+                        environment=compose_env,
                     )
                 )
 
@@ -394,6 +505,7 @@ def _discover_compose_integrations(
                             target_component_id=target_comp.id,
                             style="synchronous",
                             description=(f"Compose link from '{svc_name}' to '{link_target}'"),
+                            environment=compose_env,
                         )
                     )
 
@@ -443,10 +555,9 @@ def _discover_compose_integrations(
                                     f"Shared Compose network '{net_name}' "
                                     f"connects '{src_name}' and '{tgt_name}'"
                                 ),
+                                environment=compose_env,
                             )
                         )
-
-        break  # Only process first compose file found
 
     if integrations:
         logger.info("Found %d Docker Compose integrations", len(integrations))
@@ -1243,11 +1354,7 @@ def _discover_compose_env_integrations(
     integrations: list[IntegrationPoint] = []
     effective_name = repo_name or repo_path.name
 
-    for compose_name in _COMPOSE_FILENAMES:
-        compose_file = repo_path / compose_name
-        if not compose_file.is_file():
-            continue
-
+    for compose_file in _find_compose_files(repo_path):
         content = _safe_read_text(compose_file)
         if not content:
             continue
@@ -1260,6 +1367,7 @@ def _discover_compose_env_integrations(
         if not isinstance(services, dict):
             continue
 
+        compose_env = _infer_env_from_compose_filename(compose_file)
         service_names = {s.lower() for s in services}
 
         # Load .env file if present for variable resolution
@@ -1328,10 +1436,9 @@ def _discover_compose_env_integrations(
                             f"Compose service '{svc_name}' references "
                             f"'{target_name}' via env {env_key}"
                         ),
+                        environment=compose_env,
                     )
                 )
-
-        break  # Only process first compose file found
 
     if integrations:
         logger.info("Found %d Docker Compose env-var integrations", len(integrations))
@@ -1491,6 +1598,10 @@ def _discover_k8s_env_integrations(
                 if source_comp is None:
                     continue
 
+                k8s_env = _infer_env_from_k8s_namespace(doc) or _infer_env_from_k8s_filepath(
+                    yaml_file, repo_path
+                )
+
                 # Extract env vars from all containers
                 containers = _extract_k8s_containers(doc)
                 for env_key, env_val in containers:
@@ -1528,6 +1639,7 @@ def _discover_k8s_env_integrations(
                                 f"K8s {kind} '{workload_name}' references "
                                 f"'{target_name}' via env {env_key}"
                             ),
+                            environment=k8s_env,
                         )
                     )
 

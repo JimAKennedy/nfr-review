@@ -10,6 +10,7 @@ allowing callers to degrade gracefully.
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import subprocess  # nosec B404 — args are hardcoded tool names, not user input
@@ -17,6 +18,8 @@ import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_MERMAID_CONFIG = {"maxTextSize": 200_000}
 
 
 def render_mermaid_to_png(
@@ -52,15 +55,30 @@ def render_mermaid_to_png(
         tmp.write(mermaid_text)
         tmp_path = Path(tmp.name)
 
-    cmd = [mmdc, "-i", str(tmp_path), "-o", str(output_path), "-b", "transparent"]
-    if scale > 1:
-        cmd.extend(["-s", str(scale)])
-    if width is not None:
-        cmd.extend(["-w", str(width)])
-    if height is not None:
-        cmd.extend(["-H", str(height)])
-
+    cfg_path: Path | None = None
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as cfg_tmp:
+            json.dump(_MERMAID_CONFIG, cfg_tmp)
+            cfg_path = Path(cfg_tmp.name)
+
+        cmd = [
+            mmdc,
+            "-i",
+            str(tmp_path),
+            "-o",
+            str(output_path),
+            "-b",
+            "transparent",
+            "-c",
+            str(cfg_path),
+        ]
+        if scale > 1:
+            cmd.extend(["-s", str(scale)])
+        if width is not None:
+            cmd.extend(["-w", str(width)])
+        if height is not None:
+            cmd.extend(["-H", str(height)])
+
         subprocess.run(  # nosec B603
             cmd,
             capture_output=True,
@@ -78,6 +96,8 @@ def render_mermaid_to_png(
         return None
     finally:
         tmp_path.unlink(missing_ok=True)
+        if cfg_path is not None:
+            cfg_path.unlink(missing_ok=True)
 
     if output_path.exists() and output_path.stat().st_size > 0:
         return output_path
@@ -108,9 +128,24 @@ def render_mermaid_to_svg(
         tmp.write(mermaid_text)
         tmp_path = Path(tmp.name)
 
+    cfg_path: Path | None = None
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as cfg_tmp:
+            json.dump(_MERMAID_CONFIG, cfg_tmp)
+            cfg_path = Path(cfg_tmp.name)
+
         subprocess.run(  # nosec B603
-            [mmdc, "-i", str(tmp_path), "-o", str(output_path), "-b", "transparent"],
+            [
+                mmdc,
+                "-i",
+                str(tmp_path),
+                "-o",
+                str(output_path),
+                "-b",
+                "transparent",
+                "-c",
+                str(cfg_path),
+            ],
             capture_output=True,
             timeout=timeout,
             check=True,
@@ -126,6 +161,8 @@ def render_mermaid_to_svg(
         return None
     finally:
         tmp_path.unlink(missing_ok=True)
+        if cfg_path is not None:
+            cfg_path.unlink(missing_ok=True)
 
     if output_path.exists() and output_path.stat().st_size > 0:
         return output_path
