@@ -85,19 +85,13 @@ issues command (nfr-review issues <scan|sync>):
 
   issues scan:  Engine.run() --> file issues for red/high-severity findings
   issues sync:  JSONL input  --> create/update/close GitHub issues
-
-all command (nfr-review all <target1> <target2> ...):
-
-  Phase 1:  run_arch_review(all targets)  -->  architecture report (cross-repo)
-  Phase 2:  run_report_pipeline(target)   -->  NFR report (per target, loop)
-  Output:   {repo}-architecture.* + {repo}-nfr-review-{ts}.* per repo
 ```
 
 ## Module Responsibility Map
 
 | Module | Owns | Does NOT own |
 |--------|------|-------------|
-| `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `arch`, `deps`, `issues`, `init`, `all`, `list-rules`, `explain`, `version`), `run_report_pipeline()` reusable pipeline, exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
+| `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `arch`, `deps`, `issues`, `init`, `list-rules`, `explain`, `version`), exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
 | `config.py` | YAML loading, Pydantic validation, `Config`/`RulesConfig`/`CollectorsConfig` models | Tech detection, defaults beyond schema defaults |
 | `detect.py` | File-system probing for 18 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
