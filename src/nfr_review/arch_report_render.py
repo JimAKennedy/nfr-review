@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import base64
 import html
 import logging
+import struct
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -71,6 +74,8 @@ _CSS = (
     ".risk-card { margin: 0.5em 0; padding: 8px 12px;"
     " border-left: 4px solid #ddd; background: #fafafa; }\n"
     ".section-break { page-break-before: always; }\n"
+    ".diagram-page { page-break-before: always; margin: 0; padding: 0; }\n"
+    ".diagram-img { display: block; margin: 0.5em auto 0 auto; }\n"
     ".meta-table { width: auto; }\n"
     ".meta-table td { border: none; padding: 2px 12px 2px 0; }\n"
     ".meta-table td:first-child { font-weight: 600; color: #555; }\n"
@@ -80,6 +85,54 @@ _CSS = (
 def _h(text: str) -> str:
     """HTML-escape a string."""
     return html.escape(str(text))
+
+
+_PAGE_CONTENT_W_MM = 210.0 - 30  # A4 width minus 1.5 cm margins each side
+_PAGE_CONTENT_H_MM = 297.0 - 40  # A4 height minus 2 cm margins top/bottom
+_DIAGRAM_MAX_H_MM = _PAGE_CONTENT_H_MM - 25  # room for heading + padding
+
+
+def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
+    if raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
+        return None
+    w, h = struct.unpack(">II", raw[16:24])
+    return w, h
+
+
+def _embed_png(path: Path) -> str:
+    """Base64-embed a PNG, sized to fit within a single A4 page."""
+    raw = path.read_bytes()
+    data = base64.b64encode(raw).decode("ascii")
+    dims = _png_dimensions(raw)
+    style = ""
+    if dims:
+        img_w, img_h = dims
+        if img_w > 0 and img_h > 0:
+            aspect = img_w / img_h
+            max_aspect = _PAGE_CONTENT_W_MM / _DIAGRAM_MAX_H_MM
+            if aspect >= max_aspect:
+                fw = _PAGE_CONTENT_W_MM
+                fh = fw / aspect
+            else:
+                fh = _DIAGRAM_MAX_H_MM
+                fw = fh * aspect
+            style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
+    return f'<img class="diagram-img" src="data:image/png;base64,{data}"{style} />'
+
+
+def _render_mermaid_to_img(mermaid_text: str) -> str | None:
+    """Render mermaid text to a high-res inline PNG, or ``None`` on failure."""
+    from nfr_review.output.render import render_mermaid_to_png
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=3)
+        if result is None:
+            return None
+        return _embed_png(tmp_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -462,16 +515,22 @@ def _pdf_integrations_html(report: ArchReport) -> str:
 
 
 def _pdf_diagrams_html(report: ArchReport) -> str:
-    """Render C4 diagrams as HTML code blocks."""
+    """Render C4 diagrams as high-res PNG images, one per page."""
     if not report.diagrams:
         return ""
-    parts = ["<h2>C4 Diagrams</h2>"]
+    parts: list[str] = []
     for diagram in report.diagrams:
-        parts.append(f"<h3>{_h(diagram.title)}</h3>")
+        parts.append('<div class="diagram-page">')
+        parts.append(f"<h2>{_h(diagram.title)}</h2>")
         if diagram.scope:
             parts.append(f"<p><em>Scope: {_h(diagram.scope)}</em></p>")
         parts.append(f"<p><em>Level: {_h(diagram.level)}</em></p>")
-        parts.append(f"<pre><code>{_h(diagram.mermaid)}</code></pre>")
+        img_html = _render_mermaid_to_img(diagram.mermaid)
+        if img_html:
+            parts.append(img_html)
+        else:
+            parts.append(f"<pre><code>{_h(diagram.mermaid)}</code></pre>")
+        parts.append("</div>")
     return "\n".join(parts)
 
 
@@ -562,8 +621,14 @@ def _pdf_domain_model_html(report: ArchReport) -> str:
                 parts.append(f"<p>Entities: {_h(', '.join(bc.entities))}</p>")
 
     if dm.context_map_mermaid:
+        parts.append('<div class="diagram-page">')
         parts.append("<h3>Context Map</h3>")
-        parts.append(f"<pre><code>{_h(dm.context_map_mermaid)}</code></pre>")
+        img_html = _render_mermaid_to_img(dm.context_map_mermaid)
+        if img_html:
+            parts.append(img_html)
+        else:
+            parts.append(f"<pre><code>{_h(dm.context_map_mermaid)}</code></pre>")
+        parts.append("</div>")
 
     return "\n".join(parts)
 
@@ -638,7 +703,7 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
     importable.
     """
     try:
-        import weasyprint  # type: ignore[import-not-found]
+        import weasyprint  # type: ignore[import-not-found,import-untyped]
     except ImportError:
         logger.warning("weasyprint not installed; skipping PDF generation")
         return None
@@ -702,7 +767,7 @@ def render_arch_report(
         formats = ["json", "md"]
         # Auto-include PDF if weasyprint is available
         try:
-            import weasyprint  # type: ignore[import-not-found] # noqa: F401
+            import weasyprint  # type: ignore[import-not-found,import-untyped] # noqa: F401
 
             formats.append("pdf")
         except ImportError:
