@@ -1818,13 +1818,6 @@ def init_cmd(target: Path, dry_run: bool) -> None:
     default=False,
     help="Skip LLM-based analysis (domain model enhancement, market comparison).",
 )
-@click.option(
-    "--diagram-mode",
-    type=click.Choice(["hierarchical", "flat"]),
-    default="hierarchical",
-    show_default=True,
-    help="Component diagram layout: hierarchical (overview + detail) or flat.",
-)
 def arch_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -1833,7 +1826,6 @@ def arch_cmd(
     output_dir: Path,
     output_formats: tuple[str, ...],
     no_llm: bool,
-    diagram_mode: str,
 ) -> None:
     """Generate architecture documentation report."""
     from nfr_review.arch_orchestrator import run_arch_review
@@ -1878,7 +1870,6 @@ def arch_cmd(
             target_list,
             repo_names=repo_names,
             skip_llm=no_llm,
-            diagram_mode=diagram_mode,
             progress=_progress,
         )
     except Exception as exc:  # noqa: BLE001
@@ -1909,226 +1900,6 @@ def arch_cmd(
     for fmt, path in produced.items():
         parts.append(f"{fmt}={path}")
     _ts_echo(" ".join(parts))
-
-
-@cli.command(
-    "all",
-    help="Run architecture review (cross-repo) + NFR report (per-repo) in one go. "
-    "Accepts one or more target directories.",
-)
-@click.argument(
-    "targets",
-    nargs=-1,
-    required=True,
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
-)
-@click.option(
-    "-v",
-    "--verbose",
-    count=True,
-    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
-)
-@click.option(
-    "-q",
-    "--quiet",
-    is_flag=True,
-    help="Suppress warnings (ERROR level only).",
-)
-@click.option(
-    "--log-file",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Write diagnostics to FILE instead of stderr.",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=Path("reports"),
-    show_default=True,
-    help="Directory where all output files are written.",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Path to nfr-review.yaml (used for each NFR report). "
-    "Defaults to per-repo auto-detection.",
-)
-@click.option("--no-arch", is_flag=True, default=False, help="Skip the architecture report.")
-@click.option("--no-tests", is_flag=True, default=False, help="Skip pytest execution.")
-@click.option("--no-deps", is_flag=True, default=False, help="Skip dependency tree analysis.")
-@click.option(
-    "--no-diagrams",
-    is_flag=True,
-    default=False,
-    help="Suppress Mermaid diagram sections in NFR reports.",
-)
-@click.option("--no-pdf", is_flag=True, default=False, help="Skip PDF report generation.")
-@click.option(
-    "--no-summary",
-    is_flag=True,
-    default=False,
-    help="Skip LLM executive summary generation.",
-)
-@click.option(
-    "--test-timeout",
-    type=int,
-    default=420,
-    show_default=True,
-    help="Maximum seconds to wait for pytest per repo.",
-)
-@click.option(
-    "--no-score",
-    is_flag=True,
-    default=False,
-    help="Skip design maturity score computation.",
-)
-@click.option(
-    "--max-resolve-rounds",
-    type=int,
-    default=None,
-    help="Maximum resolver iterations for dependency analysis.",
-)
-@click.option(
-    "--no-llm",
-    is_flag=True,
-    default=False,
-    help="Skip LLM-based analysis in architecture report.",
-)
-@click.option(
-    "--diagram-mode",
-    type=click.Choice(["hierarchical", "flat"]),
-    default="hierarchical",
-    show_default=True,
-    help="Architecture diagram layout.",
-)
-@click.option(
-    "--exclude-tests/--include-tests",
-    default=True,
-    help="Exclude test and fixture directories from NFR analysis (default: exclude).",
-)
-def all_cmd(
-    targets: tuple[Path, ...],
-    verbose: int,
-    quiet: bool,
-    log_file: Path | None,
-    output_dir: Path,
-    config_path: Path | None,
-    no_arch: bool,
-    no_tests: bool,
-    no_deps: bool,
-    no_diagrams: bool,
-    no_pdf: bool,
-    no_summary: bool,
-    test_timeout: int,
-    no_score: bool,
-    max_resolve_rounds: int | None,
-    no_llm: bool,
-    diagram_mode: str,
-    exclude_tests: bool,
-) -> None:
-    """Run architecture review across all targets, then NFR report per target."""
-    if verbose and quiet:
-        raise click.UsageError("--verbose and --quiet are mutually exclusive")
-    _configure_logging(verbose, quiet, log_file)
-
-    target_list = list(targets)
-    repo_names = [_repo_name(t) for t in target_list]
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-
-    if not quiet:
-        click.echo(f"\nnfr-review all v{__version__}", err=True)
-        click.echo(f"Targets:    {', '.join(str(t) for t in target_list)}", err=True)
-        click.echo(f"Started:    {_timestamp()}", err=True)
-        click.echo("", err=True)
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    arch_result: dict[str, Any] | None = None
-
-    # Phase 1: Architecture review (cross-repo)
-    if not no_arch:
-        from nfr_review.arch_orchestrator import run_arch_review
-        from nfr_review.arch_report_render import render_arch_report
-
-        t0 = _phase("Running architecture review (all targets)", quiet=quiet)
-        try:
-            report = run_arch_review(
-                target_list,
-                repo_names=repo_names,
-                skip_llm=no_llm,
-                diagram_mode=diagram_mode,
-                progress=lambda msg: _ts_echo(msg, quiet=quiet),
-            )
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"error: architecture review failed: {exc}", err=True)
-            raise click.exceptions.Exit(1) from exc
-        _phase_done("Architecture review", t0, quiet=quiet)
-
-        t0 = _phase("Rendering architecture output", quiet=quiet)
-        try:
-            arch_files = render_arch_report(report, output_dir, formats=None)
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"error: arch report rendering failed: {exc}", err=True)
-            raise click.exceptions.Exit(1) from exc
-        _phase_done("Architecture output", t0, quiet=quiet)
-
-        arch_result = {
-            "components": len(report.components),
-            "integrations": len(report.integration_points),
-            "risks": len(report.risk_findings),
-            "recommendations": len(report.recommendations),
-            "files": {k: v for k, v in arch_files.items() if v is not None},
-        }
-
-    # Phase 2: NFR report per target
-    report_results: list[tuple[str, ReportResult]] = []
-    for target, repo in zip(target_list, repo_names, strict=True):
-        if not quiet:
-            click.echo("", err=True)
-        _phase(f"Running NFR report for {repo}", quiet=quiet)
-        stem = f"{repo}-nfr-review-{timestamp}"
-        result = run_report_pipeline(
-            target,
-            output_dir=output_dir,
-            config_path=config_path,
-            no_tests=no_tests,
-            no_deps=no_deps,
-            no_diagrams=no_diagrams,
-            pdf=not no_pdf,
-            no_summary=no_summary,
-            test_timeout=test_timeout,
-            show_score=not no_score,
-            max_resolve_rounds=max_resolve_rounds,
-            include_tests=not exclude_tests,
-            quiet=quiet,
-            stem=stem,
-        )
-        report_results.append((repo, result))
-
-    # Summary
-    if not quiet:
-        click.echo("", err=True)
-    click.echo("=" * 60, err=True)
-    _ts_echo("nfr-review all — complete")
-    if arch_result:
-        _ts_echo(
-            f"  arch: components={arch_result['components']} "
-            f"integrations={arch_result['integrations']} "
-            f"risks={arch_result['risks']} "
-            f"recommendations={arch_result['recommendations']}"
-        )
-        for fmt, path in arch_result["files"].items():
-            _ts_echo(f"    {fmt}={path}")
-    for repo, rr in report_results:
-        _ts_echo(
-            f"  {repo}: findings={rr.total_findings} "
-            f"(nfr={rr.nfr_count} hygiene={rr.hygiene_count})"
-        )
-        _ts_echo(f"    md={rr.md_path} csv={rr.csv_path}")
-        if rr.pdf_path:
-            _ts_echo(f"    pdf={rr.pdf_path}")
-    click.echo("=" * 60, err=True)
 
 
 @cli.command("version", help="Print the nfr-review version and exit.")
