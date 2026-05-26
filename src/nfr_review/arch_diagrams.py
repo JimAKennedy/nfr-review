@@ -336,16 +336,21 @@ def render_c4_container(
             component_ids=[],
         )
 
-    # Separate containers from libraries
+    # Separate containers, infrastructure, and libraries
     containers: list[Component] = []
+    infra_by_env: dict[str, list[Component]] = {}
     libraries: list[Component] = []
     for c in components:
-        if c.component_type in _CONTAINER_TYPES or c.component_type == "external":
+        if c.environment is not None:
+            infra_by_env.setdefault(c.environment, []).append(c)
+        elif c.component_type in _CONTAINER_TYPES or c.component_type == "external":
             containers.append(c)
-        else:
+        elif c.component_type == "library":
             libraries.append(c)
+        else:
+            containers.append(c)
 
-    # Group by boundary
+    # Group app containers by boundary
     boundary_groups: dict[str, list[Component]] = {}
     for c in containers:
         grp = _primary_boundary(c)
@@ -368,6 +373,24 @@ def render_c4_container(
         _render_nodes_with_package_nesting(
             lines, grp_name, grp_comps, "        ", _container_node
         )
+        lines.append("    end")
+
+    # Emit infrastructure grouped by environment
+    _ENV_DISPLAY: dict[str, str] = {
+        "prod": "Production Infrastructure",
+        "staging": "Staging Infrastructure",
+        "test": "Test Infrastructure",
+        "dev": "Development Infrastructure",
+    }
+    for env_name in sorted(infra_by_env, key=lambda e: (e != "prod", e)):
+        env_comps = infra_by_env[env_name]
+        sg_id = _safe_id(f"infra_{env_name}")
+        label = _ENV_DISPLAY.get(env_name, f"{env_name.title()} Infrastructure")
+        lines.append(f"    subgraph {sg_id}[{_quote_label(label)}]")
+        for c in env_comps:
+            cid = _safe_id(c.id)
+            node_label = f"{c.name}<br/>{c.component_type}"
+            lines.append(f"        {_node_declaration(cid, node_label, c.component_type)}")
         lines.append("    end")
 
     # Emit library subgraphs

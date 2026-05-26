@@ -14,7 +14,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from ruamel.yaml import YAML, YAMLError
 
@@ -22,6 +22,10 @@ from nfr_review.arch_models import Component, IntegrationPoint, IntegrationStyle
 from nfr_review.path_filter import should_exclude_path
 
 logger = logging.getLogger(__name__)
+
+ComponentType = Literal[
+    "service", "library", "database", "queue", "gateway", "ui", "worker", "external"
+]
 
 
 # ---------------------------------------------------------------------------
@@ -92,6 +96,76 @@ def _component_by_k8s_selector(
 def _find_or_create_infra_id(name: str) -> str:
     """Generate a stable ID for an inferred infrastructure component."""
     return _make_id("infra", name)
+
+
+# ---------------------------------------------------------------------------
+# Environment inference from config filenames
+# ---------------------------------------------------------------------------
+
+_ENV_PROFILE_RE = re.compile(r"application[-_](\w+)\.(?:yml|yaml|properties)$", re.IGNORECASE)
+_APPSETTINGS_ENV_RE = re.compile(r"appsettings\.(\w+)\.json$", re.IGNORECASE)
+_DOTENV_ENV_RE = re.compile(r"\.env\.(\w+)$", re.IGNORECASE)
+
+_KNOWN_ENVS = frozenset(
+    {
+        "dev",
+        "development",
+        "local",
+        "test",
+        "testing",
+        "ci",
+        "staging",
+        "stage",
+        "uat",
+        "sit",
+        "prod",
+        "production",
+        "demo",
+        "sandbox",
+        "perf",
+        "qa",
+    }
+)
+
+_ENV_NORMALIZE: dict[str, str] = {
+    "development": "dev",
+    "local": "dev",
+    "testing": "test",
+    "ci": "test",
+    "stage": "staging",
+    "uat": "staging",
+    "sit": "staging",
+    "production": "prod",
+}
+
+
+def _infer_environment(config_path: Path, repo_path: Path) -> str | None:
+    """Infer the deployment environment from a config file path.
+
+    Returns a normalized environment name (dev/test/staging/prod) or None
+    if no environment can be determined (base config).
+    """
+    name = config_path.name
+
+    for pattern in (_ENV_PROFILE_RE, _APPSETTINGS_ENV_RE, _DOTENV_ENV_RE):
+        m = pattern.match(name)
+        if m:
+            profile = m.group(1).lower()
+            if profile in _KNOWN_ENVS:
+                return _ENV_NORMALIZE.get(profile, profile)
+
+    rel = config_path.relative_to(repo_path)
+    parts = [p.lower() for p in rel.parts]
+    for part in parts:
+        if part in _KNOWN_ENVS:
+            return _ENV_NORMALIZE.get(part, part)
+        if part == "overlays":
+            idx = parts.index(part)
+            if idx + 1 < len(parts) and parts[idx + 1] in _KNOWN_ENVS:
+                env = parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -783,6 +857,9 @@ def _discover_config_integrations(
         # Find the owning component for this config file
         owner_comp = _find_owning_component(config_file, repo_path, components)
 
+        # Infer environment from the config filename/path
+        env = _infer_environment(config_file, repo_path)
+
         # JDBC connections
         for match in _JDBC_PATTERN.finditer(content):
             db_type = match.group(1).lower()
@@ -813,6 +890,7 @@ def _discover_config_integrations(
                     protocol=f"jdbc:{db_type}",
                     description=f"JDBC connection to {db_type} at '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -845,6 +923,7 @@ def _discover_config_integrations(
                     protocol="redis",
                     description=f"Redis connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -877,6 +956,7 @@ def _discover_config_integrations(
                     protocol="amqp",
                     description=f"AMQP connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -909,6 +989,7 @@ def _discover_config_integrations(
                     protocol="mongodb",
                     description=f"MongoDB connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -941,6 +1022,7 @@ def _discover_config_integrations(
                     protocol="kafka",
                     description=f"Kafka broker at '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -973,6 +1055,7 @@ def _discover_config_integrations(
                     protocol="postgresql",
                     description=f"PostgreSQL connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -1005,6 +1088,7 @@ def _discover_config_integrations(
                     protocol="mysql",
                     description=f"MySQL connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -1053,6 +1137,7 @@ def _discover_config_integrations(
                         data_flow="bidirectional"
                         if style in ("shared_database", "message_queue")
                         else None,
+                        environment=env,
                     )
                 )
 
@@ -1099,6 +1184,7 @@ def _discover_config_integrations(
                     style="api_call",
                     protocol="http",
                     description=f"HTTP endpoint at '{host}'",
+                    environment=env,
                 )
             )
 
@@ -2589,7 +2675,77 @@ def discover_integrations_multi_repo(
     return result
 
 
+_PROTOCOL_TO_COMPONENT_TYPE: dict[str, str] = {
+    "postgresql": "database",
+    "mysql": "database",
+    "mongodb": "database",
+    "redis": "database",
+    "cassandra": "database",
+    "neo4j": "database",
+    "h2": "database",
+    "elasticsearch": "database",
+    "kafka": "queue",
+    "amqp": "queue",
+    "nats": "queue",
+    "smtp": "external",
+    "http": "external",
+    "https": "external",
+    "grpc": "external",
+}
+
+
+def materialize_infra_components(
+    components: list[Component],
+    integrations: list[IntegrationPoint],
+) -> list[Component]:
+    """Create Component objects for infrastructure targets not already known.
+
+    Integration discovery creates stable IDs via ``_find_or_create_infra_id``
+    but never materializes them as real Component objects. This means diagram
+    edges to databases/queues are silently dropped because the target node
+    doesn't exist.
+
+    This function scans all integration endpoints, finds IDs with no matching
+    component, and creates lightweight Component stubs so diagrams can render
+    them.  Environment is inferred from the integration that references them.
+    """
+    known_ids = {c.id for c in components}
+    new_components: dict[str, Component] = {}
+
+    for intg in integrations:
+        for target_id in (intg.source_component_id, intg.target_component_id):
+            if target_id in known_ids or target_id in new_components:
+                continue
+            if not target_id.startswith("infra-"):
+                continue
+
+            slug = target_id.split("-", 1)[1].rsplit("-", 1)[0]
+            name = slug.replace("-", " ").title()
+
+            comp_type: ComponentType = "database"
+            if intg.protocol:
+                proto_key = intg.protocol.split(":")[0].lower()
+                raw = _PROTOCOL_TO_COMPONENT_TYPE.get(proto_key, "external")
+                comp_type = cast(ComponentType, raw)
+
+            new_components[target_id] = Component(
+                id=target_id,
+                name=name,
+                description=f"Infrastructure: {name}",
+                component_type=comp_type,
+                environment=intg.environment,
+            )
+
+    if new_components:
+        for comp in new_components.values():
+            components.append(comp)
+        logger.info("Materialized %d infrastructure components", len(new_components))
+
+    return components
+
+
 __all__ = [
     "discover_integrations",
     "discover_integrations_multi_repo",
+    "materialize_infra_components",
 ]
