@@ -1,0 +1,1018 @@
+{
+  "$defs": {
+    "ArchReportMetadata": {
+      "additionalProperties": false,
+      "description": "Provenance and scope metadata for the architecture report.",
+      "properties": {
+        "tool_version": {
+          "title": "Tool Version",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "timestamp": {
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "repos_analyzed": {
+          "items": {
+            "$ref": "#/$defs/RepoInfo"
+          },
+          "title": "Repos Analyzed",
+          "type": "array"
+        },
+        "llm_available": {
+          "default": false,
+          "title": "Llm Available",
+          "type": "boolean"
+        },
+        "llm_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llm Model"
+        }
+      },
+      "required": [
+        "tool_version",
+        "timestamp"
+      ],
+      "title": "ArchReportMetadata",
+      "type": "object"
+    },
+    "BoundedContext": {
+      "additionalProperties": false,
+      "description": "A bounded context in the domain model.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "entities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Entities",
+          "type": "array"
+        },
+        "component_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Component Ids",
+          "type": "array"
+        },
+        "upstream_contexts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Upstream Contexts",
+          "type": "array"
+        },
+        "downstream_contexts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Downstream Contexts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "BoundedContext",
+      "type": "object"
+    },
+    "C4Diagram": {
+      "additionalProperties": false,
+      "description": "A C4 architecture diagram at a specific level.",
+      "properties": {
+        "level": {
+          "enum": [
+            "context",
+            "container",
+            "component",
+            "code"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "mermaid": {
+          "title": "Mermaid",
+          "type": "string"
+        },
+        "component_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Component Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "level",
+        "title",
+        "mermaid"
+      ],
+      "title": "C4Diagram",
+      "type": "object"
+    },
+    "Component": {
+      "additionalProperties": false,
+      "description": "A major architectural component discovered in the solution.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "component_type": {
+          "enum": [
+            "service",
+            "library",
+            "database",
+            "queue",
+            "gateway",
+            "ui",
+            "worker",
+            "external"
+          ],
+          "title": "Component Type",
+          "type": "string"
+        },
+        "boundaries": {
+          "items": {
+            "$ref": "#/$defs/ComponentBoundary"
+          },
+          "title": "Boundaries",
+          "type": "array"
+        },
+        "responsibilities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Responsibilities",
+          "type": "array"
+        },
+        "tech_stack": {
+          "items": {
+            "$ref": "#/$defs/TechStackEntry"
+          },
+          "title": "Tech Stack",
+          "type": "array"
+        },
+        "repo": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo"
+        },
+        "c4_level": {
+          "default": "component",
+          "enum": [
+            "context",
+            "container",
+            "component",
+            "code"
+          ],
+          "title": "C4 Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "component_type"
+      ],
+      "title": "Component",
+      "type": "object"
+    },
+    "ComponentBoundary": {
+      "additionalProperties": false,
+      "description": "How a component is bounded within the codebase.",
+      "properties": {
+        "boundary_type": {
+          "enum": [
+            "package",
+            "module",
+            "directory",
+            "build_target",
+            "repo"
+          ],
+          "title": "Boundary Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "repo": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repo"
+        }
+      },
+      "required": [
+        "boundary_type",
+        "path"
+      ],
+      "title": "ComponentBoundary",
+      "type": "object"
+    },
+    "ComponentTestCoverage": {
+      "additionalProperties": false,
+      "description": "Test coverage assessment for a component.",
+      "properties": {
+        "component_id": {
+          "title": "Component Id",
+          "type": "string"
+        },
+        "functional_coverage": {
+          "default": "none",
+          "enum": [
+            "none",
+            "minimal",
+            "partial",
+            "adequate",
+            "comprehensive"
+          ],
+          "title": "Functional Coverage",
+          "type": "string"
+        },
+        "nonfunctional_coverage": {
+          "default": "none",
+          "enum": [
+            "none",
+            "minimal",
+            "partial",
+            "adequate",
+            "comprehensive"
+          ],
+          "title": "Nonfunctional Coverage",
+          "type": "string"
+        },
+        "test_types_present": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Test Types Present",
+          "type": "array"
+        },
+        "gaps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Gaps",
+          "type": "array"
+        },
+        "evidence_locators": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Locators",
+          "type": "array"
+        }
+      },
+      "required": [
+        "component_id"
+      ],
+      "title": "ComponentTestCoverage",
+      "type": "object"
+    },
+    "DomainEntity": {
+      "additionalProperties": false,
+      "description": "An entity in the inferred domain model.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "attributes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Attributes",
+          "type": "array"
+        },
+        "relationships": {
+          "items": {
+            "$ref": "#/$defs/EntityRelationship"
+          },
+          "title": "Relationships",
+          "type": "array"
+        },
+        "bounded_context": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bounded Context"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "DomainEntity",
+      "type": "object"
+    },
+    "DomainModelSection": {
+      "additionalProperties": false,
+      "description": "Domain model analysis section (requires LLM).",
+      "properties": {
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/DomainEntity"
+          },
+          "title": "Entities",
+          "type": "array"
+        },
+        "bounded_contexts": {
+          "items": {
+            "$ref": "#/$defs/BoundedContext"
+          },
+          "title": "Bounded Contexts",
+          "type": "array"
+        },
+        "context_map_mermaid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Context Map Mermaid"
+        }
+      },
+      "title": "DomainModelSection",
+      "type": "object"
+    },
+    "DynamicScenario": {
+      "additionalProperties": false,
+      "description": "A key dynamic interaction scenario through the architecture.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "trigger": {
+          "title": "Trigger",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ScenarioStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "components_involved": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Components Involved",
+          "type": "array"
+        },
+        "integrations_involved": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Integrations Involved",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "trigger"
+      ],
+      "title": "DynamicScenario",
+      "type": "object"
+    },
+    "EntityRelationship": {
+      "additionalProperties": false,
+      "description": "A relationship between domain entities.",
+      "properties": {
+        "target_entity": {
+          "title": "Target Entity",
+          "type": "string"
+        },
+        "relationship_type": {
+          "enum": [
+            "has_many",
+            "has_one",
+            "belongs_to",
+            "many_to_many",
+            "references",
+            "extends"
+          ],
+          "title": "Relationship Type",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target_entity",
+        "relationship_type"
+      ],
+      "title": "EntityRelationship",
+      "type": "object"
+    },
+    "IntegrationPoint": {
+      "additionalProperties": false,
+      "description": "An integration between two components.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source_component_id": {
+          "title": "Source Component Id",
+          "type": "string"
+        },
+        "target_component_id": {
+          "title": "Target Component Id",
+          "type": "string"
+        },
+        "style": {
+          "enum": [
+            "synchronous",
+            "asynchronous",
+            "event_driven",
+            "shared_database",
+            "file_transfer",
+            "api_call",
+            "message_queue",
+            "rpc"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Protocol"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "data_flow": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data Flow"
+        },
+        "is_cross_repo": {
+          "default": false,
+          "title": "Is Cross Repo",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source_component_id",
+        "target_component_id",
+        "style"
+      ],
+      "title": "IntegrationPoint",
+      "type": "object"
+    },
+    "MarketAnalysisSection": {
+      "additionalProperties": false,
+      "description": "Market comparison section (requires LLM).",
+      "properties": {
+        "comparisons": {
+          "items": {
+            "$ref": "#/$defs/MarketComparison"
+          },
+          "title": "Comparisons",
+          "type": "array"
+        },
+        "overall_maturity": {
+          "default": "initial",
+          "enum": [
+            "initial",
+            "developing",
+            "defined",
+            "managed",
+            "optimizing"
+          ],
+          "title": "Overall Maturity",
+          "type": "string"
+        },
+        "maturity_rationale": {
+          "default": "",
+          "title": "Maturity Rationale",
+          "type": "string"
+        },
+        "differentiation_summary": {
+          "default": "",
+          "title": "Differentiation Summary",
+          "type": "string"
+        }
+      },
+      "title": "MarketAnalysisSection",
+      "type": "object"
+    },
+    "MarketComparison": {
+      "additionalProperties": false,
+      "description": "Comparison with a similar solution on the market.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "similarities": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Similarities",
+          "type": "array"
+        },
+        "differences": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Differences",
+          "type": "array"
+        },
+        "maturity": {
+          "default": "initial",
+          "enum": [
+            "initial",
+            "developing",
+            "defined",
+            "managed",
+            "optimizing"
+          ],
+          "title": "Maturity",
+          "type": "string"
+        },
+        "relative_positioning": {
+          "default": "",
+          "title": "Relative Positioning",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "MarketComparison",
+      "type": "object"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "description": "A recommendation for human reviewers or additional testing.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "human_review",
+            "additional_testing",
+            "architecture_improvement",
+            "documentation_gap"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "priority": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "rationale": {
+          "title": "Rationale",
+          "type": "string"
+        },
+        "affected_component_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Component Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "priority",
+        "title",
+        "description",
+        "rationale"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RepoInfo": {
+      "additionalProperties": false,
+      "description": "Information about a repository that was analyzed.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "git_sha": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Sha"
+        },
+        "git_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Branch"
+        }
+      },
+      "required": [
+        "path",
+        "name"
+      ],
+      "title": "RepoInfo",
+      "type": "object"
+    },
+    "RiskFinding": {
+      "additionalProperties": false,
+      "description": "An architecture-level risk finding.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "performance_bottleneck",
+            "resilience_threat",
+            "change_hotspot",
+            "scalability_limit",
+            "security_surface",
+            "operational_risk"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "affected_component_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Component Ids",
+          "type": "array"
+        },
+        "affected_integration_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Affected Integration Ids",
+          "type": "array"
+        },
+        "evidence": {
+          "default": "",
+          "title": "Evidence",
+          "type": "string"
+        },
+        "recommendation": {
+          "default": "",
+          "title": "Recommendation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "severity",
+        "title",
+        "description"
+      ],
+      "title": "RiskFinding",
+      "type": "object"
+    },
+    "ScenarioStep": {
+      "additionalProperties": false,
+      "description": "A single step in a dynamic scenario.",
+      "properties": {
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "from_component_id": {
+          "title": "From Component Id",
+          "type": "string"
+        },
+        "to_component_id": {
+          "title": "To Component Id",
+          "type": "string"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "data": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Data"
+        }
+      },
+      "required": [
+        "sequence",
+        "from_component_id",
+        "to_component_id",
+        "action"
+      ],
+      "title": "ScenarioStep",
+      "type": "object"
+    },
+    "TechStackEntry": {
+      "additionalProperties": false,
+      "description": "A technology used by a component.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "TechStackEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Root model for a complete architecture documentation report.",
+  "properties": {
+    "schema_version": {
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/ArchReportMetadata"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/Component"
+      },
+      "title": "Components",
+      "type": "array"
+    },
+    "integration_points": {
+      "items": {
+        "$ref": "#/$defs/IntegrationPoint"
+      },
+      "title": "Integration Points",
+      "type": "array"
+    },
+    "dynamic_scenarios": {
+      "items": {
+        "$ref": "#/$defs/DynamicScenario"
+      },
+      "title": "Dynamic Scenarios",
+      "type": "array"
+    },
+    "test_coverage": {
+      "items": {
+        "$ref": "#/$defs/ComponentTestCoverage"
+      },
+      "title": "Test Coverage",
+      "type": "array"
+    },
+    "diagrams": {
+      "items": {
+        "$ref": "#/$defs/C4Diagram"
+      },
+      "title": "Diagrams",
+      "type": "array"
+    },
+    "risk_findings": {
+      "items": {
+        "$ref": "#/$defs/RiskFinding"
+      },
+      "title": "Risk Findings",
+      "type": "array"
+    },
+    "domain_model": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DomainModelSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "market_analysis": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MarketAnalysisSection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recommendations": {
+      "items": {
+        "$ref": "#/$defs/Recommendation"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "metadata"
+  ],
+  "title": "ArchReport",
+  "type": "object"
+}
