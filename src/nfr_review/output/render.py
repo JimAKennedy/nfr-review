@@ -25,11 +25,16 @@ def render_mermaid_to_png(
     *,
     timeout: int = 30,
     scale: int = 1,
+    width: int | None = None,
+    height: int | None = None,
 ) -> Path | None:
     """Render Mermaid diagram text to a PNG file via ``mmdc``.
 
     *scale* sets the output scale factor (``-s``).  Use 3 for high-DPI
     PDFs that need to look sharp when zoomed.
+
+    *width* / *height* set the viewport dimensions in pixels (``-w``/``-H``).
+    Larger values give complex diagrams more room for node layout.
 
     Returns *output_path* on success, ``None`` if mmdc is not available.
     """
@@ -50,6 +55,10 @@ def render_mermaid_to_png(
     cmd = [mmdc, "-i", str(tmp_path), "-o", str(output_path), "-b", "transparent"]
     if scale > 1:
         cmd.extend(["-s", str(scale)])
+    if width is not None:
+        cmd.extend(["-w", str(width)])
+    if height is not None:
+        cmd.extend(["-H", str(height)])
 
     try:
         subprocess.run(  # nosec B603

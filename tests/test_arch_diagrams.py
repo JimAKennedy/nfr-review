@@ -7,10 +7,13 @@ from __future__ import annotations
 import pytest
 
 from nfr_review.arch_diagrams import (
+    _package_boundary,
     _safe_id,
     generate_all_diagrams,
     render_c4_code,
     render_c4_component,
+    render_c4_component_detail,
+    render_c4_component_overview,
     render_c4_container,
     render_c4_context,
 )
@@ -460,12 +463,12 @@ class TestRenderC4Code:
 
 
 class TestGenerateAllDiagrams:
-    def test_returns_three_diagrams(
+    def test_returns_three_diagrams_flat(
         self,
         all_components: list[Component],
         all_integrations: list[IntegrationPoint],
     ) -> None:
-        diagrams = generate_all_diagrams(all_components, all_integrations)
+        diagrams = generate_all_diagrams(all_components, all_integrations, diagram_mode="flat")
         assert len(diagrams) == 3
         assert diagrams[0].level == "context"
         assert diagrams[1].level == "container"
@@ -535,6 +538,291 @@ class TestGenerateAllDiagrams:
         diagrams = generate_all_diagrams(all_components, all_integrations, coverage=None)
         container_diag = diagrams[1]
         assert "classDef" not in container_diag.mermaid
+
+
+# ---------------------------------------------------------------------------
+# Component overview diagram tests
+# ---------------------------------------------------------------------------
+
+
+class TestRenderC4ComponentOverview:
+    def test_empty_components(self) -> None:
+        result = render_c4_component_overview([], [])
+        assert result.level == "component"
+        assert result.scope == "overview"
+        assert result.component_ids == []
+
+    def test_groups_collapsed(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        result = render_c4_component_overview(all_components, all_integrations)
+        assert result.scope == "overview"
+        assert "subgraph" not in result.mermaid
+        assert "services/api" in result.mermaid
+        assert "infra/db" in result.mermaid
+        assert "infra/queue" in result.mermaid
+
+    def test_inter_group_edges(
+        self,
+        api_service: Component,
+        db_component: Component,
+        sync_integration: IntegrationPoint,
+    ) -> None:
+        result = render_c4_component_overview(
+            [api_service, db_component],
+            [sync_integration],
+        )
+        assert "-->" in result.mermaid
+
+    def test_intra_group_edges_excluded(self) -> None:
+        comp_a = Component(
+            id="svc-a",
+            name="A",
+            description="A",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+        )
+        comp_b = Component(
+            id="svc-b",
+            name="B",
+            description="B",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+        )
+        integ = IntegrationPoint(
+            id="int-ab",
+            source_component_id="svc-a",
+            target_component_id="svc-b",
+            style="synchronous",
+        )
+        result = render_c4_component_overview([comp_a, comp_b], [integ])
+        assert "-->" not in result.mermaid
+
+    def test_deduplicates_inter_group_edges(
+        self,
+        api_service: Component,
+        db_component: Component,
+    ) -> None:
+        integ1 = IntegrationPoint(
+            id="int-1",
+            source_component_id="svc-api",
+            target_component_id="db-main",
+            style="synchronous",
+        )
+        integ2 = IntegrationPoint(
+            id="int-2",
+            source_component_id="svc-api",
+            target_component_id="db-main",
+            style="synchronous",
+        )
+        result = render_c4_component_overview(
+            [api_service, db_component],
+            [integ1, integ2],
+        )
+        assert result.mermaid.count("-->") == 1
+
+    def test_group_count_in_label(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        result = render_c4_component_overview(all_components, all_integrations)
+        assert "(1)" in result.mermaid
+
+    def test_root_named_sensibly(self) -> None:
+        comp = Component(
+            id="svc-root",
+            name="Root Service",
+            description="Lives at root",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
+        )
+        result = render_c4_component_overview([comp], [])
+        assert "Project Root" in result.mermaid
+
+    def test_dot_slash_root_normalized(self) -> None:
+        comp = Component(
+            id="svc-root",
+            name="Root Service",
+            description="Lives at root",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="./")],
+        )
+        result = render_c4_component_overview([comp], [])
+        assert "Project Root" in result.mermaid
+        assert "./" not in result.mermaid
+
+    def test_dot_slash_prefix_stripped(self) -> None:
+        comp = Component(
+            id="svc-web",
+            name="Web Service",
+            description="Frontend",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="./src/web")],
+        )
+        result = render_c4_component_overview([comp], [])
+        assert "src/web" in result.mermaid
+        assert "./src/web" not in result.mermaid
+
+
+# ---------------------------------------------------------------------------
+# Component detail diagram tests
+# ---------------------------------------------------------------------------
+
+
+class TestRenderC4ComponentDetail:
+    def test_empty_focus_group(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        result = render_c4_component_detail(
+            all_components, all_integrations, "nonexistent/path"
+        )
+        assert result.component_ids == []
+
+    def test_focus_group_expanded(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        result = render_c4_component_detail(all_components, all_integrations, "services/api")
+        assert "subgraph" in result.mermaid
+        assert "API Service" in result.mermaid
+        assert result.scope == "services/api"
+        assert "svc-api" in result.component_ids
+
+    def test_external_groups_as_stubs(
+        self,
+        api_service: Component,
+        db_component: Component,
+        sync_integration: IntegrationPoint,
+    ) -> None:
+        result = render_c4_component_detail(
+            [api_service, db_component],
+            [sync_integration],
+            "services/api",
+        )
+        assert "infra/db" in result.mermaid
+        assert "stroke-dasharray" in result.mermaid
+
+    def test_internal_edges_shown(self) -> None:
+        comp_a = Component(
+            id="svc-a",
+            name="A",
+            description="A",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+        )
+        comp_b = Component(
+            id="svc-b",
+            name="B",
+            description="B",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+        )
+        integ = IntegrationPoint(
+            id="int-ab",
+            source_component_id="svc-a",
+            target_component_id="svc-b",
+            style="synchronous",
+            protocol="gRPC",
+        )
+        result = render_c4_component_detail([comp_a, comp_b], [integ], "services")
+        assert "-->" in result.mermaid
+        assert "gRPC" in result.mermaid
+
+    def test_cross_edges_to_stubs(
+        self,
+        api_service: Component,
+        db_component: Component,
+        queue_component: Component,
+        sync_integration: IntegrationPoint,
+        async_integration: IntegrationPoint,
+    ) -> None:
+        result = render_c4_component_detail(
+            [api_service, db_component, queue_component],
+            [sync_integration, async_integration],
+            "services/api",
+        )
+        assert "-->" in result.mermaid
+        assert "-.->" in result.mermaid
+
+    def test_title_includes_group_name(
+        self,
+        api_service: Component,
+    ) -> None:
+        result = render_c4_component_detail([api_service], [], "services/api")
+        assert "services/api" in result.title
+
+
+# ---------------------------------------------------------------------------
+# generate_all_diagrams hierarchical mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateAllDiagramsHierarchical:
+    def test_hierarchical_mode_multi_group(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        diagrams = generate_all_diagrams(
+            all_components, all_integrations, diagram_mode="hierarchical"
+        )
+        levels = [d.level for d in diagrams]
+        assert levels[0] == "context"
+        assert levels[1] == "container"
+        assert any(d.scope == "overview" for d in diagrams)
+        assert len(diagrams) > 3
+
+    def test_flat_mode_unchanged(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        diagrams = generate_all_diagrams(all_components, all_integrations, diagram_mode="flat")
+        assert len(diagrams) == 3
+        assert diagrams[2].level == "component"
+        assert diagrams[2].scope is None
+
+    def test_single_group_falls_back_to_flat(self) -> None:
+        comps = [
+            Component(
+                id="svc-a",
+                name="A",
+                description="A",
+                component_type="service",
+                boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+            ),
+            Component(
+                id="svc-b",
+                name="B",
+                description="B",
+                component_type="service",
+                boundaries=[ComponentBoundary(boundary_type="directory", path="services")],
+            ),
+        ]
+        diagrams = generate_all_diagrams(comps, [], diagram_mode="hierarchical")
+        assert len(diagrams) == 3
+
+    def test_detail_count_matches_groups(
+        self,
+        all_components: list[Component],
+        all_integrations: list[IntegrationPoint],
+    ) -> None:
+        from nfr_review.arch_diagrams import _group_components_by_boundary
+
+        groups = _group_components_by_boundary(all_components)
+        diagrams = generate_all_diagrams(
+            all_components, all_integrations, diagram_mode="hierarchical"
+        )
+        detail_diagrams = [
+            d for d in diagrams if d.level == "component" and d.scope != "overview"
+        ]
+        assert len(detail_diagrams) == len(groups)
 
 
 # ---------------------------------------------------------------------------
@@ -765,3 +1053,161 @@ class TestEdgeCases:
         container = diagrams[1]
         # Should pick "minimal" (worse of the two)
         assert "covMinimal" in container.mermaid
+
+
+# ---------------------------------------------------------------------------
+# Package boundary helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestPackageBoundary:
+    def test_returns_package_path(self) -> None:
+        comp = Component(
+            id="svc-a",
+            name="A",
+            description="A",
+            component_type="service",
+            boundaries=[
+                ComponentBoundary(boundary_type="module", path="module-a"),
+                ComponentBoundary(boundary_type="package", path="com.example"),
+            ],
+        )
+        assert _package_boundary(comp) == "com.example"
+
+    def test_returns_none_without_package(self) -> None:
+        comp = Component(
+            id="svc-a",
+            name="A",
+            description="A",
+            component_type="service",
+            boundaries=[ComponentBoundary(boundary_type="module", path="module-a")],
+        )
+        assert _package_boundary(comp) is None
+
+    def test_returns_none_no_boundaries(self) -> None:
+        comp = Component(
+            id="svc-a",
+            name="A",
+            description="A",
+            component_type="service",
+        )
+        assert _package_boundary(comp) is None
+
+
+# ---------------------------------------------------------------------------
+# Package nesting in diagram tests
+# ---------------------------------------------------------------------------
+
+
+def _make_pkg_component(
+    comp_id: str,
+    name: str,
+    boundary_path: str,
+    package: str | None = None,
+    component_type: str = "service",
+    repo: str = "my-app",
+) -> Component:
+    """Helper to create a component with optional package boundary."""
+    boundaries = [ComponentBoundary(boundary_type="module", path=boundary_path, repo=repo)]
+    if package is not None:
+        boundaries.append(ComponentBoundary(boundary_type="package", path=package, repo=repo))
+    return Component(
+        id=comp_id,
+        name=name,
+        description=f"{name} component",
+        component_type=component_type,
+        boundaries=boundaries,
+        repo=repo,
+    )
+
+
+class TestPackageNestingInComponent:
+    def test_components_with_packages_produce_nested_subgraphs(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Order API", "services", package="com.example")
+        result = render_c4_component([comp_a, comp_b], [])
+        assert "com.example" in result.mermaid
+        assert result.mermaid.count("subgraph") == 2  # outer group + package
+
+    def test_different_packages_produce_separate_subgraphs(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Connector", "services", package="org.other")
+        result = render_c4_component([comp_a, comp_b], [])
+        assert "com.example" in result.mermaid
+        assert "org.other" in result.mermaid
+        assert result.mermaid.count("subgraph") == 3  # outer group + 2 packages
+
+    def test_mixed_package_and_no_package(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Legacy", "services", package=None)
+        result = render_c4_component([comp_a, comp_b], [])
+        assert "com.example" in result.mermaid
+        assert "User API" in result.mermaid
+        assert "Legacy" in result.mermaid
+
+    def test_no_packages_renders_flat(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "A", "services", package=None)
+        comp_b = _make_pkg_component("svc-b", "B", "services", package=None)
+        result = render_c4_component([comp_a, comp_b], [])
+        assert result.mermaid.count("subgraph") == 1  # only the boundary group
+
+    def test_edges_still_work_with_nesting(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Order API", "services", package="com.example")
+        integ = IntegrationPoint(
+            id="int-ab",
+            source_component_id="svc-a",
+            target_component_id="svc-b",
+            style="synchronous",
+            protocol="gRPC",
+        )
+        result = render_c4_component([comp_a, comp_b], [integ])
+        assert "-->" in result.mermaid
+        assert "gRPC" in result.mermaid
+
+
+class TestPackageNestingInContainer:
+    def test_container_nests_by_package(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Order API", "services", package="com.example")
+        result = render_c4_container([comp_a, comp_b], [])
+        assert "com.example" in result.mermaid
+
+    def test_container_no_packages_flat(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "A", "services", package=None)
+        comp_b = _make_pkg_component("svc-b", "B", "services", package=None)
+        result = render_c4_container([comp_a, comp_b], [])
+        # Only the boundary group subgraph, no package subgraphs
+        assert result.mermaid.count("subgraph") == 1
+
+
+class TestPackageNestingInDetail:
+    def test_detail_nests_by_package(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Order API", "services", package="com.example")
+        result = render_c4_component_detail([comp_a, comp_b], [], "services")
+        assert "com.example" in result.mermaid
+        assert result.mermaid.count("subgraph") == 2  # focus group + package
+
+    def test_detail_multiple_packages(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Connector", "services", package="org.other")
+        result = render_c4_component_detail([comp_a, comp_b], [], "services")
+        assert "com.example" in result.mermaid
+        assert "org.other" in result.mermaid
+        assert result.mermaid.count("subgraph") == 3  # focus group + 2 packages
+
+
+class TestPackageNestingInCode:
+    def test_code_nests_by_package(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "User API", "services", package="com.example")
+        comp_b = _make_pkg_component("svc-b", "Order API", "services", package="com.example")
+        result = render_c4_code([comp_a, comp_b])
+        assert "com.example" in result.mermaid
+        assert result.mermaid.count("subgraph") == 2  # dir group + package
+
+    def test_code_no_packages_flat(self) -> None:
+        comp_a = _make_pkg_component("svc-a", "A", "services", package=None)
+        comp_b = _make_pkg_component("svc-b", "B", "services", package=None)
+        result = render_c4_code([comp_a, comp_b])
+        assert result.mermaid.count("subgraph") == 1

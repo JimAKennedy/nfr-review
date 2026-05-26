@@ -1745,6 +1745,13 @@ def init_cmd(target: Path, dry_run: bool) -> None:
     default=False,
     help="Skip LLM-based analysis (domain model enhancement, market comparison).",
 )
+@click.option(
+    "--diagram-mode",
+    type=click.Choice(["hierarchical", "flat"]),
+    default="hierarchical",
+    show_default=True,
+    help="Component diagram layout: hierarchical (overview + detail) or flat.",
+)
 def arch_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -1753,6 +1760,7 @@ def arch_cmd(
     output_dir: Path,
     output_formats: tuple[str, ...],
     no_llm: bool,
+    diagram_mode: str,
 ) -> None:
     """Generate architecture documentation report."""
     from nfr_review.arch_orchestrator import run_arch_review
@@ -1797,6 +1805,7 @@ def arch_cmd(
             target_list,
             repo_names=repo_names,
             skip_llm=no_llm,
+            diagram_mode=diagram_mode,
             progress=_progress,
         )
     except Exception as exc:  # noqa: BLE001
