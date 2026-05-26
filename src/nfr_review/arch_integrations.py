@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-import yaml
+from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.arch_models import Component, IntegrationPoint, IntegrationStyle
 from nfr_review.path_filter import should_exclude_path
@@ -37,16 +37,18 @@ def _safe_read_text(path: Path) -> str | None:
 
 
 def _safe_yaml_load(text: str) -> Any:
+    _yaml = YAML(typ="safe")
     try:
-        return yaml.safe_load(text)
-    except yaml.YAMLError:
+        return _yaml.load(text)
+    except YAMLError:
         return None
 
 
 def _safe_yaml_load_all(text: str) -> list[Any]:
+    _yaml = YAML(typ="safe")
     try:
-        return [doc for doc in yaml.safe_load_all(text) if doc is not None]
-    except yaml.YAMLError:
+        return [doc for doc in _yaml.load_all(text) if doc is not None]
+    except YAMLError:
         return []
 
 
