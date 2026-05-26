@@ -7,10 +7,14 @@ branding:
   color: "blue"
 
 inputs:
-  target:
-    description: "Path to the repository to scan"
+  path:
+    description: "Path to the repository to scan (alias: target)"
     required: false
     default: "."
+  target:
+    description: "Deprecated — use 'path' instead"
+    required: false
+    default: ""
   config:
     description: "Path to nfr-review.yaml config file"
     required: false
@@ -19,10 +23,18 @@ inputs:
     description: "Path to baseline JSONL for diff mode"
     required: false
     default: ""
-  fail-on-red:
-    description: "Whether to fail the check when red findings are present"
+  fail-on:
+    description: "Failure threshold: 'red' (default), 'red+amber', or 'never'"
     required: false
-    default: "true"
+    default: "red"
+  fail-on-red:
+    description: "Deprecated — use 'fail-on' instead. Kept for backward compat."
+    required: false
+    default: ""
+  sarif:
+    description: "Override path for SARIF output file"
+    required: false
+    default: ""
   sarif-upload:
     description: "Whether to upload SARIF to GitHub Security tab"
     required: false
@@ -31,18 +43,42 @@ inputs:
     description: "Whether to post a PR comment with results"
     required: false
     default: "true"
-  file-issues:
-    description: "Whether to file GitHub issues for red findings"
+  create-issues:
+    description: "Whether to sync GitHub issues for findings"
     required: false
     default: "false"
+  file-issues:
+    description: "Deprecated — use 'create-issues' instead"
+    required: false
+    default: ""
   issue-severity:
     description: "Minimum severity for issue filing (critical, high, medium, low, info)"
     required: false
     default: "high"
+  rag-min:
+    description: "Minimum RAG level for issue filing (red, amber, green)"
+    required: false
+    default: "amber"
+  extra-labels:
+    description: "Comma-separated extra labels for filed issues"
+    required: false
+    default: ""
+  first-run-cap:
+    description: "Max issues to create on the first sync (prevents flooding)"
+    required: false
+    default: "25"
   python-version:
-    description: "Python version to use"
+    description: "Python version to use (pip mode only, ignored in container mode)"
     required: false
     default: "3.12"
+  execution:
+    description: "Execution mode: 'pip' installs via pip, 'container' uses pre-built Docker image"
+    required: false
+    default: "pip"
+  image:
+    description: "Docker image for container mode (default: ghcr.io/jimakennedy/nfr-review:latest)"
+    required: false
+    default: "ghcr.io/jimakennedy/nfr-review:latest"
 
 outputs:
   findings-count:
@@ -60,106 +96,171 @@ outputs:
   exit-code:
     description: "Exit code of the nfr-review run (0=pass, 2=threshold exceeded)"
     value: ${{ steps.scan.outputs.exit-code }}
-  issues-filed:
-    description: "Number of GitHub issues filed for red findings"
-    value: ${{ steps.file-issues.outputs.issues-filed }}
+  sarif-path:
+    description: "Path to the generated SARIF file (empty if sarif-upload is false)"
+    value: ${{ steps.scan.outputs.sarif-path }}
+  jsonl-path:
+    description: "Path to the generated JSONL findings file"
+    value: ${{ steps.scan.outputs.jsonl-path }}
+  issues-created:
+    description: "Number of GitHub issues created"
+    value: ${{ steps.sync-issues.outputs.issues-created }}
+  issues-updated:
+    description: "Number of GitHub issues updated"
+    value: ${{ steps.sync-issues.outputs.issues-updated }}
+  issues-closed:
+    description: "Number of GitHub issues closed"
+    value: ${{ steps.sync-issues.outputs.issues-closed }}
 
 runs:
   using: "composite"
   steps:
-    # ── 1. Set up Python ────────────────────────────────────────────────
+    # ── 1. Set up Python (pip mode only) ────────────────────────────────
     - name: Set up Python
+      if: inputs.execution != 'container'
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
       with:
         python-version: ${{ inputs.python-version }}
 
-    # ── 2. Install nfr-review from the action's own repository ──────────
+    # ── 2. Install nfr-review (pip mode only) ───────────────────────────
     - name: Install nfr-review
+      if: inputs.execution != 'container'
       shell: bash
       run: pip install "${{ github.action_path }}"
 
-    # ── 3. Run nfr-review scan ──────────────────────────────────────────
+    # ── 3. Pull container image (container mode only) ───────────────────
+    - name: Pull nfr-review image
+      if: inputs.execution == 'container'
+      shell: bash
+      run: docker pull "${{ inputs.image }}"
+
+    # ── 4. Resolve backward-compat inputs ───────────────────────────────
+    - name: Resolve inputs
+      id: resolve
+      shell: bash
+      run: |
+        # path vs deprecated target
+        SCAN_PATH="${{ inputs.path }}"
+        if [ -n "${{ inputs.target }}" ]; then
+          SCAN_PATH="${{ inputs.target }}"
+        fi
+        echo "scan-path=${SCAN_PATH}" >> "$GITHUB_OUTPUT"
+
+        # fail-on vs deprecated fail-on-red
+        # When fail-on-red is explicitly set and fail-on is at its default,
+        # map the old boolean to the new enum.
+        FAIL_ON="${{ inputs.fail-on }}"
+        FAIL_ON_RED="${{ inputs.fail-on-red }}"
+        if [ -n "$FAIL_ON_RED" ]; then
+          if [ "$FAIL_ON_RED" = "false" ]; then
+            FAIL_ON="never"
+          elif [ "$FAIL_ON_RED" = "true" ]; then
+            FAIL_ON="red"
+          fi
+        fi
+        echo "fail-on=${FAIL_ON}" >> "$GITHUB_OUTPUT"
+
+        # create-issues vs deprecated file-issues
+        CREATE_ISSUES="${{ inputs.create-issues }}"
+        FILE_ISSUES="${{ inputs.file-issues }}"
+        if [ -n "$FILE_ISSUES" ] && [ "$CREATE_ISSUES" = "false" ]; then
+          CREATE_ISSUES="$FILE_ISSUES"
+        fi
+        echo "create-issues=${CREATE_ISSUES}" >> "$GITHUB_OUTPUT"
+
+    # ── 5. Run nfr-review scan ──────────────────────────────────────────
     - name: Run nfr-review scan
       id: scan
       shell: bash
       run: |
         set +e
 
-        ARGS=("run" "${{ inputs.target }}")
-
-        if [ -n "${{ inputs.config }}" ]; then
-          ARGS+=("--config" "${{ inputs.config }}")
-        fi
+        SCAN_PATH="${{ steps.resolve.outputs.scan-path }}"
 
         JSONL_PATH="${{ runner.temp }}/nfr-review-output.jsonl"
-        ARGS+=("--jsonl" "$JSONL_PATH")
 
-        nfr-review "${ARGS[@]}"
-        EXIT_CODE=$?
+        # Determine SARIF path
+        SARIF_PATH=""
+        if [ "${{ inputs.sarif-upload }}" = "true" ] || [ -n "${{ inputs.sarif }}" ]; then
+          if [ -n "${{ inputs.sarif }}" ]; then
+            SARIF_PATH="${{ inputs.sarif }}"
+          else
+            SARIF_PATH="${{ runner.temp }}/nfr-review.sarif"
+          fi
+        fi
+
+        if [ "${{ inputs.execution }}" = "container" ]; then
+          # ── Container mode ──────────────────────────────────────────
+          # Map host paths to container mount points:
+          #   $GITHUB_WORKSPACE -> /repo
+          #   $RUNNER_TEMP      -> /output
+          CONTAINER_SCAN="/repo"
+          if [ "$SCAN_PATH" != "." ] && [ "$SCAN_PATH" != "./" ]; then
+            CONTAINER_SCAN="/repo/${SCAN_PATH#./}"
+          fi
+
+          DOCKER_ARGS=("run" "--rm")
+          DOCKER_ARGS+=("--user" "$(id -u):$(id -g)")
+          DOCKER_ARGS+=("-e" "HOME=/tmp")
+          DOCKER_ARGS+=("-v" "${{ github.workspace }}:/repo")
+          DOCKER_ARGS+=("-v" "${{ runner.temp }}:/output")
+          DOCKER_ARGS+=("${{ inputs.image }}")
+          DOCKER_ARGS+=("run" "$CONTAINER_SCAN")
+          DOCKER_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+
+          if [ -n "${{ inputs.config }}" ]; then
+            DOCKER_ARGS+=("--config" "/repo/${{ inputs.config }}")
+          fi
+
+          if [ -n "${{ inputs.baseline }}" ]; then
+            DOCKER_ARGS+=("--baseline" "/repo/${{ inputs.baseline }}")
+          fi
+
+          if [ -n "$SARIF_PATH" ]; then
+            SARIF_BASENAME="$(basename "$SARIF_PATH")"
+            DOCKER_ARGS+=("--sarif" "/output/${SARIF_BASENAME}")
+            SARIF_PATH="${{ runner.temp }}/${SARIF_BASENAME}"
+          fi
+
+          docker "${DOCKER_ARGS[@]}"
+          EXIT_CODE=$?
+        else
+          # ── Pip mode ────────────────────────────────────────────────
+          ARGS=("run" "${SCAN_PATH}")
+
+          if [ -n "${{ inputs.config }}" ]; then
+            ARGS+=("--config" "${{ inputs.config }}")
+          fi
+
+          if [ -n "${{ inputs.baseline }}" ]; then
+            ARGS+=("--baseline" "${{ inputs.baseline }}")
+          fi
+
+          ARGS+=("--jsonl" "$JSONL_PATH")
+
+          if [ -n "$SARIF_PATH" ]; then
+            ARGS+=("--sarif" "$SARIF_PATH")
+          fi
+
+          nfr-review "${ARGS[@]}"
+          EXIT_CODE=$?
+        fi
 
         echo "exit-code=${EXIT_CODE}" >> "$GITHUB_OUTPUT"
         echo "jsonl-path=${JSONL_PATH}" >> "$GITHUB_OUTPUT"
-
-        # Always succeed here — we gate on red findings in a later step.
-        exit 0
-
-    # ── 4. Generate SARIF (if requested) ────────────────────────────────
-    - name: Generate SARIF
-      if: inputs.sarif-upload == 'true'
-      id: sarif
-      shell: bash
-      run: |
-        SARIF_PATH="${{ runner.temp }}/nfr-review.sarif"
-        ARGS=("run" "${{ inputs.target }}" "--jsonl" "/dev/null")
-
-        if [ -n "${{ inputs.config }}" ]; then
-          ARGS+=("--config" "${{ inputs.config }}")
-        fi
-
-        # The report command supports --sarif; for the action we re-run
-        # with SARIF output.  A future version may add --sarif to run.
-        # For now, generate from the existing JSONL.
-        python -c "
-        import json, sys
-        from pathlib import Path
-        # Minimal SARIF from JSONL — the full sarif.py module can be used
-        # once it is wired to the run command.
-        jsonl = Path('${{ steps.scan.outputs.jsonl-path }}')
-        sarif = {
-            '\$schema': 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json',
-            'version': '2.1.0',
-            'runs': [{
-                'tool': {'driver': {'name': 'nfr-review', 'version': '0.1.0', 'rules': []}},
-                'results': []
-            }]
-        }
-        if jsonl.exists():
-            for line in jsonl.read_text().splitlines():
-                rec = json.loads(line)
-                if rec.get('record_type') != 'finding' or rec.get('rag') == 'skipped':
-                    continue
-                level_map = {'red': 'error', 'amber': 'warning', 'green': 'note'}
-                sarif['runs'][0]['results'].append({
-                    'ruleId': rec.get('rule_id', ''),
-                    'level': level_map.get(rec.get('rag', ''), 'note'),
-                    'message': {'text': rec.get('summary', '')},
-                    'locations': [{'physicalLocation': {
-                        'artifactLocation': {'uri': rec.get('evidence_locator', 'unknown')},
-                    }}],
-                })
-        Path('${SARIF_PATH}').write_text(json.dumps(sarif, indent=2))
-        "
-
         echo "sarif-path=${SARIF_PATH}" >> "$GITHUB_OUTPUT"
 
-    # ── 5. Upload SARIF ─────────────────────────────────────────────────
+        # Always succeed here — we gate on findings in a later step.
+        exit 0
+
+    # ── 6. Upload SARIF ─────────────────────────────────────────────────
     - name: Upload SARIF
       if: inputs.sarif-upload == 'true'
       uses: github/codeql-action/upload-sarif@v4
       with:
-        sarif_file: ${{ steps.sarif.outputs.sarif-path }}
+        sarif_file: ${{ steps.scan.outputs.sarif-path }}
 
-    # ── 6. Parse JSONL and set output counts ────────────────────────────
+    # ── 7. Parse JSONL and set output counts ────────────────────────────
     - name: Parse results
       id: parse
       shell: bash
@@ -173,7 +274,7 @@ runs:
           exit 0
         fi
 
-        python -c "
+        python3 -c "
         import json
         from pathlib import Path
 
@@ -190,7 +291,7 @@ runs:
         print(f'green-count={counts[\"green\"]}')
         " >> "$GITHUB_OUTPUT"
 
-    # ── 7. Generate PR comment ──────────────────────────────────────────
+    # ── 8. Generate PR comment ──────────────────────────────────────────
     - name: Generate comment body
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       id: comment-body
@@ -200,7 +301,7 @@ runs:
         BODY_PATH="${{ runner.temp }}/nfr-review-comment.md"
 
         if [ -f "$JSONL_PATH" ]; then
-          python "${{ github.action_path }}/scripts/action_comment.py" "$JSONL_PATH" > "$BODY_PATH"
+          python3 "${{ github.action_path }}/scripts/action_comment.py" "$JSONL_PATH" > "$BODY_PATH"
         else
           echo "<!-- nfr-review-comment -->" > "$BODY_PATH"
           echo "## NFR Review Results" >> "$BODY_PATH"
@@ -210,7 +311,7 @@ runs:
 
         echo "body-path=${BODY_PATH}" >> "$GITHUB_OUTPUT"
 
-    # ── 8. Post / update sticky PR comment ──────────────────────────────
+    # ── 9. Post / update sticky PR comment ──────────────────────────────
     - name: Post PR comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       uses: peter-evans/create-or-update-comment@v5
@@ -219,34 +320,98 @@ runs:
         body-path: ${{ steps.comment-body.outputs.body-path }}
         comment-tag: nfr-review-comment
 
-    # ── 9. File GitHub issues for red findings ────────────────────────────
-    - name: File remediation issues
-      if: inputs.file-issues == 'true'
-      id: file-issues
+    # ── 10. Sync GitHub issues ──────────────────────────────────────────
+    - name: Sync remediation issues
+      if: steps.resolve.outputs.create-issues == 'true'
+      id: sync-issues
       shell: bash
       env:
-        NFR_ISSUE_SEVERITY_THRESHOLD: ${{ inputs.issue-severity }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         JSONL_PATH="${{ steps.scan.outputs.jsonl-path }}"
         if [ ! -f "$JSONL_PATH" ]; then
-          echo "issues-filed=0" >> "$GITHUB_OUTPUT"
+          echo "issues-created=0" >> "$GITHUB_OUTPUT"
+          echo "issues-updated=0" >> "$GITHUB_OUTPUT"
+          echo "issues-closed=0" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
-        OUTPUT=$(python "${{ github.action_path }}/scripts/action_issues.py" "$JSONL_PATH" 2>&1)
+        SYNC_ARGS=("issues" "sync")
+        SYNC_ARGS+=("--jsonl" "$JSONL_PATH")
+        SYNC_ARGS+=("--repo" "${{ github.repository }}")
+        SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
+        SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
+        SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
+
+        if [ -n "${{ inputs.extra-labels }}" ]; then
+          IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
+          for lbl in "${LABELS[@]}"; do
+            SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
+          done
+        fi
+
+        if [ "${{ inputs.execution }}" = "container" ]; then
+          # ── Container mode ──────────────────────────────────────────
+          DOCKER_ARGS=("run" "--rm")
+          DOCKER_ARGS+=("--user" "$(id -u):$(id -g)")
+          DOCKER_ARGS+=("-e" "HOME=/tmp")
+          DOCKER_ARGS+=("-e" "GITHUB_TOKEN")
+          DOCKER_ARGS+=("-v" "${{ runner.temp }}:/output:ro")
+          DOCKER_ARGS+=("${{ inputs.image }}")
+
+          # Remap JSONL path to container mount
+          CONTAINER_SYNC_ARGS=("issues" "sync")
+          CONTAINER_SYNC_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+          CONTAINER_SYNC_ARGS+=("--repo" "${{ github.repository }}")
+          CONTAINER_SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
+          CONTAINER_SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
+          CONTAINER_SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
+
+          if [ -n "${{ inputs.extra-labels }}" ]; then
+            IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
+            for lbl in "${LABELS[@]}"; do
+              CONTAINER_SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
+            done
+          fi
+
+          OUTPUT=$(docker "${DOCKER_ARGS[@]}" "${CONTAINER_SYNC_ARGS[@]}" 2>&1)
+        else
+          # ── Pip mode ────────────────────────────────────────────────
+          OUTPUT=$(nfr-review "${SYNC_ARGS[@]}" 2>&1)
+        fi
+
         echo "$OUTPUT"
 
-        FILED=$(echo "$OUTPUT" | grep -c '^\[filed\]' || true)
-        echo "issues-filed=${FILED}" >> "$GITHUB_OUTPUT"
+        # Parse sync summary line: "sync: created=N updated=N closed=N ..."
+        CREATED=$(echo "$OUTPUT" | grep -oP 'created=\K[0-9]+' || echo "0")
+        UPDATED=$(echo "$OUTPUT" | grep -oP 'updated=\K[0-9]+' || echo "0")
+        CLOSED=$(echo "$OUTPUT" | grep -oP 'closed=\K[0-9]+' || echo "0")
 
-    # ── 10. Fail on red findings ────────────────────────────────────────
-    - name: Check for red findings
-      if: inputs.fail-on-red == 'true'
+        echo "issues-created=${CREATED}" >> "$GITHUB_OUTPUT"
+        echo "issues-updated=${UPDATED}" >> "$GITHUB_OUTPUT"
+        echo "issues-closed=${CLOSED}" >> "$GITHUB_OUTPUT"
+
+    # ── 11. Fail on findings threshold ──────────────────────────────────
+    - name: Check findings threshold
+      if: steps.resolve.outputs.fail-on != 'never'
       shell: bash
       run: |
+        FAIL_ON="${{ steps.resolve.outputs.fail-on }}"
         RED_COUNT="${{ steps.parse.outputs.red-count }}"
-        if [ "${RED_COUNT}" -gt 0 ]; then
-          echo "::error::nfr-review found ${RED_COUNT} red finding(s) — failing the check"
-          exit 1
+        AMBER_COUNT="${{ steps.parse.outputs.amber-count }}"
+
+        if [ "${FAIL_ON}" = "red+amber" ]; then
+          TOTAL=$(( RED_COUNT + AMBER_COUNT ))
+          if [ "${TOTAL}" -gt 0 ]; then
+            echo "::error::nfr-review found ${RED_COUNT} red + ${AMBER_COUNT} amber finding(s) — failing the check"
+            exit 1
+          fi
+          echo "No red or amber findings — check passed"
+        else
+          # Default: fail on red
+          if [ "${RED_COUNT}" -gt 0 ]; then
+            echo "::error::nfr-review found ${RED_COUNT} red finding(s) — failing the check"
+            exit 1
+          fi
+          echo "No red findings — check passed"
         fi
-        echo "No red findings — check passed"

@@ -545,7 +545,7 @@ def render_pdf(
 <body>{"".join(sections)}</body>
 </html>"""
 
-    import weasyprint  # type: ignore[import-not-found]
+    import weasyprint  # type: ignore[import-not-found,import-untyped]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     weasyprint.HTML(string=html_doc).write_pdf(str(output_path))

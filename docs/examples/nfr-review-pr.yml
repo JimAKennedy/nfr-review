@@ -1,8 +1,17 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Example workflow: run nfr-review on every pull request and post a
-# sticky comment with a RAG summary.  Red findings fail the check.
+# Example workflow: run nfr-review on every pull request in diff mode
+# against the last nightly baseline, post a sticky comment, and fail
+# on red findings.
+#
+# Prerequisites:
+#   - A nightly workflow (see nfr-review-nightly.yml) that uploads an
+#     artifact named "nfr-review-baseline".
+#   - On first adoption (no prior nightly exists), the baseline download
+#     will be skipped and nfr-review runs a full scan instead of a diff.
+#     Merge that first PR with fail-on: "never" if it exceeds thresholds,
+#     then restore fail-on: "red" once a nightly baseline exists.
 #
 # Usage — copy this file to .github/workflows/nfr-review.yml in the
 # repository you want to scan and adjust the `with:` inputs below.
@@ -13,10 +22,15 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: nfr-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true       # newer push cancels in-flight scan
+
 permissions:
   contents: read
   pull-requests: write
-  security-events: write  # required only if sarif-upload is true
+  security-events: write         # required only if sarif-upload is true
+  actions: read                  # required to download nightly artifact
 
 jobs:
   nfr-review:
@@ -27,15 +41,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Download baseline from last successful nightly ────────────────
+      - name: Download nightly baseline
+        id: baseline
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: nfr-review-nightly.yml
+          branch: main
+          name: nfr-review-baseline
+          path: ${{ runner.temp }}/baseline
+          if_no_artifact_found: warn   # first run has no baseline — that's OK
+
       - name: Run NFR Review
         id: nfr
-        uses: your-org/nfr-review@main
+        uses: JimAKennedy/nfr-review@v1
         with:
-          target: .
-          fail-on-red: "true"
+          path: .
+          fail-on: "red"               # "red" (default), "red+amber", or "never"
+          baseline: ${{ steps.baseline.outcome == 'success' && format('{0}/baseline/nfr-review-output.jsonl', runner.temp) || '' }}
           sarif-upload: "true"
           comment: "true"
+          create-issues: "false"        # set "true" to sync issues from PR scans
+          # execution: "container"      # "pip" (default) or "container"
+          # image: "ghcr.io/jimakennedy/nfr-review:latest"
+          # extra-labels: "team:platform,sprint:23"
+          # first-run-cap: "25"
+          # rag-min: "amber"
+          # config: ".nfr-review.yaml"
 
+      # ── Artifacts ─────────────────────────────────────────────────────
+      - name: Upload PR scan results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.nfr.outputs.jsonl-path }}
+          retention-days: 30
+
+      # ── Job summary ───────────────────────────────────────────────────
       - name: Summary
         if: always()
         run: |
@@ -47,3 +90,6 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues created | ${{ steps.nfr.outputs.issues-created }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues updated | ${{ steps.nfr.outputs.issues-updated }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues closed | ${{ steps.nfr.outputs.issues-closed }} |" >> $GITHUB_STEP_SUMMARY

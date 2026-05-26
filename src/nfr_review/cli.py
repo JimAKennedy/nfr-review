@@ -1697,6 +1697,138 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         click.echo("No technologies detected.", err=True)
 
 
+@cli.command(
+    "arch",
+    help="Generate architecture documentation for TARGET repository/repositories.",
+)
+@click.argument(
+    "targets",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("reports"),
+    show_default=True,
+    help="Directory where report files are written.",
+)
+@click.option(
+    "--format",
+    "output_formats",
+    multiple=True,
+    type=click.Choice(["json", "md", "pdf"]),
+    help="Output format(s). Repeat for multiple. Default: json + md + pdf.",
+)
+@click.option(
+    "--no-llm",
+    is_flag=True,
+    default=False,
+    help="Skip LLM-based analysis (domain model enhancement, market comparison).",
+)
+def arch_cmd(
+    targets: tuple[Path, ...],
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    output_dir: Path,
+    output_formats: tuple[str, ...],
+    no_llm: bool,
+) -> None:
+    """Generate architecture documentation report."""
+    from nfr_review.arch_orchestrator import run_arch_review
+    from nfr_review.arch_report_render import render_arch_report
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    target_list = list(targets)
+    repo_names = [_repo_name(t) for t in target_list]
+    primary_repo = repo_names[0] if repo_names else "unknown"
+
+    opts: dict[str, str] = {}
+    if no_llm:
+        opts["llm"] = "skipped"
+    if len(target_list) > 1:
+        opts["repos"] = str(len(target_list))
+    if output_formats:
+        opts["formats"] = ",".join(output_formats)
+
+    phases = ["discover", "integrate", "coverage", "diagrams", "risks"]
+    if not no_llm:
+        phases.extend(["domain-model", "market"])
+    phases.extend(["recommend", "output"])
+
+    _banner(
+        "arch",
+        primary_repo,
+        target_list[0],
+        options=opts or None,
+        phases=phases,
+        quiet=quiet,
+    )
+
+    def _progress(msg: str) -> None:
+        _ts_echo(msg, quiet=quiet)
+
+    t0 = _phase("Running architecture review", quiet=quiet)
+    try:
+        report = run_arch_review(
+            target_list,
+            repo_names=repo_names,
+            skip_llm=no_llm,
+            progress=_progress,
+        )
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"error: architecture review failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+    _phase_done("Architecture review", t0, quiet=quiet)
+
+    # Determine formats
+    formats = list(output_formats) if output_formats else None
+
+    t0 = _phase("Rendering output files", quiet=quiet)
+    try:
+        results = render_arch_report(report, output_dir, formats=formats)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"error: report rendering failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+    _phase_done("Output rendering", t0, quiet=quiet)
+
+    # Summary
+    produced = {k: v for k, v in results.items() if v is not None}
+    parts = [
+        f"nfr-review arch: components={len(report.components)}",
+        f"integrations={len(report.integration_points)}",
+        f"risks={len(report.risk_findings)}",
+        f"recommendations={len(report.recommendations)}",
+        f"files_emitted={len(produced)}",
+    ]
+    for fmt, path in produced.items():
+        parts.append(f"{fmt}={path}")
+    _ts_echo(" ".join(parts))
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""

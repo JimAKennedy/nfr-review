@@ -1,0 +1,85 @@
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Example workflow: run a full nfr-review scan nightly on the default
+# branch, upload SARIF, create/sync GitHub issues, and publish baseline
+# + PDF artifacts for downstream PR workflows to consume.
+#
+# Usage — copy this file to .github/workflows/nfr-review-nightly.yml
+# in the repository you want to scan and adjust the schedule / inputs.
+
+name: NFR Review (nightly)
+
+on:
+  schedule:
+    - cron: "0 3 * * *"          # 03:00 UTC daily — adjust to taste
+  workflow_dispatch:              # manual trigger for ad-hoc runs
+
+concurrency:
+  group: nfr-review-nightly
+  cancel-in-progress: false      # let a running scan finish
+
+permissions:
+  contents: read
+  issues: write                  # required for create-issues
+  security-events: write         # required for SARIF upload
+
+jobs:
+  nfr-review:
+    name: NFR Review (nightly)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0         # full history for git-based collectors
+
+      - name: Run NFR Review
+        id: nfr
+        uses: JimAKennedy/nfr-review@v1
+        with:
+          path: .
+          fail-on: "never"       # nightly is observational — never fail the job
+          sarif-upload: "true"
+          comment: "false"       # no PR to comment on
+          create-issues: "true"
+          rag-min: "amber"       # file issues for amber + red findings
+          first-run-cap: "25"    # prevent issue flood on first adoption
+          # extra-labels: "team:platform,nfr"
+          # config: ".nfr-review.yaml"
+          # execution: "container"
+          # image: "ghcr.io/jimakennedy/nfr-review:1.2.3"
+
+      # ── Artifacts ─────────────────────────────────────────────────────
+      - name: Upload baseline artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-baseline
+          path: ${{ steps.nfr.outputs.jsonl-path }}
+          retention-days: 90     # PR workflow downloads this for diff mode
+
+      - name: Upload SARIF artifact
+        if: always() && steps.nfr.outputs.sarif-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-sarif
+          path: ${{ steps.nfr.outputs.sarif-path }}
+          retention-days: 365
+
+      # ── Job summary ───────────────────────────────────────────────────
+      - name: Summary
+        if: always()
+        run: |
+          echo "## NFR Review (nightly)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Findings | ${{ steps.nfr.outputs.findings-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues created | ${{ steps.nfr.outputs.issues-created }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues updated | ${{ steps.nfr.outputs.issues-updated }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Issues closed | ${{ steps.nfr.outputs.issues-closed }} |" >> $GITHUB_STEP_SUMMARY
