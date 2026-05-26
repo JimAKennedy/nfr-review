@@ -165,15 +165,26 @@ def _primary_boundary(comp: Component) -> str:
     if comp.repo:
         return comp.repo
     if comp.boundaries:
-        return comp.boundaries[0].path
-    return "default"
+        return _normalize_boundary(comp.boundaries[0].path)
+    return "."
+
+
+_ROOT_PATHS = frozenset({".", "./", "", "root", "default"})
+
+
+def _normalize_boundary(path: str) -> str:
+    """Collapse all root-equivalent boundary strings to ``"."``."""
+    stripped = path.strip().rstrip("/")
+    if stripped in _ROOT_PATHS:
+        return "."
+    return path
 
 
 def _boundary_path(comp: Component) -> str:
     """Return the most specific boundary path for component-level grouping."""
     if comp.boundaries:
-        return comp.boundaries[0].path
-    return "root"
+        return _normalize_boundary(comp.boundaries[0].path)
+    return "."
 
 
 # ---------------------------------------------------------------------------
@@ -440,6 +451,8 @@ def render_c4_container(
         if integ.source_component_id in comp_map and integ.target_component_id in comp_map:
             src_id = _safe_id(integ.source_component_id)
             tgt_id = _safe_id(integ.target_component_id)
+            if src_id == tgt_id:
+                continue
             if (src_id, tgt_id) not in seen_edges:
                 seen_edges.add((src_id, tgt_id))
                 lines.append(_edge(src_id, tgt_id, integ))
@@ -531,6 +544,8 @@ def render_c4_component(
         if integ.source_component_id in scoped_ids and integ.target_component_id in scoped_ids:
             src_id = _safe_id(integ.source_component_id)
             tgt_id = _safe_id(integ.target_component_id)
+            if src_id == tgt_id:
+                continue
             if (src_id, tgt_id) not in seen_edges:
                 seen_edges.add((src_id, tgt_id))
                 lines.append(_edge(src_id, tgt_id, integ))
@@ -653,12 +668,12 @@ def render_c4_component_detail(
             internal_edges.append(integ)
         elif src_in and not tgt_in:
             tgt_grp = comp_to_group.get(integ.target_component_id)
-            if tgt_grp is not None:
+            if tgt_grp is not None and tgt_grp != focus_group:
                 external_groups_needed.add(tgt_grp)
                 cross_edges.append(integ)
         elif tgt_in and not src_in:
             src_grp = comp_to_group.get(integ.source_component_id)
-            if src_grp is not None:
+            if src_grp is not None and src_grp != focus_group:
                 external_groups_needed.add(src_grp)
                 cross_edges.append(integ)
 
@@ -691,6 +706,8 @@ def render_c4_component_detail(
     for integ in internal_edges:
         src_id = _safe_id(integ.source_component_id)
         tgt_id = _safe_id(integ.target_component_id)
+        if src_id == tgt_id:
+            continue
         if (src_id, tgt_id) not in seen_edges:
             seen_edges.add((src_id, tgt_id))
             lines.append(_edge(src_id, tgt_id, integ))
@@ -705,6 +722,8 @@ def render_c4_component_detail(
             src_grp = comp_to_group.get(integ.source_component_id, "")
             src_id = _safe_id(f"ext_{src_grp}")
             tgt_id = _safe_id(integ.target_component_id)
+        if src_id == tgt_id:
+            continue
         if (src_id, tgt_id) not in seen_edges:
             seen_edges.add((src_id, tgt_id))
             lines.append(_edge(src_id, tgt_id, integ))
