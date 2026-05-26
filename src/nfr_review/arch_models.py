@@ -76,7 +76,6 @@ class Component(BaseModel):
     responsibilities: list[str] = Field(default_factory=list)
     tech_stack: list[TechStackEntry] = Field(default_factory=list)
     repo: str | None = None
-    environment: str | None = None
     c4_level: C4Level = "component"
 
 
@@ -93,7 +92,6 @@ class IntegrationPoint(BaseModel):
     description: str = ""
     data_flow: str | None = None
     is_cross_repo: bool = False
-    environment: str | None = None
 
 
 class ScenarioStep(BaseModel):
