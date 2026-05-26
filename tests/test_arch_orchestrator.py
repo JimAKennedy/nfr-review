@@ -125,8 +125,8 @@ class TestArchCliCommand:
             ],
         )
         assert result.exit_code == 0
-        json_file = out_dir / "architecture-report.json"
-        assert json_file.exists()
+        json_files = list(out_dir.glob("*-architecture-report.json"))
+        assert len(json_files) == 1
 
     def test_arch_markdown_output(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
@@ -144,8 +144,8 @@ class TestArchCliCommand:
             ],
         )
         assert result.exit_code == 0
-        md_file = out_dir / "architecture-report.md"
-        assert md_file.exists()
+        md_files = list(out_dir.glob("*-architecture-report.md"))
+        assert len(md_files) == 1
 
     def test_arch_multiple_formats(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
@@ -165,8 +165,8 @@ class TestArchCliCommand:
             ],
         )
         assert result.exit_code == 0
-        assert (out_dir / "architecture-report.json").exists()
-        assert (out_dir / "architecture-report.md").exists()
+        assert len(list(out_dir.glob("*-architecture-report.json"))) == 1
+        assert len(list(out_dir.glob("*-architecture-report.md"))) == 1
 
     def test_arch_no_target_fails(self) -> None:
         runner = CliRunner()

@@ -546,8 +546,11 @@ class TestRenderArchReport:
         assert "md" in results
         assert results["json"] is not None
         assert results["md"] is not None
-        assert (tmp_path / "architecture-report.json").exists()
-        assert (tmp_path / "architecture-report.md").exists()
+        assert results["json"].exists()
+        assert results["md"].exists()
+        assert "test-repo" in results["json"].name
+        assert results["json"].name.endswith("-architecture-report.json")
+        assert results["md"].name.endswith("-architecture-report.md")
 
     def test_explicit_formats(self, tmp_path: Path) -> None:
         report = _make_full_report()
@@ -555,8 +558,9 @@ class TestRenderArchReport:
 
         assert "json" in results
         assert "md" not in results
-        assert (tmp_path / "architecture-report.json").exists()
-        assert not (tmp_path / "architecture-report.md").exists()
+        assert results["json"].exists()
+        md_files = list(tmp_path.glob("*-architecture-report.md"))
+        assert len(md_files) == 0
 
     def test_unknown_format_returns_none(self, tmp_path: Path) -> None:
         report = _make_full_report()
@@ -585,9 +589,10 @@ class TestRenderArchReport:
         assert results["json"] is not None
         assert results["md"] is not None
         assert results["pdf"] is not None
-        assert (tmp_path / "architecture-report.json").exists()
-        assert (tmp_path / "architecture-report.md").exists()
-        assert (tmp_path / "architecture-report.pdf").exists()
+        assert results["json"].exists()
+        assert results["md"].exists()
+        assert results["pdf"].exists()
+        assert results["pdf"].name.endswith("-architecture-report.pdf")
 
     def test_empty_report_all_formats(self, tmp_path: Path) -> None:
         report = _make_empty_report()
