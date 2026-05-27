@@ -16,11 +16,12 @@ all the reference tables you need along the way.
 4. [Action outputs reference](#4-action-outputs-reference)
 5. [Permissions reference](#5-permissions-reference)
 6. [Versioning policy](#6-versioning-policy)
-7. [Configuration](#7-configuration)
-8. [Execution modes](#8-execution-modes)
-9. [Running locally](#9-running-locally)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Uninstalling](#11-uninstalling)
+7. [LLM features](#7-llm-features)
+8. [Configuration](#8-configuration)
+9. [Execution modes](#9-execution-modes)
+10. [Running locally](#10-running-locally)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Uninstalling](#12-uninstalling)
 
 ---
 
@@ -55,6 +56,10 @@ jobs:
 That is everything you need to start getting non-functional design feedback on
 pull requests. The action installs nfr-review via pip, scans the repository,
 and fails the check if any red findings are present.
+
+> **Optional:** To enable LLM-powered features (executive summary, ADR drift
+> analysis), add `anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}` to the
+> `with:` block. See [LLM features](#7-llm-features) for details.
 
 ---
 
@@ -128,6 +133,7 @@ All inputs are optional. The action reference is `JimAKennedy/nfr-review@v1`.
 | `python-version` | `"3.12"` | Python version to use (pip mode only, ignored in container mode). |
 | `execution` | `"pip"` | Execution mode: `"pip"` or `"container"`. |
 | `image` | `"ghcr.io/jimakennedy/nfr-review:latest"` | Docker image for container mode. |
+| `anthropic-api-key` | `""` | Anthropic API key for LLM features. Omit to skip LLM features gracefully. |
 
 ---
 
@@ -223,7 +229,72 @@ include breaking changes without notice.
 
 ---
 
-## 7. Configuration
+## 7. LLM features
+
+nfr-review includes optional LLM-powered analysis that uses the Anthropic API.
+When `ANTHROPIC_API_KEY` is not set, these features are **skipped gracefully** —
+the scan runs normally and all static-analysis findings are still produced.
+
+### What LLM features provide
+
+| Feature | Command | What it does |
+|---------|---------|--------------|
+| Executive summary | `report` | Generates a natural-language summary for the PDF report |
+| ADR drift analysis | `run` | Detects when code has drifted from Architecture Decision Records |
+| PII detection confirmation | `run` | Uses LLM to confirm potential PII logging patterns |
+| Domain model inference | `arch` | Infers bounded contexts and domain models from code |
+| Market comparison | `arch` | Compares architecture patterns against industry norms |
+
+### Setting up in GitHub Actions
+
+1. Add `ANTHROPIC_API_KEY` as a **repository secret** in Settings > Secrets and
+   variables > Actions.
+
+2. Pass it to the action via the `anthropic-api-key` input:
+
+```yaml
+- name: Run NFR Review
+  id: nfr
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    fail-on: "red"
+    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The action forwards the key as an environment variable to the scan process. In
+container mode, it is injected into the Docker container automatically.
+
+### Setting up locally
+
+Export the environment variable before running nfr-review:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+nfr-review report /path/to/repo
+nfr-review arch /path/to/repo
+```
+
+To permanently skip LLM features without unsetting the key, use `--no-llm`
+and/or `--no-summary`:
+
+```bash
+nfr-review report /path/to/repo --no-summary   # skip executive summary
+nfr-review arch /path/to/repo --no-llm         # skip domain model / market comparison
+nfr-review all /path/to/repo --no-llm --no-summary  # skip all LLM features
+```
+
+### Cost and data considerations
+
+- LLM calls send **code snippets** (not entire files) to the Anthropic API.
+  See [SECURITY.md](../SECURITY.md) for the data scope details.
+- A typical `report` run with summary generation uses ~2,000–5,000 tokens.
+- Architecture analysis (`arch --no-llm` omitted) uses ~10,000–30,000 tokens
+  depending on codebase size.
+
+---
+
+## 8. Configuration
 
 nfr-review can be configured with an optional `nfr-review.yaml` file in your
 repository root (or any path specified via the `config` input).
@@ -242,7 +313,7 @@ See the [README](../README.md) for the full configuration reference.
 
 ---
 
-## 8. Execution modes
+## 9. Execution modes
 
 The `execution` input controls how nfr-review runs inside the GitHub Actions
 runner.
@@ -283,7 +354,7 @@ image: "ghcr.io/jimakennedy/nfr-review:1.2.3"
 
 ---
 
-## 9. Running locally
+## 10. Running locally
 
 ### Install from source
 
@@ -322,6 +393,11 @@ nfr-review run /path/to/repo --baseline baseline.jsonl
 # Full report with PDF, score, test results, and dependency analysis
 nfr-review report /path/to/repo
 
+# Enable LLM features (executive summary, ADR drift, etc.)
+export ANTHROPIC_API_KEY="sk-ant-..."
+nfr-review report /path/to/repo          # includes executive summary
+nfr-review report /path/to/repo --no-summary  # skip LLM summary
+
 # Architecture documentation (multi-repo supported)
 nfr-review arch /path/to/repo1 /path/to/repo2
 
@@ -353,7 +429,7 @@ docker run --rm \
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### "Resource not accessible by integration" error
 
@@ -403,16 +479,24 @@ explicitly grant each permission the action needs.
   available, set `python-version` to a version present on the runner.
 - nfr-review requires Python 3.11 or later.
 
+### LLM features are skipped / "ANTHROPIC_API_KEY not set"
+
+- This is normal if you have not configured an API key. LLM features are
+  optional and the scan produces all static-analysis findings without them.
+- To enable: add `ANTHROPIC_API_KEY` as a repository secret, then pass it via
+  the `anthropic-api-key` input (see [LLM features](#7-llm-features)).
+- Locally: `export ANTHROPIC_API_KEY="sk-ant-..."` before running nfr-review.
+
 ### Action fails but no findings are shown
 
 - Check the "Run nfr-review scan" step logs for errors (import failures,
   missing dependencies, config parse errors).
 - Run the scan locally to reproduce the issue (see
-  [Running locally](#9-running-locally)).
+  [Running locally](#10-running-locally)).
 
 ---
 
-## 11. Uninstalling
+## 12. Uninstalling
 
 ### Remove the GitHub Action
 
