@@ -48,7 +48,7 @@ report command (nfr-review report <target>):
         +-- write_csv()      (combined findings)
         +-- write_jsonl()    (combined findings)
         |
-        v  [with --pdf]
+        v  [--no-pdf to skip]
   generate_executive_summary()  -->  SummaryResult  (LLM, --no-summary skips)
         |
         v
@@ -58,7 +58,7 @@ report command (nfr-review report <target>):
     {repo}-nfr-review-{timestamp}.md
     {repo}-nfr-review-{timestamp}.csv
     {repo}-nfr-review-{timestamp}.jsonl
-    {repo}-nfr-review-{timestamp}.pdf  (with --pdf)
+    {repo}-nfr-review-{timestamp}.pdf  (--no-pdf to skip)
 
 deps command (nfr-review deps <target>):
 
@@ -68,15 +68,38 @@ deps command (nfr-review deps <target>):
         +-- render_deps_section()   -->  Markdown (--output)
         +-- render_dot_dependency_graph()  -->  DOT file (--dot)
         +-- render_dot_to_file()           -->  SVG (--render-diagrams)
+
+arch command (nfr-review arch <targets...>):
+
+  Collectors  -->  list[Evidence]  (multi-repo)
+        |
+        v
+  arch_integrations  -->  components, integrations, risks, recommendations
+        |
+        +-- JSON report    -->  {repo}-architecture.json
+        +-- Markdown report  -->  {repo}-architecture.md
+        +-- arch_diagrams    -->  Mermaid diagrams (C4 levels)
+        +-- PDF report       -->  {repo}-architecture.pdf  (via weasyprint)
+
+issues command (nfr-review issues <scan|sync>):
+
+  issues scan:  Engine.run() --> file issues for red/high-severity findings
+  issues sync:  JSONL input  --> create/update/close GitHub issues
+
+all command (nfr-review all <target1> <target2> ...):
+
+  Phase 1:  run_arch_review(all targets)  -->  architecture report (cross-repo)
+  Phase 2:  run_report_pipeline(target)   -->  NFR report (per target, loop)
+  Output:   {repo}-architecture.* + {repo}-nfr-review-{ts}.* per repo
 ```
 
 ## Module Responsibility Map
 
 | Module | Owns | Does NOT own |
 |--------|------|-------------|
-| `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `list-rules`, `explain`, `version`), exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
+| `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `arch`, `deps`, `issues`, `init`, `all`, `list-rules`, `explain`, `version`), `run_report_pipeline()` reusable pipeline, exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
 | `config.py` | YAML loading, Pydantic validation, `Config`/`RulesConfig`/`CollectorsConfig` models | Tech detection, defaults beyond schema defaults |
-| `detect.py` | File-system probing for 17 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
+| `detect.py` | File-system probing for 18 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
 | `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `Band` | Serialization format details (CSV column order lives in output/) |
 | `protocols.py` | `Collector` and `Rule` runtime-checkable protocols | Registration, instantiation |
@@ -102,6 +125,17 @@ deps command (nfr-review deps <target>):
 | `deps_analysis.py` | Orchestrates per-ecosystem dependency analysis; calls dep solvers and `deps_dev_client`; returns `list[DepReport]` | Individual resolver logic, HTTP calls |
 | `dep_solver.py` | resolvelib-based transitive dependency solver; `DepReport` model | Network I/O (delegated to `deps_dev_client`), output formatting |
 | `deps_dev_client.py` | HTTP client for deps.dev API; package version and dependency metadata retrieval | Solving logic, caching policy |
+| `arch_orchestrator.py` | Architecture report orchestration: multi-repo scanning, collector dispatch, report assembly | Individual collector or rule logic |
+| `arch_models.py` | Pydantic models for architecture reports: `ArchComponent`, `ArchIntegration`, `ArchRisk`, `ArchRecommendation` | Report rendering, diagram generation |
+| `arch_integrations.py` | Integration discovery, infra materialization, environment inference | Diagram rendering, report rendering |
+| `arch_diagrams.py` | Mermaid C4 diagram generation (context, container, component, code levels) | Integration discovery, report assembly |
+| `arch_discovery.py` | Component and boundary discovery from collected evidence | Rule evaluation, evidence gathering |
+| `arch_domain_model.py` | LLM-assisted domain model enhancement for architecture reports | Evidence gathering, diagram rendering |
+| `arch_market_comparison.py` | LLM-assisted market comparison and maturity assessment | Evidence gathering, diagram rendering |
+| `arch_risk_analysis.py` | Risk identification and scoring for architecture reports | Evidence gathering, output formatting |
+| `arch_recommendations.py` | Architecture improvement recommendations | Evidence gathering, output formatting |
+| `arch_report_render.py` | Architecture report rendering (JSON, Markdown, PDF) | Integration discovery, risk analysis |
+| `arch_test_coverage.py` | Test coverage analysis for architecture reports | Evidence gathering, rule evaluation |
 | `collectors/cmake.py` | CMake build system evidence: `CMakeLists.txt` parsing, FetchContent detection, minimum version | Rule evaluation, C++ AST analysis |
 | `collectors/cpp_ast.py` | C++ source evidence: header guard detection, raw memory patterns, exception handling patterns | Rule evaluation, build system analysis |
 
@@ -193,6 +227,7 @@ triggering registration. The CLI imports these packages at startup.
 | Add a new hygiene collector | `hygiene/collectors/<name>.py` with `_register()` | `hygiene/collectors/__init__.py` (import), test fixtures |
 | Add a new hygiene rule | `hygiene/rules/<prefix>_<name>.py` with `_register()` | `hygiene/rules/__init__.py` (import), category prefix convention: `lic_`, `com_`, `ci_`, `doc_`, `bld_`, `prv_` |
 | Add an optional dependency | `pyproject.toml` `[project.optional-dependencies]`, try/except ImportError with fallback stubs | mypy `[[tool.mypy.overrides]]` for untyped package |
+| Add architecture report feature | `arch_*.py` (models, discovery, integrations, diagrams, risk, recommendations) | `arch_orchestrator.py` for orchestration, `arch_report_render.py` for output |
 
 ## Collector Contract
 

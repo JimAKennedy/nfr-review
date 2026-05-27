@@ -14,19 +14,35 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from ruamel.yaml import YAML, YAMLError
 
-from nfr_review.arch_models import Component, IntegrationPoint, IntegrationStyle
+from nfr_review.arch_models import (
+    Component,
+    ComponentBoundary,
+    IntegrationPoint,
+    IntegrationStyle,
+)
 from nfr_review.path_filter import should_exclude_path
 
 logger = logging.getLogger(__name__)
+
+ComponentType = Literal[
+    "service", "library", "database", "queue", "gateway", "ui", "worker", "external"
+]
 
 
 # ---------------------------------------------------------------------------
 # Helpers (mirror arch_discovery patterns)
 # ---------------------------------------------------------------------------
+
+
+def _is_comment_line(text: str, pos: int) -> bool:
+    """Check whether *pos* sits on a comment line (``#`` or ``//``)."""
+    line_start = text.rfind("\n", 0, pos) + 1
+    prefix = text[line_start:pos].lstrip()
+    return prefix.startswith("#") or prefix.startswith("//")
 
 
 def _safe_read_text(path: Path) -> str | None:
@@ -95,6 +111,143 @@ def _find_or_create_infra_id(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Environment inference from config filenames
+# ---------------------------------------------------------------------------
+
+_ENV_PROFILE_RE = re.compile(r"application[-_](\w+)\.(?:yml|yaml|properties)$", re.IGNORECASE)
+_APPSETTINGS_ENV_RE = re.compile(r"appsettings\.(\w+)\.json$", re.IGNORECASE)
+_DOTENV_ENV_RE = re.compile(r"\.env\.(\w+)$", re.IGNORECASE)
+
+_KNOWN_ENVS = frozenset(
+    {
+        "dev",
+        "development",
+        "local",
+        "test",
+        "testing",
+        "ci",
+        "staging",
+        "stage",
+        "uat",
+        "sit",
+        "prod",
+        "production",
+        "demo",
+        "sandbox",
+        "perf",
+        "qa",
+    }
+)
+
+_ENV_NORMALIZE: dict[str, str] = {
+    "development": "dev",
+    "local": "dev",
+    "testing": "test",
+    "ci": "test",
+    "stage": "staging",
+    "uat": "staging",
+    "sit": "staging",
+    "production": "prod",
+}
+
+
+def _infer_environment(config_path: Path, repo_path: Path) -> str | None:
+    """Infer the deployment environment from a config file path.
+
+    Returns a normalized environment name (dev/test/staging/prod) or None
+    if no environment can be determined (base config).
+    """
+    name = config_path.name
+
+    for pattern in (_ENV_PROFILE_RE, _APPSETTINGS_ENV_RE, _DOTENV_ENV_RE):
+        m = pattern.match(name)
+        if m:
+            profile = m.group(1).lower()
+            if profile in _KNOWN_ENVS:
+                return _ENV_NORMALIZE.get(profile, profile)
+
+    rel = config_path.relative_to(repo_path)
+    parts = [p.lower() for p in rel.parts]
+    for part in parts:
+        if part in _KNOWN_ENVS:
+            return _ENV_NORMALIZE.get(part, part)
+        if part == "overlays":
+            idx = parts.index(part)
+            if idx + 1 < len(parts) and parts[idx + 1] in _KNOWN_ENVS:
+                env = parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+
+    return None
+
+
+def _normalize_env(raw: str) -> str | None:
+    """Normalize a raw environment token to a canonical name, or None if unknown."""
+    lower = raw.lower()
+    if lower in _KNOWN_ENVS:
+        return _ENV_NORMALIZE.get(lower, lower)
+    return None
+
+
+def _infer_env_from_path_parts(parts: list[str]) -> str | None:
+    """Infer environment from directory path segments (e.g. 'overlays/prod')."""
+    lower_parts = [p.lower() for p in parts]
+    for part in lower_parts:
+        if part in _KNOWN_ENVS:
+            return _ENV_NORMALIZE.get(part, part)
+        if part == "overlays":
+            idx = lower_parts.index(part)
+            if idx + 1 < len(lower_parts) and lower_parts[idx + 1] in _KNOWN_ENVS:
+                env = lower_parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+        if part == "environments":
+            idx = lower_parts.index(part)
+            if idx + 1 < len(lower_parts) and lower_parts[idx + 1] in _KNOWN_ENVS:
+                env = lower_parts[idx + 1]
+                return _ENV_NORMALIZE.get(env, env)
+    return None
+
+
+def _infer_env_from_k8s_namespace(doc: dict[str, Any]) -> str | None:
+    """Infer environment from a K8s manifest's metadata.namespace field."""
+    metadata = doc.get("metadata", {})
+    if not isinstance(metadata, dict):
+        return None
+    ns = metadata.get("namespace", "")
+    if not ns or not isinstance(ns, str):
+        return None
+    return _normalize_env(ns)
+
+
+def _infer_env_from_k8s_filepath(yaml_file: Path, repo_path: Path) -> str | None:
+    """Infer environment from a K8s manifest's file path."""
+    try:
+        rel = yaml_file.relative_to(repo_path)
+    except ValueError:
+        return None
+    return _infer_env_from_path_parts(list(rel.parts))
+
+
+_COMPOSE_ENV_RE = re.compile(
+    r"(?:docker-)?compose[.-](\w+)\.(?:yml|yaml)$",
+    re.IGNORECASE,
+)
+
+
+def _infer_env_from_compose_filename(compose_file: Path) -> str | None:
+    """Infer environment from compose filename variants.
+
+    Matches patterns like ``docker-compose.prod.yml``, ``compose-staging.yaml``,
+    ``docker-compose.dev.yml``.  Returns None for base filenames and non-env
+    variants (e.g. ``docker-compose.override.yml``).
+    """
+    m = _COMPOSE_ENV_RE.match(compose_file.name)
+    if m:
+        candidate = m.group(1).lower()
+        return _normalize_env(candidate)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Strategy 1: K8s Service -> Deployment mapping
 # ---------------------------------------------------------------------------
 
@@ -144,6 +297,10 @@ def _discover_k8s_integrations(
                 if not name:
                     continue
 
+                env = _infer_env_from_k8s_namespace(doc) or _infer_env_from_k8s_filepath(
+                    yaml_file, repo_path
+                )
+
                 if kind == "Service":
                     spec = doc.get("spec", {}) or {}
                     selector = spec.get("selector", {}) or {}
@@ -153,6 +310,7 @@ def _discover_k8s_integrations(
                                 "name": name,
                                 "selector": selector,
                                 "namespace": metadata.get("namespace", "default"),
+                                "environment": env,
                             }
                         )
                 elif kind in ("Deployment", "StatefulSet", "DaemonSet"):
@@ -164,7 +322,14 @@ def _discover_k8s_integrations(
                     pod_labels = tmpl_metadata.get("labels", {}) or {}
                     merged_labels = {**labels, **pod_labels}
 
-                    k8s_workloads.append({"name": name, "labels": merged_labels, "kind": kind})
+                    k8s_workloads.append(
+                        {
+                            "name": name,
+                            "labels": merged_labels,
+                            "kind": kind,
+                            "environment": env,
+                        }
+                    )
 
     # Match services to workloads via selector
     for svc in k8s_services:
@@ -184,6 +349,7 @@ def _discover_k8s_integrations(
                     wl_comp = _component_by_k8s_selector(components, workload["labels"])
 
                 if svc_comp and wl_comp and svc_comp.id != wl_comp.id:
+                    intg_env = svc.get("environment") or workload.get("environment")
                     intg_id = _make_id(
                         "intg",
                         f"{effective_name}/k8s/{svc['name']}->{workload['name']}",
@@ -199,6 +365,7 @@ def _discover_k8s_integrations(
                                 f"K8s Service '{svc['name']}' routes to "
                                 f"{workload['kind']} '{workload['name']}'"
                             ),
+                            environment=intg_env,
                         )
                     )
                 elif svc_comp is None and wl_comp:
@@ -225,6 +392,37 @@ _COMPOSE_FILENAMES = (
     "compose.yaml",
 )
 
+_COMPOSE_GLOB_PATTERNS = (
+    "docker-compose.*.yml",
+    "docker-compose.*.yaml",
+    "docker-compose-*.yml",
+    "docker-compose-*.yaml",
+    "compose.*.yml",
+    "compose.*.yaml",
+    "compose-*.yml",
+    "compose-*.yaml",
+)
+
+
+def _find_compose_files(repo_path: Path) -> list[Path]:
+    """Find all compose files, base names first, then env-variant files."""
+    found: list[Path] = []
+    seen: set[str] = set()
+    for name in _COMPOSE_FILENAMES:
+        candidate = repo_path / name
+        if candidate.is_file() and candidate.name not in seen:
+            found.append(candidate)
+            seen.add(candidate.name)
+    for pattern in _COMPOSE_GLOB_PATTERNS:
+        try:
+            for candidate in repo_path.glob(pattern):
+                if candidate.is_file() and candidate.name not in seen:
+                    found.append(candidate)
+                    seen.add(candidate.name)
+        except OSError:
+            continue
+    return found
+
 
 def _discover_compose_integrations(
     repo_path: Path,
@@ -235,11 +433,7 @@ def _discover_compose_integrations(
     integrations: list[IntegrationPoint] = []
     effective_name = repo_name or repo_path.name
 
-    for compose_name in _COMPOSE_FILENAMES:
-        compose_file = repo_path / compose_name
-        if not compose_file.is_file():
-            continue
-
+    for compose_file in _find_compose_files(repo_path):
         content = _safe_read_text(compose_file)
         if not content:
             continue
@@ -251,6 +445,8 @@ def _discover_compose_integrations(
         services = data.get("services", {})
         if not isinstance(services, dict):
             continue
+
+        compose_env = _infer_env_from_compose_filename(compose_file)
 
         seen_pairs: set[tuple[str, str]] = set()
 
@@ -290,6 +486,7 @@ def _discover_compose_integrations(
                         target_component_id=target_comp.id,
                         style="synchronous",
                         description=(f"Compose service '{svc_name}' depends on '{dep_name}'"),
+                        environment=compose_env,
                     )
                 )
 
@@ -320,6 +517,7 @@ def _discover_compose_integrations(
                             target_component_id=target_comp.id,
                             style="synchronous",
                             description=(f"Compose link from '{svc_name}' to '{link_target}'"),
+                            environment=compose_env,
                         )
                     )
 
@@ -369,10 +567,9 @@ def _discover_compose_integrations(
                                     f"Shared Compose network '{net_name}' "
                                     f"connects '{src_name}' and '{tgt_name}'"
                                 ),
+                                environment=compose_env,
                             )
                         )
-
-        break  # Only process first compose file found
 
     if integrations:
         logger.info("Found %d Docker Compose integrations", len(integrations))
@@ -581,6 +778,8 @@ def _discover_gradle_integrations(
 # Strategy 4: Config-file connection string discovery
 # ---------------------------------------------------------------------------
 
+_EMBEDDED_DB_TYPES = frozenset({"h2", "hsqldb", "derby", "sqlite"})
+
 # Patterns for connection strings in config files
 _JDBC_PATTERN = re.compile(r"jdbc:(\w+)://([^/\s:?]+)", re.IGNORECASE)
 _REDIS_PATTERN = re.compile(r"redis(?:s)?://([^/\s:?]+)", re.IGNORECASE)
@@ -690,10 +889,26 @@ _IGNORED_HOSTS = frozenset(
 )
 
 
+_IGNORED_DOMAINS = (
+    ".example.com",
+    ".example.org",
+    ".example.net",
+    ".test",
+    ".invalid",
+    ".localhost",
+    ".local",
+)
+
+
 def _is_ignorable_host(host: str) -> bool:
     """Return True if the host is a generic/non-meaningful target."""
     host_lower = host.lower()
-    return host_lower in _IGNORED_HOSTS or host_lower.startswith("$")
+    if host_lower in _IGNORED_HOSTS or host_lower.startswith("$"):
+        return True
+    for suffix in _IGNORED_DOMAINS:
+        if host_lower.endswith(suffix):
+            return True
+    return False
 
 
 def _extract_host_from_value(value: str) -> str | None:
@@ -783,12 +998,18 @@ def _discover_config_integrations(
         # Find the owning component for this config file
         owner_comp = _find_owning_component(config_file, repo_path, components)
 
+        # Infer environment from the config filename/path
+        env = _infer_environment(config_file, repo_path)
+
         # JDBC connections
         for match in _JDBC_PATTERN.finditer(content):
             db_type = match.group(1).lower()
             host = match.group(2)
             if _is_ignorable_host(host):
                 host = db_type  # Use DB type as identifier for localhost
+            jdbc_env = env
+            if jdbc_env is None and db_type in _EMBEDDED_DB_TYPES:
+                jdbc_env = "dev"
             dedup_key = f"jdbc:{db_type}:{host}"
             if dedup_key in seen_keys:
                 continue
@@ -813,6 +1034,7 @@ def _discover_config_integrations(
                     protocol=f"jdbc:{db_type}",
                     description=f"JDBC connection to {db_type} at '{host}'",
                     data_flow="bidirectional",
+                    environment=jdbc_env,
                 )
             )
 
@@ -845,6 +1067,7 @@ def _discover_config_integrations(
                     protocol="redis",
                     description=f"Redis connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -877,6 +1100,7 @@ def _discover_config_integrations(
                     protocol="amqp",
                     description=f"AMQP connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -909,6 +1133,7 @@ def _discover_config_integrations(
                     protocol="mongodb",
                     description=f"MongoDB connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -941,6 +1166,7 @@ def _discover_config_integrations(
                     protocol="kafka",
                     description=f"Kafka broker at '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -973,6 +1199,7 @@ def _discover_config_integrations(
                     protocol="postgresql",
                     description=f"PostgreSQL connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -1005,6 +1232,7 @@ def _discover_config_integrations(
                     protocol="mysql",
                     description=f"MySQL connection to '{host}'",
                     data_flow="bidirectional",
+                    environment=env,
                 )
             )
 
@@ -1053,6 +1281,7 @@ def _discover_config_integrations(
                         data_flow="bidirectional"
                         if style in ("shared_database", "message_queue")
                         else None,
+                        environment=env,
                     )
                 )
 
@@ -1060,6 +1289,9 @@ def _discover_config_integrations(
         for match in _HTTP_ENDPOINT_PATTERN.finditer(content):
             host = match.group(1)
             if _is_ignorable_host(host):
+                continue
+            # Skip matches inside comment lines
+            if _is_comment_line(content, match.start()):
                 continue
             # Skip schema/namespace URLs
             full_url = match.group(0)
@@ -1099,6 +1331,7 @@ def _discover_config_integrations(
                     style="api_call",
                     protocol="http",
                     description=f"HTTP endpoint at '{host}'",
+                    environment=env,
                 )
             )
 
@@ -1157,11 +1390,7 @@ def _discover_compose_env_integrations(
     integrations: list[IntegrationPoint] = []
     effective_name = repo_name or repo_path.name
 
-    for compose_name in _COMPOSE_FILENAMES:
-        compose_file = repo_path / compose_name
-        if not compose_file.is_file():
-            continue
-
+    for compose_file in _find_compose_files(repo_path):
         content = _safe_read_text(compose_file)
         if not content:
             continue
@@ -1174,6 +1403,7 @@ def _discover_compose_env_integrations(
         if not isinstance(services, dict):
             continue
 
+        compose_env = _infer_env_from_compose_filename(compose_file)
         service_names = {s.lower() for s in services}
 
         # Load .env file if present for variable resolution
@@ -1242,10 +1472,9 @@ def _discover_compose_env_integrations(
                             f"Compose service '{svc_name}' references "
                             f"'{target_name}' via env {env_key}"
                         ),
+                        environment=compose_env,
                     )
                 )
-
-        break  # Only process first compose file found
 
     if integrations:
         logger.info("Found %d Docker Compose env-var integrations", len(integrations))
@@ -1405,6 +1634,10 @@ def _discover_k8s_env_integrations(
                 if source_comp is None:
                     continue
 
+                k8s_env = _infer_env_from_k8s_namespace(doc) or _infer_env_from_k8s_filepath(
+                    yaml_file, repo_path
+                )
+
                 # Extract env vars from all containers
                 containers = _extract_k8s_containers(doc)
                 for env_key, env_val in containers:
@@ -1442,6 +1675,7 @@ def _discover_k8s_env_integrations(
                                 f"K8s {kind} '{workload_name}' references "
                                 f"'{target_name}' via env {env_key}"
                             ),
+                            environment=k8s_env,
                         )
                     )
 
@@ -2589,7 +2823,125 @@ def discover_integrations_multi_repo(
     return result
 
 
+_PROTOCOL_TO_COMPONENT_TYPE: dict[str, str] = {
+    "postgresql": "database",
+    "mysql": "database",
+    "mongodb": "database",
+    "redis": "database",
+    "cassandra": "database",
+    "neo4j": "database",
+    "h2": "database",
+    "elasticsearch": "database",
+    "kafka": "queue",
+    "amqp": "queue",
+    "nats": "queue",
+    "smtp": "external",
+    "http": "external",
+    "https": "external",
+    "grpc": "external",
+}
+
+
+def materialize_infra_components(
+    components: list[Component],
+    integrations: list[IntegrationPoint],
+) -> list[Component]:
+    """Create Component objects for infrastructure targets not already known.
+
+    Integration discovery creates stable IDs via ``_find_or_create_infra_id``
+    but never materializes them as real Component objects. This means diagram
+    edges to databases/queues are silently dropped because the target node
+    doesn't exist.
+
+    This function scans all integration endpoints, finds IDs with no matching
+    component, and creates lightweight Component stubs so diagrams can render
+    them.  When the same infra target is referenced with different environments,
+    per-environment components are created and integration edges are rewritten
+    to point to the env-specific copy.
+    """
+    known_ids = {c.id for c in components}
+
+    # Collect (infra_id, environment) -> [integration indices]
+    infra_envs: dict[str, dict[str | None, list[int]]] = {}
+    infra_meta: dict[str, tuple[str, ComponentType]] = {}
+
+    for idx, intg in enumerate(integrations):
+        for target_id in (intg.source_component_id, intg.target_component_id):
+            if target_id in known_ids:
+                continue
+            if not target_id.startswith("infra-"):
+                continue
+
+            if target_id not in infra_meta:
+                slug = target_id.split("-", 1)[1].rsplit("-", 1)[0]
+                name = slug.replace("-", " ").title()
+                comp_type: ComponentType = "database"
+                if intg.protocol:
+                    proto_key = intg.protocol.split(":")[0].lower()
+                    raw = _PROTOCOL_TO_COMPONENT_TYPE.get(proto_key, "external")
+                    comp_type = cast(ComponentType, raw)
+                infra_meta[target_id] = (name, comp_type)
+
+            infra_envs.setdefault(target_id, {}).setdefault(intg.environment, []).append(idx)
+
+    new_components: dict[str, Component] = {}
+
+    for base_id, env_map in infra_envs.items():
+        name, comp_type = infra_meta[base_id]
+
+        # Auto-tag embedded/in-memory databases as dev when env is unknown
+        slug = base_id.split("-", 1)[1].rsplit("-", 1)[0]
+        if None in env_map and any(db in slug for db in _EMBEDDED_DB_TYPES):
+            indices = env_map.pop(None)
+            env_map.setdefault("dev", []).extend(indices)
+            for idx in indices:
+                integrations[idx] = integrations[idx].model_copy(update={"environment": "dev"})
+
+        envs = set(env_map.keys())
+
+        if len(envs) <= 1:
+            env = next(iter(envs))
+            new_components[base_id] = Component(
+                id=base_id,
+                name=name,
+                description=f"Infrastructure: {name}",
+                component_type=comp_type,
+                boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
+                environment=env,
+            )
+        else:
+            for env, intg_indices in env_map.items():
+                env_suffix = env or "default"
+                env_id = f"{base_id}--{env_suffix}"
+                display = f"{name} ({env_suffix})" if env else name
+                new_components[env_id] = Component(
+                    id=env_id,
+                    name=display,
+                    description=f"Infrastructure: {display}",
+                    component_type=comp_type,
+                    boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
+                    environment=env,
+                )
+                for idx in intg_indices:
+                    intg = integrations[idx]
+                    updates: dict[str, str] = {}
+                    if intg.source_component_id == base_id:
+                        updates["source_component_id"] = env_id
+                    if intg.target_component_id == base_id:
+                        updates["target_component_id"] = env_id
+                    if updates:
+                        integrations[idx] = intg.model_copy(update=updates)
+
+    if new_components:
+        for comp in new_components.values():
+            components.append(comp)
+        logger.info("Materialized %d infrastructure components", len(new_components))
+
+    return components
+
+
 __all__ = [
     "discover_integrations",
     "discover_integrations_multi_repo",
+    "materialize_infra_components",
 ]

@@ -350,7 +350,9 @@ def _render_mermaid_inline(mermaid_text: str) -> str | None:
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
-        result = render_mermaid_to_png(mermaid_text, tmp_path, scale=3)
+        result = render_mermaid_to_png(
+            mermaid_text, tmp_path, scale=3, width=2400, height=1600
+        )
         if result is None:
             return None
         return f'<div class="diagram-container">{_embed_image(tmp_path)}</div>'

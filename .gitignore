@@ -31,10 +31,15 @@ coverage/
 .cache/
 tmp/
 *.egg-info/
+*-nfr-review.csv
+*-nfr-review.jsonl
+*-hygiene-report.csv
+*-hygiene-report.jsonl
 nfr-review.csv
 nfr-review.jsonl
 hygiene-report.csv
 hygiene-report.jsonl
+.claude/
 .regression-repos/
 .tools/
 package.json

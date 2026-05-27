@@ -319,9 +319,27 @@ nfr-review run /path/to/repo --jsonl findings.jsonl --sarif findings.sarif
 # Diff mode against a baseline
 nfr-review run /path/to/repo --baseline baseline.jsonl
 
+# Full report with PDF, score, test results, and dependency analysis
+nfr-review report /path/to/repo
+
+# Architecture documentation (multi-repo supported)
+nfr-review arch /path/to/repo1 /path/to/repo2
+
+# Hygiene audit
+nfr-review hygiene /path/to/repo
+
+# Dependency analysis
+nfr-review deps /path/to/repo
+
+# Auto-detect technologies and generate config
+nfr-review init /path/to/repo
+
 # Sync issues to GitHub (requires GITHUB_TOKEN)
 export GITHUB_TOKEN="ghp_..."
-nfr-review issues sync --jsonl findings.jsonl --repo owner/repo
+nfr-review issues sync findings.jsonl --repo owner/repo
+
+# Run architecture + NFR reports across multiple repos
+nfr-review all /path/to/repo1 /path/to/repo2
 ```
 
 ### Docker

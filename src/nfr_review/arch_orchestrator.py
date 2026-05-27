@@ -63,6 +63,7 @@ def run_arch_review(
     *,
     repo_names: list[str] | None = None,
     skip_llm: bool = False,
+    diagram_mode: str = "hierarchical",
     progress: ProgressCallback | None = None,
 ) -> ArchReport:
     """Run the full architecture review pipeline and return an ArchReport.
@@ -87,6 +88,7 @@ def run_arch_review(
     from nfr_review.arch_integrations import (
         discover_integrations,
         discover_integrations_multi_repo,
+        materialize_infra_components,
     )
     from nfr_review.arch_recommendations import generate_recommendations
     from nfr_review.arch_risk_analysis import analyze_risks
@@ -142,6 +144,13 @@ def run_arch_review(
         integrations = discover_integrations(targets[0], components, repo_name=repo_names[0])
     cb(f"Found {len(integrations)} integration points")
 
+    # --- materialize infrastructure components ---
+    prev_count = len(components)
+    components = materialize_infra_components(components, integrations)
+    new_infra = len(components) - prev_count
+    if new_infra:
+        cb(f"Materialized {new_infra} infrastructure components")
+
     # --- test coverage ---
     cb("Assessing test coverage...")
     if multi:
@@ -152,7 +161,9 @@ def run_arch_review(
 
     # --- C4 diagrams ---
     cb("Generating C4 diagrams...")
-    diagrams = generate_all_diagrams(components, integrations, test_coverage)
+    diagrams = generate_all_diagrams(
+        components, integrations, test_coverage, diagram_mode=diagram_mode
+    )
     cb(f"Generated {len(diagrams)} diagrams")
 
     # --- risk analysis ---

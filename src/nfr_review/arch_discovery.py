@@ -530,6 +530,102 @@ def _discover_gradle_subprojects(
     return components
 
 
+def _discover_java_base_package(component_path: Path) -> str | None:
+    """Walk src/main/{java,kotlin}/ to find the base Java/Kotlin package."""
+    for lang_dir in ("java", "kotlin"):
+        src = component_path / "src" / "main" / lang_dir
+        if not src.is_dir():
+            continue
+
+        current = src
+        parts: list[str] = []
+
+        while True:
+            try:
+                subdirs = sorted(
+                    d for d in current.iterdir() if d.is_dir() and not d.name.startswith(".")
+                )
+            except OSError:
+                break
+
+            has_source = any(
+                f.suffix in (".java", ".kt") for f in current.iterdir() if f.is_file()
+            )
+
+            if len(subdirs) == 1 and not has_source:
+                parts.append(subdirs[0].name)
+                current = subdirs[0]
+            else:
+                break
+
+        if parts:
+            return ".".join(parts)
+
+    return None
+
+
+def _discover_python_top_package(component_path: Path) -> str | None:
+    """Find the top-level Python package in a component directory."""
+    for root in (component_path / "src", component_path):
+        if not root.is_dir():
+            continue
+        try:
+            children = sorted(root.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if (
+                child.is_dir()
+                and not child.name.startswith(".")
+                and child.name not in _HIDDEN_DIRS
+                and (child / "__init__.py").is_file()
+            ):
+                return child.name
+    return None
+
+
+def _discover_go_module_path(component_path: Path) -> str | None:
+    """Read go.mod for the module path."""
+    go_mod = component_path / "go.mod"
+    if not go_mod.is_file():
+        return None
+    content = _safe_read_text(go_mod)
+    if not content:
+        return None
+    match = re.search(r"^module\s+(\S+)", content, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _enrich_package_boundaries(
+    components: list[Component],
+    repo_path: Path,
+) -> None:
+    """Add package-type boundaries to components where source packages are found."""
+    for comp in components:
+        if not comp.boundaries:
+            continue
+
+        primary = comp.boundaries[0]
+        comp_path = repo_path / primary.path if primary.path not in (".", "") else repo_path
+
+        if not comp_path.is_dir():
+            continue
+
+        pkg = (
+            _discover_java_base_package(comp_path)
+            or _discover_python_top_package(comp_path)
+            or _discover_go_module_path(comp_path)
+        )
+        if pkg:
+            comp.boundaries.append(
+                ComponentBoundary(
+                    boundary_type="package",
+                    path=pkg,
+                    repo=primary.repo,
+                )
+            )
+
+
 def _deduplicate_components(components: list[Component]) -> list[Component]:
     """Remove components that overlap by boundary path, preferring more specific ones."""
     if not components:
@@ -617,6 +713,7 @@ def discover_components(
             all_components.append(root_comp)
 
     result = _deduplicate_components(all_components)
+    _enrich_package_boundaries(result, repo_path)
     logger.info("Total components discovered: %d", len(result))
     return result
 
