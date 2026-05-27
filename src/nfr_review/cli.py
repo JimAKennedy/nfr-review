@@ -20,6 +20,7 @@ JSONL) can be piped from stdout-equivalent file paths without contamination.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import sys
 import time
@@ -43,6 +44,21 @@ from nfr_review.output import OutputError, write_csv, write_jsonl
 from nfr_review.registry import Registry, rule_registry
 
 logger = logging.getLogger(__name__)
+
+
+@dataclasses.dataclass
+class ReportResult:
+    """Structured result from run_report_pipeline."""
+
+    md_path: Path
+    csv_path: Path
+    jsonl_path: Path
+    sarif_path: Path | None
+    pdf_path: Path | None
+    total_findings: int
+    nfr_count: int
+    hygiene_count: int
+
 
 _SEVERITY_ORDER: tuple[Severity, ...] = ("info", "low", "medium", "high", "critical")
 
@@ -689,129 +705,29 @@ def hygiene_cmd(
             raise click.exceptions.Exit(2)
 
 
-@cli.command(
-    "report",
-    help="Run NFR + hygiene scans and produce a timestamped report. "
-    "All features (PDF, score, test-path inclusion) are enabled by default; "
-    "use --no-* / --exclude-* flags to opt out.",
-)
-@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
-@click.option(
-    "-v",
-    "--verbose",
-    count=True,
-    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
-)
-@click.option(
-    "-q",
-    "--quiet",
-    is_flag=True,
-    help="Suppress warnings (ERROR level only).",
-)
-@click.option(
-    "--log-file",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Write diagnostics to FILE instead of stderr.",
-)
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=Path("reports"),
-    show_default=True,
-    help="Directory where report files are written.",
-)
-@click.option(
-    "--no-tests",
-    is_flag=True,
-    default=False,
-    help="Skip pytest execution.",
-)
-@click.option(
-    "--no-deps",
-    is_flag=True,
-    default=False,
-    help="Skip dependency tree analysis.",
-)
-@click.option(
-    "--no-diagrams",
-    is_flag=True,
-    default=False,
-    help="Suppress Mermaid diagram sections in the report.",
-)
-@click.option(
-    "--exclude-tests/--include-tests",
-    default=True,
-    help="Exclude test and fixture directories from analysis (default: exclude).",
-)
-@click.option(
-    "--no-pdf",
-    is_flag=True,
-    default=False,
-    help="Skip PDF report generation.",
-)
-@click.option(
-    "--no-summary",
-    is_flag=True,
-    default=False,
-    help="Skip LLM executive summary generation (PDF will omit summary section).",
-)
-@click.option(
-    "--test-timeout",
-    type=int,
-    default=420,
-    show_default=True,
-    help="Maximum seconds to wait for pytest to complete (default: 420).",
-)
-@click.option(
-    "--sarif",
-    "sarif_path",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Output path for SARIF 2.1.0 findings file.",
-)
-@click.option(
-    "--no-score",
-    is_flag=True,
-    default=False,
-    help="Skip design maturity score computation.",
-)
-@click.option(
-    "--max-resolve-rounds",
-    type=int,
-    default=None,
-    help="Maximum resolver iterations for dependency analysis (default: 2000).",
-)
-def report_cmd(
+def run_report_pipeline(
     target: Path,
-    verbose: int,
-    quiet: bool,
-    log_file: Path | None,
-    config_path: Path | None,
-    output_dir: Path,
-    no_tests: bool,
-    no_deps: bool,
-    no_diagrams: bool,
-    exclude_tests: bool,
-    no_pdf: bool,
-    no_summary: bool,
-    test_timeout: int,
+    *,
+    output_dir: Path = Path("reports"),
+    config_path: Path | None = None,
+    no_tests: bool = False,
+    no_deps: bool = False,
+    no_diagrams: bool = False,
+    pdf: bool = True,
+    no_summary: bool = False,
+    test_timeout: int = 420,
     sarif_path: Path | None = None,
-    no_score: bool = False,
+    show_score: bool = True,
     max_resolve_rounds: int | None = None,
-) -> None:
-    """Report command — run NFR + hygiene scans, optional pytest, emit report."""
-    pdf = not no_pdf
-    show_score = not no_score
-    include_tests = not exclude_tests
+    include_tests: bool = True,
+    quiet: bool = False,
+    stem: str | None = None,
+) -> ReportResult:
+    """Run the full NFR + hygiene report pipeline and return structured results.
 
+    This is the core pipeline extracted from the ``report`` CLI command so that
+    callers (e.g. the ``all`` command) can invoke it without a Click context.
+    """
     from nfr_review.output.jdepend_section import (
         build_adr_section,
         build_derived_adrs_section,
@@ -819,17 +735,6 @@ def report_cmd(
     )
     from nfr_review.output.markdown import render_markdown_report
     from nfr_review.output.pytest_runner import run_pytest
-
-    if verbose and quiet:
-        raise click.UsageError("--verbose and --quiet are mutually exclusive")
-    _configure_logging(verbose, quiet, log_file)
-
-    if not target.exists():
-        click.echo(f"error: target does not exist: {target}", err=True)
-        raise click.exceptions.Exit(1)
-    if not target.is_dir():
-        click.echo(f"error: target is not a directory: {target}", err=True)
-        raise click.exceptions.Exit(1)
 
     repo = _repo_name(target)
     phases = ["config", "detect", "nfr-scan", "hygiene-scan"]
@@ -996,7 +901,8 @@ def report_cmd(
 
     # Write output files
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-    stem = f"{repo}-nfr-review-{timestamp}"
+    if stem is None:
+        stem = f"{repo}-nfr-review-{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     md_path = output_dir / f"{stem}.md"
@@ -1015,10 +921,12 @@ def report_cmd(
         )
         write_csv(combined_result, csv_path)
         write_jsonl(combined_result, jsonl_path)
+        actual_sarif: Path | None = None
         if sarif_path is not None:
             from nfr_review.output.sarif import write_sarif
 
             write_sarif(combined_result, sarif_path)
+            actual_sarif = sarif_path
     except (OSError, OutputError) as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
@@ -1095,7 +1003,10 @@ def report_cmd(
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None
 
-    total = len(nfr_result.findings) + len(hygiene_result.findings)
+    nfr_count = len(nfr_result.findings)
+    hygiene_count = len(hygiene_result.findings)
+    total = nfr_count + hygiene_count
+
     if not quiet:
         click.echo("", err=True)
     summary_parts = [
@@ -1104,9 +1015,168 @@ def report_cmd(
     ]
     if pdf_path:
         summary_parts.append(f"pdf={pdf_path}")
-    if sarif_path is not None:
-        summary_parts.append(f"sarif={sarif_path}")
+    if actual_sarif is not None:
+        summary_parts.append(f"sarif={actual_sarif}")
     _ts_echo(" ".join(summary_parts))
+
+    return ReportResult(
+        md_path=md_path,
+        csv_path=csv_path,
+        jsonl_path=jsonl_path,
+        sarif_path=actual_sarif,
+        pdf_path=pdf_path,
+        total_findings=total,
+        nfr_count=nfr_count,
+        hygiene_count=hygiene_count,
+    )
+
+
+@cli.command(
+    "report",
+    help="Run NFR + hygiene scans and produce a timestamped report. "
+    "All features (PDF, score, test-path inclusion) are enabled by default; "
+    "use --no-* / --exclude-* flags to opt out.",
+)
+@click.argument("target", type=click.Path(file_okay=False, path_type=Path))
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml. Defaults to ./nfr-review.yaml if present.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("reports"),
+    show_default=True,
+    help="Directory where report files are written.",
+)
+@click.option(
+    "--no-tests",
+    is_flag=True,
+    default=False,
+    help="Skip pytest execution.",
+)
+@click.option(
+    "--no-deps",
+    is_flag=True,
+    default=False,
+    help="Skip dependency tree analysis.",
+)
+@click.option(
+    "--no-diagrams",
+    is_flag=True,
+    default=False,
+    help="Suppress Mermaid diagram sections in the report.",
+)
+@click.option(
+    "--exclude-tests/--include-tests",
+    default=True,
+    help="Exclude test and fixture directories from analysis (default: exclude).",
+)
+@click.option(
+    "--no-pdf",
+    is_flag=True,
+    default=False,
+    help="Skip PDF report generation.",
+)
+@click.option(
+    "--no-summary",
+    is_flag=True,
+    default=False,
+    help="Skip LLM executive summary generation (PDF will omit summary section).",
+)
+@click.option(
+    "--test-timeout",
+    type=int,
+    default=420,
+    show_default=True,
+    help="Maximum seconds to wait for pytest to complete (default: 420).",
+)
+@click.option(
+    "--sarif",
+    "sarif_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output path for SARIF 2.1.0 findings file.",
+)
+@click.option(
+    "--no-score",
+    is_flag=True,
+    default=False,
+    help="Skip design maturity score computation.",
+)
+@click.option(
+    "--max-resolve-rounds",
+    type=int,
+    default=None,
+    help="Maximum resolver iterations for dependency analysis (default: 2000).",
+)
+def report_cmd(
+    target: Path,
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    config_path: Path | None,
+    output_dir: Path,
+    no_tests: bool,
+    no_deps: bool,
+    no_diagrams: bool,
+    exclude_tests: bool,
+    no_pdf: bool,
+    no_summary: bool,
+    test_timeout: int,
+    sarif_path: Path | None = None,
+    no_score: bool = False,
+    max_resolve_rounds: int | None = None,
+) -> None:
+    """Report command — run NFR + hygiene scans, optional pytest, emit report."""
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    if not target.exists():
+        click.echo(f"error: target does not exist: {target}", err=True)
+        raise click.exceptions.Exit(1)
+    if not target.is_dir():
+        click.echo(f"error: target is not a directory: {target}", err=True)
+        raise click.exceptions.Exit(1)
+
+    run_report_pipeline(
+        target,
+        output_dir=output_dir,
+        config_path=config_path,
+        no_tests=no_tests,
+        no_deps=no_deps,
+        no_diagrams=no_diagrams,
+        pdf=not no_pdf,
+        no_summary=no_summary,
+        test_timeout=test_timeout,
+        sarif_path=sarif_path,
+        show_score=not no_score,
+        max_resolve_rounds=max_resolve_rounds,
+        include_tests=not exclude_tests,
+        quiet=quiet,
+    )
 
 
 @cli.command("deps", help="Analyze dependency tree and show upgrade recommendations.")
@@ -1503,23 +1573,20 @@ def issues_scan_cmd(
     "sync",
     help="Sync GitHub issues from a JSONL scan file: create, update, and close.",
 )
-@click.option(
-    "--jsonl",
+@click.argument(
     "jsonl_path",
-    required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to a JSONL file produced by 'nfr-review run'.",
 )
 @click.option(
     "--repo",
-    required=True,
-    help="GitHub owner/repo (e.g. org/repo).",
+    default=None,
+    help="GitHub owner/repo (e.g. org/repo). Required unless --dry-run.",
 )
 @click.option(
-    "--label",
+    "--extra-labels",
     "extra_labels",
-    multiple=True,
-    help="Extra label(s) to apply (repeatable).",
+    default=None,
+    help="Comma-separated extra labels to apply (e.g. 'team:platform,sprint:23').",
 )
 @click.option(
     "--rag-min",
@@ -1568,8 +1635,8 @@ def issues_scan_cmd(
 )
 def issues_sync_cmd(
     jsonl_path: Path,
-    repo: str,
-    extra_labels: tuple[str, ...],
+    repo: str | None,
+    extra_labels: str | None,
     rag_min: str,
     severity_threshold: str,
     first_run_cap: int,
@@ -1585,6 +1652,8 @@ def issues_sync_cmd(
 
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    if not dry_run and not repo:
+        raise click.UsageError("--repo is required unless --dry-run is set")
     _configure_logging(verbose, quiet, None)
 
     # Load findings from JSONL
@@ -1603,13 +1672,17 @@ def issues_sync_cmd(
         quiet=quiet,
     )
 
+    label_list: list[str] | None = None
+    if extra_labels:
+        label_list = [lbl.strip() for lbl in extra_labels.split(",") if lbl.strip()]
+
     results = sync_issues(
         findings,
-        repo,
+        repo or "",
         dry_run=dry_run,
         rag_min=rag_min,
         severity_threshold=severity_threshold,
-        extra_labels=list(extra_labels) if extra_labels else None,
+        extra_labels=label_list,
         first_run_cap=first_run_cap,
         close_resolved=close_resolved,
     )
@@ -1838,13 +1911,233 @@ def arch_cmd(
     _ts_echo(" ".join(parts))
 
 
+@cli.command(
+    "all",
+    help="Run architecture review (cross-repo) + NFR report (per-repo) in one go. "
+    "Accepts one or more target directories.",
+)
+@click.argument(
+    "targets",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("reports"),
+    show_default=True,
+    help="Directory where all output files are written.",
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to nfr-review.yaml (used for each NFR report). "
+    "Defaults to per-repo auto-detection.",
+)
+@click.option("--no-arch", is_flag=True, default=False, help="Skip the architecture report.")
+@click.option("--no-tests", is_flag=True, default=False, help="Skip pytest execution.")
+@click.option("--no-deps", is_flag=True, default=False, help="Skip dependency tree analysis.")
+@click.option(
+    "--no-diagrams",
+    is_flag=True,
+    default=False,
+    help="Suppress Mermaid diagram sections in NFR reports.",
+)
+@click.option("--no-pdf", is_flag=True, default=False, help="Skip PDF report generation.")
+@click.option(
+    "--no-summary",
+    is_flag=True,
+    default=False,
+    help="Skip LLM executive summary generation.",
+)
+@click.option(
+    "--test-timeout",
+    type=int,
+    default=420,
+    show_default=True,
+    help="Maximum seconds to wait for pytest per repo.",
+)
+@click.option(
+    "--no-score",
+    is_flag=True,
+    default=False,
+    help="Skip design maturity score computation.",
+)
+@click.option(
+    "--max-resolve-rounds",
+    type=int,
+    default=None,
+    help="Maximum resolver iterations for dependency analysis.",
+)
+@click.option(
+    "--no-llm",
+    is_flag=True,
+    default=False,
+    help="Skip LLM-based analysis in architecture report.",
+)
+@click.option(
+    "--diagram-mode",
+    type=click.Choice(["hierarchical", "flat"]),
+    default="hierarchical",
+    show_default=True,
+    help="Architecture diagram layout.",
+)
+@click.option(
+    "--exclude-tests/--include-tests",
+    default=True,
+    help="Exclude test and fixture directories from NFR analysis (default: exclude).",
+)
+def all_cmd(
+    targets: tuple[Path, ...],
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    output_dir: Path,
+    config_path: Path | None,
+    no_arch: bool,
+    no_tests: bool,
+    no_deps: bool,
+    no_diagrams: bool,
+    no_pdf: bool,
+    no_summary: bool,
+    test_timeout: int,
+    no_score: bool,
+    max_resolve_rounds: int | None,
+    no_llm: bool,
+    diagram_mode: str,
+    exclude_tests: bool,
+) -> None:
+    """Run architecture review across all targets, then NFR report per target."""
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    target_list = list(targets)
+    repo_names = [_repo_name(t) for t in target_list]
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+
+    if not quiet:
+        click.echo(f"\nnfr-review all v{__version__}", err=True)
+        click.echo(f"Targets:    {', '.join(str(t) for t in target_list)}", err=True)
+        click.echo(f"Started:    {_timestamp()}", err=True)
+        click.echo("", err=True)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    arch_result: dict[str, Any] | None = None
+
+    # Phase 1: Architecture review (cross-repo)
+    if not no_arch:
+        from nfr_review.arch_orchestrator import run_arch_review
+        from nfr_review.arch_report_render import render_arch_report
+
+        t0 = _phase("Running architecture review (all targets)", quiet=quiet)
+        try:
+            report = run_arch_review(
+                target_list,
+                repo_names=repo_names,
+                skip_llm=no_llm,
+                diagram_mode=diagram_mode,
+                progress=lambda msg: _ts_echo(msg, quiet=quiet),
+            )
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"error: architecture review failed: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+        _phase_done("Architecture review", t0, quiet=quiet)
+
+        t0 = _phase("Rendering architecture output", quiet=quiet)
+        try:
+            arch_files = render_arch_report(report, output_dir, formats=None)
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"error: arch report rendering failed: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+        _phase_done("Architecture output", t0, quiet=quiet)
+
+        arch_result = {
+            "components": len(report.components),
+            "integrations": len(report.integration_points),
+            "risks": len(report.risk_findings),
+            "recommendations": len(report.recommendations),
+            "files": {k: v for k, v in arch_files.items() if v is not None},
+        }
+
+    # Phase 2: NFR report per target
+    report_results: list[tuple[str, ReportResult]] = []
+    for target, repo in zip(target_list, repo_names, strict=True):
+        if not quiet:
+            click.echo("", err=True)
+        _phase(f"Running NFR report for {repo}", quiet=quiet)
+        stem = f"{repo}-nfr-review-{timestamp}"
+        result = run_report_pipeline(
+            target,
+            output_dir=output_dir,
+            config_path=config_path,
+            no_tests=no_tests,
+            no_deps=no_deps,
+            no_diagrams=no_diagrams,
+            pdf=not no_pdf,
+            no_summary=no_summary,
+            test_timeout=test_timeout,
+            show_score=not no_score,
+            max_resolve_rounds=max_resolve_rounds,
+            include_tests=not exclude_tests,
+            quiet=quiet,
+            stem=stem,
+        )
+        report_results.append((repo, result))
+
+    # Summary
+    if not quiet:
+        click.echo("", err=True)
+    click.echo("=" * 60, err=True)
+    _ts_echo("nfr-review all — complete")
+    if arch_result:
+        _ts_echo(
+            f"  arch: components={arch_result['components']} "
+            f"integrations={arch_result['integrations']} "
+            f"risks={arch_result['risks']} "
+            f"recommendations={arch_result['recommendations']}"
+        )
+        for fmt, path in arch_result["files"].items():
+            _ts_echo(f"    {fmt}={path}")
+    for repo, rr in report_results:
+        _ts_echo(
+            f"  {repo}: findings={rr.total_findings} "
+            f"(nfr={rr.nfr_count} hygiene={rr.hygiene_count})"
+        )
+        _ts_echo(f"    md={rr.md_path} csv={rr.csv_path}")
+        if rr.pdf_path:
+            _ts_echo(f"    pdf={rr.pdf_path}")
+    click.echo("=" * 60, err=True)
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""
     click.echo(__version__)
 
 
-__all__ = ["_DedupFilter", "_configure_logging", "cli"]
+__all__ = ["ReportResult", "_DedupFilter", "_configure_logging", "cli", "run_report_pipeline"]
 
 
 if __name__ == "__main__":
