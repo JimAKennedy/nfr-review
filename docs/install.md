@@ -16,11 +16,12 @@ all the reference tables you need along the way.
 4. [Action outputs reference](#4-action-outputs-reference)
 5. [Permissions reference](#5-permissions-reference)
 6. [Versioning policy](#6-versioning-policy)
-7. [Configuration](#7-configuration)
-8. [Execution modes](#8-execution-modes)
-9. [Running locally](#9-running-locally)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Uninstalling](#11-uninstalling)
+7. [LLM features](#7-llm-features)
+8. [Configuration](#8-configuration)
+9. [Execution modes](#9-execution-modes)
+10. [Running locally](#10-running-locally)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Uninstalling](#12-uninstalling)
 
 ---
 
@@ -55,6 +56,10 @@ jobs:
 That is everything you need to start getting non-functional design feedback on
 pull requests. The action installs nfr-review via pip, scans the repository,
 and fails the check if any red findings are present.
+
+> **Optional:** To enable LLM-powered features (executive summary, ADR drift
+> analysis), add `anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}` to the
+> `with:` block. See [LLM features](#7-llm-features) for details.
 
 ---
 
@@ -128,6 +133,7 @@ All inputs are optional. The action reference is `JimAKennedy/nfr-review@v1`.
 | `python-version` | `"3.12"` | Python version to use (pip mode only, ignored in container mode). |
 | `execution` | `"pip"` | Execution mode: `"pip"` or `"container"`. |
 | `image` | `"ghcr.io/jimakennedy/nfr-review:latest"` | Docker image for container mode. |
+| `anthropic-api-key` | `""` | Anthropic API key for LLM features. Omit to skip LLM features gracefully. |
 
 ---
 
@@ -223,7 +229,67 @@ include breaking changes without notice.
 
 ---
 
-## 7. Configuration
+## 7. LLM features
+
+nfr-review includes optional LLM-powered analysis that uses the Anthropic API.
+When `ANTHROPIC_API_KEY` is not set, these features are **skipped gracefully** —
+the scan runs normally and all static-analysis findings are still produced.
+
+### What LLM features provide
+
+| Feature | Command | What it does |
+|---------|---------|--------------|
+| Executive summary | `report` | Generates a natural-language summary for the PDF report |
+| ADR drift analysis | `run` | Detects when code has drifted from Architecture Decision Records |
+| PII detection confirmation | `run` | Uses LLM to confirm potential PII logging patterns |
+| Domain model inference | `arch` | Infers bounded contexts and domain models from code |
+| Market comparison | `arch` | Compares architecture patterns against industry norms |
+
+### Setting up in GitHub Actions
+
+1. Add `ANTHROPIC_API_KEY` as a **repository secret** in Settings > Secrets and
+   variables > Actions.
+
+2. Pass it to the action via the `anthropic-api-key` input:
+
+```yaml
+- name: Run NFR Review
+  id: nfr
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    fail-on: "red"
+    anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The action forwards the key as an environment variable to the scan process. In
+container mode, it is injected into the Docker container automatically.
+
+### Setting up locally
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+nfr-review report /path/to/repo
+```
+
+### Opting out
+
+If the key is set but you want to skip LLM features for a specific run:
+
+```bash
+nfr-review report /path/to/repo --no-summary   # skip executive summary
+nfr-review arch /path/to/repo --no-llm         # skip all LLM analysis
+```
+
+### Cost and data scope
+
+LLM features send code snippets and structural metadata to the Anthropic API.
+See [SECURITY.md](../SECURITY.md) for the full data scope disclosure. Typical
+cost is under $0.10 per scan for most repositories.
+
+---
+
+## 8. Configuration
 
 nfr-review can be configured with an optional `nfr-review.yaml` file in your
 repository root (or any path specified via the `config` input).
@@ -242,7 +308,7 @@ See the [README](../README.md) for the full configuration reference.
 
 ---
 
-## 8. Execution modes
+## 9. Execution modes
 
 The `execution` input controls how nfr-review runs inside the GitHub Actions
 runner.
@@ -283,7 +349,7 @@ image: "ghcr.io/jimakennedy/nfr-review:1.2.3"
 
 ---
 
-## 9. Running locally
+## 10. Running locally
 
 ### Install from source
 
@@ -353,7 +419,7 @@ docker run --rm \
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### "Resource not accessible by integration" error
 
@@ -403,16 +469,23 @@ explicitly grant each permission the action needs.
   available, set `python-version` to a version present on the runner.
 - nfr-review requires Python 3.11 or later.
 
+### LLM summary or ADR drift analysis is missing
+
+`ANTHROPIC_API_KEY` is not set or is invalid. LLM features are silently skipped
+when the key is absent. Set the key as described in
+[LLM features](#7-llm-features) and rerun the scan. Use `-v` to see which
+features were skipped.
+
 ### Action fails but no findings are shown
 
 - Check the "Run nfr-review scan" step logs for errors (import failures,
   missing dependencies, config parse errors).
 - Run the scan locally to reproduce the issue (see
-  [Running locally](#9-running-locally)).
+  [Running locally](#10-running-locally)).
 
 ---
 
-## 11. Uninstalling
+## 12. Uninstalling
 
 ### Remove the GitHub Action
 
