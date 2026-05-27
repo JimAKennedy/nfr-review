@@ -46,7 +46,6 @@ jobs:
           create-issues: "true"
           rag-min: "amber"       # file issues for amber + red findings
           first-run-cap: "25"    # prevent issue flood on first adoption
-          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # enables LLM features
           # extra-labels: "team:platform,nfr"
           # config: ".nfr-review.yaml"
           # execution: "container"

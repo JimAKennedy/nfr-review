@@ -40,7 +40,6 @@ jobs:
         with:
           execution: "container"
           # image: "ghcr.io/jimakennedy/nfr-review:1.2.3"  # pin a version
-          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # enables LLM features
           path: .
           fail-on: "red"
           sarif-upload: "true"

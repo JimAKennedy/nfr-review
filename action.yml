@@ -79,10 +79,6 @@ inputs:
     description: "Docker image for container mode (default: ghcr.io/jimakennedy/nfr-review:latest)"
     required: false
     default: "ghcr.io/jimakennedy/nfr-review:latest"
-  anthropic-api-key:
-    description: "Anthropic API key for LLM-powered features (executive summary, ADR drift, PII detection). Omit to skip LLM features gracefully."
-    required: false
-    default: ""
 
 outputs:
   findings-count:
@@ -208,9 +204,6 @@ runs:
           DOCKER_ARGS=("run" "--rm")
           DOCKER_ARGS+=("--user" "$(id -u):$(id -g)")
           DOCKER_ARGS+=("-e" "HOME=/tmp")
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
-            DOCKER_ARGS+=("-e" "ANTHROPIC_API_KEY")
-          fi
           DOCKER_ARGS+=("-v" "${{ github.workspace }}:/repo")
           DOCKER_ARGS+=("-v" "${{ runner.temp }}:/output")
           DOCKER_ARGS+=("${{ inputs.image }}")
