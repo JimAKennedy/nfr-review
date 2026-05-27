@@ -54,7 +54,7 @@ jobs:
 
       # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload baseline artifact
-        if: always()
+        if: always() && steps.nfr.outputs.jsonl-path != ''
         uses: actions/upload-artifact@v4
         with:
           name: nfr-review-baseline
