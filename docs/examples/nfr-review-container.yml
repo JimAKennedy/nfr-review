@@ -47,6 +47,7 @@ jobs:
           create-issues: "true"
           rag-min: "amber"
           first-run-cap: "25"
+          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # enable LLM features
 
       - name: Summary
         if: always()
