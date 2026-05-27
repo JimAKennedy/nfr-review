@@ -72,6 +72,10 @@ These are **not** Python packages — they are standalone binaries that some col
 
 Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped.
 
+### Optional: LLM features
+
+Set `ANTHROPIC_API_KEY` to enable LLM-powered analysis (executive summary, ADR drift detection, PII confirmation). Without it, these features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+
 ## Installation
 
 ```bash

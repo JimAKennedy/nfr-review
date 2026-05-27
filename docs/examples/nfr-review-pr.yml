@@ -62,6 +62,7 @@ jobs:
           sarif-upload: "true"
           comment: "true"
           create-issues: "false"        # set "true" to sync issues from PR scans
+          # anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}  # enables LLM features
           # execution: "container"      # "pip" (default) or "container"
           # image: "ghcr.io/jimakennedy/nfr-review:latest"
           # extra-labels: "team:platform,sprint:23"
