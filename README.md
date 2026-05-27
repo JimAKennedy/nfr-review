@@ -285,11 +285,41 @@ nfr-review issues scan /path/to/target/repo
 nfr-review issues scan --dry-run /path/to/target/repo
 
 # Sync issues from a prior JSONL scan file
-nfr-review issues sync --jsonl findings.jsonl --repo owner/repo
+nfr-review issues sync findings.jsonl --repo owner/repo
 
 # Preview sync decisions without calling GitHub
-nfr-review issues sync --jsonl findings.jsonl --repo owner/repo --dry-run
+nfr-review issues sync findings.jsonl --dry-run
 ```
+
+### Run everything at once
+
+`nfr-review all` runs an architecture review across all targets and an NFR report per target in a single invocation.
+
+```bash
+# Architecture + NFR reports for two repos
+nfr-review all /path/to/repo1 /path/to/repo2
+
+# Skip architecture, just batch NFR reports
+nfr-review all /path/to/repo1 /path/to/repo2 --no-arch
+
+# Custom output directory, skip PDF and tests
+nfr-review all /path/to/repo1 --output-dir my-reports --no-pdf --no-tests
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--output-dir` | `reports` | Directory for all output files |
+| `--no-arch` | off | Skip the cross-repo architecture report |
+| `--no-tests` | off | Skip pytest execution per repo |
+| `--no-deps` | off | Skip dependency analysis |
+| `--no-diagrams` | off | Suppress Mermaid diagrams in NFR reports |
+| `--no-pdf` | off | Skip PDF generation |
+| `--no-summary` | off | Skip LLM executive summary |
+| `--no-score` | off | Skip maturity score |
+| `--no-llm` | off | Skip LLM analysis in architecture report |
+| `--diagram-mode` | `hierarchical` | Architecture diagram layout |
+| `--test-timeout` | `420` | Pytest timeout per repo (seconds) |
+| `--exclude-tests` | exclude | Exclude test directories from NFR analysis |
 
 ### Check version
 
