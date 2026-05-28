@@ -96,6 +96,37 @@ def _make_id(prefix: str, name: str) -> str:
     return f"{prefix}-{slug}-{short_hash}"
 
 
+_ML_FRAMEWORK_MARKERS: dict[str, tuple[str, str]] = {
+    "torch": ("PyTorch", "framework"),
+    "pytorch": ("PyTorch", "framework"),
+    "tensorflow": ("TensorFlow", "framework"),
+    "keras": ("Keras", "framework"),
+    "sklearn": ("scikit-learn", "library"),
+    "scikit-learn": ("scikit-learn", "library"),
+    "onnx": ("ONNX", "library"),
+    "onnxruntime": ("ONNX Runtime", "library"),
+    "xgboost": ("XGBoost", "library"),
+    "lightgbm": ("LightGBM", "library"),
+    "jax": ("JAX", "framework"),
+}
+
+
+def _detect_ml_frameworks(path: Path, entries: list[TechStackEntry]) -> None:
+    """Scan requirements.txt / pyproject.toml for ML framework dependencies."""
+    seen: set[str] = {e.name for e in entries}
+    req_file = path / "requirements.txt"
+    if req_file.is_file():
+        content = _safe_read_text(req_file) or ""
+        for line in content.splitlines():
+            pkg = line.strip().split("=")[0].split(">")[0].split("<")[0].split("[")[0].strip()
+            pkg_lower = pkg.lower()
+            if pkg_lower in _ML_FRAMEWORK_MARKERS:
+                name, role = _ML_FRAMEWORK_MARKERS[pkg_lower]
+                if name not in seen:
+                    entries.append(TechStackEntry(name=name, role=role))
+                    seen.add(name)
+
+
 def _infer_tech_stack(path: Path) -> list[TechStackEntry]:
     """Infer the tech stack for a single component directory."""
     entries: list[TechStackEntry] = []
@@ -125,7 +156,13 @@ def _infer_tech_stack(path: Path) -> list[TechStackEntry]:
             if '"express"' in content:
                 entries.append(TechStackEntry(name="Express", role="framework"))
 
-    if (path / "pyproject.toml").is_file() or (path / "setup.py").is_file():
+    _python_build = (
+        (path / "pyproject.toml").is_file()
+        or (path / "setup.py").is_file()
+        or (path / "setup.cfg").is_file()
+        or (path / "requirements.txt").is_file()
+    )
+    if _python_build:
         entries.append(TechStackEntry(name="Python", role="language"))
         content = _safe_read_text(path / "pyproject.toml") or ""
         if "fastapi" in content.lower():
@@ -134,6 +171,7 @@ def _infer_tech_stack(path: Path) -> list[TechStackEntry]:
             entries.append(TechStackEntry(name="Django", role="framework"))
         elif "flask" in content.lower():
             entries.append(TechStackEntry(name="Flask", role="framework"))
+        _detect_ml_frameworks(path, entries)
 
     if (path / "go.mod").is_file():
         entries.append(TechStackEntry(name="Go", role="language"))
@@ -143,6 +181,21 @@ def _infer_tech_stack(path: Path) -> list[TechStackEntry]:
 
     if (path / "CMakeLists.txt").is_file():
         entries.append(TechStackEntry(name="C++", role="language"))
+        cmake_content = _safe_read_text(path / "CMakeLists.txt") or ""
+        cmake_lower = cmake_content.lower()
+        if "juce_add_plugin" in cmake_lower or "juce_add_gui_app" in cmake_lower:
+            entries.append(TechStackEntry(name="JUCE", role="framework"))
+        if (
+            "vst3sdk" in cmake_lower
+            or "vst3_sdk" in cmake_lower
+            or "smtg_add_vst3plugin" in cmake_lower
+        ):
+            entries.append(TechStackEntry(name="VST3 SDK", role="framework"))
+        if "onnxruntime" in cmake_lower:
+            entries.append(TechStackEntry(name="ONNX Runtime", role="library"))
+
+    if (path / "dvc.yaml").is_file() or (path / "dvc.lock").is_file():
+        entries.append(TechStackEntry(name="DVC", role="tool"))
 
     return entries
 
@@ -395,6 +448,226 @@ def _discover_docker_compose_components(
             )
 
         break  # Only process first compose file found
+
+    return components
+
+
+_SOURCE_DIRS = frozenset({"source", "src"})
+
+_CPP_EXTENSIONS = frozenset({".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hxx"})
+
+_SOURCE_SUBDIR_SKIP = frozenset(
+    {
+        "build",
+        "build-test",
+        "test",
+        "tests",
+        "third_party",
+        "thirdparty",
+        "vendor",
+        "external",
+        "cmake",
+        "resource",
+        "resources",
+        "docs",
+        "doc",
+    }
+)
+
+_SUBDIR_TYPE_HINTS: dict[str, ComponentType] = {
+    "ml": "worker",
+    "inference": "worker",
+    "training": "worker",
+    "transforms": "library",
+    "transform": "library",
+    "evolution": "library",
+    "ui": "ui",
+    "gui": "ui",
+    "editor": "ui",
+    "view": "ui",
+    "core": "library",
+    "common": "library",
+    "utils": "library",
+    "net": "library",
+    "network": "library",
+    "audio": "library",
+    "dsp": "library",
+}
+
+_MIN_SOURCE_FILES = 2
+
+
+def _discover_source_subdirectories(
+    repo_path: Path, repo_name: str | None = None
+) -> list[Component]:
+    """Discover sub-components from C++ source directory structure.
+
+    Scans source/ or src/ for subdirectories containing enough source files
+    to qualify as distinct architectural components (e.g. ml/, transforms/).
+    """
+    components: list[Component] = []
+    effective_name = repo_name or repo_path.name
+
+    for source_dir_name in _SOURCE_DIRS:
+        source_dir = repo_path / source_dir_name
+        if not source_dir.is_dir():
+            continue
+
+        for child in sorted(source_dir.iterdir()):
+            if not child.is_dir():
+                continue
+            if child.name.startswith(".") or child.name.lower() in _SOURCE_SUBDIR_SKIP:
+                continue
+
+            src_files = [
+                f for f in child.iterdir() if f.is_file() and f.suffix in _CPP_EXTENSIONS
+            ]
+            if len(src_files) < _MIN_SOURCE_FILES:
+                continue
+
+            comp_type = _SUBDIR_TYPE_HINTS.get(child.name.lower(), "library")
+            rel_path = str(child.relative_to(repo_path))
+            comp_id = _make_id("src", f"{effective_name}/{rel_path}")
+
+            components.append(
+                Component(
+                    id=comp_id,
+                    name=child.name,
+                    description=f"C++ source sub-component in {source_dir_name}/",
+                    component_type=comp_type,
+                    boundaries=[
+                        ComponentBoundary(
+                            boundary_type="directory",
+                            path=rel_path,
+                            repo=effective_name,
+                        )
+                    ],
+                    tech_stack=[TechStackEntry(name="C++", role="language")],
+                    repo=effective_name,
+                )
+            )
+
+        if components:
+            logger.debug(
+                "Found %d source sub-components in %s/", len(components), source_dir_name
+            )
+
+    return components
+
+
+def _discover_ml_pipeline_components(
+    repo_path: Path, repo_name: str | None = None
+) -> list[Component]:
+    """Discover ML training pipeline directories.
+
+    Detects directories containing requirements.txt + Python scripts as
+    ML pipeline components. Parses requirements.txt for ML framework
+    identification.
+    """
+    components: list[Component] = []
+    effective_name = repo_name or repo_path.name
+
+    for child in sorted(repo_path.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name.startswith(".") or child.name in _HIDDEN_DIRS:
+            continue
+
+        req_file = child / "requirements.txt"
+        if not req_file.is_file():
+            continue
+
+        py_files = list(child.rglob("*.py"))
+        if len(py_files) < 2:
+            continue
+
+        tech = _infer_tech_stack(child)
+        has_dvc = (child / "dvc.yaml").is_file() or (repo_path / "dvc.yaml").is_file()
+        if has_dvc and not any(t.name == "DVC" for t in tech):
+            tech.append(TechStackEntry(name="DVC", role="tool"))
+
+        rel_path = str(child.relative_to(repo_path))
+        comp_id = _make_id("ml", f"{effective_name}/{rel_path}")
+
+        desc = "ML training pipeline"
+        ml_names = [t.name for t in tech if t.role == "framework" and t.name != "Python"]
+        if ml_names:
+            desc = f"ML training pipeline ({', '.join(ml_names)})"
+
+        components.append(
+            Component(
+                id=comp_id,
+                name=child.name,
+                description=desc,
+                component_type="worker",
+                boundaries=[
+                    ComponentBoundary(
+                        boundary_type="directory",
+                        path=rel_path,
+                        repo=effective_name,
+                    )
+                ],
+                tech_stack=tech,
+                repo=effective_name,
+            )
+        )
+
+    if components:
+        logger.debug("Found %d ML pipeline components", len(components))
+
+    return components
+
+
+def _discover_nested_build_components(
+    repo_path: Path, repo_name: str | None = None
+) -> list[Component]:
+    """Discover subdirectories with their own build files.
+
+    Finds non-standard nested project directories (outside _MONOREPO_DIRS)
+    that have build configuration, indicating a separate component.
+    """
+    components: list[Component] = []
+    effective_name = repo_name or repo_path.name
+
+    for child in sorted(repo_path.iterdir()):
+        if not child.is_dir():
+            continue
+        if child.name.startswith(".") or child.name in _HIDDEN_DIRS:
+            continue
+        if child.name.lower() in _MONOREPO_DIRS:
+            continue
+        if child.name.lower() in _SOURCE_SUBDIR_SKIP:
+            continue
+
+        has_build = any((child / bf).is_file() for bf in _BUILD_FILES)
+        if not has_build:
+            continue
+
+        tech = _infer_tech_stack(child)
+        comp_type = _infer_component_type(child.name, child, tech)
+        rel_path = str(child.relative_to(repo_path))
+        comp_id = _make_id("nested", f"{effective_name}/{rel_path}")
+
+        components.append(
+            Component(
+                id=comp_id,
+                name=child.name,
+                description="Nested project component",
+                component_type=comp_type,
+                boundaries=[
+                    ComponentBoundary(
+                        boundary_type="directory",
+                        path=rel_path,
+                        repo=effective_name,
+                    )
+                ],
+                tech_stack=tech,
+                repo=effective_name,
+            )
+        )
+
+    if components:
+        logger.debug("Found %d nested build components", len(components))
 
     return components
 
@@ -666,9 +939,12 @@ def discover_components(
     Applies multiple discovery strategies in priority order:
     1. Monorepo directories (packages/, services/, apps/, etc.)
     2. Build-system modules (Maven multi-module, Gradle sub-projects)
-    3. Kubernetes workloads
-    4. Docker Compose services
-    5. Root project (if nothing else found or include_root=True)
+    3. Nested build components (subdirs with own build files)
+    4. ML pipeline directories (requirements.txt + Python scripts)
+    5. C++ source subdirectories (source/ml/, source/transforms/, etc.)
+    6. Kubernetes workloads
+    7. Docker Compose services
+    8. Root project (if nothing else found or include_root=True)
 
     Returns a deduplicated list of Component objects.
     """
@@ -694,20 +970,38 @@ def discover_components(
     if gradle_comps:
         logger.info("Found %d Gradle sub-projects", len(gradle_comps))
 
-    # Strategy 3: Kubernetes workloads
+    # Strategy 3: Nested build components (subdirs with own build files)
+    nested_comps = _discover_nested_build_components(repo_path, effective_name)
+    all_components.extend(nested_comps)
+    if nested_comps:
+        logger.info("Found %d nested build components", len(nested_comps))
+
+    # Strategy 4: ML pipeline directories (requirements.txt + Python scripts)
+    ml_comps = _discover_ml_pipeline_components(repo_path, effective_name)
+    all_components.extend(ml_comps)
+    if ml_comps:
+        logger.info("Found %d ML pipeline components", len(ml_comps))
+
+    # Strategy 5: C++ source subdirectories
+    src_comps = _discover_source_subdirectories(repo_path, effective_name)
+    all_components.extend(src_comps)
+    if src_comps:
+        logger.info("Found %d source sub-components", len(src_comps))
+
+    # Strategy 6: Kubernetes workloads
     k8s_comps = _discover_k8s_components(repo_path, effective_name)
     all_components.extend(k8s_comps)
     if k8s_comps:
         logger.info("Found %d K8s workloads", len(k8s_comps))
 
-    # Strategy 4: Docker Compose services
+    # Strategy 7: Docker Compose services
     compose_comps = _discover_docker_compose_components(repo_path, effective_name)
     all_components.extend(compose_comps)
     if compose_comps:
         logger.info("Found %d Docker Compose services", len(compose_comps))
 
-    # Strategy 5: Root component
-    if include_root or not all_components:
+    # Strategy 8: Root component (skip when nested build components supersede it)
+    if not nested_comps and (include_root or not all_components):
         root_comp = _discover_build_root_component(repo_path, effective_name)
         if root_comp is not None:
             all_components.append(root_comp)

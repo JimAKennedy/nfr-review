@@ -11,8 +11,12 @@ import pytest
 from nfr_review.arch_discovery import (
     _discover_go_module_path,
     _discover_java_base_package,
+    _discover_ml_pipeline_components,
+    _discover_nested_build_components,
     _discover_python_top_package,
+    _discover_source_subdirectories,
     _enrich_package_boundaries,
+    _infer_tech_stack,
     discover_components,
     discover_components_multi_repo,
 )
@@ -563,3 +567,274 @@ class TestEnrichPackageBoundaries:
         pkg_boundaries = [b for b in core_comp.boundaries if b.boundary_type == "package"]
         assert len(pkg_boundaries) == 1
         assert pkg_boundaries[0].path == "com.acme.core"
+
+
+class TestTechStackDetection:
+    def test_requirements_txt_detects_python(self, tmp_repo: Path) -> None:
+        (tmp_repo / "requirements.txt").write_text("flask>=2.0\n")
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "Python" in names
+
+    def test_dvc_yaml_detected(self, tmp_repo: Path) -> None:
+        (tmp_repo / "dvc.yaml").write_text("stages:\n  train:\n    cmd: python train.py\n")
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "DVC" in names
+
+    def test_cmake_juce_detection(self, tmp_repo: Path) -> None:
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\njuce_add_plugin(MyPlugin)\n"
+        )
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "C++" in names
+        assert "JUCE" in names
+
+    def test_cmake_vst3_detection(self, tmp_repo: Path) -> None:
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\nadd_subdirectory(vst3sdk)\n"
+        )
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "VST3 SDK" in names
+
+    def test_cmake_onnxruntime_detection(self, tmp_repo: Path) -> None:
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\n"
+            "FetchContent_Declare(onnxruntime URL https://example.com)\n"
+        )
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "ONNX Runtime" in names
+
+    def test_ml_framework_parsing_from_requirements(self, tmp_repo: Path) -> None:
+        (tmp_repo / "requirements.txt").write_text("torch>=2.0\nonnx\nnumpy\n")
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "Python" in names
+        assert "PyTorch" in names
+        assert "ONNX" in names
+
+    def test_no_false_positives_on_plain_cmake(self, tmp_repo: Path) -> None:
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\nadd_executable(myapp main.cpp)\n"
+        )
+        entries = _infer_tech_stack(tmp_repo)
+        names = [e.name for e in entries]
+        assert "C++" in names
+        assert "JUCE" not in names
+        assert "VST3 SDK" not in names
+        assert "ONNX Runtime" not in names
+
+
+class TestSourceSubdirDiscovery:
+    def test_cpp_source_subdirs_discovered(self, tmp_repo: Path) -> None:
+        source = tmp_repo / "source"
+        source.mkdir()
+        for subdir in ("ml", "transforms", "evolution"):
+            d = source / subdir
+            d.mkdir()
+            (d / "impl.cpp").write_text("")
+            (d / "impl.h").write_text("")
+
+        comps = _discover_source_subdirectories(tmp_repo)
+        names = {c.name for c in comps}
+        assert names == {"ml", "transforms", "evolution"}
+
+    def test_subdir_type_inference(self, tmp_repo: Path) -> None:
+        source = tmp_repo / "source"
+        source.mkdir()
+        ml = source / "ml"
+        ml.mkdir()
+        (ml / "a.cpp").write_text("")
+        (ml / "b.cpp").write_text("")
+        transforms = source / "transforms"
+        transforms.mkdir()
+        (transforms / "a.cpp").write_text("")
+        (transforms / "b.h").write_text("")
+
+        comps = _discover_source_subdirectories(tmp_repo)
+        ml_comp = next(c for c in comps if c.name == "ml")
+        tx_comp = next(c for c in comps if c.name == "transforms")
+        assert ml_comp.component_type == "worker"
+        assert tx_comp.component_type == "library"
+
+    def test_skip_test_and_build_dirs(self, tmp_repo: Path) -> None:
+        source = tmp_repo / "source"
+        source.mkdir()
+        for skip_dir in ("tests", "build", "vendor"):
+            d = source / skip_dir
+            d.mkdir()
+            (d / "a.cpp").write_text("")
+            (d / "b.cpp").write_text("")
+
+        comps = _discover_source_subdirectories(tmp_repo)
+        assert len(comps) == 0
+
+    def test_insufficient_files_skipped(self, tmp_repo: Path) -> None:
+        source = tmp_repo / "source"
+        source.mkdir()
+        d = source / "tiny"
+        d.mkdir()
+        (d / "one.cpp").write_text("")
+
+        comps = _discover_source_subdirectories(tmp_repo)
+        assert len(comps) == 0
+
+    def test_cpp_tech_stack_set(self, tmp_repo: Path) -> None:
+        source = tmp_repo / "source"
+        source.mkdir()
+        d = source / "ml"
+        d.mkdir()
+        (d / "a.cpp").write_text("")
+        (d / "b.h").write_text("")
+
+        comps = _discover_source_subdirectories(tmp_repo)
+        assert len(comps) == 1
+        assert any(t.name == "C++" for t in comps[0].tech_stack)
+
+
+class TestMLPipelineDiscovery:
+    def test_corpus_with_requirements_and_scripts(self, tmp_repo: Path) -> None:
+        corpus = tmp_repo / "corpus"
+        corpus.mkdir()
+        (corpus / "requirements.txt").write_text("torch>=2.0\nonnx\n")
+        scripts = corpus / "scripts"
+        scripts.mkdir()
+        (scripts / "train.py").write_text("import torch\n")
+        (scripts / "export.py").write_text("import onnx\n")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 1
+        assert comps[0].name == "corpus"
+        assert comps[0].component_type == "worker"
+        names = [t.name for t in comps[0].tech_stack]
+        assert "Python" in names
+        assert "PyTorch" in names
+
+    def test_dvc_pipeline_detected(self, tmp_repo: Path) -> None:
+        corpus = tmp_repo / "corpus"
+        corpus.mkdir()
+        (corpus / "requirements.txt").write_text("torch\n")
+        (corpus / "train.py").write_text("")
+        (corpus / "export.py").write_text("")
+        (tmp_repo / "dvc.yaml").write_text("stages:\n  train:\n    cmd: python train.py\n")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 1
+        names = [t.name for t in comps[0].tech_stack]
+        assert "DVC" in names
+
+    def test_no_python_files_skipped(self, tmp_repo: Path) -> None:
+        corpus = tmp_repo / "corpus"
+        corpus.mkdir()
+        (corpus / "requirements.txt").write_text("torch\n")
+        (corpus / "data.csv").write_text("a,b\n1,2\n")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 0
+
+    def test_no_requirements_skipped(self, tmp_repo: Path) -> None:
+        corpus = tmp_repo / "corpus"
+        corpus.mkdir()
+        (corpus / "train.py").write_text("")
+        (corpus / "export.py").write_text("")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 0
+
+    def test_hidden_dirs_skipped(self, tmp_repo: Path) -> None:
+        hidden = tmp_repo / ".venv"
+        hidden.mkdir()
+        (hidden / "requirements.txt").write_text("flask\n")
+        (hidden / "a.py").write_text("")
+        (hidden / "b.py").write_text("")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 0
+
+    def test_description_includes_framework_names(self, tmp_repo: Path) -> None:
+        corpus = tmp_repo / "training"
+        corpus.mkdir()
+        (corpus / "requirements.txt").write_text("torch\ntensorflow\n")
+        (corpus / "a.py").write_text("")
+        (corpus / "b.py").write_text("")
+
+        comps = _discover_ml_pipeline_components(tmp_repo)
+        assert len(comps) == 1
+        assert "PyTorch" in comps[0].description
+        assert "TensorFlow" in comps[0].description
+
+
+class TestNestedBuildComponents:
+    def test_nested_cmake_project(self, tmp_repo: Path) -> None:
+        nested = tmp_repo / "MyPlugin"
+        nested.mkdir()
+        (nested / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\njuce_add_plugin(MyPlugin)\n"
+        )
+
+        comps = _discover_nested_build_components(tmp_repo)
+        assert len(comps) == 1
+        assert comps[0].name == "MyPlugin"
+        names = [t.name for t in comps[0].tech_stack]
+        assert "C++" in names
+        assert "JUCE" in names
+
+    def test_skip_monorepo_dirs(self, tmp_repo: Path) -> None:
+        packages = tmp_repo / "packages"
+        packages.mkdir()
+        (packages / "package.json").write_text("{}")
+
+        comps = _discover_nested_build_components(tmp_repo)
+        assert len(comps) == 0
+
+    def test_skip_build_dirs(self, tmp_repo: Path) -> None:
+        build = tmp_repo / "build"
+        build.mkdir()
+        (build / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.22)\n")
+
+        comps = _discover_nested_build_components(tmp_repo)
+        assert len(comps) == 0
+
+    def test_no_build_file_skipped(self, tmp_repo: Path) -> None:
+        child = tmp_repo / "docs"
+        child.mkdir()
+        (child / "README.md").write_text("# Docs\n")
+
+        comps = _discover_nested_build_components(tmp_repo)
+        assert len(comps) == 0
+
+
+class TestIntegratedDiscovery:
+    def test_mixed_cpp_and_ml_repo(self, tmp_repo: Path) -> None:
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\njuce_add_plugin(MyPlugin)\n"
+            "add_subdirectory(vst3sdk)\nFetchContent_Declare(onnxruntime URL x)\n"
+        )
+        source = tmp_repo / "source"
+        source.mkdir()
+        ml = source / "ml"
+        ml.mkdir()
+        (ml / "inference.cpp").write_text("")
+        (ml / "inference.h").write_text("")
+        transforms = source / "transforms"
+        transforms.mkdir()
+        (transforms / "fx.cpp").write_text("")
+        (transforms / "fx.h").write_text("")
+
+        corpus = tmp_repo / "corpus"
+        corpus.mkdir()
+        (corpus / "requirements.txt").write_text("torch>=2.0\nonnx\n")
+        scripts = corpus / "scripts"
+        scripts.mkdir()
+        (scripts / "train.py").write_text("")
+        (scripts / "export.py").write_text("")
+
+        comps = discover_components(tmp_repo, include_root=True)
+        names = {c.name for c in comps}
+        assert "ml" in names
+        assert "transforms" in names
+        assert "corpus" in names
+        assert len(comps) >= 4
