@@ -45,7 +45,7 @@ jobs:
   nfr-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: JimAKennedy/nfr-review@v1
         with:
           fail-on: "red"
@@ -56,6 +56,11 @@ jobs:
 That is everything you need to start getting non-functional design feedback on
 pull requests. The action installs nfr-review via pip, scans the repository,
 and fails the check if any red findings are present.
+
+> **Code Scanning (recommended):** To see SARIF results in the GitHub Security tab,
+> enable Code Scanning in **Settings > Code security > Code scanning**. If Code
+> Scanning is not enabled, the SARIF upload step is skipped gracefully — all other
+> features (PR comment, artifacts, fail-on threshold) still work.
 
 > **Optional:** To enable LLM-powered features (executive summary, ADR drift
 > analysis), add `anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}` to the
@@ -80,11 +85,10 @@ Copy [`docs/examples/nfr-review-pr.yml`](examples/nfr-review-pr.yml) to
 Key features of the PR workflow:
 
 - Downloads the baseline artifact from the last successful nightly run
-  (using `dawidd6/action-download-artifact@v6`).
+  (using the `gh` CLI — no third-party action required).
 - Runs nfr-review in **diff mode** so only new or changed findings appear.
 - On first adoption (no nightly has run yet), the baseline download is skipped
-  and a full scan runs instead. Set `fail-on: "never"` for that first merge,
-  then restore `fail-on: "red"` once a nightly baseline exists.
+  automatically and a full scan runs instead. No manual setup needed.
 
 ### Nightly workflow
 
@@ -428,12 +432,16 @@ block (see [Permissions reference](#5-permissions-reference)). If your
 repository or organization uses restrictive default permissions, you must
 explicitly grant each permission the action needs.
 
-### SARIF upload fails
+### SARIF upload warning
 
-- Ensure `security-events: write` is in the permissions block.
-- GitHub Code Scanning must be enabled for the repository (it is enabled by
-  default on public repos; private repos may need Advanced Security or the
+If the workflow shows a warning like "SARIF upload failed — Code Scanning may
+not be enabled", the scan still completed successfully — only the upload to the
+Security tab was skipped. To fix:
+
+- Enable Code Scanning in **Settings > Code security > Code scanning** (enabled
+  by default on public repos; private repos may need Advanced Security or the
   free Code Scanning tier).
+- Ensure `security-events: write` is in the workflow permissions block.
 
 ### No PR comment appears
 
@@ -445,9 +453,9 @@ explicitly grant each permission the action needs.
 ### Diff mode shows all findings (not just new ones)
 
 - The baseline artifact may not exist yet. Run the nightly workflow at least
-  once before opening a PR.
-- Verify the `dawidd6/action-download-artifact` step completed successfully
-  (check the step output for "Artifact downloaded" vs "No artifact found").
+  once before opening a PR (or trigger it manually via Actions > Run workflow).
+- Verify the "Download nightly baseline" step completed successfully
+  (check the step output — it will log a notice if no baseline was found).
 - Ensure the `baseline` input path matches the downloaded artifact location.
 
 ### Too many issues created at once

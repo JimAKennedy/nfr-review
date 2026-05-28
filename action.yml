@@ -264,10 +264,18 @@ runs:
 
     # ── 6. Upload SARIF ─────────────────────────────────────────────────
     - name: Upload SARIF
+      id: sarif-upload
       if: inputs.sarif-upload == 'true'
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: ${{ steps.scan.outputs.sarif-path }}
+
+    - name: SARIF upload status
+      if: inputs.sarif-upload == 'true' && steps.sarif-upload.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::warning::SARIF upload failed — Code Scanning may not be enabled for this repository. Enable it in Settings > Code security > Code scanning, then re-run. Findings are still available in the PR comment and workflow artifacts."
 
     # ── 7. Parse JSONL and set output counts ────────────────────────────
     - name: Parse results
