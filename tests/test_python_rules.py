@@ -24,6 +24,7 @@ _R007_FIELDS = {
     "collector_version",
     "confidence",
     "pattern_tag",
+    "content_hash",
 }
 
 

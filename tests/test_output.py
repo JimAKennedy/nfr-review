@@ -22,6 +22,7 @@ R007_HEADER = (
     "collector_version",
     "confidence",
     "pattern_tag",
+    "content_hash",
 )
 
 
@@ -101,6 +102,7 @@ def test_csv_finding_row_preserves_field_order(tmp_path: Path) -> None:
         "0.1.0",
         "0.95",
         "documentation",
+        "",
     ]
 
 
