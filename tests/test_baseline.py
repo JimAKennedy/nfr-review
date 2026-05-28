@@ -10,7 +10,12 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from nfr_review.baseline import BaselineData, filter_new_findings, load_baseline
+from nfr_review.baseline import (
+    BaselineData,
+    classify_findings,
+    filter_new_findings,
+    load_baseline,
+)
 from nfr_review.cli import cli
 from nfr_review.models import Finding
 
@@ -266,6 +271,132 @@ class TestStableBaselineDiffing:
             finding_count=1,
         )
         assert baseline.keys == baseline.legacy_keys
+
+
+# ---- classify_findings -------------------------------------------------------
+
+
+class TestClassifyFindings:
+    def test_truly_new_finding(self) -> None:
+        baseline = BaselineData(
+            legacy_keys={("R001", "old.py:1", "tag")},
+            stable_keys={("R001", "old.py", "tag", "aaa111")},
+            finding_count=1,
+        )
+        new_f = _make_finding(
+            rule_id="R002",
+            evidence_locator="new.py:5",
+            pattern_tag="other",
+            content_hash="bbb222",
+        )
+        result = classify_findings([new_f], baseline)
+        assert len(result.new) == 1
+        assert result.new[0].rule_id == "R002"
+        assert len(result.shifted) == 0
+
+    def test_shifted_finding(self) -> None:
+        """Same content_hash at a different line → shifted, not new."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "c.cpp:140", "raw-new")},
+            stable_keys={("R001", "c.cpp", "raw-new", "abc123")},
+            finding_count=1,
+        )
+        shifted_f = _make_finding(
+            rule_id="R001",
+            evidence_locator="c.cpp:142",
+            pattern_tag="raw-new",
+            content_hash="abc123",
+        )
+        result = classify_findings([shifted_f], baseline)
+        assert len(result.new) == 0
+        assert len(result.shifted) == 1
+        assert result.shifted[0].finding.evidence_locator == "c.cpp:142"
+        assert result.shifted[0].baseline_locator == "c.cpp:140"
+
+    def test_unchanged_finding_neither_new_nor_shifted(self) -> None:
+        """Matches both stable and legacy key — not shifted."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "a.py:10", "tag")},
+            stable_keys={("R001", "a.py", "tag", "hash1")},
+            finding_count=1,
+        )
+        f = _make_finding(
+            rule_id="R001",
+            evidence_locator="a.py:10",
+            pattern_tag="tag",
+            content_hash="hash1",
+        )
+        result = classify_findings([f], baseline)
+        assert len(result.new) == 0
+        assert len(result.shifted) == 0
+
+    def test_resolved_finding(self) -> None:
+        """Baseline entry not matched by any current finding."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "old.py:1", "tag")},
+            stable_keys={("R001", "old.py", "tag", "aaa111")},
+            finding_count=1,
+        )
+        result = classify_findings([], baseline)
+        assert len(result.resolved) >= 1
+
+    def test_mixed_classification(self) -> None:
+        """Mixed new, shifted, resolved in one call."""
+        baseline = BaselineData(
+            legacy_keys={
+                ("R001", "a.cpp:10", "raw-new"),
+                ("R002", "b.cpp:20", "raw-new"),
+            },
+            stable_keys={
+                ("R001", "a.cpp", "raw-new", "hash_a"),
+                ("R002", "b.cpp", "raw-new", "hash_b"),
+            },
+            finding_count=2,
+        )
+        # a.cpp shifted (same content hash, different line)
+        shifted_f = _make_finding(
+            rule_id="R001",
+            evidence_locator="a.cpp:12",
+            pattern_tag="raw-new",
+            content_hash="hash_a",
+        )
+        # c.cpp is truly new
+        new_f = _make_finding(
+            rule_id="R003",
+            evidence_locator="c.cpp:1",
+            pattern_tag="raw-new",
+            content_hash="hash_c",
+        )
+        result = classify_findings([shifted_f, new_f], baseline)
+        assert len(result.new) == 1
+        assert result.new[0].rule_id == "R003"
+        assert len(result.shifted) == 1
+        assert result.shifted[0].finding.rule_id == "R001"
+        # R002/b.cpp was in baseline but not in current scan → resolved
+        assert len(result.resolved) >= 1
+
+    def test_no_content_hash_falls_back_to_legacy(self) -> None:
+        """Finding without content_hash matched via legacy key → not new."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "a.py:10", "tag")},
+            finding_count=1,
+        )
+        f = _make_finding(
+            rule_id="R001",
+            evidence_locator="a.py:10",
+            pattern_tag="tag",
+        )
+        result = classify_findings([f], baseline)
+        assert len(result.new) == 0
+        assert len(result.shifted) == 0
+
+    def test_empty_baseline_all_new(self) -> None:
+        baseline = BaselineData()
+        f = _make_finding()
+        result = classify_findings([f], baseline)
+        assert len(result.new) == 1
+        assert len(result.shifted) == 0
+        assert len(result.resolved) == 0
 
 
 # ---- T02/T03: CLI --baseline integration -----------------------------------
