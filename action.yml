@@ -195,6 +195,14 @@ runs:
           fi
         fi
 
+        # Resolve baseline: skip if the file doesn't exist (e.g. first run
+        # or failed baseline download) rather than crashing the CLI.
+        BASELINE="${{ inputs.baseline }}"
+        if [ -n "$BASELINE" ] && [ ! -f "$BASELINE" ]; then
+          echo "::warning::Baseline file '${BASELINE}' not found — running without baseline comparison"
+          BASELINE=""
+        fi
+
         if [ "${{ inputs.execution }}" = "container" ]; then
           # ── Container mode ──────────────────────────────────────────
           # Map host paths to container mount points:
@@ -221,8 +229,8 @@ runs:
             DOCKER_ARGS+=("--config" "/repo/${{ inputs.config }}")
           fi
 
-          if [ -n "${{ inputs.baseline }}" ]; then
-            DOCKER_ARGS+=("--baseline" "/repo/${{ inputs.baseline }}")
+          if [ -n "$BASELINE" ]; then
+            DOCKER_ARGS+=("--baseline" "/repo/$BASELINE")
           fi
 
           if [ -n "$SARIF_PATH" ]; then
@@ -241,8 +249,8 @@ runs:
             ARGS+=("--config" "${{ inputs.config }}")
           fi
 
-          if [ -n "${{ inputs.baseline }}" ]; then
-            ARGS+=("--baseline" "${{ inputs.baseline }}")
+          if [ -n "$BASELINE" ]; then
+            ARGS+=("--baseline" "$BASELINE")
           fi
 
           ARGS+=("--jsonl" "$JSONL_PATH")
