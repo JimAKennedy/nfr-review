@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0         # full history for git-based collectors
 
@@ -55,7 +55,7 @@ jobs:
       # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload baseline artifact
         if: always() && steps.nfr.outputs.jsonl-path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nfr-review-baseline
           path: ${{ steps.nfr.outputs.jsonl-path }}
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload SARIF artifact
         if: always() && steps.nfr.outputs.sarif-path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nfr-review-sarif
           path: ${{ steps.nfr.outputs.sarif-path }}
