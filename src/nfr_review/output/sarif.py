@@ -43,8 +43,16 @@ def _map_severity(severity: Severity) -> str:
     return _SEVERITY_TO_LEVEL.get(severity, "note")
 
 
-def _parse_location(evidence_locator: str) -> dict[str, Any]:
-    """Parse an evidence_locator into a SARIF location object."""
+def _parse_location(
+    evidence_locator: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Parse an evidence_locator into SARIF location components.
+
+    Returns (physical_location, logical_location) — exactly one is set.
+    Physical locations go inside ``locations[]``; logical locations go in
+    the result-level ``logicalLocations[]`` array (GitHub rejects
+    ``logicalLocation`` inside ``locations[]``).
+    """
     m = _FILE_LOCATOR_RE.match(evidence_locator)
     if m:
         uri = m.group(1)
@@ -58,9 +66,8 @@ def _parse_location(evidence_locator: str) -> dict[str, Any]:
             if col is not None:
                 region["startColumn"] = int(col)
             phys["region"] = region
-        return {"physicalLocation": phys}
-    # Fallback: logical location
-    return {"logicalLocation": {"fullyQualifiedName": evidence_locator}}
+        return {"physicalLocation": phys}, None
+    return None, {"fullyQualifiedName": evidence_locator}
 
 
 def _build_rules(findings: list[Finding]) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -84,12 +91,12 @@ def _finding_to_result(
     rule_index_map: dict[str, int],
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
+    phys_loc, logical_loc = _parse_location(finding.evidence_locator)
     result: dict[str, Any] = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
         "message": {"text": finding.summary},
-        "locations": [_parse_location(finding.evidence_locator)],
         "properties": {
             "rag": finding.rag,
             "confidence": finding.confidence,
@@ -98,6 +105,10 @@ def _finding_to_result(
             "collector_name": finding.collector_name,
         },
     }
+    if phys_loc is not None:
+        result["locations"] = [phys_loc]
+    if logical_loc is not None:
+        result["logicalLocations"] = [logical_loc]
     return result
 
 
