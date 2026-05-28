@@ -58,6 +58,61 @@ def _git_info(repo_path: Path) -> tuple[str | None, str | None]:
     return sha, branch
 
 
+_VENDOR_PATH_SEGMENTS = frozenset(
+    {
+        "vst3sdk",
+        "vst3_sdk",
+        "third_party",
+        "thirdparty",
+        "3rdparty",
+        "vendor",
+        "external",
+        "deps",
+        "build",
+        "build-test",
+        "cmake-build",
+        "node_modules",
+        ".build",
+    }
+)
+
+
+def _is_vendor_path(file_path: str) -> bool:
+    """Return True if the file is under a vendor/SDK directory."""
+    parts = file_path.lower().split("/")
+    return bool(_VENDOR_PATH_SEGMENTS.intersection(parts))
+
+
+def _collect_cpp_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
+    """Collect enriched class data from C++ files across all targets."""
+    try:
+        from nfr_review.collectors.cpp_ast import CppAstCollector
+    except ImportError:
+        return None
+
+    collector = CppAstCollector()
+    all_classes: list[dict] = []
+    for target in targets:
+        try:
+            evidence_list = collector.collect(target, config=None)
+        except Exception:
+            logger.debug("cpp-ast collection failed for %s", target, exc_info=True)
+            continue
+        for ev in evidence_list:
+            if _is_vendor_path(ev.payload.get("file_path", "")):
+                continue
+            for cls in ev.payload.get("classes", []):
+                if cls.get("name") and (
+                    cls.get("base_classes") or cls.get("methods") or cls.get("fields")
+                ):
+                    all_classes.append(cls)
+
+    if all_classes:
+        cb(f"Extracted {len(all_classes)} C++ classes for class diagram")
+        return all_classes
+    return None
+
+
 def run_arch_review(
     targets: list[Path],
     *,
@@ -159,10 +214,17 @@ def run_arch_review(
         test_coverage = assess_test_coverage(targets[0], components, repo_name=repo_names[0])
     cb(f"Assessed coverage for {len(test_coverage)} components")
 
+    # --- C++ class extraction for class diagrams ---
+    class_data = _collect_cpp_class_data(targets, cb)
+
     # --- C4 diagrams ---
     cb("Generating C4 diagrams...")
     diagrams = generate_all_diagrams(
-        components, integrations, test_coverage, diagram_mode=diagram_mode
+        components,
+        integrations,
+        test_coverage,
+        diagram_mode=diagram_mode,
+        class_data=class_data,
     )
     cb(f"Generated {len(diagrams)} diagrams")
 

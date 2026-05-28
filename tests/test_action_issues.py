@@ -306,6 +306,69 @@ class TestFileIssuesDedup:
         assert all(r["status"] == "skipped" for r in results)
 
 
+class TestEnsureLabels:
+    """Tests for _ensure_labels — auto-creation of missing GitHub labels."""
+
+    def _mock_result(self, returncode: int = 0, stdout: str = "", stderr: str = ""):
+        return type("R", (), {"returncode": returncode, "stdout": stdout, "stderr": stderr})()
+
+    def test_creates_missing_labels(self) -> None:
+        existing = json.dumps([{"name": "nfr-review"}])
+        calls: list[list[str]] = []
+
+        def fake_run(args, **_kw):
+            calls.append(args)
+            if "label" in args and "list" in args:
+                return self._mock_result(stdout=existing)
+            return self._mock_result()
+
+        from nfr_review.issues import _ensure_labels
+
+        with patch("nfr_review.issues.subprocess.run", side_effect=fake_run):
+            _ensure_labels("owner/repo", {"nfr-review", "severity:high"})
+
+        create_calls = [c for c in calls if "create" in c]
+        assert len(create_calls) == 1
+        assert "severity:high" in create_calls[0]
+
+    def test_no_creates_when_all_exist(self) -> None:
+        existing = json.dumps([{"name": "nfr-review"}, {"name": "severity:critical"}])
+        calls: list[list[str]] = []
+
+        def fake_run(args, **_kw):
+            calls.append(args)
+            return self._mock_result(stdout=existing)
+
+        from nfr_review.issues import _ensure_labels
+
+        with patch("nfr_review.issues.subprocess.run", side_effect=fake_run):
+            _ensure_labels("owner/repo", {"nfr-review", "severity:critical"})
+
+        create_calls = [c for c in calls if "create" in c]
+        assert len(create_calls) == 0
+
+    def test_empty_labels_noop(self) -> None:
+        from nfr_review.issues import _ensure_labels
+
+        with patch("nfr_review.issues.subprocess.run") as mock:
+            _ensure_labels("owner/repo", set())
+
+        mock.assert_not_called()
+
+    def test_gh_not_found_graceful(self) -> None:
+        from nfr_review.issues import _ensure_labels
+
+        with patch("nfr_review.issues.subprocess.run", side_effect=FileNotFoundError):
+            _ensure_labels("owner/repo", {"nfr-review"})
+
+    def test_list_failure_graceful(self) -> None:
+        from nfr_review.issues import _ensure_labels
+
+        mock = self._mock_result(returncode=1, stderr="auth required")
+        with patch("nfr_review.issues.subprocess.run", return_value=mock):
+            _ensure_labels("owner/repo", {"nfr-review"})
+
+
 class TestFindExistingIssues:
     def test_no_gh_cli(self) -> None:
         with patch("nfr_review.issues.subprocess.run", side_effect=FileNotFoundError):

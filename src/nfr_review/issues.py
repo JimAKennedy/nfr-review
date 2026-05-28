@@ -208,6 +208,49 @@ def _gh_run(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProces
     )
 
 
+_LABEL_COLORS: dict[str, str] = {
+    "nfr-review": "0052CC",
+    "severity:critical": "B60205",
+    "severity:high": "D93F0B",
+    "severity:medium": "FBCA04",
+    "severity:low": "0E8A16",
+    "severity:info": "C5DEF5",
+}
+
+
+def _ensure_labels(repo: str, labels: set[str]) -> None:
+    """Create any labels that don't already exist in the repo."""
+    if not labels:
+        return
+
+    try:
+        result = _gh_run(["label", "list", "--repo", repo, "--json", "name", "--limit", "200"])
+    except FileNotFoundError:
+        return
+
+    if result.returncode != 0:
+        logger.warning("Could not list labels: %s", result.stderr.strip()[:120])
+        return
+
+    try:
+        existing = {item["name"] for item in json.loads(result.stdout)}
+    except (json.JSONDecodeError, KeyError):
+        existing = set()
+
+    for label in sorted(labels - existing):
+        color = _LABEL_COLORS.get(label, "EDEDED")
+        try:
+            r = _gh_run(
+                ["label", "create", label, "--repo", repo, "--color", color, "--force"]
+            )
+            if r.returncode == 0:
+                logger.info("Created label %r in %s", label, repo)
+            else:
+                logger.warning("Failed to create label %r: %s", label, r.stderr.strip()[:120])
+        except FileNotFoundError:
+            return
+
+
 def _fetch_nfr_issues(
     repo: str,
     *,
@@ -303,6 +346,12 @@ def sync_issues(
     finding_by_key: dict[str, dict[str, Any]] = {}
     for f in filtered:
         finding_by_key[_finding_key(f)] = f
+
+    if not dry_run and repo and finding_by_key:
+        all_labels: set[str] = set()
+        for f in finding_by_key.values():
+            all_labels.update(issue_labels(f, extra_labels))
+        _ensure_labels(repo, all_labels)
 
     all_issues = _fetch_nfr_issues(repo) if repo else []
 
@@ -506,6 +555,12 @@ def file_issues(
     filtered = filter_findings(findings, severity_threshold, rag_min="red")
     if not filtered:
         return []
+
+    if not dry_run and repo:
+        all_labels: set[str] = set()
+        for f in filtered:
+            all_labels.update(issue_labels(f))
+        _ensure_labels(repo, all_labels)
 
     existing_fps = set() if dry_run else find_existing_issues(repo)
 

@@ -15,6 +15,12 @@ Evidence payload contract (kind="cpp-ast-file"):
         name: str
         line: int — 1-based line number
         has_destructor: bool
+        is_struct: bool
+        base_classes: list[dict] — each with name: str, access: str
+        methods: list[dict] — each with name, return_type, access,
+            is_virtual, is_pure_virtual, line
+        fields: list[dict] — each with name, type, access, line
+        is_abstract: bool — True when any method is pure virtual
     namespaces: list[str] — namespace names found
     includes: list[dict] — each with:
         path: str — included file path
@@ -117,25 +123,170 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
     return funcs
 
 
+def _extract_base_classes(node: Node, source: bytes) -> list[dict[str, str]]:
+    """Extract base classes from a class/struct specifier node."""
+    bases: list[dict[str, str]] = []
+    for child in node.children:
+        if child.type == "base_class_clause":
+            current_access = "private"
+            for bc_child in child.children:
+                if bc_child.type == "access_specifier":
+                    current_access = text(bc_child, source).strip()
+                elif bc_child.type in ("type_identifier", "qualified_identifier"):
+                    bases.append({"name": text(bc_child, source), "access": current_access})
+            break
+    return bases
+
+
+def _extract_members(
+    body: Node, source: bytes, is_struct: bool
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
+    """Extract methods, fields, and destructor presence from a class body.
+
+    Returns (methods, fields, has_destructor).
+    """
+    methods: list[dict[str, Any]] = []
+    fields: list[dict[str, Any]] = []
+    has_destructor = False
+    current_access = "public" if is_struct else "private"
+
+    for child in body.children:
+        if child.type == "access_specifier":
+            current_access = text(child, source).strip().rstrip(":")
+            continue
+
+        if child.type == "function_definition":
+            decl = child.child_by_field_name("declarator")
+            if decl and "~" in text(decl, source):
+                has_destructor = True
+            fname = _member_func_name(decl, source) if decl else ""
+            rtype = ""
+            type_node = child.child_by_field_name("type")
+            if type_node:
+                rtype = text(type_node, source)
+            is_virtual = "virtual" in text(child, source).split("(")[0]
+            methods.append(
+                {
+                    "name": fname,
+                    "return_type": rtype,
+                    "access": current_access,
+                    "is_virtual": is_virtual,
+                    "is_pure_virtual": False,
+                    "line": child.start_point[0] + 1,
+                }
+            )
+            continue
+
+        if child.type == "field_declaration":
+            decl = child.child_by_field_name("declarator")
+            if decl and _has_function_declarator(decl):
+                fname = _member_func_name(decl, source)
+                if "~" in fname:
+                    has_destructor = True
+                    continue
+                rtype = ""
+                type_node = child.child_by_field_name("type")
+                if type_node:
+                    rtype = text(type_node, source)
+                child_text = text(child, source)
+                is_virtual = child_text.lstrip().startswith("virtual")
+                is_pure = is_virtual and "= 0" in child_text
+                methods.append(
+                    {
+                        "name": fname,
+                        "return_type": rtype,
+                        "access": current_access,
+                        "is_virtual": is_virtual,
+                        "is_pure_virtual": is_pure,
+                        "line": child.start_point[0] + 1,
+                    }
+                )
+            elif decl:
+                field_name = ""
+                if decl.type in ("field_identifier", "identifier"):
+                    field_name = text(decl, source)
+                elif decl.type == "pointer_declarator":
+                    for dc in decl.children:
+                        if dc.type in ("field_identifier", "identifier"):
+                            field_name = text(dc, source)
+                            break
+                ftype = ""
+                type_node = child.child_by_field_name("type")
+                if type_node:
+                    ftype = text(type_node, source)
+                if field_name:
+                    fields.append(
+                        {
+                            "name": field_name,
+                            "type": ftype,
+                            "access": current_access,
+                            "line": child.start_point[0] + 1,
+                        }
+                    )
+
+    return methods, fields, has_destructor
+
+
+def _member_func_name(declarator: Node, source: bytes) -> str:
+    """Extract function name from a declarator node."""
+    func_decl = _find_descendant(declarator, "function_declarator")
+    if func_decl:
+        for child in func_decl.children:
+            if child.type in ("identifier", "field_identifier", "qualified_identifier"):
+                return text(child, source)
+            if child.type == "destructor_name":
+                return text(child, source)
+    if declarator.type in ("identifier", "field_identifier"):
+        return text(declarator, source)
+    return ""
+
+
+def _find_descendant(node: Node, target_type: str) -> Node | None:
+    """Find the first descendant of a specific type (BFS)."""
+    if node.type == target_type:
+        return node
+    for child in node.children:
+        result = _find_descendant(child, target_type)
+        if result:
+            return result
+    return None
+
+
+def _has_function_declarator(node: Node) -> bool:
+    """Check if a node contains a function_declarator anywhere."""
+    if node.type == "function_declarator":
+        return True
+    for child in node.children:
+        if _has_function_declarator(child):
+            return True
+    return False
+
+
 def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
     classes: list[dict[str, Any]] = []
     for node_type in ("class_specifier", "struct_specifier"):
+        is_struct = node_type == "struct_specifier"
         for node in find_nodes(root, node_type):
             name_node = node.child_by_field_name("name")
             name = text(name_node, source) if name_node else ""
+            base_classes = _extract_base_classes(node, source)
             has_destructor = False
+            methods: list[dict[str, Any]] = []
+            fields: list[dict[str, Any]] = []
             body = node.child_by_field_name("body")
             if body:
-                for child in body.children:
-                    child_text = text(child, source)
-                    if "~" in child_text:
-                        has_destructor = True
-                        break
+                methods, fields, has_destructor = _extract_members(body, source, is_struct)
+            has_pure_virtual = any(m.get("is_pure_virtual") for m in methods)
             classes.append(
                 {
                     "name": name,
                     "line": node.start_point[0] + 1,
                     "has_destructor": has_destructor,
+                    "is_struct": is_struct,
+                    "base_classes": base_classes,
+                    "methods": methods,
+                    "fields": fields,
+                    "is_abstract": has_pure_virtual,
                 }
             )
     return classes

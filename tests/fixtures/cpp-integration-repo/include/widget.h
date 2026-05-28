@@ -15,4 +15,13 @@ private:
     std::string name_;
 };
 
+class FancyWidget : public Widget {
+public:
+    explicit FancyWidget(std::string name, int style);
+    int style() const;
+
+private:
+    int style_;
+};
+
 }  // namespace demo
