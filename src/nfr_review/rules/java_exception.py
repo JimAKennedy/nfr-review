@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -52,6 +52,9 @@ class ExceptionHandlingAntipatternRule:
                             collector_version=ev.collector_version,
                             confidence=0.85,
                             pattern_tag="exception-handling",
+                            content_hash=compute_content_hash(
+                                block.get("body_text", block["caught_type"])
+                            ),
                         )
                     )
 

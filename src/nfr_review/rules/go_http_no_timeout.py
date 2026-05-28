@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -52,6 +52,9 @@ class GoHttpNoTimeoutRule:
                             collector_version=ev.collector_version,
                             confidence=0.95,
                             pattern_tag="go-http-no-timeout",
+                            content_hash=compute_content_hash(
+                                call.get("source_line", call_name)
+                            ),
                         )
                     )
                 elif call_name == "http.Client" and not call["has_timeout"]:
@@ -70,6 +73,9 @@ class GoHttpNoTimeoutRule:
                             collector_version=ev.collector_version,
                             confidence=0.9,
                             pattern_tag="go-http-no-timeout",
+                            content_hash=compute_content_hash(
+                                call.get("source_line", call_name)
+                            ),
                         )
                     )
 

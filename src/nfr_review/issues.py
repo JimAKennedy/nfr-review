@@ -36,11 +36,23 @@ _LEGACY_MARKER_PREFIX = "<!-- nfr-review:issue:"
 
 
 def _finding_key(finding: dict[str, Any]) -> str:
-    parts = [
-        finding.get("rule_id", ""),
-        finding.get("evidence_locator", ""),
-        finding.get("pattern_tag", ""),
-    ]
+    content_hash = finding.get("content_hash", "")
+    if content_hash:
+        from nfr_review.models import _strip_line_from_locator
+
+        file_path = _strip_line_from_locator(finding.get("evidence_locator", ""))
+        parts = [
+            finding.get("rule_id", ""),
+            file_path,
+            finding.get("pattern_tag", ""),
+            content_hash,
+        ]
+    else:
+        parts = [
+            finding.get("rule_id", ""),
+            finding.get("evidence_locator", ""),
+            finding.get("pattern_tag", ""),
+        ]
     return hashlib.sha256(":".join(parts).encode()).hexdigest()[:12]
 
 
