@@ -33,6 +33,7 @@ IntegrationStyle = Literal[
     "api_call",
     "message_queue",
     "rpc",
+    "build_dependency",
 ]
 CoverageLevel = Literal["none", "minimal", "partial", "adequate", "comprehensive"]
 MaturityLevel = Literal["initial", "developing", "defined", "managed", "optimizing"]
