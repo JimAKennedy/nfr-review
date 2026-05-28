@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from nfr_review.arch_discovery import DvcPipeline
 from nfr_review.arch_models import C4Diagram, Component, IntegrationPoint
 
 if TYPE_CHECKING:
@@ -897,6 +898,57 @@ def render_class_diagram(
 
 
 # ===================================================================
+# Pipeline Diagram — from DVC stage DAG
+# ===================================================================
+
+
+def render_pipeline_diagram(
+    pipeline: DvcPipeline,
+    title: str | None = None,
+) -> C4Diagram:
+    """Render a Mermaid flowchart from a parsed DVC pipeline.
+
+    Stages are shown as nodes with their command. Edges follow the
+    implicit DAG derived from stage output-to-input dependencies.
+    Stages with no edges are shown as isolated nodes.
+    """
+    title = title or "ML Pipeline"
+
+    if not pipeline.stages:
+        return C4Diagram(
+            level="code",
+            title=title,
+            scope="pipeline",
+            mermaid="flowchart TD\n",
+            component_ids=[],
+        )
+
+    lines: list[str] = ["flowchart TD"]
+
+    for stage in pipeline.stages:
+        sid = _safe_id(stage.name)
+        cmd_short = stage.cmd
+        if len(cmd_short) > 40:
+            cmd_short = cmd_short[:37] + "..."
+        label = f"{stage.name}<br/>{cmd_short}"
+        lines.append(f"    {sid}[{_quote_label(label)}]")
+
+    for src, tgt in pipeline.edges:
+        src_id = _safe_id(src)
+        tgt_id = _safe_id(tgt)
+        lines.append(f"    {src_id} --> {tgt_id}")
+
+    mermaid = "\n".join(lines) + "\n"
+    return C4Diagram(
+        level="code",
+        title=title,
+        scope="pipeline",
+        mermaid=mermaid,
+        component_ids=[],
+    )
+
+
+# ===================================================================
 # Convenience — generate all diagrams
 # ===================================================================
 
@@ -908,8 +960,9 @@ def generate_all_diagrams(
     *,
     diagram_mode: str = "hierarchical",
     class_data: list[dict] | None = None,
+    pipeline_data: list[DvcPipeline] | None = None,
 ) -> list[C4Diagram]:
-    """Generate context + container + component + class diagrams.
+    """Generate context + container + component + class + pipeline diagrams.
 
     If *coverage* is provided, the container diagram nodes are annotated
     with colour classes reflecting coverage levels.
@@ -920,6 +973,9 @@ def generate_all_diagrams(
 
     If *class_data* is provided (enriched class dicts from cpp-ast),
     a Mermaid class diagram is appended.
+
+    If *pipeline_data* is provided (parsed DVC pipelines), a Mermaid
+    pipeline flowchart is appended for each pipeline.
     """
     diagrams: list[C4Diagram] = []
 
@@ -987,6 +1043,10 @@ def generate_all_diagrams(
     if class_data:
         diagrams.append(render_class_diagram(class_data))
 
+    if pipeline_data:
+        for pipeline in pipeline_data:
+            diagrams.append(render_pipeline_diagram(pipeline))
+
     return diagrams
 
 
@@ -999,4 +1059,5 @@ __all__ = [
     "render_c4_container",
     "render_c4_context",
     "render_class_diagram",
+    "render_pipeline_diagram",
 ]

@@ -9,6 +9,7 @@ import subprocess  # nosec B404 — git commands with hardcoded args
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from nfr_review import __version__
 from nfr_review.arch_models import (
@@ -16,6 +17,9 @@ from nfr_review.arch_models import (
     ArchReportMetadata,
     RepoInfo,
 )
+
+if TYPE_CHECKING:
+    from nfr_review.arch_discovery import DvcPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +85,33 @@ def _is_vendor_path(file_path: str) -> bool:
     """Return True if the file is under a vendor/SDK directory."""
     parts = file_path.lower().split("/")
     return bool(_VENDOR_PATH_SEGMENTS.intersection(parts))
+
+
+def _collect_dvc_pipeline_data(
+    targets: list[Path], cb: ProgressCallback
+) -> list[DvcPipeline] | None:
+    """Collect DVC pipeline data from all targets."""
+    from nfr_review.arch_discovery import parse_dvc_pipeline
+
+    pipelines: list[DvcPipeline] = []
+    for target in targets:
+        dvc_yaml = target / "dvc.yaml"
+        if not dvc_yaml.is_file():
+            for child in sorted(target.iterdir()):
+                if child.is_dir() and (child / "dvc.yaml").is_file():
+                    result = parse_dvc_pipeline(child / "dvc.yaml")
+                    if result:
+                        pipelines.append(result)
+            continue
+        result = parse_dvc_pipeline(dvc_yaml)
+        if result:
+            pipelines.append(result)
+
+    if pipelines:
+        total_stages = sum(len(p.stages) for p in pipelines)
+        cb(f"Found {len(pipelines)} DVC pipeline(s) with {total_stages} stages")
+        return pipelines
+    return None
 
 
 def _collect_cpp_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
@@ -217,6 +248,9 @@ def run_arch_review(
     # --- C++ class extraction for class diagrams ---
     class_data = _collect_cpp_class_data(targets, cb)
 
+    # --- DVC pipeline extraction ---
+    pipeline_data = _collect_dvc_pipeline_data(targets, cb)
+
     # --- C4 diagrams ---
     cb("Generating C4 diagrams...")
     diagrams = generate_all_diagrams(
@@ -225,6 +259,7 @@ def run_arch_review(
         test_coverage,
         diagram_mode=diagram_mode,
         class_data=class_data,
+        pipeline_data=pipeline_data,
     )
     cb(f"Generated {len(diagrams)} diagrams")
 
