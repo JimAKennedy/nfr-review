@@ -320,16 +320,26 @@ runs:
 
         echo "body-path=${BODY_PATH}" >> "$GITHUB_OUTPUT"
 
-    # ── 9. Post / update sticky PR comment ──────────────────────────────
+    # ── 9. Find existing sticky comment (if any) ─────────────────────────
+    - name: Find existing NFR Review comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      id: find-comment
+      uses: peter-evans/find-comment@v3
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body-includes: "<!-- nfr-review-comment -->"
+
+    # ── 10. Post / update sticky PR comment ─────────────────────────────
     - name: Post PR comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       uses: peter-evans/create-or-update-comment@v5
       with:
         issue-number: ${{ github.event.pull_request.number }}
+        comment-id: ${{ steps.find-comment.outputs.comment-id }}
         body-path: ${{ steps.comment-body.outputs.body-path }}
-        comment-tag: nfr-review-comment
+        edit-mode: replace
 
-    # ── 10. Sync GitHub issues ──────────────────────────────────────────
+    # ── 11. Sync GitHub issues ──────────────────────────────────────────
     - name: Sync remediation issues
       if: steps.resolve.outputs.create-issues == 'true'
       id: sync-issues
@@ -400,7 +410,7 @@ runs:
         echo "issues-updated=${UPDATED}" >> "$GITHUB_OUTPUT"
         echo "issues-closed=${CLOSED}" >> "$GITHUB_OUTPUT"
 
-    # ── 11. Fail on findings threshold ──────────────────────────────────
+    # ── 12. Fail on findings threshold ──────────────────────────────────
     - name: Check findings threshold
       if: steps.resolve.outputs.fail-on != 'never'
       shell: bash

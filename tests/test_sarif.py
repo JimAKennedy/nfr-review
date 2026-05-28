@@ -139,7 +139,7 @@ class TestEvidenceLocatorParsing:
         assert phys["artifactLocation"]["uri"] == "src/main.py"
         assert "region" not in phys
 
-    def test_logical_location_fallback(self, tmp_path: Path) -> None:
+    def test_non_file_locator_falls_back_to_repo_root(self, tmp_path: Path) -> None:
         finding = _make_finding(evidence_locator="maven:org.example:foo:1.0")
         result = _make_result(findings=[finding])
         out = tmp_path / "out.sarif.json"
@@ -147,8 +147,7 @@ class TestEvidenceLocatorParsing:
 
         sarif = json.loads(out.read_text(encoding="utf-8"))
         loc = sarif["runs"][0]["results"][0]["locations"][0]
-        assert "logicalLocation" in loc
-        assert loc["logicalLocation"]["fullyQualifiedName"] == "maven:org.example:foo:1.0"
+        assert loc["physicalLocation"]["artifactLocation"]["uri"] == "."
 
 
 class TestSkippedRules:
@@ -192,10 +191,10 @@ class TestEmptyFindings:
         assert sarif["runs"][0]["tool"]["driver"]["rules"] == []
 
 
-class TestRunMetadataProperties:
-    """Test RunMetadata goes into run.properties."""
+class TestRunMetadata:
+    """Test RunMetadata maps to tool driver version."""
 
-    def test_sarif_run_metadata_properties(self, tmp_path: Path) -> None:
+    def test_sarif_tool_version_from_metadata(self, tmp_path: Path) -> None:
         metadata = RunMetadata(
             tool_version="1.2.3",
             target_repo="/home/user/my-repo",
@@ -212,11 +211,9 @@ class TestRunMetadataProperties:
         write_sarif(result, out)
 
         sarif = json.loads(out.read_text(encoding="utf-8"))
-        props = sarif["runs"][0]["properties"]
-        assert props["target_repo"] == "/home/user/my-repo"
-        assert props["git_sha"] == "abc123"
-        assert props["git_branch"] == "main"
-        assert props["timestamp"] == "2026-01-15T12:00:00Z"
+        run = sarif["runs"][0]
+        assert run["tool"]["driver"]["version"] == "1.2.3"
+        assert "properties" not in run
 
 
 class TestRulesDeduplication:

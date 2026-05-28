@@ -42,15 +42,19 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Download baseline from last successful nightly ────────────────
+      # continue-on-error handles two first-adoption cases:
+      #   1. nightly workflow exists but has never run (API 404 on workflow runs)
+      #   2. nightly ran but produced no artifact
       - name: Download nightly baseline
         id: baseline
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: nfr-review-nightly.yml
           branch: main
           name: nfr-review-baseline
           path: ${{ runner.temp }}/baseline
-          if_no_artifact_found: warn   # first run has no baseline — that's OK
+          if_no_artifact_found: warn
 
       - name: Run NFR Review
         id: nfr
@@ -72,7 +76,7 @@ jobs:
 
       # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload PR scan results
-        if: always()
+        if: always() && steps.nfr.outputs.jsonl-path != ''
         uses: actions/upload-artifact@v4
         with:
           name: nfr-review-pr-${{ github.event.pull_request.number }}

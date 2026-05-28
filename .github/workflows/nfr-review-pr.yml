@@ -1,0 +1,72 @@
+# Dogfood workflow: run nfr-review on PRs against itself.
+# Uses `./` (local action) instead of the released tag.
+
+name: NFR Review
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: nfr-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+
+jobs:
+  nfr-review:
+    name: NFR Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # continue-on-error handles first-adoption cases:
+      #   1. nightly workflow exists but has never run
+      #   2. nightly ran but produced no artifact
+      - name: Download nightly baseline
+        id: baseline
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: nfr-review-nightly.yml
+          branch: main
+          name: nfr-review-baseline
+          path: ${{ runner.temp }}/baseline
+          if_no_artifact_found: warn
+
+      - name: Run NFR Review
+        id: nfr
+        uses: ./
+        with:
+          path: .
+          fail-on: "never"
+          baseline: ${{ steps.baseline.outcome == 'success' && format('{0}/baseline/nfr-review-output.jsonl', runner.temp) || '' }}
+          sarif-upload: "true"
+          comment: "true"
+          create-issues: "false"
+
+      - name: Upload PR scan results
+        if: always() && steps.nfr.outputs.jsonl-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.nfr.outputs.jsonl-path }}
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## NFR Review" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Findings | ${{ steps.nfr.outputs.findings-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY

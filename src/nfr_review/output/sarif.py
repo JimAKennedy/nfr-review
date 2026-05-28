@@ -43,24 +43,31 @@ def _map_severity(severity: Severity) -> str:
     return _SEVERITY_TO_LEVEL.get(severity, "note")
 
 
+_FALLBACK_LOCATION: dict[str, Any] = {"physicalLocation": {"artifactLocation": {"uri": "."}}}
+
+
 def _parse_location(evidence_locator: str) -> dict[str, Any]:
-    """Parse an evidence_locator into a SARIF location object."""
+    """Parse an evidence_locator into a SARIF location object.
+
+    GitHub Code Scanning requires every result to have at least one location
+    with a ``file``-scheme URI. Non-file locators (``dep:``, ``maven:``, etc.)
+    fall back to the repo root.
+    """
     m = _FILE_LOCATOR_RE.match(evidence_locator)
-    if m:
-        uri = m.group(1)
-        line = m.group(2)
-        col = m.group(3)
-        phys: dict[str, Any] = {
-            "artifactLocation": {"uri": uri},
-        }
-        if line is not None:
-            region: dict[str, int] = {"startLine": int(line)}
-            if col is not None:
-                region["startColumn"] = int(col)
-            phys["region"] = region
-        return {"physicalLocation": phys}
-    # Fallback: logical location
-    return {"logicalLocation": {"fullyQualifiedName": evidence_locator}}
+    if not m:
+        return _FALLBACK_LOCATION
+    uri = m.group(1)
+    line = m.group(2)
+    col = m.group(3)
+    phys: dict[str, Any] = {
+        "artifactLocation": {"uri": uri},
+    }
+    if line is not None:
+        region: dict[str, int] = {"startLine": int(line)}
+        if col is not None:
+            region["startColumn"] = int(col)
+        phys["region"] = region
+    return {"physicalLocation": phys}
 
 
 def _build_rules(findings: list[Finding]) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -84,21 +91,14 @@ def _finding_to_result(
     rule_index_map: dict[str, int],
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
-    result: dict[str, Any] = {
+    text = f"{finding.summary}\nRecommendation: {finding.recommendation}"
+    return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
-        "message": {"text": finding.summary},
+        "message": {"text": text},
         "locations": [_parse_location(finding.evidence_locator)],
-        "properties": {
-            "rag": finding.rag,
-            "confidence": finding.confidence,
-            "recommendation": finding.recommendation,
-            "pattern_tag": finding.pattern_tag,
-            "collector_name": finding.collector_name,
-        },
     }
-    return result
 
 
 def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:
@@ -109,6 +109,7 @@ def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:
         "kind": "notApplicable",
         "level": "none",
         "message": {"text": f"rule skipped: {justification}"},
+        "locations": [_FALLBACK_LOCATION],
         "suppressions": [
             {
                 "kind": "inSource",
@@ -138,15 +139,6 @@ def write_sarif(run_result: RunResult, path: Path) -> None:
         if rule_result.skipped:
             results.append(_skipped_to_result(rule_result.rule_id, rule_result.skip_reason))
 
-    run_properties: dict[str, Any] = {
-        "target_repo": metadata.target_repo,
-        "timestamp": metadata.timestamp,
-    }
-    if metadata.git_sha is not None:
-        run_properties["git_sha"] = metadata.git_sha
-    if metadata.git_branch is not None:
-        run_properties["git_branch"] = metadata.git_branch
-
     sarif: dict[str, Any] = {
         "$schema": _SARIF_SCHEMA,
         "version": "2.1.0",
@@ -160,7 +152,6 @@ def write_sarif(run_result: RunResult, path: Path) -> None:
                     },
                 },
                 "results": results,
-                "properties": run_properties,
             }
         ],
     }
