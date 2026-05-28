@@ -324,7 +324,7 @@ runs:
     - name: Find existing NFR Review comment
       if: inputs.comment == 'true' && github.event_name == 'pull_request'
       id: find-comment
-      uses: peter-evans/find-comment@v3
+      uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
       with:
         issue-number: ${{ github.event.pull_request.number }}
         body-includes: "<!-- nfr-review-comment -->"

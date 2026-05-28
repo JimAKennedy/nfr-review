@@ -24,21 +24,27 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # continue-on-error handles first-adoption cases:
-      #   1. nightly workflow exists but has never run
-      #   2. nightly ran but produced no artifact
       - name: Download nightly baseline
         id: baseline
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: nfr-review-nightly.yml
-          branch: main
-          name: nfr-review-baseline
-          path: ${{ runner.temp }}/baseline
-          if_no_artifact_found: warn
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --workflow=nfr-review-nightly.yml --branch=main --status=success --limit=1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::notice::No prior nightly baseline found — running full scan (normal on first adoption)"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if gh run download "$RUN_ID" --name nfr-review-baseline --dir "${{ runner.temp }}/baseline" 2>/dev/null; then
+            echo "Downloaded baseline from nightly run #${RUN_ID}"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Nightly baseline artifact missing or expired — running full scan"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run NFR Review
         id: nfr
@@ -46,14 +52,14 @@ jobs:
         with:
           path: .
           fail-on: "never"
-          baseline: ${{ steps.baseline.outcome == 'success' && format('{0}/baseline/nfr-review-output.jsonl', runner.temp) || '' }}
+          baseline: ${{ steps.baseline.outputs.found == 'true' && format('{0}/baseline/nfr-review-output.jsonl', runner.temp) || '' }}
           sarif-upload: "true"
           comment: "true"
           create-issues: "false"
 
       - name: Upload PR scan results
         if: always() && steps.nfr.outputs.jsonl-path != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nfr-review-pr-${{ github.event.pull_request.number }}
           path: ${{ steps.nfr.outputs.jsonl-path }}
