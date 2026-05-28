@@ -371,18 +371,14 @@ runs:
           exit 0
         fi
 
-        SYNC_ARGS=("issues" "sync")
-        SYNC_ARGS+=("--jsonl" "$JSONL_PATH")
+        SYNC_ARGS=("issues" "sync" "$JSONL_PATH")
         SYNC_ARGS+=("--repo" "${{ github.repository }}")
         SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
         SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
         SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
 
         if [ -n "${{ inputs.extra-labels }}" ]; then
-          IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
-          for lbl in "${LABELS[@]}"; do
-            SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
-          done
+          SYNC_ARGS+=("--extra-labels" "${{ inputs.extra-labels }}")
         fi
 
         if [ "${{ inputs.execution }}" = "container" ]; then
@@ -395,18 +391,14 @@ runs:
           DOCKER_ARGS+=("${{ inputs.image }}")
 
           # Remap JSONL path to container mount
-          CONTAINER_SYNC_ARGS=("issues" "sync")
-          CONTAINER_SYNC_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+          CONTAINER_SYNC_ARGS=("issues" "sync" "/output/nfr-review-output.jsonl")
           CONTAINER_SYNC_ARGS+=("--repo" "${{ github.repository }}")
           CONTAINER_SYNC_ARGS+=("--severity-threshold" "${{ inputs.issue-severity }}")
           CONTAINER_SYNC_ARGS+=("--rag-min" "${{ inputs.rag-min }}")
           CONTAINER_SYNC_ARGS+=("--first-run-cap" "${{ inputs.first-run-cap }}")
 
           if [ -n "${{ inputs.extra-labels }}" ]; then
-            IFS=',' read -ra LABELS <<< "${{ inputs.extra-labels }}"
-            for lbl in "${LABELS[@]}"; do
-              CONTAINER_SYNC_ARGS+=("--label" "$(echo "$lbl" | xargs)")
-            done
+            CONTAINER_SYNC_ARGS+=("--extra-labels" "${{ inputs.extra-labels }}")
           fi
 
           OUTPUT=$(docker "${DOCKER_ARGS[@]}" "${CONTAINER_SYNC_ARGS[@]}" 2>&1)
