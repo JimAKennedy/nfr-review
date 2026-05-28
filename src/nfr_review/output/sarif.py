@@ -43,15 +43,13 @@ def _map_severity(severity: Severity) -> str:
     return _SEVERITY_TO_LEVEL.get(severity, "note")
 
 
-def _parse_location(
-    evidence_locator: str,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Parse an evidence_locator into SARIF location components.
+def _parse_location(evidence_locator: str) -> dict[str, Any]:
+    """Parse an evidence_locator into a SARIF location object.
 
-    Returns (physical_location, logical_location) — exactly one is set.
-    Physical locations go inside ``locations[]``; logical locations go in
-    the result-level ``logicalLocations[]`` array (GitHub rejects
-    ``logicalLocation`` inside ``locations[]``).
+    Always returns a ``physicalLocation`` — GitHub's SARIF validator rejects
+    both ``logicalLocation`` inside ``locations[]`` and ``logicalLocations``
+    at the result level.  For non-file locators we emit the raw string as
+    the artifact URI so it still shows up in the Code Scanning UI.
     """
     m = _FILE_LOCATOR_RE.match(evidence_locator)
     if m:
@@ -66,8 +64,8 @@ def _parse_location(
             if col is not None:
                 region["startColumn"] = int(col)
             phys["region"] = region
-        return {"physicalLocation": phys}, None
-    return None, {"fullyQualifiedName": evidence_locator}
+        return {"physicalLocation": phys}
+    return {"physicalLocation": {"artifactLocation": {"uri": evidence_locator}}}
 
 
 def _build_rules(findings: list[Finding]) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -91,12 +89,12 @@ def _finding_to_result(
     rule_index_map: dict[str, int],
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
-    phys_loc, logical_loc = _parse_location(finding.evidence_locator)
-    result: dict[str, Any] = {
+    return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
         "message": {"text": finding.summary},
+        "locations": [_parse_location(finding.evidence_locator)],
         "properties": {
             "rag": finding.rag,
             "confidence": finding.confidence,
@@ -105,11 +103,6 @@ def _finding_to_result(
             "collector_name": finding.collector_name,
         },
     }
-    if phys_loc is not None:
-        result["locations"] = [phys_loc]
-    if logical_loc is not None:
-        result["logicalLocations"] = [logical_loc]
-    return result
 
 
 def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:

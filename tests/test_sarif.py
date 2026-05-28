@@ -146,9 +146,11 @@ class TestEvidenceLocatorParsing:
         write_sarif(result, out)
 
         sarif = json.loads(out.read_text(encoding="utf-8"))
-        r = sarif["runs"][0]["results"][0]
-        assert "locations" not in r
-        assert r["logicalLocations"][0]["fullyQualifiedName"] == "maven:org.example:foo:1.0"
+        loc = sarif["runs"][0]["results"][0]["locations"][0]
+        assert "physicalLocation" in loc
+        assert (
+            loc["physicalLocation"]["artifactLocation"]["uri"] == "maven:org.example:foo:1.0"
+        )
 
 
 class TestSkippedRules:
