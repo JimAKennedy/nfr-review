@@ -361,6 +361,7 @@ class TestSyncIdempotent:
 
         with (
             patch("nfr_review.issues._fetch_nfr_issues", return_value=issues),
+            patch("nfr_review.issues._ensure_labels"),
             patch("nfr_review.issues._gh_run") as gh,
         ):
             results = sync_issues([_RED_CRITICAL], "owner/repo", rag_min="red")
