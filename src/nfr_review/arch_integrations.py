@@ -2692,6 +2692,168 @@ def _deduplicate_integrations(
 
 
 # ---------------------------------------------------------------------------
+# Strategy 10: CMake FetchContent / add_subdirectory cross-repo deps
+# ---------------------------------------------------------------------------
+
+_FETCHCONTENT_DECLARE_RE = re.compile(
+    r"FetchContent_Declare\s*\(\s*(\w+)", re.IGNORECASE | re.DOTALL
+)
+_CMAKE_GIT_REPO_RE = re.compile(r"GIT_REPOSITORY\s+([\S]+)", re.IGNORECASE)
+_ADD_SUBDIR_RE = re.compile(r"add_subdirectory\s*\(\s*([^\s)]+)", re.IGNORECASE)
+
+
+def _repo_name_from_url(url: str) -> str | None:
+    """Extract a repository name from a Git URL.
+
+    Handles https://host/org/repo.git, git@host:org/repo.git, and bare names.
+    """
+    url = url.rstrip("/")
+    if url.endswith(".git"):
+        url = url[:-4]
+    # Last path segment
+    slash_idx = url.rfind("/")
+    colon_idx = url.rfind(":")
+    sep = max(slash_idx, colon_idx)
+    if sep >= 0:
+        return url[sep + 1 :]
+    return url or None
+
+
+def _component_by_repo_name(components: list[Component], repo_name: str) -> Component | None:
+    """Find a component whose repo attribute matches *repo_name*."""
+    name_lower = repo_name.lower()
+    for comp in components:
+        if comp.repo and comp.repo.lower() == name_lower:
+            return comp
+        if comp.name.lower() == name_lower:
+            return comp
+    return None
+
+
+def _discover_cmake_integrations(
+    repo_path: Path,
+    components: list[Component],
+    repo_name: str | None = None,
+) -> list[IntegrationPoint]:
+    """Discover cross-repo dependencies from CMake FetchContent and add_subdirectory."""
+    integrations: list[IntegrationPoint] = []
+    effective_name = repo_name or repo_path.name
+    seen_pairs: set[tuple[str, str]] = set()
+
+    source_comp = _component_by_name(components, effective_name)
+    if source_comp is None:
+        for comp in components:
+            if comp.repo and comp.repo.lower() == effective_name.lower():
+                source_comp = comp
+                break
+
+    if source_comp is None:
+        return integrations
+
+    cmake_files: list[Path] = []
+    for cmake_path in repo_path.rglob("CMakeLists.txt"):
+        if should_exclude_path(str(cmake_path.relative_to(repo_path))):
+            continue
+        cmake_files.append(cmake_path)
+
+    for cmake_path in sorted(cmake_files):
+        content = _safe_read_text(cmake_path)
+        if not content:
+            continue
+
+        # FetchContent_Declare — match GIT_REPOSITORY URLs to known components
+        for m in _FETCHCONTENT_DECLARE_RE.finditer(content):
+            dep_name = m.group(1)
+            start = m.start()
+            paren_depth = 0
+            end = start
+            for idx in range(start, len(content)):
+                if content[idx] == "(":
+                    paren_depth += 1
+                elif content[idx] == ")":
+                    paren_depth -= 1
+                    if paren_depth == 0:
+                        end = idx + 1
+                        break
+            block_text = content[start:end]
+
+            if _is_comment_line(content, m.start()):
+                continue
+
+            url_m = _CMAKE_GIT_REPO_RE.search(block_text)
+            if not url_m:
+                continue
+            url = url_m.group(1)
+            extracted_name = _repo_name_from_url(url)
+            if not extracted_name:
+                continue
+
+            target_comp = _component_by_repo_name(components, extracted_name)
+            if target_comp is None:
+                target_comp = _component_by_name(components, dep_name)
+            if target_comp is None or target_comp.id == source_comp.id:
+                continue
+
+            pair = (source_comp.id, target_comp.id)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            rel_path = cmake_path.relative_to(repo_path)
+            integrations.append(
+                IntegrationPoint(
+                    id=_make_id("cmake-fetch", f"{effective_name}-{extracted_name}"),
+                    source_component_id=source_comp.id,
+                    target_component_id=target_comp.id,
+                    style="build_dependency",
+                    protocol="cmake-fetchcontent",
+                    description=(
+                        f"FetchContent dependency on {extracted_name} via {rel_path}"
+                    ),
+                )
+            )
+
+        # add_subdirectory — match relative paths to sibling repos
+        for m in _ADD_SUBDIR_RE.finditer(content):
+            if _is_comment_line(content, m.start()):
+                continue
+            subdir_arg = m.group(1)
+            resolved = (cmake_path.parent / subdir_arg).resolve()
+            target_name = resolved.name
+
+            target_comp = _component_by_repo_name(components, target_name)
+            if target_comp is None or target_comp.id == source_comp.id:
+                continue
+
+            pair = (source_comp.id, target_comp.id)
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+
+            rel_path = cmake_path.relative_to(repo_path)
+            integrations.append(
+                IntegrationPoint(
+                    id=_make_id("cmake-subdir", f"{effective_name}-{target_name}"),
+                    source_component_id=source_comp.id,
+                    target_component_id=target_comp.id,
+                    style="build_dependency",
+                    protocol="cmake-add-subdirectory",
+                    description=(
+                        f"add_subdirectory dependency on {target_name} via {rel_path}"
+                    ),
+                )
+            )
+
+    if integrations:
+        logger.info(
+            "Found %d CMake cross-repo dependencies in %s",
+            len(integrations),
+            effective_name,
+        )
+    return integrations
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -2764,6 +2926,11 @@ def discover_integrations(
     # Strategy 9: Build-dependency to infrastructure mapping
     all_integrations.extend(
         _discover_build_dep_integrations(repo_path, components, effective_name)
+    )
+
+    # Strategy 10: CMake FetchContent / add_subdirectory cross-repo deps
+    all_integrations.extend(
+        _discover_cmake_integrations(repo_path, components, effective_name)
     )
 
     result = _deduplicate_integrations(all_integrations)
