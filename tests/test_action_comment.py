@@ -238,6 +238,55 @@ class TestMarkdownStructure:
         assert "..." in md
 
 
+class TestCommentTruncation:
+    """Test that oversized comments are truncated to fit GitHub's limit."""
+
+    def _make_findings(self, count: int) -> list[dict]:
+        """Generate *count* red findings with long summaries."""
+        return [
+            {
+                **_RED_FINDING,
+                "rule_id": f"R{i:03d}",
+                "summary": f"Finding {i}: " + "x" * 300,
+                "recommendation": "Fix " + "y" * 200,
+            }
+            for i in range(count)
+        ]
+
+    def test_small_comment_keeps_details(self, tmp_path: Path) -> None:
+        p = _write_jsonl(tmp_path, [_METADATA, _RED_FINDING, _AMBER_FINDING])
+        md = action_comment.generate_comment(p)
+        assert "<details>" in md
+        assert "exceeded GitHub" not in md
+
+    def test_oversized_comment_drops_details(self, tmp_path: Path) -> None:
+        findings = self._make_findings(200)
+        p = _write_jsonl(tmp_path, [_METADATA, *findings])
+        md = action_comment.generate_comment(p)
+        assert "<details>" not in md
+        assert "exceeded GitHub" in md
+        assert "JSONL artifact" in md
+
+    def test_oversized_comment_within_limit(self, tmp_path: Path) -> None:
+        findings = self._make_findings(200)
+        p = _write_jsonl(tmp_path, [_METADATA, *findings])
+        md = action_comment.generate_comment(p)
+        assert len(md) <= action_comment._MAX_COMMENT_LENGTH
+
+    def test_oversized_preserves_top_findings(self, tmp_path: Path) -> None:
+        findings = self._make_findings(200)
+        p = _write_jsonl(tmp_path, [_METADATA, *findings])
+        md = action_comment.generate_comment(p)
+        assert "### Top Findings" in md
+
+    def test_oversized_preserves_rag_summary(self, tmp_path: Path) -> None:
+        findings = self._make_findings(200)
+        p = _write_jsonl(tmp_path, [_METADATA, *findings])
+        md = action_comment.generate_comment(p)
+        assert "### RAG Summary" in md
+        assert "| **200** |" in md
+
+
 class TestCountByRag:
     """Unit tests for the _count_by_rag helper."""
 
