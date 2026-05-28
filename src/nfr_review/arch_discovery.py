@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -1032,7 +1033,113 @@ def discover_components_multi_repo(
     return all_components
 
 
+@dataclass
+class DvcStage:
+    """A single stage parsed from a DVC pipeline definition."""
+
+    name: str
+    cmd: str
+    deps: list[str] = field(default_factory=list)
+    outs: list[str] = field(default_factory=list)
+    params: list[str] = field(default_factory=list)
+    metrics: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DvcPipeline:
+    """Parsed DVC pipeline with stages and computed DAG edges."""
+
+    stages: list[DvcStage] = field(default_factory=list)
+    edges: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _extract_dvc_paths(value: Any) -> list[str]:
+    """Extract file paths from a DVC deps/outs/params/metrics entry.
+
+    DVC supports both simple string lists and dicts with path keys.
+    """
+    if value is None:
+        return []
+    result: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            result.append(item)
+        elif isinstance(item, dict):
+            path = item.get("path") or item.get("fname")
+            if path:
+                result.append(str(path))
+            elif len(item) == 1:
+                result.append(str(next(iter(item.values()))))
+    return result
+
+
+def parse_dvc_pipeline(dvc_yaml_path: Path) -> DvcPipeline | None:
+    """Parse a dvc.yaml file into a DvcPipeline with stages and DAG edges.
+
+    Returns None if the file cannot be parsed or contains no stages.
+    """
+    yaml = YAML(typ="safe")
+    try:
+        data = yaml.load(dvc_yaml_path)
+    except (YAMLError, OSError):
+        logger.debug("Failed to parse DVC pipeline: %s", dvc_yaml_path, exc_info=True)
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    stages_data = data.get("stages")
+    if not isinstance(stages_data, dict) or not stages_data:
+        return None
+
+    stages: list[DvcStage] = []
+    for stage_name, stage_def in stages_data.items():
+        if not isinstance(stage_def, dict):
+            continue
+        cmd = stage_def.get("cmd", "")
+        if isinstance(cmd, list):
+            cmd = " && ".join(str(c) for c in cmd)
+        stages.append(
+            DvcStage(
+                name=str(stage_name),
+                cmd=str(cmd),
+                deps=_extract_dvc_paths(stage_def.get("deps")),
+                outs=_extract_dvc_paths(stage_def.get("outs")),
+                params=_extract_dvc_paths(stage_def.get("params")),
+                metrics=_extract_dvc_paths(stage_def.get("metrics")),
+            )
+        )
+
+    if not stages:
+        return None
+
+    # Compute DAG edges: stage A -> stage B when any output of A is a dep of B
+    outs_to_stage: dict[str, str] = {}
+    for stage in stages:
+        for out in stage.outs:
+            outs_to_stage[out] = stage.name
+
+    edges: list[tuple[str, str]] = []
+    for stage in stages:
+        for dep in stage.deps:
+            producer = outs_to_stage.get(dep)
+            if producer and producer != stage.name:
+                edges.append((producer, stage.name))
+
+    logger.debug(
+        "Parsed DVC pipeline: %d stages, %d edges from %s",
+        len(stages),
+        len(edges),
+        dvc_yaml_path,
+    )
+
+    return DvcPipeline(stages=stages, edges=edges)
+
+
 __all__ = [
+    "DvcPipeline",
+    "DvcStage",
     "discover_components",
     "discover_components_multi_repo",
+    "parse_dvc_pipeline",
 ]

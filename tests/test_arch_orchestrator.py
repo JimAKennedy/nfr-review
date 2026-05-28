@@ -97,6 +97,40 @@ class TestRunArchReview:
         report = run_arch_review([sample_repo], skip_llm=True)
         assert report.dynamic_scenarios == []
 
+    def test_dvc_pipeline_diagram_when_dvc_yaml_present(self, sample_repo: Path) -> None:
+        (sample_repo / "dvc.yaml").write_text(
+            "stages:\n"
+            "  prepare:\n"
+            "    cmd: python prepare.py\n"
+            "    outs:\n"
+            "      - prepared/\n"
+            "  train:\n"
+            "    cmd: python train.py\n"
+            "    deps:\n"
+            "      - prepared/\n"
+            "    outs:\n"
+            "      - model.pt\n"
+        )
+        report = run_arch_review([sample_repo], skip_llm=True)
+        pipeline_diagrams = [d for d in report.diagrams if d.scope == "pipeline"]
+        assert len(pipeline_diagrams) == 1
+        assert "prepare" in pipeline_diagrams[0].mermaid
+        assert "train" in pipeline_diagrams[0].mermaid
+        assert "prepare --> train" in pipeline_diagrams[0].mermaid
+
+    def test_no_pipeline_diagram_without_dvc(self, sample_repo: Path) -> None:
+        report = run_arch_review([sample_repo], skip_llm=True)
+        pipeline_diagrams = [d for d in report.diagrams if d.scope == "pipeline"]
+        assert len(pipeline_diagrams) == 0
+
+    def test_dvc_in_subdirectory(self, sample_repo: Path) -> None:
+        ml_dir = sample_repo / "training"
+        ml_dir.mkdir()
+        (ml_dir / "dvc.yaml").write_text("stages:\n  train:\n    cmd: python train.py\n")
+        report = run_arch_review([sample_repo], skip_llm=True)
+        pipeline_diagrams = [d for d in report.diagrams if d.scope == "pipeline"]
+        assert len(pipeline_diagrams) == 1
+
 
 class TestArchCliCommand:
     """Tests for the 'nfr-review arch' CLI command."""

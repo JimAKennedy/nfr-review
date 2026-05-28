@@ -19,6 +19,7 @@ from nfr_review.arch_discovery import (
     _infer_tech_stack,
     discover_components,
     discover_components_multi_repo,
+    parse_dvc_pipeline,
 )
 
 
@@ -888,3 +889,143 @@ class TestClassDiagramIntegration:
         assert len(all_classes) >= 2
         diagram = render_class_diagram(all_classes)
         assert "Widget <|-- FancyWidget" in diagram.mermaid
+
+
+class TestParseDvcPipeline:
+    def test_multi_stage_pipeline(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text(
+            "stages:\n"
+            "  prepare:\n"
+            "    cmd: python prepare.py\n"
+            "    deps:\n"
+            "      - raw_data/\n"
+            "    outs:\n"
+            "      - prepared/\n"
+            "  train:\n"
+            "    cmd: python train.py\n"
+            "    deps:\n"
+            "      - prepared/\n"
+            "      - src/train.py\n"
+            "    outs:\n"
+            "      - model.pt\n"
+            "    params:\n"
+            "      - params.yaml\n"
+            "    metrics:\n"
+            "      - metrics.json\n"
+            "  export:\n"
+            "    cmd: python export.py\n"
+            "    deps:\n"
+            "      - model.pt\n"
+            "    outs:\n"
+            "      - model.onnx\n"
+        )
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is not None
+        assert len(result.stages) == 3
+        names = [s.name for s in result.stages]
+        assert names == ["prepare", "train", "export"]
+
+        train = result.stages[1]
+        assert train.cmd == "python train.py"
+        assert "prepared/" in train.deps
+        assert "model.pt" in train.outs
+        assert "params.yaml" in train.params
+        assert "metrics.json" in train.metrics
+
+    def test_dag_edges_from_outputs_to_deps(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text(
+            "stages:\n"
+            "  prepare:\n"
+            "    cmd: python prepare.py\n"
+            "    outs:\n"
+            "      - prepared/\n"
+            "  train:\n"
+            "    cmd: python train.py\n"
+            "    deps:\n"
+            "      - prepared/\n"
+            "    outs:\n"
+            "      - model.pt\n"
+            "  export:\n"
+            "    cmd: python export.py\n"
+            "    deps:\n"
+            "      - model.pt\n"
+        )
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is not None
+        assert ("prepare", "train") in result.edges
+        assert ("train", "export") in result.edges
+        assert len(result.edges) == 2
+
+    def test_single_stage_no_edges(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text(
+            "stages:\n"
+            "  train:\n"
+            "    cmd: python train.py\n"
+            "    deps:\n"
+            "      - data/\n"
+            "    outs:\n"
+            "      - model.pt\n"
+        )
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is not None
+        assert len(result.stages) == 1
+        assert result.edges == []
+
+    def test_empty_stages_returns_none(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text("stages: {}\n")
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is None
+
+    def test_no_stages_key_returns_none(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text("vars:\n  - foo: bar\n")
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is None
+
+    def test_invalid_yaml_returns_none(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text("{{not valid yaml")
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is None
+
+    def test_missing_file_returns_none(self, tmp_path: Path) -> None:
+        result = parse_dvc_pipeline(tmp_path / "nonexistent.yaml")
+        assert result is None
+
+    def test_dict_style_deps_and_outs(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text(
+            "stages:\n"
+            "  train:\n"
+            "    cmd: python train.py\n"
+            "    deps:\n"
+            "      - path: data/train.csv\n"
+            "    outs:\n"
+            "      - path: model.pkl\n"
+        )
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is not None
+        assert "data/train.csv" in result.stages[0].deps
+        assert "model.pkl" in result.stages[0].outs
+
+    def test_list_cmd_joined(self, tmp_path: Path) -> None:
+        dvc_yaml = tmp_path / "dvc.yaml"
+        dvc_yaml.write_text(
+            "stages:\n  build:\n    cmd:\n      - pip install -e .\n      - python build.py\n"
+        )
+
+        result = parse_dvc_pipeline(dvc_yaml)
+        assert result is not None
+        assert "pip install -e ." in result.stages[0].cmd
+        assert "&&" in result.stages[0].cmd
