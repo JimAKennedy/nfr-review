@@ -1,9 +1,18 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Example workflow: run a full nfr-review scan nightly on the default
-# branch, upload SARIF, create/sync GitHub issues, and publish baseline
-# + PDF artifacts for downstream PR workflows to consume.
+# Example workflow: run a full nfr-review scan on the default branch,
+# upload SARIF, create/sync GitHub issues, and publish a baseline
+# artifact for downstream PR workflows to consume.
+#
+# Triggers:
+#   push → main:  Refreshes the baseline immediately after every merge
+#                  so the next PR scan diffs against fresh data (no
+#                  chicken-and-egg lag).
+#   schedule:      Catches drift even when no PRs are landing.  Skips
+#                  the scan automatically if no commits arrived since
+#                  the last successful run.
+#   workflow_dispatch: Manual trigger for ad-hoc runs.
 #
 # Usage — copy this file to .github/workflows/nfr-review-nightly.yml
 # in the repository you want to scan and adjust the schedule / inputs.
@@ -11,8 +20,10 @@
 name: NFR Review (nightly)
 
 on:
+  push:
+    branches: [main]             # refresh baseline immediately after merge
   schedule:
-    - cron: "0 3 * * *"          # 03:00 UTC daily — adjust to taste
+    - cron: "0 3 * * *"          # 03:00 UTC daily — catches drift
   workflow_dispatch:              # manual trigger for ad-hoc runs
 
 concurrency:
@@ -20,6 +31,7 @@ concurrency:
   cancel-in-progress: false      # let a running scan finish
 
 permissions:
+  actions: read                  # required for gh run list (skip check)
   contents: read
   issues: write                  # required for create-issues
   security-events: write         # required for SARIF upload
@@ -35,7 +47,36 @@ jobs:
         with:
           fetch-depth: 0         # full history for git-based collectors
 
+      # ── Skip if unchanged (scheduled runs only) ──────────────────────
+      - name: Check for new commits since last successful run
+        if: github.event_name == 'schedule'
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LAST_RUN=$(gh run list \
+            --workflow=nfr-review-nightly.yml \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json createdAt \
+            --jq '.[0].createdAt' 2>/dev/null || true)
+          if [ -z "$LAST_RUN" ] || [ "$LAST_RUN" = "null" ]; then
+            echo "No prior successful run — proceeding with scan"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          NEW_COMMITS=$(git log --since="$LAST_RUN" --oneline | wc -l | tr -d ' ')
+          if [ "$NEW_COMMITS" = "0" ]; then
+            echo "::notice::No commits since last successful run ($LAST_RUN) — skipping scan"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$NEW_COMMITS commit(s) since $LAST_RUN — proceeding with scan"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run NFR Review
+        if: steps.check.outputs.skip != 'true'
         id: nfr
         uses: JimAKennedy/nfr-review@v1
         with:
@@ -54,7 +95,7 @@ jobs:
 
       # ── Artifacts ─────────────────────────────────────────────────────
       - name: Upload baseline artifact
-        if: always() && steps.nfr.outputs.jsonl-path != ''
+        if: always() && steps.check.outputs.skip != 'true' && steps.nfr.outputs.jsonl-path != ''
         uses: actions/upload-artifact@v7
         with:
           name: nfr-review-baseline
@@ -62,7 +103,7 @@ jobs:
           retention-days: 90     # PR workflow downloads this for diff mode
 
       - name: Upload SARIF artifact
-        if: always() && steps.nfr.outputs.sarif-path != ''
+        if: always() && steps.check.outputs.skip != 'true' && steps.nfr.outputs.sarif-path != ''
         uses: actions/upload-artifact@v7
         with:
           name: nfr-review-sarif
@@ -70,8 +111,15 @@ jobs:
           retention-days: 365
 
       # ── Job summary ───────────────────────────────────────────────────
+      - name: Summary (skipped)
+        if: always() && steps.check.outputs.skip == 'true'
+        run: |
+          echo "## NFR Review (nightly) — skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No commits since last successful run. Scan skipped to save CI minutes." >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
-        if: always()
+        if: always() && steps.check.outputs.skip != 'true'
         run: |
           echo "## NFR Review (nightly)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

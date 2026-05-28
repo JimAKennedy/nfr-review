@@ -141,7 +141,7 @@ class TestFilterNewFindings:
     def test_removes_known_findings(self) -> None:
         f_known = _make_finding(rule_id="R001", evidence_locator="a.py:1", pattern_tag="t1")
         f_new = _make_finding(rule_id="R002", evidence_locator="b.py:2", pattern_tag="t2")
-        baseline = BaselineData(keys={f_known.identity_key}, finding_count=1)
+        baseline = BaselineData(legacy_keys={f_known.identity_key}, finding_count=1)
 
         result = filter_new_findings([f_known, f_new], baseline)
         assert len(result) == 1
@@ -156,9 +156,116 @@ class TestFilterNewFindings:
     def test_removes_all_when_all_known(self) -> None:
         f1 = _make_finding(rule_id="R001", evidence_locator="a.py:1", pattern_tag="t1")
         f2 = _make_finding(rule_id="R002", evidence_locator="b.py:2", pattern_tag="t2")
-        baseline = BaselineData(keys={f1.identity_key, f2.identity_key}, finding_count=2)
+        baseline = BaselineData(
+            legacy_keys={f1.identity_key, f2.identity_key}, finding_count=2
+        )
         result = filter_new_findings([f1, f2], baseline)
         assert len(result) == 0
+
+
+# ---- Stable fingerprint: dual-key matching ---------------------------------
+
+
+class TestStableBaselineDiffing:
+    """Tests for content-hash-based baseline matching (line-shift-immune)."""
+
+    def test_content_hash_loaded_from_jsonl(self, tmp_path: Path) -> None:
+        findings = [
+            _make_finding(
+                rule_id="R001",
+                evidence_locator="c.cpp:42",
+                pattern_tag="raw-new",
+                content_hash="abc123def456",
+            )
+        ]
+        jsonl_path = tmp_path / "baseline.jsonl"
+        _write_jsonl(jsonl_path, findings)
+        baseline = load_baseline(jsonl_path)
+        assert ("R001", "c.cpp", "raw-new", "abc123def456") in baseline.stable_keys
+        assert ("R001", "c.cpp:42", "raw-new") in baseline.legacy_keys
+
+    def test_line_shift_matched_via_stable_key(self) -> None:
+        """Same content at different line numbers should match via stable key."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "c.cpp:140", "raw-new")},
+            stable_keys={("R001", "c.cpp", "raw-new", "abc123")},
+            finding_count=1,
+        )
+        shifted = _make_finding(
+            rule_id="R001",
+            evidence_locator="c.cpp:142",
+            pattern_tag="raw-new",
+            content_hash="abc123",
+        )
+        result = filter_new_findings([shifted], baseline)
+        assert len(result) == 0
+
+    def test_legacy_fallback_when_no_content_hash(self) -> None:
+        """Findings without content_hash still match via legacy key."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "a.py:10", "tag")},
+            finding_count=1,
+        )
+        f = _make_finding(rule_id="R001", evidence_locator="a.py:10", pattern_tag="tag")
+        result = filter_new_findings([f], baseline)
+        assert len(result) == 0
+
+    def test_old_baseline_new_scan_with_content_hash(self) -> None:
+        """Old baseline without content_hash, new scan with content_hash.
+        Falls back to legacy key match.
+        """
+        baseline = BaselineData(
+            legacy_keys={("R001", "c.cpp:140", "raw-new")},
+            finding_count=1,
+        )
+        f = _make_finding(
+            rule_id="R001",
+            evidence_locator="c.cpp:140",
+            pattern_tag="raw-new",
+            content_hash="abc123",
+        )
+        result = filter_new_findings([f], baseline)
+        assert len(result) == 0
+
+    def test_old_baseline_line_shifted_is_new(self) -> None:
+        """Old baseline without content_hash, line shifted — finding IS new
+        (no stable key in baseline to match against).
+        """
+        baseline = BaselineData(
+            legacy_keys={("R001", "c.cpp:140", "raw-new")},
+            finding_count=1,
+        )
+        shifted = _make_finding(
+            rule_id="R001",
+            evidence_locator="c.cpp:142",
+            pattern_tag="raw-new",
+            content_hash="abc123",
+        )
+        result = filter_new_findings([shifted], baseline)
+        assert len(result) == 1
+
+    def test_truly_new_finding_not_suppressed(self) -> None:
+        baseline = BaselineData(
+            legacy_keys={("R001", "c.cpp:140", "raw-new")},
+            stable_keys={("R001", "c.cpp", "raw-new", "abc123")},
+            finding_count=1,
+        )
+        new_f = _make_finding(
+            rule_id="R001",
+            evidence_locator="c.cpp:200",
+            pattern_tag="raw-new",
+            content_hash="xyz789",
+        )
+        result = filter_new_findings([new_f], baseline)
+        assert len(result) == 1
+
+    def test_backward_compat_keys_alias(self) -> None:
+        """The .keys property returns legacy_keys for backward compat."""
+        baseline = BaselineData(
+            legacy_keys={("R001", "a.py:10", "tag")},
+            finding_count=1,
+        )
+        assert baseline.keys == baseline.legacy_keys
 
 
 # ---- T02/T03: CLI --baseline integration -----------------------------------

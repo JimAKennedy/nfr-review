@@ -17,7 +17,9 @@ from nfr_review.arch_diagrams import (
     render_c4_container,
     render_c4_context,
     render_class_diagram,
+    render_pipeline_diagram,
 )
+from nfr_review.arch_discovery import DvcPipeline, DvcStage
 from nfr_review.arch_models import (
     C4Diagram,
     Component,
@@ -1447,3 +1449,95 @@ class TestClassDiagram:
         diagrams = generate_all_diagrams([comp], [])
         class_diagrams = [d for d in diagrams if d.scope == "classes"]
         assert len(class_diagrams) == 0
+
+
+class TestPipelineDiagram:
+    def test_multi_stage_dag(self) -> None:
+        pipeline = DvcPipeline(
+            stages=[
+                DvcStage(name="prepare", cmd="python prepare.py", outs=["prepared/"]),
+                DvcStage(
+                    name="train", cmd="python train.py", deps=["prepared/"], outs=["model.pt"]
+                ),
+                DvcStage(name="export", cmd="python export.py", deps=["model.pt"]),
+            ],
+            edges=[("prepare", "train"), ("train", "export")],
+        )
+
+        diagram = render_pipeline_diagram(pipeline)
+        assert diagram.level == "code"
+        assert diagram.scope == "pipeline"
+        assert "flowchart TD" in diagram.mermaid
+        assert "prepare" in diagram.mermaid
+        assert "train" in diagram.mermaid
+        assert "export" in diagram.mermaid
+        assert "python prepare.py" in diagram.mermaid
+        assert "prepare --> train" in diagram.mermaid
+        assert "train --> export" in diagram.mermaid
+
+    def test_single_stage(self) -> None:
+        pipeline = DvcPipeline(
+            stages=[DvcStage(name="train", cmd="python train.py")],
+            edges=[],
+        )
+
+        diagram = render_pipeline_diagram(pipeline)
+        assert "train" in diagram.mermaid
+        assert "-->" not in diagram.mermaid
+
+    def test_empty_pipeline(self) -> None:
+        pipeline = DvcPipeline(stages=[], edges=[])
+        diagram = render_pipeline_diagram(pipeline)
+        assert diagram.mermaid == "flowchart TD\n"
+
+    def test_long_cmd_truncated(self) -> None:
+        long_cmd = (
+            "python -m training.run --epochs=100"
+            " --batch-size=32 --learning-rate=0.001 --output=model.pt"
+        )
+        pipeline = DvcPipeline(
+            stages=[DvcStage(name="train", cmd=long_cmd)],
+            edges=[],
+        )
+
+        diagram = render_pipeline_diagram(pipeline)
+        assert "..." in diagram.mermaid
+        assert long_cmd not in diagram.mermaid
+
+    def test_custom_title(self) -> None:
+        pipeline = DvcPipeline(
+            stages=[DvcStage(name="train", cmd="python train.py")],
+            edges=[],
+        )
+        diagram = render_pipeline_diagram(pipeline, title="Training Pipeline")
+        assert diagram.title == "Training Pipeline"
+
+    def test_generate_all_with_pipeline_data(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        pipeline = DvcPipeline(
+            stages=[
+                DvcStage(name="prepare", cmd="python prepare.py", outs=["data/"]),
+                DvcStage(name="train", cmd="python train.py", deps=["data/"]),
+            ],
+            edges=[("prepare", "train")],
+        )
+        diagrams = generate_all_diagrams([comp], [], pipeline_data=[pipeline])
+        pipeline_diagrams = [d for d in diagrams if d.scope == "pipeline"]
+        assert len(pipeline_diagrams) == 1
+        assert "prepare" in pipeline_diagrams[0].mermaid
+
+    def test_generate_all_no_pipeline_data(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        diagrams = generate_all_diagrams([comp], [])
+        pipeline_diagrams = [d for d in diagrams if d.scope == "pipeline"]
+        assert len(pipeline_diagrams) == 0

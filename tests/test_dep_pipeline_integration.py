@@ -133,11 +133,14 @@ class TestDepPipelineEndToEnd:
         upgrade = [r for r in csv_rows if r["rule_id"] == "dep-upgrade-path"]
         assert len(upgrade) >= 1, "Expected at least one dep-upgrade-path finding in CSV"
 
-    def test_csv_all_10_fields_populated(self, csv_rows: list[dict[str, str]]) -> None:
+    def test_csv_all_required_fields_populated(self, csv_rows: list[dict[str, str]]) -> None:
+        optional_fields = {"content_hash"}
         for row in csv_rows:
             if row.get("rag") == "skipped":
                 continue
             for field in CSV_HEADER:
+                if field in optional_fields:
+                    continue
                 assert row.get(field, "") != "", (
                     f"Field {field!r} is empty in row with rule_id={row.get('rule_id')}"
                 )

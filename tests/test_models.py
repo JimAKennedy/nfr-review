@@ -21,6 +21,7 @@ FINDING_FIELD_ORDER = (
     "collector_version",
     "confidence",
     "pattern_tag",
+    "content_hash",
 )
 
 
@@ -36,6 +37,7 @@ def _valid_finding_payload() -> dict:
         "collector_version": "0.1.0",
         "confidence": 0.95,
         "pattern_tag": "documentation",
+        "content_hash": "",
     }
 
 
@@ -88,12 +90,22 @@ def test_finding_accepts_all_severity_values() -> None:
         Finding(**payload)
 
 
-@pytest.mark.parametrize("missing", FINDING_FIELD_ORDER)
+_REQUIRED_FINDING_FIELDS = tuple(f for f in FINDING_FIELD_ORDER if f != "content_hash")
+
+
+@pytest.mark.parametrize("missing", _REQUIRED_FINDING_FIELDS)
 def test_finding_requires_every_field(missing: str) -> None:
     payload = _valid_finding_payload()
     payload.pop(missing)
     with pytest.raises(ValidationError):
         Finding(**payload)
+
+
+def test_content_hash_defaults_to_empty() -> None:
+    payload = _valid_finding_payload()
+    payload.pop("content_hash")
+    f = Finding(**payload)
+    assert f.content_hash == ""
 
 
 def test_finding_confidence_is_bounded() -> None:
@@ -206,3 +218,111 @@ def test_run_metadata_dirty_flag_accepts_bool() -> None:
         git_dirty=True,
     )
     assert m.git_dirty is True
+
+
+# ---- Stable identity key (content_hash) ------------------------------------
+
+
+class TestStableIdentityKey:
+    def test_falls_back_to_legacy_without_content_hash(self) -> None:
+        f = Finding(**{**_valid_finding_payload(), "evidence_locator": "src/main.py:42"})
+        assert f.stable_identity_key == f.identity_key
+
+    def test_strips_line_number_when_content_hash_set(self) -> None:
+        f = Finding(
+            **{
+                **_valid_finding_payload(),
+                "evidence_locator": "src/main.py:42",
+                "content_hash": "abc123def456",
+            }
+        )
+        assert f.stable_identity_key == (
+            "sample-readme-exists",
+            "src/main.py",
+            "documentation",
+            "abc123def456",
+        )
+
+    def test_same_content_different_line_same_stable_key(self) -> None:
+        base = {**_valid_finding_payload(), "content_hash": "abc123def456"}
+        f1 = Finding(**{**base, "evidence_locator": "controller.cpp:140"})
+        f2 = Finding(**{**base, "evidence_locator": "controller.cpp:142"})
+        assert f1.stable_identity_key == f2.stable_identity_key
+        assert f1.identity_key != f2.identity_key
+
+    def test_different_content_same_line_different_stable_key(self) -> None:
+        base = {**_valid_finding_payload(), "evidence_locator": "controller.cpp:42"}
+        f1 = Finding(**{**base, "content_hash": "hash_aaa"})
+        f2 = Finding(**{**base, "content_hash": "hash_bbb"})
+        assert f1.stable_identity_key != f2.stable_identity_key
+
+    def test_locator_without_line_number_unchanged(self) -> None:
+        f = Finding(
+            **{
+                **_valid_finding_payload(),
+                "evidence_locator": "project-wide",
+                "content_hash": "abc123",
+            }
+        )
+        assert f.stable_identity_key == (
+            "sample-readme-exists",
+            "project-wide",
+            "documentation",
+            "abc123",
+        )
+
+
+class TestComputeContentHash:
+    def test_empty_string_returns_empty(self) -> None:
+        from nfr_review.models import compute_content_hash
+
+        assert compute_content_hash("") == ""
+        assert compute_content_hash("   ") == ""
+
+    def test_deterministic(self) -> None:
+        from nfr_review.models import compute_content_hash
+
+        h1 = compute_content_hash("auto* widget = new CTextLabel(rect)")
+        h2 = compute_content_hash("auto* widget = new CTextLabel(rect)")
+        assert h1 == h2
+        assert len(h1) == 12
+
+    def test_strips_whitespace(self) -> None:
+        from nfr_review.models import compute_content_hash
+
+        h1 = compute_content_hash("  code()  ")
+        h2 = compute_content_hash("code()")
+        assert h1 == h2
+
+    def test_different_content_different_hash(self) -> None:
+        from nfr_review.models import compute_content_hash
+
+        h1 = compute_content_hash("new CTextLabel(rect)")
+        h2 = compute_content_hash("new CTextButton(rect)")
+        assert h1 != h2
+
+
+class TestStripLineFromLocator:
+    def test_strips_line_number(self) -> None:
+        from nfr_review.models import _strip_line_from_locator
+
+        assert _strip_line_from_locator("controller.cpp:142") == "controller.cpp"
+
+    def test_preserves_non_line_locator(self) -> None:
+        from nfr_review.models import _strip_line_from_locator
+
+        assert _strip_line_from_locator("project-wide") == "project-wide"
+
+    def test_preserves_resource_locator(self) -> None:
+        from nfr_review.models import _strip_line_from_locator
+
+        assert (
+            _strip_line_from_locator("deployment.yaml:my-pod:container")
+            == "deployment.yaml:my-pod:container"
+        )
+
+    def test_only_strips_trailing_digits(self) -> None:
+        from nfr_review.models import _strip_line_from_locator
+
+        assert _strip_line_from_locator("src/main.py:42") == "src/main.py"
+        assert _strip_line_from_locator("a:b:10") == "a:b"

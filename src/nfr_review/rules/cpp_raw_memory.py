@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
+from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
@@ -47,6 +47,7 @@ class CppRawMemoryRule:
                         collector_version=ev.collector_version,
                         confidence=0.9,
                         pattern_tag="cpp-raw-new",
+                        content_hash=compute_content_hash(expr.get("expression", "")),
                     )
                 )
 
@@ -66,6 +67,7 @@ class CppRawMemoryRule:
                         collector_version=ev.collector_version,
                         confidence=0.9,
                         pattern_tag="cpp-raw-delete",
+                        content_hash=compute_content_hash(expr.get("expression", "")),
                     )
                 )
 
@@ -86,6 +88,7 @@ class CppRawMemoryRule:
                             collector_version=ev.collector_version,
                             confidence=0.9,
                             pattern_tag="cpp-malloc-usage",
+                            content_hash=compute_content_hash(call.get("call", "")),
                         )
                     )
 

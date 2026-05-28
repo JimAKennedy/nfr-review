@@ -2362,3 +2362,218 @@ class TestMaterializeInfraComponents:
         redis = [c for c in infra_comps if "redis" in c.name.lower()]
         assert len(redis) >= 1
         assert redis[0].environment == "dev"
+
+
+# ---------------------------------------------------------------------------
+# Strategy 10: CMake FetchContent / add_subdirectory cross-repo deps
+# ---------------------------------------------------------------------------
+
+
+class TestCmakeIntegrationDiscovery:
+    """Tests for _discover_cmake_integrations."""
+
+    def test_fetchcontent_detects_cross_repo_dep(self, tmp_repo: Path) -> None:
+        """FetchContent_Declare with a matching URL creates an integration."""
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(plugin VERSION 1.0)\n"
+            "include(FetchContent)\n"
+            "FetchContent_Declare(\n"
+            "    drumcore\n"
+            "    GIT_REPOSITORY https://github.com/org/drumcore.git\n"
+            "    GIT_TAG v1.0.0\n"
+            ")\n"
+        )
+        plugin_comp = _make_component("plugin", repo="plugin", boundary_path=".")
+        lib_comp = _make_component("drumcore", comp_type="library", repo="drumcore")
+        integrations = discover_integrations(
+            tmp_repo, [plugin_comp, lib_comp], repo_name="plugin"
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 1
+        assert cmake_intgs[0].source_component_id == plugin_comp.id
+        assert cmake_intgs[0].target_component_id == lib_comp.id
+        assert cmake_intgs[0].protocol == "cmake-fetchcontent"
+
+    def test_add_subdirectory_detects_sibling_dep(self, tmp_repo: Path) -> None:
+        """add_subdirectory with a relative path to a sibling repo creates an integration."""
+        plugin_dir = tmp_repo / "plugin"
+        plugin_dir.mkdir()
+        lib_dir = tmp_repo / "drumcore"
+        lib_dir.mkdir()
+        (plugin_dir / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(plugin VERSION 1.0)\n"
+            "add_subdirectory(../drumcore ${CMAKE_BINARY_DIR}/drumcore)\n"
+        )
+        plugin_comp = _make_component("plugin", repo="plugin", boundary_path=".")
+        lib_comp = _make_component("drumcore", comp_type="library", repo="drumcore")
+        integrations = discover_integrations(
+            plugin_dir, [plugin_comp, lib_comp], repo_name="plugin"
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 1
+        assert cmake_intgs[0].protocol == "cmake-add-subdirectory"
+        assert cmake_intgs[0].target_component_id == lib_comp.id
+
+    def test_multi_repo_marks_cmake_deps_cross_repo(self, tmp_path: Path) -> None:
+        """Multi-repo discovery marks FetchContent deps as cross-repo."""
+        repo_a = tmp_path / "plugin-a"
+        repo_a.mkdir()
+        (repo_a / ".git").mkdir()
+        (repo_a / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(plugin_a VERSION 1.0)\n"
+            "include(FetchContent)\n"
+            "FetchContent_Declare(\n"
+            "    shared_lib\n"
+            "    GIT_REPOSITORY https://github.com/org/shared-lib.git\n"
+            "    GIT_TAG v2.0\n"
+            ")\n"
+        )
+        repo_b = tmp_path / "shared-lib"
+        repo_b.mkdir()
+        (repo_b / ".git").mkdir()
+        (repo_b / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(shared_lib VERSION 2.0)\n"
+            "add_library(shared_lib STATIC src/lib.cpp)\n"
+        )
+        comp_a = _make_component("plugin-a", repo="plugin-a", boundary_path=".")
+        comp_b = _make_component(
+            "shared-lib", comp_type="library", repo="shared-lib", boundary_path="."
+        )
+        integrations = discover_integrations_multi_repo(
+            [repo_a, repo_b],
+            [comp_a, comp_b],
+            repo_names=["plugin-a", "shared-lib"],
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 1
+        assert cmake_intgs[0].is_cross_repo is True
+
+    def test_no_match_for_unknown_url(self, tmp_repo: Path) -> None:
+        """FetchContent with an unknown URL produces no integration."""
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(myapp VERSION 1.0)\n"
+            "FetchContent_Declare(\n"
+            "    googletest\n"
+            "    GIT_REPOSITORY https://github.com/google/googletest.git\n"
+            "    GIT_TAG v1.14.0\n"
+            ")\n"
+        )
+        comp = _make_component("myapp", repo="myapp", boundary_path=".")
+        integrations = discover_integrations(tmp_repo, [comp], repo_name="myapp")
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 0
+
+    def test_commented_fetchcontent_ignored(self, tmp_repo: Path) -> None:
+        """Commented-out FetchContent lines are not parsed."""
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(plugin VERSION 1.0)\n"
+            "# FetchContent_Declare(\n"
+            "#     drumcore\n"
+            "#     GIT_REPOSITORY https://github.com/org/drumcore.git\n"
+            "#     GIT_TAG v1.0.0\n"
+            "# )\n"
+        )
+        plugin_comp = _make_component("plugin", repo="plugin", boundary_path=".")
+        lib_comp = _make_component("drumcore", comp_type="library", repo="drumcore")
+        integrations = discover_integrations(
+            tmp_repo, [plugin_comp, lib_comp], repo_name="plugin"
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 0
+
+    def test_multiple_fetchcontent_deps(self, tmp_repo: Path) -> None:
+        """Multiple FetchContent deps produce multiple integrations."""
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(plugin VERSION 1.0)\n"
+            "include(FetchContent)\n"
+            "FetchContent_Declare(\n"
+            "    libA\n"
+            "    GIT_REPOSITORY https://github.com/org/lib-a.git\n"
+            "    GIT_TAG v1.0\n"
+            ")\n"
+            "FetchContent_Declare(\n"
+            "    libB\n"
+            "    GIT_REPOSITORY https://github.com/org/lib-b.git\n"
+            "    GIT_TAG v2.0\n"
+            ")\n"
+        )
+        plugin = _make_component("plugin", repo="plugin", boundary_path=".")
+        lib_a = _make_component("lib-a", comp_type="library", repo="lib-a")
+        lib_b = _make_component("lib-b", comp_type="library", repo="lib-b")
+        integrations = discover_integrations(
+            tmp_repo, [plugin, lib_a, lib_b], repo_name="plugin"
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 2
+        targets = {i.target_component_id for i in cmake_intgs}
+        assert targets == {lib_a.id, lib_b.id}
+
+    def test_self_reference_ignored(self, tmp_repo: Path) -> None:
+        """FetchContent pointing to the same repo is ignored."""
+        (tmp_repo / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n"
+            "project(mylib VERSION 1.0)\n"
+            "FetchContent_Declare(\n"
+            "    mylib\n"
+            "    GIT_REPOSITORY https://github.com/org/mylib.git\n"
+            "    GIT_TAG v1.0\n"
+            ")\n"
+        )
+        comp = _make_component("mylib", repo="mylib", boundary_path=".")
+        integrations = discover_integrations(tmp_repo, [comp], repo_name="mylib")
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 0
+
+    def test_fixture_repos_cross_repo(self) -> None:
+        """End-to-end test with the cmake-shared-lib and cmake-consumer fixtures."""
+        fixtures = Path(__file__).parent / "fixtures"
+        shared = fixtures / "cmake-shared-lib"
+        consumer_a = fixtures / "cmake-consumer-a"
+        consumer_b = fixtures / "cmake-consumer-b"
+
+        lib_comp = _make_component(
+            "drumcore",
+            comp_type="library",
+            repo="cmake-shared-lib",
+            boundary_path=".",
+        )
+        comp_a = _make_component(
+            "cmake-consumer-a",
+            repo="cmake-consumer-a",
+            boundary_path=".",
+        )
+        comp_b = _make_component(
+            "cmake-consumer-b",
+            repo="cmake-consumer-b",
+            boundary_path=".",
+        )
+        all_comps = [lib_comp, comp_a, comp_b]
+
+        integrations = discover_integrations_multi_repo(
+            [shared, consumer_a, consumer_b],
+            all_comps,
+            repo_names=["cmake-shared-lib", "cmake-consumer-a", "cmake-consumer-b"],
+        )
+        cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
+        assert len(cmake_intgs) == 2
+        assert all(i.is_cross_repo for i in cmake_intgs)
+        sources = {i.source_component_id for i in cmake_intgs}
+        assert sources == {comp_a.id, comp_b.id}
+        assert all(i.target_component_id == lib_comp.id for i in cmake_intgs)
+
+    def test_repo_name_from_url_variants(self) -> None:
+        """_repo_name_from_url handles various Git URL formats."""
+        from nfr_review.arch_integrations import _repo_name_from_url
+
+        assert _repo_name_from_url("https://github.com/org/repo.git") == "repo"
+        assert _repo_name_from_url("https://github.com/org/repo") == "repo"
+        assert _repo_name_from_url("git@github.com:org/repo.git") == "repo"
+        assert _repo_name_from_url("https://gitlab.com/org/sub/repo.git/") == "repo"
+        assert _repo_name_from_url("") is None
