@@ -43,29 +43,27 @@ def _map_severity(severity: Severity) -> str:
     return _SEVERITY_TO_LEVEL.get(severity, "note")
 
 
-def _parse_location(evidence_locator: str) -> dict[str, Any]:
+def _parse_location(evidence_locator: str) -> dict[str, Any] | None:
     """Parse an evidence_locator into a SARIF location object.
 
-    Always returns a ``physicalLocation`` — GitHub's SARIF validator rejects
-    both ``logicalLocation`` inside ``locations[]`` and ``logicalLocations``
-    at the result level.  For non-file locators we emit the raw string as
-    the artifact URI so it still shows up in the Code Scanning UI.
+    Returns ``None`` for non-file locators — GitHub Code Scanning rejects
+    URIs whose scheme doesn't match the checkout (``file``).
     """
     m = _FILE_LOCATOR_RE.match(evidence_locator)
-    if m:
-        uri = m.group(1)
-        line = m.group(2)
-        col = m.group(3)
-        phys: dict[str, Any] = {
-            "artifactLocation": {"uri": uri},
-        }
-        if line is not None:
-            region: dict[str, int] = {"startLine": int(line)}
-            if col is not None:
-                region["startColumn"] = int(col)
-            phys["region"] = region
-        return {"physicalLocation": phys}
-    return {"physicalLocation": {"artifactLocation": {"uri": evidence_locator}}}
+    if not m:
+        return None
+    uri = m.group(1)
+    line = m.group(2)
+    col = m.group(3)
+    phys: dict[str, Any] = {
+        "artifactLocation": {"uri": uri},
+    }
+    if line is not None:
+        region: dict[str, int] = {"startLine": int(line)}
+        if col is not None:
+            region["startColumn"] = int(col)
+        phys["region"] = region
+    return {"physicalLocation": phys}
 
 
 def _build_rules(findings: list[Finding]) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -90,13 +88,16 @@ def _finding_to_result(
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
     text = f"{finding.summary}\nRecommendation: {finding.recommendation}"
-    return {
+    result: dict[str, Any] = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
         "message": {"text": text},
-        "locations": [_parse_location(finding.evidence_locator)],
     }
+    loc = _parse_location(finding.evidence_locator)
+    if loc is not None:
+        result["locations"] = [loc]
+    return result
 
 
 def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:
