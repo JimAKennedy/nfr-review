@@ -1,0 +1,66 @@
+# Dogfood workflow: run nfr-review against itself nightly.
+# Uses `./` (local action) instead of the released tag.
+
+name: NFR Review (nightly)
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nfr-review-nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  nfr-review:
+    name: NFR Review (nightly)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run NFR Review
+        id: nfr
+        uses: ./
+        with:
+          path: .
+          fail-on: "never"
+          sarif-upload: "true"
+          comment: "false"
+          create-issues: "false"
+
+      - name: Upload baseline artifact
+        if: always() && steps.nfr.outputs.jsonl-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-baseline
+          path: ${{ steps.nfr.outputs.jsonl-path }}
+          retention-days: 90
+
+      - name: Upload SARIF artifact
+        if: always() && steps.nfr.outputs.sarif-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-review-sarif
+          path: ${{ steps.nfr.outputs.sarif-path }}
+          retention-days: 365
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## NFR Review (nightly)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Findings | ${{ steps.nfr.outputs.findings-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
