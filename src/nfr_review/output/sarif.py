@@ -89,19 +89,18 @@ def _finding_to_result(
     rule_index_map: dict[str, int],
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
+    md_lines = [
+        finding.summary,
+        "",
+        f"**RAG:** {finding.rag} | **Confidence:** {finding.confidence}",
+        f"**Recommendation:** {finding.recommendation}",
+    ]
     return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
-        "message": {"text": finding.summary},
+        "message": {"text": finding.summary, "markdown": "\n".join(md_lines)},
         "locations": [_parse_location(finding.evidence_locator)],
-        "properties": {
-            "rag": finding.rag,
-            "confidence": finding.confidence,
-            "recommendation": finding.recommendation,
-            "pattern_tag": finding.pattern_tag,
-            "collector_name": finding.collector_name,
-        },
     }
 
 
