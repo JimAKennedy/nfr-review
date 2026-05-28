@@ -139,15 +139,15 @@ class TestEvidenceLocatorParsing:
         assert phys["artifactLocation"]["uri"] == "src/main.py"
         assert "region" not in phys
 
-    def test_non_file_locator_omits_locations(self, tmp_path: Path) -> None:
+    def test_non_file_locator_falls_back_to_repo_root(self, tmp_path: Path) -> None:
         finding = _make_finding(evidence_locator="maven:org.example:foo:1.0")
         result = _make_result(findings=[finding])
         out = tmp_path / "out.sarif.json"
         write_sarif(result, out)
 
         sarif = json.loads(out.read_text(encoding="utf-8"))
-        r = sarif["runs"][0]["results"][0]
-        assert "locations" not in r
+        loc = sarif["runs"][0]["results"][0]["locations"][0]
+        assert loc["physicalLocation"]["artifactLocation"]["uri"] == "."
 
 
 class TestSkippedRules:

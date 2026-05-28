@@ -43,15 +43,19 @@ def _map_severity(severity: Severity) -> str:
     return _SEVERITY_TO_LEVEL.get(severity, "note")
 
 
-def _parse_location(evidence_locator: str) -> dict[str, Any] | None:
+_FALLBACK_LOCATION: dict[str, Any] = {"physicalLocation": {"artifactLocation": {"uri": "."}}}
+
+
+def _parse_location(evidence_locator: str) -> dict[str, Any]:
     """Parse an evidence_locator into a SARIF location object.
 
-    Returns ``None`` for non-file locators — GitHub Code Scanning rejects
-    URIs whose scheme doesn't match the checkout (``file``).
+    GitHub Code Scanning requires every result to have at least one location
+    with a ``file``-scheme URI. Non-file locators (``dep:``, ``maven:``, etc.)
+    fall back to the repo root.
     """
     m = _FILE_LOCATOR_RE.match(evidence_locator)
     if not m:
-        return None
+        return _FALLBACK_LOCATION
     uri = m.group(1)
     line = m.group(2)
     col = m.group(3)
@@ -88,16 +92,13 @@ def _finding_to_result(
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
     text = f"{finding.summary}\nRecommendation: {finding.recommendation}"
-    result: dict[str, Any] = {
+    return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
         "message": {"text": text},
+        "locations": [_parse_location(finding.evidence_locator)],
     }
-    loc = _parse_location(finding.evidence_locator)
-    if loc is not None:
-        result["locations"] = [loc]
-    return result
 
 
 def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:
@@ -108,6 +109,7 @@ def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:
         "kind": "notApplicable",
         "level": "none",
         "message": {"text": f"rule skipped: {justification}"},
+        "locations": [_FALLBACK_LOCATION],
         "suppressions": [
             {
                 "kind": "inSource",
