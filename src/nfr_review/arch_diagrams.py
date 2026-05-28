@@ -802,6 +802,101 @@ def render_c4_code(
 
 
 # ===================================================================
+# Class Diagram — from enriched C++ AST evidence
+# ===================================================================
+
+_ACCESS_SYMBOL = {"public": "+", "protected": "#", "private": "-"}
+_MAX_MEMBERS_PER_CLASS = 15
+
+
+def render_class_diagram(
+    class_data: list[dict],
+    title: str | None = None,
+) -> C4Diagram:
+    """Render a Mermaid class diagram from enriched C++ AST class data.
+
+    *class_data* is a list of class dicts as produced by the cpp-ast
+    collector's enriched payload (base_classes, methods, fields).
+    """
+    title = title or "Class Diagram"
+
+    if not class_data:
+        return C4Diagram(
+            level="code",
+            title=title,
+            scope="classes",
+            mermaid="classDiagram\n",
+            component_ids=[],
+        )
+
+    lines: list[str] = ["classDiagram"]
+    known_names = {c["name"] for c in class_data if c.get("name")}
+
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name:
+            continue
+        cid = _safe_id(name)
+
+        if cls.get("is_abstract"):
+            lines.append(f"    class {cid}")
+            lines.append(f"    <<abstract>> {cid}")
+        elif cls.get("is_struct"):
+            lines.append(f"    class {cid}")
+            lines.append(f"    <<struct>> {cid}")
+        else:
+            lines.append(f"    class {cid}")
+
+        member_count = 0
+        for field in cls.get("fields", []):
+            if member_count >= _MAX_MEMBERS_PER_CLASS:
+                break
+            sym = _ACCESS_SYMBOL.get(field.get("access", "private"), "-")
+            ftype = field.get("type", "")
+            fname = field.get("name", "")
+            lines.append(f"    {cid} : {sym}{fname} {ftype}")
+            member_count += 1
+
+        for method in cls.get("methods", []):
+            if member_count >= _MAX_MEMBERS_PER_CLASS:
+                break
+            mname = method.get("name", "")
+            if mname.startswith("~"):
+                continue
+            sym = _ACCESS_SYMBOL.get(method.get("access", "public"), "+")
+            rtype = method.get("return_type", "")
+            virt = "*" if method.get("is_pure_virtual") else ""
+            lines.append(f"    {cid} : {sym}{mname}(){virt} {rtype}")
+            member_count += 1
+
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name:
+            continue
+        cid = _safe_id(name)
+        for base in cls.get("base_classes", []):
+            base_name = base.get("name", "")
+            if base_name in known_names:
+                bid = _safe_id(base_name)
+                lines.append(f"    {bid} <|-- {cid}")
+            else:
+                ext_id = _safe_id(base_name)
+                lines.append(f"    class {ext_id}")
+                lines.append(f"    <<external>> {ext_id}")
+                lines.append(f"    {ext_id} <|-- {cid}")
+                known_names.add(base_name)
+
+    mermaid = "\n".join(lines) + "\n"
+    return C4Diagram(
+        level="code",
+        title=title,
+        scope="classes",
+        mermaid=mermaid,
+        component_ids=[],
+    )
+
+
+# ===================================================================
 # Convenience — generate all diagrams
 # ===================================================================
 
@@ -812,8 +907,9 @@ def generate_all_diagrams(
     coverage: list[ComponentTestCoverage] | None = None,
     *,
     diagram_mode: str = "hierarchical",
+    class_data: list[dict] | None = None,
 ) -> list[C4Diagram]:
-    """Generate context + container + component diagrams.
+    """Generate context + container + component + class diagrams.
 
     If *coverage* is provided, the container diagram nodes are annotated
     with colour classes reflecting coverage levels.
@@ -821,6 +917,9 @@ def generate_all_diagrams(
     *diagram_mode* controls component diagram layout:
     - ``"hierarchical"`` (default): overview + per-group detail diagrams.
     - ``"flat"``: single monolithic component diagram (original behavior).
+
+    If *class_data* is provided (enriched class dicts from cpp-ast),
+    a Mermaid class diagram is appended.
     """
     diagrams: list[C4Diagram] = []
 
@@ -885,6 +984,9 @@ def generate_all_diagrams(
             for bp in sorted(groups):
                 diagrams.append(render_c4_component_detail(components, integrations, bp))
 
+    if class_data:
+        diagrams.append(render_class_diagram(class_data))
+
     return diagrams
 
 
@@ -896,4 +998,5 @@ __all__ = [
     "render_c4_component_overview",
     "render_c4_container",
     "render_c4_context",
+    "render_class_diagram",
 ]

@@ -16,6 +16,7 @@ from nfr_review.arch_diagrams import (
     render_c4_component_overview,
     render_c4_container,
     render_c4_context,
+    render_class_diagram,
 )
 from nfr_review.arch_models import (
     C4Diagram,
@@ -1292,3 +1293,157 @@ class TestContainerEnvironmentGrouping:
         )
         result = render_c4_container([app, prod_db], [intg])
         assert "-->" in result.mermaid
+
+
+# ===================================================================
+# Class Diagram Tests
+# ===================================================================
+
+_SAMPLE_CLASSES = [
+    {
+        "name": "AudioProcessor",
+        "line": 1,
+        "has_destructor": True,
+        "is_struct": False,
+        "base_classes": [],
+        "methods": [
+            {
+                "name": "processBlock",
+                "return_type": "void",
+                "access": "public",
+                "is_virtual": True,
+                "is_pure_virtual": True,
+                "line": 3,
+            },
+            {
+                "name": "getName",
+                "return_type": "char",
+                "access": "public",
+                "is_virtual": True,
+                "is_pure_virtual": True,
+                "line": 4,
+            },
+        ],
+        "fields": [
+            {"name": "sampleRate_", "type": "int", "access": "protected", "line": 7},
+        ],
+        "is_abstract": True,
+    },
+    {
+        "name": "PluginProcessor",
+        "line": 10,
+        "has_destructor": False,
+        "is_struct": False,
+        "base_classes": [{"name": "AudioProcessor", "access": "public"}],
+        "methods": [
+            {
+                "name": "processBlock",
+                "return_type": "void",
+                "access": "public",
+                "is_virtual": False,
+                "is_pure_virtual": False,
+                "line": 12,
+            },
+        ],
+        "fields": [
+            {"name": "gain_", "type": "float", "access": "private", "line": 15},
+        ],
+        "is_abstract": False,
+    },
+    {
+        "name": "Config",
+        "line": 20,
+        "has_destructor": False,
+        "is_struct": True,
+        "base_classes": [],
+        "methods": [],
+        "fields": [
+            {"name": "value", "type": "int", "access": "public", "line": 21},
+        ],
+        "is_abstract": False,
+    },
+]
+
+
+class TestClassDiagram:
+    def test_empty_input(self) -> None:
+        result = render_class_diagram([])
+        assert result.level == "code"
+        assert result.mermaid == "classDiagram\n"
+
+    def test_starts_with_class_diagram(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert result.mermaid.startswith("classDiagram\n")
+
+    def test_abstract_annotation(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "<<abstract>> AudioProcessor" in result.mermaid
+
+    def test_struct_annotation(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "<<struct>> Config" in result.mermaid
+
+    def test_inheritance_edge(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "AudioProcessor <|-- PluginProcessor" in result.mermaid
+
+    def test_method_with_access(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "+processBlock()" in result.mermaid
+
+    def test_pure_virtual_marker(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "+processBlock()* void" in result.mermaid
+
+    def test_field_with_access(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "#sampleRate_ int" in result.mermaid
+        assert "-gain_ float" in result.mermaid
+
+    def test_external_base_class(self) -> None:
+        classes = [
+            {
+                "name": "MyWidget",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [{"name": "CView", "access": "public"}],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "<<external>> CView" in result.mermaid
+        assert "CView <|-- MyWidget" in result.mermaid
+
+    def test_custom_title(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES, title="Plugin Classes")
+        assert result.title == "Plugin Classes"
+
+    def test_no_destructors_in_output(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "~AudioProcessor" not in result.mermaid
+
+    def test_generate_all_includes_class_diagram(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        diagrams = generate_all_diagrams([comp], [], class_data=_SAMPLE_CLASSES)
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        assert len(class_diagrams) == 1
+        assert "classDiagram" in class_diagrams[0].mermaid
+
+    def test_generate_all_no_class_data(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        diagrams = generate_all_diagrams([comp], [])
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        assert len(class_diagrams) == 0

@@ -838,3 +838,53 @@ class TestIntegratedDiscovery:
         assert "transforms" in names
         assert "corpus" in names
         assert len(comps) >= 4
+
+
+class TestClassDiagramIntegration:
+    """End-to-end: C++ AST extraction -> class diagram generation."""
+
+    def test_class_diagram_from_cpp_fixture(self) -> None:
+        from nfr_review.arch_diagrams import render_class_diagram
+        from nfr_review.collectors.cpp_ast import CppAstCollector
+
+        fixture = Path(__file__).parent / "fixtures" / "cpp-ast-sample-repo"
+        collector = CppAstCollector()
+        evidence = collector.collect(fixture, config=None)
+
+        all_classes: list[dict] = []
+        for ev in evidence:
+            for cls in ev.payload.get("classes", []):
+                if cls.get("name") and (
+                    cls.get("base_classes") or cls.get("methods") or cls.get("fields")
+                ):
+                    all_classes.append(cls)
+
+        assert len(all_classes) >= 5
+        diagram = render_class_diagram(all_classes)
+        assert diagram.level == "code"
+        assert "classDiagram" in diagram.mermaid
+        assert "AudioProcessor" in diagram.mermaid
+        assert "PluginProcessor" in diagram.mermaid
+        assert "AudioProcessor <|-- PluginProcessor" in diagram.mermaid
+        assert "<<abstract>> AudioProcessor" in diagram.mermaid
+        assert "+processBlock()" in diagram.mermaid
+
+    def test_class_diagram_from_integration_repo(self) -> None:
+        from nfr_review.arch_diagrams import render_class_diagram
+        from nfr_review.collectors.cpp_ast import CppAstCollector
+
+        fixture = Path(__file__).parent / "fixtures" / "cpp-integration-repo"
+        collector = CppAstCollector()
+        evidence = collector.collect(fixture, config=None)
+
+        all_classes: list[dict] = []
+        for ev in evidence:
+            for cls in ev.payload.get("classes", []):
+                if cls.get("name") and (
+                    cls.get("base_classes") or cls.get("methods") or cls.get("fields")
+                ):
+                    all_classes.append(cls)
+
+        assert len(all_classes) >= 2
+        diagram = render_class_diagram(all_classes)
+        assert "Widget <|-- FancyWidget" in diagram.mermaid

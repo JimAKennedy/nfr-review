@@ -118,6 +118,111 @@ class TestTemplateCode:
         assert "Container" in class_names
 
 
+class TestClassHierarchy:
+    """Tests for enriched class extraction: base classes, methods, fields."""
+
+    def _get_hierarchy_payload(self, collector: CppAstCollector) -> dict:
+        results = collector.collect(FIXTURES, config=None)
+        hier = [e for e in results if "class_hierarchy.h" in e.payload["file_path"]]
+        assert len(hier) == 1
+        return hier[0].payload
+
+    def _class_by_name(self, payload: dict, name: str) -> dict:
+        for c in payload["classes"]:
+            if c["name"] == name:
+                return c
+        raise AssertionError(f"Class {name!r} not found")
+
+    def test_detects_abstract_class(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        assert audio["is_abstract"] is True
+
+    def test_concrete_classes_not_abstract(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        plugin = self._class_by_name(p, "PluginProcessor")
+        assert plugin["is_abstract"] is False
+
+    def test_extracts_base_classes(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        plugin = self._class_by_name(p, "PluginProcessor")
+        assert len(plugin["base_classes"]) == 1
+        assert plugin["base_classes"][0]["name"] == "AudioProcessor"
+        assert plugin["base_classes"][0]["access"] == "public"
+
+    def test_multi_level_inheritance(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        reverb = self._class_by_name(p, "ReverbProcessor")
+        assert len(reverb["base_classes"]) == 1
+        assert reverb["base_classes"][0]["name"] == "EffectProcessor"
+
+    def test_extracts_methods_with_access(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        method_names = [m["name"] for m in audio["methods"]]
+        assert "processBlock" in method_names
+        assert "getName" in method_names
+
+    def test_pure_virtual_methods(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        pure = [m for m in audio["methods"] if m["is_pure_virtual"]]
+        assert len(pure) == 2
+
+    def test_virtual_methods(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        effect = self._class_by_name(p, "EffectProcessor")
+        virtual_methods = [m for m in effect["methods"] if m["is_virtual"]]
+        assert any(m["name"] == "setMix" for m in virtual_methods)
+
+    def test_extracts_fields_with_access(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        protected_fields = [f for f in audio["fields"] if f["access"] == "protected"]
+        assert len(protected_fields) == 2
+        field_names = {f["name"] for f in protected_fields}
+        assert "sampleRate_" in field_names
+        assert "blockSize_" in field_names
+
+    def test_private_fields(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        plugin = self._class_by_name(p, "PluginProcessor")
+        private_fields = [f for f in plugin["fields"] if f["access"] == "private"]
+        assert len(private_fields) == 2
+
+    def test_struct_default_public(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        config = self._class_by_name(p, "Config")
+        assert config["is_struct"] is True
+        for f in config["fields"]:
+            assert f["access"] == "public"
+
+    def test_struct_methods(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        config = self._class_by_name(p, "Config")
+        assert any(m["name"] == "validate" for m in config["methods"])
+
+    def test_no_base_class_for_root(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        assert audio["base_classes"] == []
+
+    def test_field_types(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        plugin = self._class_by_name(p, "PluginProcessor")
+        field_types = {f["name"]: f["type"] for f in plugin["fields"]}
+        assert field_types["gain_"] == "float"
+
+    def test_has_destructor(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        audio = self._class_by_name(p, "AudioProcessor")
+        assert audio["has_destructor"] is True
+
+    def test_class_count(self, collector: CppAstCollector) -> None:
+        p = self._get_hierarchy_payload(collector)
+        assert len(p["classes"]) == 5
+
+
 class TestCollectorMetadata:
     def test_evidence_kind(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
@@ -134,7 +239,7 @@ class TestCollectorMetadata:
     def test_collects_all_fixture_files(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         file_paths = {e.payload["file_path"] for e in results}
-        assert len(file_paths) == 5
+        assert len(file_paths) == 6
 
     def test_log_statements_contract(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
