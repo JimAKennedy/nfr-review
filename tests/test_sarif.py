@@ -194,10 +194,10 @@ class TestEmptyFindings:
         assert sarif["runs"][0]["tool"]["driver"]["rules"] == []
 
 
-class TestRunMetadataProperties:
-    """Test RunMetadata goes into run.properties."""
+class TestRunMetadata:
+    """Test RunMetadata maps to tool driver version."""
 
-    def test_sarif_run_metadata_properties(self, tmp_path: Path) -> None:
+    def test_sarif_tool_version_from_metadata(self, tmp_path: Path) -> None:
         metadata = RunMetadata(
             tool_version="1.2.3",
             target_repo="/home/user/my-repo",
@@ -214,11 +214,9 @@ class TestRunMetadataProperties:
         write_sarif(result, out)
 
         sarif = json.loads(out.read_text(encoding="utf-8"))
-        props = sarif["runs"][0]["properties"]
-        assert props["target_repo"] == "/home/user/my-repo"
-        assert props["git_sha"] == "abc123"
-        assert props["git_branch"] == "main"
-        assert props["timestamp"] == "2026-01-15T12:00:00Z"
+        run = sarif["runs"][0]
+        assert run["tool"]["driver"]["version"] == "1.2.3"
+        assert "properties" not in run
 
 
 class TestRulesDeduplication:

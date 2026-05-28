@@ -89,17 +89,12 @@ def _finding_to_result(
     rule_index_map: dict[str, int],
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
-    md_lines = [
-        finding.summary,
-        "",
-        f"**RAG:** {finding.rag} | **Confidence:** {finding.confidence}",
-        f"**Recommendation:** {finding.recommendation}",
-    ]
+    text = f"{finding.summary}\nRecommendation: {finding.recommendation}"
     return {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
-        "message": {"text": finding.summary, "markdown": "\n".join(md_lines)},
+        "message": {"text": text},
         "locations": [_parse_location(finding.evidence_locator)],
     }
 
@@ -141,15 +136,6 @@ def write_sarif(run_result: RunResult, path: Path) -> None:
         if rule_result.skipped:
             results.append(_skipped_to_result(rule_result.rule_id, rule_result.skip_reason))
 
-    run_properties: dict[str, Any] = {
-        "target_repo": metadata.target_repo,
-        "timestamp": metadata.timestamp,
-    }
-    if metadata.git_sha is not None:
-        run_properties["git_sha"] = metadata.git_sha
-    if metadata.git_branch is not None:
-        run_properties["git_branch"] = metadata.git_branch
-
     sarif: dict[str, Any] = {
         "$schema": _SARIF_SCHEMA,
         "version": "2.1.0",
@@ -163,7 +149,6 @@ def write_sarif(run_result: RunResult, path: Path) -> None:
                     },
                 },
                 "results": results,
-                "properties": run_properties,
             }
         ],
     }
