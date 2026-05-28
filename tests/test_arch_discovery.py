@@ -840,6 +840,7 @@ class TestIntegratedDiscovery:
         assert len(comps) >= 4
 
 
+
 class TestClassDiagramIntegration:
     """End-to-end: C++ AST extraction -> class diagram generation."""
 
