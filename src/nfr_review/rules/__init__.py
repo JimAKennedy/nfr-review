@@ -68,6 +68,9 @@ from nfr_review.rules import (
     dockerfile_user_directive as dockerfile_user_directive,  # noqa: F401
 )
 from nfr_review.rules import (
+    dormant_classes as dormant_classes,  # noqa: F401
+)
+from nfr_review.rules import (
     gatling_performance as gatling_performance,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -234,6 +237,7 @@ __all__ = [
     "cpp_clang_format",
     "cpp_clang_tidy",
     "cpp_dormant_classes",
+    "dormant_classes",
     "cpp_exception_safety",
     "cpp_include_guards",
     "cpp_raw_memory",
