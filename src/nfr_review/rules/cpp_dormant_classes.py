@@ -17,69 +17,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from nfr_review.arch_diagrams import _CPP_TYPE_NOISE
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 
-_CPP_TYPE_NOISE = frozenset(
-    {
-        "std",
-        "const",
-        "volatile",
-        "mutable",
-        "void",
-        "bool",
-        "int",
-        "char",
-        "float",
-        "double",
-        "long",
-        "short",
-        "signed",
-        "unsigned",
-        "size_t",
-        "ptrdiff_t",
-        "int8_t",
-        "int16_t",
-        "int32_t",
-        "int64_t",
-        "uint8_t",
-        "uint16_t",
-        "uint32_t",
-        "uint64_t",
-        "string",
-        "wstring",
-        "auto",
-        "unique_ptr",
-        "shared_ptr",
-        "weak_ptr",
-        "SharedPointer",
-        "vector",
-        "array",
-        "map",
-        "unordered_map",
-        "set",
-        "unordered_set",
-        "deque",
-        "list",
-        "queue",
-        "stack",
-        "pair",
-        "tuple",
-        "optional",
-        "variant",
-        "atomic",
-        "mutex",
-        "thread",
-        "condition_variable",
-        "uniform_real_distribution",
-        "normal_distribution",
-        "mt19937",
-        "FILE",
-        "tresult",
-        "SMTG_OVERRIDE",
-    },
-)
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
 
 

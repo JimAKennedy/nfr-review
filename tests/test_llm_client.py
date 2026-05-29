@@ -12,6 +12,7 @@ import pytest
 
 import nfr_review.llm_client as _llm_mod
 from nfr_review.llm_client import (
+    LLM_MODEL,
     ClaudeClient,
     LlmUnavailableError,
     serialize_evidence_bundle,
@@ -157,7 +158,7 @@ class TestClaudeClientAnalyze:
 
         assert result == "LLM says no PII found"
         mock_client_instance.messages.create.assert_called_once_with(
-            model="claude-sonnet-4-20250514",
+            model=LLM_MODEL,
             max_tokens=1024,
             messages=[
                 {

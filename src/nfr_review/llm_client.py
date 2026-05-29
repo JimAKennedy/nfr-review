@@ -26,6 +26,8 @@ _BACKEND_ENV = "NFR_LLM_BACKEND"
 _BACKEND_API = "api"
 _BACKEND_CLI = "claude-cli"
 
+LLM_MODEL = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-20250514")
+
 _ENV_LOADED = False
 
 
@@ -128,7 +130,7 @@ class ClaudeClient:
     def _analyze_api(self, combined: str, max_tokens: int) -> str:
         assert self._client is not None
         response = self._client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=LLM_MODEL,
             max_tokens=max_tokens,
             messages=[
                 {"role": "user", "content": combined},
