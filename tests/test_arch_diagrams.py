@@ -1439,6 +1439,42 @@ class TestClassDiagram:
         assert len(class_diagrams) == 1
         assert "classDiagram" in class_diagrams[0].mermaid
 
+    def test_generate_all_splits_class_diagrams_by_language(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        mixed_classes = [
+            {
+                "name": "CppWidget",
+                "base_classes": [],
+                "methods": [{"name": "render", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "language": "C++",
+            },
+            {
+                "name": "PyWidget",
+                "base_classes": [],
+                "methods": [{"name": "render", "return_type": "None", "access": "public"}],
+                "fields": [],
+                "language": "Python",
+            },
+        ]
+        diagrams = generate_all_diagrams([comp], [], class_data=mixed_classes)
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        assert len(class_diagrams) == 2
+        titles = {d.title for d in class_diagrams}
+        assert "Class Diagram (C++)" in titles
+        assert "Class Diagram (Python)" in titles
+        cpp_diag = next(d for d in class_diagrams if "C++" in d.title)
+        assert "CppWidget" in cpp_diag.mermaid
+        assert "PyWidget" not in cpp_diag.mermaid
+        py_diag = next(d for d in class_diagrams if "Python" in d.title)
+        assert "PyWidget" in py_diag.mermaid
+        assert "CppWidget" not in py_diag.mermaid
+
     def test_generate_all_no_class_data(self) -> None:
         comp = Component(
             id="test-comp",

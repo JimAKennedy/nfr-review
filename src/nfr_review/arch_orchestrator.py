@@ -118,17 +118,17 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
     """Collect enriched class data from C++, Java, Python, and Go files."""
     import importlib
 
-    _COLLECTORS: list[tuple[str, str, str]] = [
-        ("nfr_review.collectors.cpp_ast", "CppAstCollector", "classes"),
-        ("nfr_review.collectors.java_ast", "JavaAstCollector", "classes"),
-        ("nfr_review.collectors.python_ast", "PythonAstCollector", "classes"),
-        ("nfr_review.collectors.go_ast", "GoAstCollector", "structs"),
+    _COLLECTORS: list[tuple[str, str, str, str]] = [
+        ("nfr_review.collectors.cpp_ast", "CppAstCollector", "classes", "C++"),
+        ("nfr_review.collectors.java_ast", "JavaAstCollector", "classes", "Java"),
+        ("nfr_review.collectors.python_ast", "PythonAstCollector", "classes", "Python"),
+        ("nfr_review.collectors.go_ast", "GoAstCollector", "structs", "Go"),
     ]
 
     all_classes: list[dict] = []
     lang_counts: dict[str, int] = {}
 
-    for module_path, class_name, payload_key in _COLLECTORS:
+    for module_path, class_name, payload_key, language in _COLLECTORS:
         try:
             mod = importlib.import_module(module_path)
             collector = getattr(mod, class_name)()
@@ -149,12 +149,12 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
                     if cls.get("name") and (
                         cls.get("base_classes") or cls.get("methods") or cls.get("fields")
                     ):
+                        cls["language"] = language
                         all_classes.append(cls)
                         count += 1
 
         if count:
-            lang = class_name.replace("AstCollector", "")
-            lang_counts[lang] = count
+            lang_counts[language] = count
 
     if all_classes:
         parts = [f"{count} {lang}" for lang, count in sorted(lang_counts.items())]

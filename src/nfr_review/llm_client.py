@@ -16,6 +16,7 @@ import logging
 import os
 import shutil
 import subprocess  # nosec B404 — intentional: shells out to claude CLI
+from pathlib import Path
 
 import anthropic
 
@@ -25,6 +26,28 @@ _BACKEND_ENV = "NFR_LLM_BACKEND"
 _BACKEND_API = "api"
 _BACKEND_CLI = "claude-cli"
 
+_ENV_LOADED = False
+
+
+def _load_dotenv_once() -> None:
+    """Load the project ``.env`` into ``os.environ`` (no-clobber, once)."""
+    global _ENV_LOADED  # noqa: PLW0603
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
+
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+
 
 class LlmUnavailableError(Exception):
     """Raised when an LLM call is attempted but no backend is usable."""
@@ -32,6 +55,7 @@ class LlmUnavailableError(Exception):
 
 def _resolve_backend() -> str:
     """Return the active backend name, validated."""
+    _load_dotenv_once()
     raw = os.environ.get(_BACKEND_ENV, _BACKEND_API).strip().lower()
     if raw in (_BACKEND_API, _BACKEND_CLI):
         return raw

@@ -1249,7 +1249,17 @@ def generate_all_diagrams(
                 diagrams.append(render_c4_component_detail(components, integrations, bp))
 
     if class_data:
-        diagrams.append(render_class_diagram(class_data))
+        by_lang: dict[str, list[dict]] = {}
+        for cls in class_data:
+            lang = cls.get("language", "Unknown")
+            by_lang.setdefault(lang, []).append(cls)
+        if len(by_lang) > 1:
+            for lang in sorted(by_lang):
+                diagrams.append(
+                    render_class_diagram(by_lang[lang], title=f"Class Diagram ({lang})")
+                )
+        else:
+            diagrams.append(render_class_diagram(class_data))
 
     if pipeline_data:
         for pipeline in pipeline_data:
