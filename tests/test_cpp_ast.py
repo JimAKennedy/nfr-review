@@ -239,9 +239,87 @@ class TestCollectorMetadata:
     def test_collects_all_fixture_files(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         file_paths = {e.payload["file_path"] for e in results}
-        assert len(file_paths) == 6
+        assert len(file_paths) == 8
 
     def test_log_statements_contract(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         for e in results:
             assert "log_statements" in e.payload
+
+
+class TestRelationships:
+    """Tests for the enriched relationship fields: parameters, namespace,
+    friends, nested classes, and type aliases."""
+
+    def _get_rel_payload(self, collector: CppAstCollector) -> dict:
+        results = collector.collect(FIXTURES, config=None)
+        rel = [e for e in results if "relationships.h" in e.payload["file_path"]]
+        assert len(rel) == 1
+        return rel[0].payload
+
+    def _class_by_name(self, payload: dict, name: str) -> dict:
+        for c in payload["classes"]:
+            if c["name"] == name:
+                return c
+        raise AssertionError(f"Class {name!r} not found")
+
+    def test_method_parameters_extracted(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        proc = self._class_by_name(p, "AudioProcessor")
+        pb = next(m for m in proc["methods"] if m["name"] == "processBlock")
+        assert len(pb["parameters"]) == 2
+        param_types = [pm["type"] for pm in pb["parameters"]]
+        assert any("AudioBuffer" in t for t in param_types)
+        assert any("int" in t for t in param_types)
+
+    def test_reference_parameter(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        proc = self._class_by_name(p, "AudioProcessor")
+        hm = next(m for m in proc["methods"] if m["name"] == "handleMidi")
+        assert len(hm["parameters"]) == 1
+        assert "MidiMessage" in hm["parameters"][0]["type"]
+
+    def test_namespace_on_class(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        proc = self._class_by_name(p, "AudioProcessor")
+        assert proc["namespace"] == "audio"
+
+    def test_friend_declaration(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        plugin = self._class_by_name(p, "PluginProcessor")
+        assert "PluginEditor" in plugin["friends"]
+
+    def test_nested_class_has_outer(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        toolbar = self._class_by_name(p, "ToolBar")
+        assert toolbar["outer_class"] == "PluginEditor"
+
+    def test_top_level_class_no_outer(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        proc = self._class_by_name(p, "AudioProcessor")
+        assert proc["outer_class"] == ""
+
+    def test_type_aliases_typedef(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        aliases = p["type_aliases"]
+        typedef_aliases = [a for a in aliases if a["kind"] == "typedef"]
+        names = [a["alias"] for a in typedef_aliases]
+        assert "SampleCount" in names
+
+    def test_type_aliases_using(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        aliases = p["type_aliases"]
+        using_aliases = [a for a in aliases if a["kind"] == "using"]
+        names = [a["alias"] for a in using_aliases]
+        assert "SampleRate" in names
+
+    def test_all_classes_have_namespace_field(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        for c in p["classes"]:
+            assert "namespace" in c
+
+    def test_all_methods_have_parameters_field(self, collector: CppAstCollector) -> None:
+        p = self._get_rel_payload(collector)
+        for c in p["classes"]:
+            for m in c["methods"]:
+                assert "parameters" in m

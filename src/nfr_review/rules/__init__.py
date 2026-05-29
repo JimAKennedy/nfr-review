@@ -25,6 +25,9 @@ from nfr_review.rules import correlation_id as correlation_id  # noqa: F401
 from nfr_review.rules import cpp_clang_format as cpp_clang_format  # noqa: F401
 from nfr_review.rules import cpp_clang_tidy as cpp_clang_tidy  # noqa: F401
 from nfr_review.rules import (
+    cpp_dormant_classes as cpp_dormant_classes,  # noqa: F401
+)
+from nfr_review.rules import (
     cpp_exception_safety as cpp_exception_safety,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -230,6 +233,7 @@ __all__ = [
     "cmake_minimum_version",
     "cpp_clang_format",
     "cpp_clang_tidy",
+    "cpp_dormant_classes",
     "cpp_exception_safety",
     "cpp_include_guards",
     "cpp_raw_memory",

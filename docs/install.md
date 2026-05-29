@@ -484,6 +484,18 @@ when the key is absent. Set the key as described in
 [LLM features](#7-llm-features) and rerun the scan. Use `-v` to see which
 features were skipped.
 
+### Code Scanning check shows "skipping" on a PR
+
+This is expected behavior, not an error. When SARIF results are uploaded, GitHub's
+Code Scanning integration compares the PR results against the base branch (main).
+If all findings in the PR already exist in the nightly baseline on main, GitHub
+reports zero *new* alerts and the code scanning check shows a **neutral / "skipping"**
+status. The NFR Review workflow itself still ran successfully — check the "NFR Review"
+workflow run in the Actions tab to confirm.
+
+You will only see the code scanning check report findings when the PR introduces
+a genuinely new alert that was not present on main.
+
 ### Action fails but no findings are shown
 
 - Check the "Run nfr-review scan" step logs for errors (import failures,
