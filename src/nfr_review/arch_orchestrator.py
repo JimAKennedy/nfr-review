@@ -114,32 +114,51 @@ def _collect_dvc_pipeline_data(
     return None
 
 
-def _collect_cpp_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
-    """Collect enriched class data from C++ files across all targets."""
-    try:
-        from nfr_review.collectors.cpp_ast import CppAstCollector
-    except ImportError:
-        return None
+def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
+    """Collect enriched class data from C++, Java, Python, and Go files."""
+    import importlib
 
-    collector = CppAstCollector()
+    _COLLECTORS: list[tuple[str, str, str, str]] = [
+        ("nfr_review.collectors.cpp_ast", "CppAstCollector", "classes", "C++"),
+        ("nfr_review.collectors.java_ast", "JavaAstCollector", "classes", "Java"),
+        ("nfr_review.collectors.python_ast", "PythonAstCollector", "classes", "Python"),
+        ("nfr_review.collectors.go_ast", "GoAstCollector", "structs", "Go"),
+    ]
+
     all_classes: list[dict] = []
-    for target in targets:
+    lang_counts: dict[str, int] = {}
+
+    for module_path, class_name, payload_key, language in _COLLECTORS:
         try:
-            evidence_list = collector.collect(target, config=None)
-        except Exception:
-            logger.debug("cpp-ast collection failed for %s", target, exc_info=True)
+            mod = importlib.import_module(module_path)
+            collector = getattr(mod, class_name)()
+        except (ImportError, AttributeError):
             continue
-        for ev in evidence_list:
-            if _is_vendor_path(ev.payload.get("file_path", "")):
+
+        count = 0
+        for target in targets:
+            try:
+                evidence_list = collector.collect(target, config=None)
+            except Exception:
+                logger.debug("%s collection failed for %s", class_name, target, exc_info=True)
                 continue
-            for cls in ev.payload.get("classes", []):
-                if cls.get("name") and (
-                    cls.get("base_classes") or cls.get("methods") or cls.get("fields")
-                ):
-                    all_classes.append(cls)
+            for ev in evidence_list:
+                if _is_vendor_path(ev.payload.get("file_path", "")):
+                    continue
+                for cls in ev.payload.get(payload_key, []):
+                    if cls.get("name") and (
+                        cls.get("base_classes") or cls.get("methods") or cls.get("fields")
+                    ):
+                        cls["language"] = language
+                        all_classes.append(cls)
+                        count += 1
+
+        if count:
+            lang_counts[language] = count
 
     if all_classes:
-        cb(f"Extracted {len(all_classes)} C++ classes for class diagram")
+        parts = [f"{count} {lang}" for lang, count in sorted(lang_counts.items())]
+        cb(f"Extracted {len(all_classes)} classes for class diagram ({', '.join(parts)})")
         return all_classes
     return None
 
@@ -205,6 +224,7 @@ def run_arch_review(
     # --- LLM client ---
     llm = None
     if not skip_llm:
+        from nfr_review import llm_client
         from nfr_review.llm_client import ClaudeClient
 
         client = ClaudeClient()
@@ -245,8 +265,8 @@ def run_arch_review(
         test_coverage = assess_test_coverage(targets[0], components, repo_name=repo_names[0])
     cb(f"Assessed coverage for {len(test_coverage)} components")
 
-    # --- C++ class extraction for class diagrams ---
-    class_data = _collect_cpp_class_data(targets, cb)
+    # --- class extraction for class diagrams (C++, Java, Python, Go) ---
+    class_data = _collect_class_data(targets, cb)
 
     # --- DVC pipeline extraction ---
     pipeline_data = _collect_dvc_pipeline_data(targets, cb)
@@ -302,7 +322,7 @@ def run_arch_review(
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         repos_analyzed=repos_info,
         llm_available=llm is not None,
-        llm_model="claude-sonnet-4-20250514" if llm is not None else None,
+        llm_model=llm_client.LLM_MODEL if llm is not None else None,
     )
 
     report = ArchReport(

@@ -18,10 +18,18 @@ Evidence payload contract (kind="cpp-ast-file"):
         is_struct: bool
         base_classes: list[dict] — each with name: str, access: str
         methods: list[dict] — each with name, return_type, access,
-            is_virtual, is_pure_virtual, line
+            is_virtual, is_pure_virtual, line, parameters
         fields: list[dict] — each with name, type, access, line
         is_abstract: bool — True when any method is pure virtual
+        namespace: str — enclosing C++ namespace (empty if global)
+        friends: list[str] — friend class names
+        outer_class: str — name of enclosing class (empty if top-level)
     namespaces: list[str] — namespace names found
+    type_aliases: list[dict] — each with:
+        alias: str — the new type name
+        target: str — the original type
+        line: int — 1-based line number
+        kind: str — "typedef" or "using"
     includes: list[dict] — each with:
         path: str — included file path
         is_system: bool — True for <...>, False for "..."
@@ -123,6 +131,44 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
     return funcs
 
 
+def _extract_parameters(func_decl: Node, source: bytes) -> list[dict[str, str]]:
+    """Extract parameter name and type from a function_declarator node."""
+    params: list[dict[str, str]] = []
+    param_list: Node | None = None
+    for child in func_decl.children:
+        if child.type == "parameter_list":
+            param_list = child
+            break
+    if param_list is None:
+        return params
+    for child in param_list.children:
+        if child.type == "parameter_declaration":
+            ptype = ""
+            pname = ""
+            type_node = child.child_by_field_name("type")
+            if type_node:
+                ptype = text(type_node, source)
+            decl = child.child_by_field_name("declarator")
+            if decl:
+                if decl.type in ("identifier", "field_identifier"):
+                    pname = text(decl, source)
+                elif decl.type == "pointer_declarator":
+                    ptype += "*"
+                    for dc in decl.children:
+                        if dc.type in ("identifier", "field_identifier"):
+                            pname = text(dc, source)
+                            break
+                elif decl.type == "reference_declarator":
+                    ptype += "&"
+                    for dc in decl.children:
+                        if dc.type in ("identifier", "field_identifier"):
+                            pname = text(dc, source)
+                            break
+            if ptype or pname:
+                params.append({"name": pname, "type": ptype})
+    return params
+
+
 def _extract_base_classes(node: Node, source: bytes) -> list[dict[str, str]]:
     """Extract base classes from a class/struct specifier node."""
     bases: list[dict[str, str]] = []
@@ -140,19 +186,26 @@ def _extract_base_classes(node: Node, source: bytes) -> list[dict[str, str]]:
 
 def _extract_members(
     body: Node, source: bytes, is_struct: bool
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool]:
-    """Extract methods, fields, and destructor presence from a class body.
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, list[str]]:
+    """Extract methods, fields, destructor presence, and friends from a class body.
 
-    Returns (methods, fields, has_destructor).
+    Returns (methods, fields, has_destructor, friends).
     """
     methods: list[dict[str, Any]] = []
     fields: list[dict[str, Any]] = []
+    friends: list[str] = []
     has_destructor = False
     current_access = "public" if is_struct else "private"
 
     for child in body.children:
         if child.type == "access_specifier":
             current_access = text(child, source).strip().rstrip(":")
+            continue
+
+        if child.type == "friend_declaration":
+            for fc in child.children:
+                if fc.type in ("type_identifier", "qualified_identifier"):
+                    friends.append(text(fc, source))
             continue
 
         if child.type == "function_definition":
@@ -165,6 +218,10 @@ def _extract_members(
             if type_node:
                 rtype = text(type_node, source)
             is_virtual = "virtual" in text(child, source).split("(")[0]
+            params: list[dict[str, str]] = []
+            func_decl = _find_descendant(decl, "function_declarator") if decl else None
+            if func_decl:
+                params = _extract_parameters(func_decl, source)
             methods.append(
                 {
                     "name": fname,
@@ -173,6 +230,7 @@ def _extract_members(
                     "is_virtual": is_virtual,
                     "is_pure_virtual": False,
                     "line": child.start_point[0] + 1,
+                    "parameters": params,
                 }
             )
             continue
@@ -191,6 +249,10 @@ def _extract_members(
                 child_text = text(child, source)
                 is_virtual = child_text.lstrip().startswith("virtual")
                 is_pure = is_virtual and "= 0" in child_text
+                params = []
+                func_decl = _find_descendant(decl, "function_declarator")
+                if func_decl:
+                    params = _extract_parameters(func_decl, source)
                 methods.append(
                     {
                         "name": fname,
@@ -199,6 +261,7 @@ def _extract_members(
                         "is_virtual": is_virtual,
                         "is_pure_virtual": is_pure,
                         "line": child.start_point[0] + 1,
+                        "parameters": params,
                     }
                 )
             elif decl:
@@ -224,7 +287,7 @@ def _extract_members(
                         }
                     )
 
-    return methods, fields, has_destructor
+    return methods, fields, has_destructor, friends
 
 
 def _member_func_name(declarator: Node, source: bytes) -> str:
@@ -262,6 +325,32 @@ def _has_function_declarator(node: Node) -> bool:
     return False
 
 
+def _enclosing_namespace(node: Node, source: bytes) -> str:
+    """Walk up the AST to find enclosing namespace(s), returning e.g. ``"outer::inner"``."""
+    parts: list[str] = []
+    cursor = node.parent
+    while cursor:
+        if cursor.type == "namespace_definition":
+            ns_name = cursor.child_by_field_name("name")
+            if ns_name:
+                parts.append(text(ns_name, source))
+        cursor = cursor.parent
+    parts.reverse()
+    return "::".join(parts)
+
+
+def _enclosing_class(node: Node, source: bytes) -> str:
+    """Return the name of the immediately enclosing class/struct, or ``""``."""
+    cursor = node.parent
+    while cursor:
+        if cursor.type in ("class_specifier", "struct_specifier"):
+            name_node = cursor.child_by_field_name("name")
+            if name_node:
+                return text(name_node, source)
+        cursor = cursor.parent
+    return ""
+
+
 def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
     classes: list[dict[str, Any]] = []
     for node_type in ("class_specifier", "struct_specifier"):
@@ -273,9 +362,12 @@ def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
             has_destructor = False
             methods: list[dict[str, Any]] = []
             fields: list[dict[str, Any]] = []
+            friends: list[str] = []
             body = node.child_by_field_name("body")
             if body:
-                methods, fields, has_destructor = _extract_members(body, source, is_struct)
+                methods, fields, has_destructor, friends = _extract_members(
+                    body, source, is_struct
+                )
             has_pure_virtual = any(m.get("is_pure_virtual") for m in methods)
             classes.append(
                 {
@@ -287,6 +379,9 @@ def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
                     "methods": methods,
                     "fields": fields,
                     "is_abstract": has_pure_virtual,
+                    "namespace": _enclosing_namespace(node, source),
+                    "friends": friends,
+                    "outer_class": _enclosing_class(node, source),
                 }
             )
     return classes
@@ -413,6 +508,38 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
     return blocks
 
 
+def _extract_type_aliases(root: Node, source: bytes) -> list[dict[str, Any]]:
+    """Extract typedef and using-alias declarations."""
+    aliases: list[dict[str, Any]] = []
+    # typedef OldType NewType;  →  type_definition node
+    for node in find_nodes(root, "type_definition"):
+        type_node = node.child_by_field_name("type")
+        decl = node.child_by_field_name("declarator")
+        if type_node and decl:
+            aliases.append(
+                {
+                    "alias": text(decl, source),
+                    "target": text(type_node, source),
+                    "line": node.start_point[0] + 1,
+                    "kind": "typedef",
+                }
+            )
+    # using NewType = OldType;  →  alias_declaration node
+    for node in find_nodes(root, "alias_declaration"):
+        name_node = node.child_by_field_name("name")
+        type_node = node.child_by_field_name("type")
+        if name_node and type_node:
+            aliases.append(
+                {
+                    "alias": text(name_node, source),
+                    "target": text(type_node, source),
+                    "line": node.start_point[0] + 1,
+                    "kind": "using",
+                }
+            )
+    return aliases
+
+
 def _detect_include_guard(source: bytes) -> tuple[bool, bool]:
     src_text = source.decode("utf-8", errors="replace")
     has_pragma = bool(_PRAGMA_ONCE_RE.search(src_text))
@@ -436,6 +563,7 @@ class CppAstCollector(BaseASTCollector):
             "functions": _extract_functions(root, source),
             "classes": _extract_classes(root, source),
             "namespaces": _extract_namespaces(root, source),
+            "type_aliases": _extract_type_aliases(root, source),
             "includes": _extract_includes(root, source),
             "new_expressions": _extract_new_expressions(root, source, rel_path),
             "delete_expressions": _extract_delete_expressions(root, source, rel_path),

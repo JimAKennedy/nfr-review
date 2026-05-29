@@ -122,17 +122,20 @@ def _build_baseline_locator_index(
 
     This requires re-parsing the baseline file — but BaselineData doesn't store
     the original locators alongside stable keys.  As a lightweight alternative,
-    we reconstruct from legacy_keys: for each stable key, find the legacy key
-    that shares (rule_id, pattern_tag) and whose file path matches.
+    we reconstruct from legacy_keys: for each legacy key, look up matching
+    stable keys via a pre-built index keyed by (rule_id, file_path, pattern_tag).
     """
+    stable_by_prefix: dict[tuple[str, str, str], list[tuple[str, str, str, str]]] = {}
+    for stable_key in baseline.stable_keys:
+        s_rule, s_file, s_tag, _s_hash = stable_key
+        stable_by_prefix.setdefault((s_rule, s_file, s_tag), []).append(stable_key)
+
     index: dict[tuple[str, str, str, str], str] = {}
     for legacy_key in baseline.legacy_keys:
         rule_id, locator, pattern_tag = legacy_key
         file_path = _strip_line_from_locator(locator)
-        for stable_key in baseline.stable_keys:
-            s_rule, s_file, s_tag, s_hash = stable_key
-            if s_rule == rule_id and s_file == file_path and s_tag == pattern_tag:
-                index[stable_key] = locator
+        for stable_key in stable_by_prefix.get((rule_id, file_path, pattern_tag), ()):
+            index[stable_key] = locator
     return index
 
 

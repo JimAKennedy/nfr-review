@@ -235,8 +235,13 @@ include breaking changes without notice.
 
 ## 7. LLM features
 
-nfr-review includes optional LLM-powered analysis that uses the Anthropic API.
-When `ANTHROPIC_API_KEY` is not set, these features are **skipped gracefully** —
+nfr-review includes optional LLM-powered analysis. Two backends are supported:
+
+- **Anthropic API** (`NFR_LLM_BACKEND=api`) — pay-per-call, requires `ANTHROPIC_API_KEY`.
+- **Claude CLI** (`NFR_LLM_BACKEND=claude-cli`) — uses your Claude Max subscription
+  via the `claude` CLI binary. No API key needed.
+
+When no backend is configured, these features are **skipped gracefully** —
 the scan runs normally and all static-analysis findings are still produced.
 
 ### What LLM features provide
@@ -250,6 +255,9 @@ the scan runs normally and all static-analysis findings are still produced.
 | Market comparison | `arch` | Compares architecture patterns against industry norms |
 
 ### Setting up in GitHub Actions
+
+GitHub Actions should use the Anthropic API backend (Claude CLI is not
+available in CI).
 
 1. Add `ANTHROPIC_API_KEY` as a **repository secret** in Settings > Secrets and
    variables > Actions.
@@ -271,10 +279,25 @@ container mode, it is injected into the Docker container automatically.
 
 ### Setting up locally
 
+The setup scripts (`scripts/setup.sh` or `scripts/setup-all.sh`) prompt you to
+choose a backend interactively. You can also configure it manually:
+
+**Option A — Anthropic API:**
+
 ```bash
+export NFR_LLM_BACKEND=api
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review report /path/to/repo
 ```
+
+**Option B — Claude CLI (Claude Max):**
+
+```bash
+export NFR_LLM_BACKEND=claude-cli
+nfr-review report /path/to/repo
+```
+
+Requires the `claude` binary on your `$PATH` (installed with Claude Code).
 
 ### Opting out
 
@@ -287,9 +310,10 @@ nfr-review arch /path/to/repo --no-llm         # skip all LLM analysis
 
 ### Cost and data scope
 
-LLM features send code snippets and structural metadata to the Anthropic API.
-See [SECURITY.md](../SECURITY.md) for the full data scope disclosure. Typical
-cost is under $0.10 per scan for most repositories.
+LLM features send code snippets and structural metadata to the Anthropic API
+(or Claude CLI). See [SECURITY.md](../SECURITY.md) for the full data scope
+disclosure. With the Anthropic API, typical cost is under $0.10 per scan.
+With Claude CLI, calls are covered by your Claude Max subscription.
 
 ---
 
@@ -479,10 +503,22 @@ Security tab was skipped. To fix:
 
 ### LLM summary or ADR drift analysis is missing
 
-`ANTHROPIC_API_KEY` is not set or is invalid. LLM features are silently skipped
-when the key is absent. Set the key as described in
-[LLM features](#7-llm-features) and rerun the scan. Use `-v` to see which
-features were skipped.
+No LLM backend is configured, or the configured backend is unavailable. LLM
+features are silently skipped when neither the API key nor Claude CLI is
+available. Configure a backend as described in [LLM features](#7-llm-features)
+and rerun the scan. Use `-v` to see which features were skipped.
+
+### Code Scanning check shows "skipping" on a PR
+
+This is expected behavior, not an error. When SARIF results are uploaded, GitHub's
+Code Scanning integration compares the PR results against the base branch (main).
+If all findings in the PR already exist in the nightly baseline on main, GitHub
+reports zero *new* alerts and the code scanning check shows a **neutral / "skipping"**
+status. The NFR Review workflow itself still ran successfully — check the "NFR Review"
+workflow run in the Actions tab to confirm.
+
+You will only see the code scanning check report findings when the PR introduces
+a genuinely new alert that was not present on main.
 
 ### Action fails but no findings are shown
 

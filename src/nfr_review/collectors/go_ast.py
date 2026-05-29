@@ -5,6 +5,18 @@ per-file Evidence with structured payload for downstream NFR rules.
 
 Evidence payload contract (kind="go-ast-file"):
     file_path: str — path relative to repo_path
+    package: str — Go package name
+    structs: list[dict] — enriched struct/interface data for class diagrams:
+        name: str
+        line: int (1-based)
+        is_struct: bool — True for struct, False for interface
+        is_abstract: bool — always True for interfaces
+        is_interface: bool
+        base_classes: list[dict] — embedded types (name, access)
+        fields: list[dict] — named fields (name, type, access, line)
+        methods: list[dict] — methods with receiver matching this type
+        namespace: str — Go package name
+        outer_class: str — always "" (Go has no nested type declarations)
     catch_blocks: list[dict] — each with:
         caught_type: str — always "" (Go recover is a bare catch-all)
         rethrows: bool — deferred function body contains panic() after recover
@@ -397,6 +409,317 @@ def _extract_defer_statements(
     return defers
 
 
+# ---------------------------------------------------------------------------
+# Class-diagram enrichment — struct/interface extraction
+# ---------------------------------------------------------------------------
+
+
+def _go_access(name: str) -> str:
+    """Go visibility: uppercase first letter = exported (public)."""
+    if name and name[0].isupper():
+        return "public"
+    return "private"
+
+
+def _extract_package(root: Node, source: bytes) -> str:
+    for child in root.children:
+        if child.type == "package_clause":
+            for sub in child.children:
+                if sub.type == "package_identifier":
+                    return text(sub, source)
+    return ""
+
+
+def _extract_field_type(node: Node, source: bytes) -> str:
+    """Extract the type string from a struct field_declaration."""
+    for child in node.children:
+        if child.type in (
+            "type_identifier",
+            "pointer_type",
+            "slice_type",
+            "map_type",
+            "array_type",
+            "qualified_type",
+            "channel_type",
+            "function_type",
+            "interface_type",
+            "struct_type",
+        ):
+            return text(child, source)
+    return ""
+
+
+def _extract_struct_fields(
+    field_list_node: Node, source: bytes
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Extract named fields and embedded types from a field_declaration_list.
+
+    Returns (fields, embedded) where embedded types become base_classes.
+    """
+    fields: list[dict[str, Any]] = []
+    embedded: list[dict[str, str]] = []
+
+    for child in field_list_node.children:
+        if child.type != "field_declaration":
+            continue
+        has_field_id = any(c.type == "field_identifier" for c in child.children)
+        if has_field_id:
+            fname = ""
+            for sub in child.children:
+                if sub.type == "field_identifier":
+                    fname = text(sub, source)
+                    break
+            ftype = _extract_field_type(child, source)
+            if fname:
+                fields.append(
+                    {
+                        "name": fname,
+                        "type": ftype,
+                        "access": _go_access(fname),
+                        "line": child.start_point[0] + 1,
+                    }
+                )
+        else:
+            etype = _extract_field_type(child, source)
+            if etype.startswith("*"):
+                etype = etype[1:]
+            if etype:
+                embedded.append({"name": etype, "access": "public"})
+
+    return fields, embedded
+
+
+def _extract_interface_methods(iface_node: Node, source: bytes) -> list[dict[str, Any]]:
+    """Extract method signatures from an interface_type node."""
+    methods: list[dict[str, Any]] = []
+    for child in iface_node.children:
+        if child.type != "method_elem":
+            continue
+        mname = ""
+        params: list[dict[str, str]] = []
+        return_type = ""
+        param_lists_seen = 0
+        for sub in child.children:
+            if sub.type == "field_identifier":
+                mname = text(sub, source)
+            elif sub.type == "parameter_list":
+                param_lists_seen += 1
+                if param_lists_seen == 1:
+                    params = _extract_param_list(sub, source)
+                else:
+                    return_type = _return_type_from_param_list(sub, source)
+            elif sub.type in (
+                "type_identifier",
+                "pointer_type",
+                "slice_type",
+                "map_type",
+                "qualified_type",
+            ):
+                return_type = text(sub, source)
+        if mname:
+            methods.append(
+                {
+                    "name": mname,
+                    "return_type": return_type,
+                    "access": "public",
+                    "is_virtual": False,
+                    "is_pure_virtual": True,
+                    "line": child.start_point[0] + 1,
+                    "parameters": params,
+                }
+            )
+    return methods
+
+
+def _extract_param_list(param_list_node: Node, source: bytes) -> list[dict[str, str]]:
+    """Extract parameters from a parameter_list node."""
+    params: list[dict[str, str]] = []
+    for child in param_list_node.children:
+        if child.type != "parameter_declaration":
+            continue
+        pname = ""
+        ptype = ""
+        for sub in child.children:
+            if sub.type == "identifier":
+                pname = text(sub, source)
+            elif sub.type in (
+                "type_identifier",
+                "pointer_type",
+                "slice_type",
+                "map_type",
+                "qualified_type",
+                "interface_type",
+            ):
+                ptype = text(sub, source)
+        if pname and ptype:
+            params.append({"name": pname, "type": ptype})
+        elif ptype and not pname:
+            pass
+    return params
+
+
+def _return_type_from_param_list(param_list_node: Node, source: bytes) -> str:
+    """Build return type from a result parameter_list like (int, error)."""
+    types: list[str] = []
+    for child in param_list_node.children:
+        if child.type == "parameter_declaration":
+            for sub in child.children:
+                if sub.type in (
+                    "type_identifier",
+                    "pointer_type",
+                    "slice_type",
+                    "map_type",
+                    "qualified_type",
+                ):
+                    types.append(text(sub, source))
+    if len(types) == 1:
+        return types[0]
+    if types:
+        return f"({', '.join(types)})"
+    return ""
+
+
+def _collect_methods_for_types(
+    root: Node, source: bytes, type_names: set[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """Collect method declarations grouped by receiver type name."""
+    methods_by_type: dict[str, list[dict[str, Any]]] = {n: [] for n in type_names}
+
+    for node in find_nodes(root, "method_declaration"):
+        receiver_type = _extract_receiver_type(node, source)
+        bare_type = receiver_type.lstrip("*")
+        if bare_type not in type_names:
+            continue
+
+        mname = ""
+        params: list[dict[str, str]] = []
+        return_type = ""
+        param_lists_seen = 0
+        for child in node.children:
+            if child.type == "field_identifier":
+                mname = text(child, source)
+            elif child.type == "parameter_list":
+                param_lists_seen += 1
+                if param_lists_seen == 2:
+                    params = _extract_param_list(child, source)
+                elif param_lists_seen == 3:
+                    return_type = _return_type_from_param_list(child, source)
+            elif child.type in (
+                "type_identifier",
+                "pointer_type",
+                "slice_type",
+                "map_type",
+                "qualified_type",
+            ):
+                return_type = text(child, source)
+
+        if mname:
+            methods_by_type[bare_type].append(
+                {
+                    "name": mname,
+                    "return_type": return_type,
+                    "access": _go_access(mname),
+                    "is_virtual": False,
+                    "is_pure_virtual": False,
+                    "line": node.start_point[0] + 1,
+                    "parameters": params,
+                }
+            )
+    return methods_by_type
+
+
+def _extract_structs_and_interfaces(
+    root: Node, source: bytes, package: str
+) -> list[dict[str, Any]]:
+    """Extract all struct and interface type declarations with enriched data."""
+    results: list[dict[str, Any]] = []
+    type_names: set[str] = set()
+    pending: list[tuple[str, int, bool, bool, list[dict[str, Any]], list[dict[str, str]]]] = []
+
+    for decl in root.children:
+        if decl.type != "type_declaration":
+            continue
+        for child in decl.children:
+            if child.type != "type_spec":
+                continue
+            tname = ""
+            struct_node = None
+            iface_node = None
+            for sub in child.children:
+                if sub.type == "type_identifier":
+                    tname = text(sub, source)
+                elif sub.type == "struct_type":
+                    struct_node = sub
+                elif sub.type == "interface_type":
+                    iface_node = sub
+
+            if not tname:
+                continue
+            type_names.add(tname)
+            line = decl.start_point[0] + 1
+
+            if struct_node is not None:
+                field_list = None
+                for sub in struct_node.children:
+                    if sub.type == "field_declaration_list":
+                        field_list = sub
+                        break
+                fields: list[dict[str, Any]] = []
+                embedded: list[dict[str, str]] = []
+                if field_list is not None:
+                    fields, embedded = _extract_struct_fields(field_list, source)
+                pending.append((tname, line, True, False, fields, embedded))
+
+            elif iface_node is not None:
+                iface_methods = _extract_interface_methods(iface_node, source)
+                pending.append((tname, line, False, True, [], []))
+                results_placeholder_idx = len(pending) - 1
+                pending[results_placeholder_idx] = (
+                    tname,
+                    line,
+                    False,
+                    True,
+                    iface_methods,  # type: ignore[arg-type]
+                    [],
+                )
+
+    methods_by_type = _collect_methods_for_types(root, source, type_names)
+
+    for tname, line, is_struct, _is_interface, fields_or_methods, embedded in pending:
+        if is_struct:
+            methods = methods_by_type.get(tname, [])
+            results.append(
+                {
+                    "name": tname,
+                    "line": line,
+                    "is_struct": True,
+                    "is_abstract": False,
+                    "is_interface": False,
+                    "base_classes": embedded,
+                    "fields": fields_or_methods,
+                    "methods": methods,
+                    "namespace": package,
+                    "outer_class": "",
+                }
+            )
+        else:
+            results.append(
+                {
+                    "name": tname,
+                    "line": line,
+                    "is_struct": False,
+                    "is_abstract": True,
+                    "is_interface": True,
+                    "base_classes": [],
+                    "fields": [],
+                    "methods": fields_or_methods,
+                    "namespace": package,
+                    "outer_class": "",
+                }
+            )
+    return results
+
+
 class GoAstCollector(BaseASTCollector):
     name = "go-ast"
     version = "0.1.0"
@@ -408,7 +731,11 @@ class GoAstCollector(BaseASTCollector):
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
+        package = _extract_package(root, source)
+        structs = _extract_structs_and_interfaces(root, source, package)
         return {
+            "package": package,
+            "structs": structs,
             "catch_blocks": _extract_catch_blocks(root, source, rel_path),
             "log_statements": _extract_log_statements(root, source, rel_path),
             "functions": _extract_functions(root, source),

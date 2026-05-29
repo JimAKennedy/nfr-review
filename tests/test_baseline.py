@@ -403,8 +403,13 @@ class TestClassifyFindings:
 
 
 class TestCLIBaseline:
-    def test_baseline_filters_known_findings_exit_0(self, tmp_path: Path) -> None:
+    def test_baseline_filters_known_findings_exit_0(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When all findings match the baseline, exit 0 (no regressions)."""
+        # Suppress LLM-powered rules (adr-gap etc.) which are non-deterministic
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
         target = tmp_path / "repo"
         target.mkdir()
         # No README -> sample rule emits a finding

@@ -25,6 +25,9 @@ from nfr_review.rules import correlation_id as correlation_id  # noqa: F401
 from nfr_review.rules import cpp_clang_format as cpp_clang_format  # noqa: F401
 from nfr_review.rules import cpp_clang_tidy as cpp_clang_tidy  # noqa: F401
 from nfr_review.rules import (
+    cpp_dormant_classes as cpp_dormant_classes,  # noqa: F401
+)
+from nfr_review.rules import (
     cpp_exception_safety as cpp_exception_safety,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -63,6 +66,9 @@ from nfr_review.rules import (
 )
 from nfr_review.rules import (
     dockerfile_user_directive as dockerfile_user_directive,  # noqa: F401
+)
+from nfr_review.rules import (
+    dormant_classes as dormant_classes,  # noqa: F401
 )
 from nfr_review.rules import (
     gatling_performance as gatling_performance,  # noqa: F401
@@ -230,6 +236,8 @@ __all__ = [
     "cmake_minimum_version",
     "cpp_clang_format",
     "cpp_clang_tidy",
+    "cpp_dormant_classes",
+    "dormant_classes",
     "cpp_exception_safety",
     "cpp_include_guards",
     "cpp_raw_memory",

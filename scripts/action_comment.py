@@ -42,10 +42,12 @@ def _load_records(jsonl_path: Path) -> list[dict[str, Any]]:
 
 
 def _count_by_rag(records: list[dict[str, Any]]) -> dict[str, int]:
-    """Count finding records by RAG status."""
+    """Count finding records by RAG status, excluding suppressed findings."""
     counts: dict[str, int] = {"red": 0, "amber": 0, "green": 0, "skipped": 0}
     for rec in records:
         if rec.get("record_type") != "finding":
+            continue
+        if rec.get("suppressed") is True:
             continue
         rag = rec.get("rag", "")
         if rag in counts:
@@ -173,6 +175,8 @@ def _classify_records(
             shifted.append(r)
         elif cls == "resolved":
             resolved.append(r)
+        elif cls == "baseline":
+            pass
         else:
             new.append(r)
 

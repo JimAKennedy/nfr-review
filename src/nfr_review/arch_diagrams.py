@@ -810,14 +810,114 @@ _ACCESS_SYMBOL = {"public": "+", "protected": "#", "private": "-"}
 _MAX_MEMBERS_PER_CLASS = 15
 
 
+def _sanitize_member_type(raw: str) -> str:
+    """Escape characters in C++ type strings that break Mermaid syntax."""
+    return raw.replace("::", ".").replace("<", "~").replace(">", "~")
+
+
+# Tokens to ignore when extracting type references from C++ field/return types.
+_CPP_TYPE_NOISE = frozenset(
+    {
+        "std",
+        "const",
+        "volatile",
+        "mutable",
+        "void",
+        "bool",
+        "int",
+        "char",
+        "float",
+        "double",
+        "long",
+        "short",
+        "signed",
+        "unsigned",
+        "size_t",
+        "ptrdiff_t",
+        "int8_t",
+        "int16_t",
+        "int32_t",
+        "int64_t",
+        "uint8_t",
+        "uint16_t",
+        "uint32_t",
+        "uint64_t",
+        "string",
+        "wstring",
+        "auto",
+        "unique_ptr",
+        "shared_ptr",
+        "weak_ptr",
+        "SharedPointer",
+        "vector",
+        "array",
+        "map",
+        "unordered_map",
+        "set",
+        "unordered_set",
+        "deque",
+        "list",
+        "queue",
+        "stack",
+        "pair",
+        "tuple",
+        "optional",
+        "variant",
+        "atomic",
+        "mutex",
+        "thread",
+        "condition_variable",
+        "uniform_real_distribution",
+        "normal_distribution",
+        "mt19937",
+        "FILE",
+        "tresult",
+        "SMTG_OVERRIDE",
+    }
+)
+_CPP_PTR_INDICATORS = frozenset({"unique_ptr", "shared_ptr", "weak_ptr", "SharedPointer"})
+_CPP_TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
+
+
+def _extract_type_refs(type_str: str, known_names: set[str]) -> list[tuple[str, bool]]:
+    """Extract referenced class names from a C++ type string.
+
+    Returns ``[(class_name, is_owned), ...]`` where *is_owned* is True for
+    by-value / unique_ptr (composition) and False for raw-pointer, reference,
+    or shared_ptr (aggregation).
+    """
+    if not type_str:
+        return []
+
+    is_pointer = "*" in type_str or "&" in type_str
+    has_shared = any(p in type_str for p in ("shared_ptr", "weak_ptr", "SharedPointer"))
+
+    refs: list[tuple[str, bool]] = []
+    seen: set[str] = set()
+    for tok in _CPP_TOKEN_RE.findall(type_str):
+        if tok in _CPP_TYPE_NOISE or tok in seen:
+            continue
+        if tok in known_names:
+            is_owned = not (is_pointer or has_shared)
+            refs.append((tok, is_owned))
+            seen.add(tok)
+    return refs
+
+
 def render_class_diagram(
     class_data: list[dict],
     title: str | None = None,
+    *,
+    group_by_namespace: bool = False,
 ) -> C4Diagram:
     """Render a Mermaid class diagram from enriched C++ AST class data.
 
     *class_data* is a list of class dicts as produced by the cpp-ast
-    collector's enriched payload (base_classes, methods, fields).
+    collector's enriched payload (base_classes, methods, fields,
+    parameters, friends, namespace, outer_class).
+
+    When *group_by_namespace* is True, classes are grouped inside
+    Mermaid ``namespace`` blocks reflecting their C++ namespace.
     """
     title = title or "Class Diagram"
 
@@ -833,29 +933,35 @@ def render_class_diagram(
     lines: list[str] = ["classDiagram"]
     known_names = {c["name"] for c in class_data if c.get("name")}
 
+    # -- Namespace grouping (collect classes by ns) --
+    ns_groups: dict[str, list[dict]] = {}
     for cls in class_data:
+        ns = cls.get("namespace", "") or ""
+        ns_groups.setdefault(ns, []).append(cls)
+
+    def _emit_class_block(cls: dict, indent: str) -> None:
         name = cls.get("name", "")
         if not name:
-            continue
+            return
         cid = _safe_id(name)
 
         if cls.get("is_abstract"):
-            lines.append(f"    class {cid}")
-            lines.append(f"    <<abstract>> {cid}")
+            lines.append(f"{indent}class {cid}")
+            lines.append(f"{indent}<<abstract>> {cid}")
         elif cls.get("is_struct"):
-            lines.append(f"    class {cid}")
-            lines.append(f"    <<struct>> {cid}")
+            lines.append(f"{indent}class {cid}")
+            lines.append(f"{indent}<<struct>> {cid}")
         else:
-            lines.append(f"    class {cid}")
+            lines.append(f"{indent}class {cid}")
 
         member_count = 0
         for field in cls.get("fields", []):
             if member_count >= _MAX_MEMBERS_PER_CLASS:
                 break
             sym = _ACCESS_SYMBOL.get(field.get("access", "private"), "-")
-            ftype = field.get("type", "")
+            ftype = _sanitize_member_type(field.get("type", ""))
             fname = field.get("name", "")
-            lines.append(f"    {cid} : {sym}{fname} {ftype}")
+            lines.append(f"{indent}{cid} : {sym}{fname} {ftype}")
             member_count += 1
 
         for method in cls.get("methods", []):
@@ -865,11 +971,29 @@ def render_class_diagram(
             if mname.startswith("~"):
                 continue
             sym = _ACCESS_SYMBOL.get(method.get("access", "public"), "+")
-            rtype = method.get("return_type", "")
+            rtype = _sanitize_member_type(method.get("return_type", ""))
             virt = "*" if method.get("is_pure_virtual") else ""
-            lines.append(f"    {cid} : {sym}{mname}(){virt} {rtype}")
+            lines.append(f"{indent}{cid} : {sym}{mname}(){virt} {rtype}")
             member_count += 1
 
+    if group_by_namespace:
+        for ns in sorted(ns_groups):
+            group = ns_groups[ns]
+            if ns:
+                safe_ns = ns.replace("::", "_")
+                lines.append(f"    namespace {safe_ns} {{")
+                for cls in group:
+                    _emit_class_block(cls, "        ")
+                lines.append("    }")
+            else:
+                for cls in group:
+                    _emit_class_block(cls, "    ")
+    else:
+        for cls in class_data:
+            _emit_class_block(cls, "    ")
+
+    # -- Inheritance edges --
+    inheritance_pairs: set[tuple[str, str]] = set()
     for cls in class_data:
         name = cls.get("name", "")
         if not name:
@@ -880,12 +1004,96 @@ def render_class_diagram(
             if base_name in known_names:
                 bid = _safe_id(base_name)
                 lines.append(f"    {bid} <|-- {cid}")
+                inheritance_pairs.add((name, base_name))
             else:
                 ext_id = _safe_id(base_name)
                 lines.append(f"    class {ext_id}")
                 lines.append(f"    <<external>> {ext_id}")
                 lines.append(f"    {ext_id} <|-- {cid}")
                 known_names.add(base_name)
+                inheritance_pairs.add((name, base_name))
+
+    # -- Composition / aggregation edges (from field types) --
+    edge_seen: set[tuple[str, str, str]] = set()
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name:
+            continue
+        cid = _safe_id(name)
+        for field in cls.get("fields", []):
+            for ref_name, is_owned in _extract_type_refs(field.get("type", ""), known_names):
+                if ref_name == name:
+                    continue
+                pair = (name, ref_name)
+                if pair in inheritance_pairs or (ref_name, name) in inheritance_pairs:
+                    continue
+                arrow = "*--" if is_owned else "o--"
+                edge_key = (name, ref_name, arrow)
+                if edge_key in edge_seen:
+                    continue
+                edge_seen.add(edge_key)
+                rid = _safe_id(ref_name)
+                lines.append(f"    {cid} {arrow} {rid}")
+
+    # -- Dependency edges (from method return types + parameter types) --
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name:
+            continue
+        cid = _safe_id(name)
+        for method in cls.get("methods", []):
+            dep_types: list[str] = []
+            if method.get("return_type"):
+                dep_types.append(method["return_type"])
+            for param in method.get("parameters", []):
+                if param.get("type"):
+                    dep_types.append(param["type"])
+            for type_str in dep_types:
+                for ref_name, _ in _extract_type_refs(type_str, known_names):
+                    if ref_name == name:
+                        continue
+                    pair = (name, ref_name)
+                    if pair in inheritance_pairs or (ref_name, name) in inheritance_pairs:
+                        continue
+                    if any((name, ref_name, a) in edge_seen for a in ("*--", "o--")):
+                        continue
+                    dep_key = (name, ref_name, "..>")
+                    if dep_key in edge_seen:
+                        continue
+                    edge_seen.add(dep_key)
+                    rid = _safe_id(ref_name)
+                    lines.append(f"    {cid} ..> {rid}")
+
+    # -- Friend edges (dashed dependency) --
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name:
+            continue
+        cid = _safe_id(name)
+        for friend_name in cls.get("friends", []):
+            if friend_name not in known_names or friend_name == name:
+                continue
+            friend_key = (name, friend_name, "..>")
+            reverse_key = (friend_name, name, "..>")
+            if friend_key in edge_seen or reverse_key in edge_seen:
+                continue
+            edge_seen.add(friend_key)
+            fid = _safe_id(friend_name)
+            lines.append(f'    {cid} ..> {fid} : "friend"')
+
+    # -- Nested class edges --
+    for cls in class_data:
+        name = cls.get("name", "")
+        outer = cls.get("outer_class", "")
+        if not name or not outer or outer not in known_names:
+            continue
+        nest_key = (outer, name, "nest")
+        if nest_key in edge_seen:
+            continue
+        edge_seen.add(nest_key)
+        oid = _safe_id(outer)
+        nid = _safe_id(name)
+        lines.append(f'    {oid} *-- {nid} : "inner"')
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(
@@ -1041,7 +1249,17 @@ def generate_all_diagrams(
                 diagrams.append(render_c4_component_detail(components, integrations, bp))
 
     if class_data:
-        diagrams.append(render_class_diagram(class_data))
+        by_lang: dict[str, list[dict]] = {}
+        for cls in class_data:
+            lang = cls.get("language", "Unknown")
+            by_lang.setdefault(lang, []).append(cls)
+        if len(by_lang) > 1:
+            for lang in sorted(by_lang):
+                diagrams.append(
+                    render_class_diagram(by_lang[lang], title=f"Class Diagram ({lang})")
+                )
+        else:
+            diagrams.append(render_class_diagram(class_data))
 
     if pipeline_data:
         for pipeline in pipeline_data:

@@ -386,11 +386,12 @@ def run_cmd(
         baseline = load_baseline(baseline_path)
         classification = classify_findings(result.findings, baseline)
         new_findings = filter_new_findings(result.findings, baseline)
-        _ts_echo(f"Baseline loaded: {baseline.finding_count} findings")
+        _ts_echo(f"Baseline loaded: {baseline.finding_count} findings", quiet=quiet)
         _ts_echo(
             f"New findings: {len(new_findings)} "
             f"({len(classification.shifted)} shifted, "
-            f"{len(classification.resolved)} resolved)"
+            f"{len(classification.resolved)} resolved)",
+            quiet=quiet,
         )
         result = RunResult(
             findings=new_findings,

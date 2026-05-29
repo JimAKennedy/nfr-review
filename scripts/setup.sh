@@ -71,30 +71,72 @@ if [[ "$NFR_BIN" == *".gsd/worktrees/"* ]] || [[ "$NFR_PKG" == *".gsd/worktrees/
   warn "This may cause unexpected behavior. Consider reinstalling from the main project root."
 fi
 
-# --- API key prompt ---
+# --- LLM backend configuration ---
 ENV_FILE="$PROJECT_ROOT/.env"
+LLM_BACKEND=""
 API_KEY_SET=false
 
-if [[ -f "$ENV_FILE" ]] && grep -q '^ANTHROPIC_API_KEY=' "$ENV_FILE"; then
-  info "ANTHROPIC_API_KEY already configured in .env"
-  API_KEY_SET=true
-else
-  echo ""
-  info "nfr-review can use an Anthropic API key for LLM-powered rules."
-  info "Leave blank to skip (LLM rules will be disabled)."
-  echo ""
-  if [[ -t 0 ]]; then
-    read -rp "ANTHROPIC_API_KEY (or Enter to skip): " api_key
-  else
-    api_key=""
-  fi
-  if [[ -n "$api_key" ]]; then
-    echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
-    info "API key written to .env"
+if [[ -f "$ENV_FILE" ]]; then
+  _existing_backend="$(grep '^NFR_LLM_BACKEND=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
+  _existing_key="$(grep '^ANTHROPIC_API_KEY=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
+fi
+
+if [[ -n "${_existing_backend:-}" ]] || [[ -n "${_existing_key:-}" ]]; then
+  if [[ "${_existing_backend:-}" == "claude-cli" ]]; then
+    info "LLM backend already configured: claude-cli (Claude Max)"
+    LLM_BACKEND="claude-cli"
+  elif [[ -n "${_existing_key:-}" ]]; then
+    info "LLM backend already configured: api (Anthropic API key set)"
+    LLM_BACKEND="api"
     API_KEY_SET=true
-  else
-    info "Skipped — LLM-powered rules will not run without an API key."
   fi
+fi
+
+if [[ -z "$LLM_BACKEND" ]] && [[ -t 0 ]]; then
+  echo ""
+  info "nfr-review can use an LLM for enhanced rules (ADR drift, PII logging, etc.)"
+  echo ""
+  echo "  1) Anthropic API key  — pay-per-call via ANTHROPIC_API_KEY"
+  echo "  2) Claude CLI         — uses your Claude Max subscription (no API key needed)"
+  echo "  3) None               — LLM-powered rules will be skipped"
+  echo ""
+  read -rp "Choose LLM backend [1/2/3]: " llm_choice
+  case "${llm_choice:-3}" in
+    1)
+      read -rp "ANTHROPIC_API_KEY: " api_key
+      if [[ -n "$api_key" ]]; then
+        if [[ -f "$ENV_FILE" ]]; then
+          sed -i.bak '/^NFR_LLM_BACKEND=/d; /^ANTHROPIC_API_KEY=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+        fi
+        echo "NFR_LLM_BACKEND=api" >> "$ENV_FILE"
+        echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
+        info "API key and backend written to .env"
+        LLM_BACKEND="api"
+        API_KEY_SET=true
+      else
+        warn "No API key entered — LLM rules will be skipped"
+        LLM_BACKEND="none"
+      fi
+      ;;
+    2)
+      if ! command -v claude &>/dev/null; then
+        warn "claude CLI not found on PATH — install Claude Code first"
+        warn "LLM rules will be unavailable until 'claude' is on PATH"
+      fi
+      if [[ -f "$ENV_FILE" ]]; then
+        sed -i.bak '/^NFR_LLM_BACKEND=/d; /^ANTHROPIC_API_KEY=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+      fi
+      echo "NFR_LLM_BACKEND=claude-cli" >> "$ENV_FILE"
+      info "Claude CLI backend written to .env"
+      LLM_BACKEND="claude-cli"
+      ;;
+    *)
+      info "Skipped — LLM-powered rules will not run"
+      LLM_BACKEND="none"
+      ;;
+  esac
+elif [[ -z "$LLM_BACKEND" ]]; then
+  LLM_BACKEND="none"
 fi
 
 # --- Inject .env loader into venv activate script ---
@@ -140,11 +182,11 @@ echo ""
 success "Setup complete!"
 echo "  Venv:    $VENV_DIR"
 echo "  Version: $NFR_VERSION"
-if $API_KEY_SET; then
-  echo "  API key: configured"
-else
-  echo "  API key: not set (LLM rules will be skipped)"
-fi
+case "$LLM_BACKEND" in
+  api)       echo "  LLM:     Anthropic API (key configured)" ;;
+  claude-cli) echo "  LLM:     Claude CLI (Claude Max)" ;;
+  *)         echo "  LLM:     disabled (LLM rules will be skipped)" ;;
+esac
 echo ""
 echo "For future sessions, activate the venv with:"
 echo "  source $VENV_DIR/bin/activate"

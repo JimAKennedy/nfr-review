@@ -87,7 +87,9 @@ def is_finding_suppressed(
         return False
 
     if target_root is not None:
-        resolved = target_root / file_path
+        resolved = (target_root / file_path).resolve()
+        if not resolved.is_relative_to(target_root.resolve()):
+            return False
         file_path = str(resolved)
 
     lines = _load_source_lines(file_path, source_cache)

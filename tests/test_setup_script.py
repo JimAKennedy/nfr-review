@@ -47,8 +47,10 @@ class TestSetupScriptStructure:
         assert "3, 11" in script_text or "3.11" in script_text
         assert "python3.11" in script_text
 
-    def test_has_api_key_prompt(self, script_text: str) -> None:
+    def test_has_llm_backend_menu(self, script_text: str) -> None:
+        assert "NFR_LLM_BACKEND" in script_text
         assert "ANTHROPIC_API_KEY" in script_text
+        assert "claude-cli" in script_text
         assert "read -rp" in script_text or "read -r" in script_text
 
     def test_has_stale_install_check(self, script_text: str) -> None:
@@ -87,8 +89,10 @@ class TestSetupAllScriptStructure:
     def test_verifies_scancode(self, all_script_text: str) -> None:
         assert "scancode" in all_script_text
 
-    def test_has_api_key_prompt(self, all_script_text: str) -> None:
+    def test_has_llm_backend_menu(self, all_script_text: str) -> None:
+        assert "NFR_LLM_BACKEND" in all_script_text
         assert "ANTHROPIC_API_KEY" in all_script_text
+        assert "claude-cli" in all_script_text
 
     def test_has_stale_install_check(self, all_script_text: str) -> None:
         assert ".gsd/worktrees/" in all_script_text

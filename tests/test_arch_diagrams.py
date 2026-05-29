@@ -1439,6 +1439,42 @@ class TestClassDiagram:
         assert len(class_diagrams) == 1
         assert "classDiagram" in class_diagrams[0].mermaid
 
+    def test_generate_all_splits_class_diagrams_by_language(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        mixed_classes = [
+            {
+                "name": "CppWidget",
+                "base_classes": [],
+                "methods": [{"name": "render", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "language": "C++",
+            },
+            {
+                "name": "PyWidget",
+                "base_classes": [],
+                "methods": [{"name": "render", "return_type": "None", "access": "public"}],
+                "fields": [],
+                "language": "Python",
+            },
+        ]
+        diagrams = generate_all_diagrams([comp], [], class_data=mixed_classes)
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        assert len(class_diagrams) == 2
+        titles = {d.title for d in class_diagrams}
+        assert "Class Diagram (C++)" in titles
+        assert "Class Diagram (Python)" in titles
+        cpp_diag = next(d for d in class_diagrams if "C++" in d.title)
+        assert "CppWidget" in cpp_diag.mermaid
+        assert "PyWidget" not in cpp_diag.mermaid
+        py_diag = next(d for d in class_diagrams if "Python" in d.title)
+        assert "PyWidget" in py_diag.mermaid
+        assert "CppWidget" not in py_diag.mermaid
+
     def test_generate_all_no_class_data(self) -> None:
         comp = Component(
             id="test-comp",
@@ -1449,6 +1485,473 @@ class TestClassDiagram:
         diagrams = generate_all_diagrams([comp], [])
         class_diagrams = [d for d in diagrams if d.scope == "classes"]
         assert len(class_diagrams) == 0
+
+
+class TestClassDiagramRelationships:
+    """Tests for composition, aggregation, and dependency edges."""
+
+    @staticmethod
+    def _make_classes() -> list[dict]:
+        return [
+            {
+                "name": "Engine",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [
+                    {
+                        "name": "getConfig",
+                        "return_type": "Config",
+                        "access": "public",
+                        "is_virtual": False,
+                        "is_pure_virtual": False,
+                        "line": 3,
+                    },
+                ],
+                "fields": [
+                    {"name": "state_", "type": "State", "access": "private", "line": 5},
+                    {
+                        "name": "logger_",
+                        "type": "std::shared_ptr<Logger>",
+                        "access": "private",
+                        "line": 6,
+                    },
+                    {
+                        "name": "items_",
+                        "type": "std::vector<Item>",
+                        "access": "private",
+                        "line": 7,
+                    },
+                ],
+                "is_abstract": False,
+            },
+            {
+                "name": "State",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [
+                    {"name": "count", "type": "int", "access": "public", "line": 21},
+                ],
+                "is_abstract": False,
+            },
+            {
+                "name": "Logger",
+                "line": 30,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Config",
+                "line": 40,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Item",
+                "line": 50,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+
+    def test_composition_by_value(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Engine *-- State" in result.mermaid
+
+    def test_aggregation_shared_ptr(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Engine o-- Logger" in result.mermaid
+
+    def test_composition_vector_element(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Engine *-- Item" in result.mermaid
+
+    def test_dependency_from_return_type(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Engine ..> Config" in result.mermaid
+
+    def test_no_self_reference(self) -> None:
+        classes = [
+            {
+                "name": "Node",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [
+                    {"name": "next_", "type": "Node*", "access": "private", "line": 2},
+                ],
+                "is_abstract": False,
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "Node *--" not in result.mermaid
+        assert "Node o--" not in result.mermaid
+
+    def test_inheritance_suppresses_composition(self) -> None:
+        classes = [
+            {
+                "name": "Base",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": True,
+            },
+            {
+                "name": "Derived",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [{"name": "Base", "access": "public"}],
+                "methods": [],
+                "fields": [
+                    {"name": "parent_", "type": "Base", "access": "private", "line": 11},
+                ],
+                "is_abstract": False,
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "Base <|-- Derived" in result.mermaid
+        assert "*--" not in result.mermaid
+
+    def test_no_edges_for_primitive_types(self) -> None:
+        result = render_class_diagram(_SAMPLE_CLASSES)
+        assert "*--" not in result.mermaid
+        assert "o--" not in result.mermaid
+        assert "..>" not in result.mermaid
+
+    def test_dedup_multiple_fields_same_type(self) -> None:
+        classes = [
+            {
+                "name": "Widget",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [
+                    {"name": "a_", "type": "Config", "access": "private", "line": 2},
+                    {"name": "b_", "type": "Config", "access": "private", "line": 3},
+                ],
+                "is_abstract": False,
+            },
+            {
+                "name": "Config",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert result.mermaid.count("Widget *-- Config") == 1
+
+    def test_pointer_field_is_aggregation(self) -> None:
+        classes = [
+            {
+                "name": "View",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [
+                    {"name": "ctrl_", "type": "Controller*", "access": "private", "line": 2},
+                ],
+                "is_abstract": False,
+            },
+            {
+                "name": "Controller",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "View o-- Controller" in result.mermaid
+        assert "*--" not in result.mermaid
+
+
+class TestClassDiagramParameterDeps:
+    """Tests for dependency edges derived from method parameter types."""
+
+    @staticmethod
+    def _make_classes() -> list[dict]:
+        return [
+            {
+                "name": "Controller",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [
+                    {
+                        "name": "handleEvent",
+                        "return_type": "void",
+                        "access": "public",
+                        "is_virtual": False,
+                        "is_pure_virtual": False,
+                        "line": 3,
+                        "parameters": [
+                            {"name": "msg", "type": "Message"},
+                            {"name": "count", "type": "int"},
+                        ],
+                    },
+                    {
+                        "name": "processBuffer",
+                        "return_type": "void",
+                        "access": "public",
+                        "is_virtual": False,
+                        "is_pure_virtual": False,
+                        "line": 4,
+                        "parameters": [
+                            {"name": "buf", "type": "AudioBuffer*"},
+                        ],
+                    },
+                ],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Message",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "AudioBuffer",
+                "line": 30,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+
+    def test_param_type_creates_dependency(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Controller ..> Message" in result.mermaid
+
+    def test_pointer_param_creates_dependency(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert "Controller ..> AudioBuffer" in result.mermaid
+
+    def test_primitive_param_no_dependency(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        lines = result.mermaid.splitlines()
+        dep_lines = [ln for ln in lines if "..>" in ln]
+        for ln in dep_lines:
+            assert "int" not in ln.split("..>")[1]
+
+
+class TestClassDiagramFriends:
+    """Tests for friend class dependency edges."""
+
+    @staticmethod
+    def _make_classes() -> list[dict]:
+        return [
+            {
+                "name": "Engine",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "friends": ["Inspector"],
+            },
+            {
+                "name": "Inspector",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+
+    def test_friend_creates_dependency(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert 'Engine ..> Inspector : "friend"' in result.mermaid
+
+    def test_friend_unknown_class_ignored(self) -> None:
+        classes = [
+            {
+                "name": "Engine",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "friends": ["UnknownClass"],
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "friend" not in result.mermaid
+
+
+class TestClassDiagramNestedClasses:
+    """Tests for nested (inner) class edges."""
+
+    @staticmethod
+    def _make_classes() -> list[dict]:
+        return [
+            {
+                "name": "Outer",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Inner",
+                "line": 5,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "outer_class": "Outer",
+            },
+        ]
+
+    def test_nested_class_edge(self) -> None:
+        result = render_class_diagram(self._make_classes())
+        assert 'Outer *-- Inner : "inner"' in result.mermaid
+
+    def test_nested_unknown_outer_ignored(self) -> None:
+        classes = [
+            {
+                "name": "Orphan",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "outer_class": "Missing",
+            },
+        ]
+        result = render_class_diagram(classes)
+        assert "inner" not in result.mermaid
+
+
+class TestClassDiagramNamespaceGrouping:
+    """Tests for optional namespace grouping in class diagrams."""
+
+    @staticmethod
+    def _make_classes() -> list[dict]:
+        return [
+            {
+                "name": "Processor",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "audio",
+            },
+            {
+                "name": "Buffer",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "audio",
+            },
+            {
+                "name": "Config",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": True,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "",
+            },
+        ]
+
+    def test_namespace_grouping_enabled(self) -> None:
+        result = render_class_diagram(self._make_classes(), group_by_namespace=True)
+        assert "namespace audio {" in result.mermaid
+        assert "Processor" in result.mermaid
+        assert "Buffer" in result.mermaid
+
+    def test_namespace_grouping_disabled(self) -> None:
+        result = render_class_diagram(self._make_classes(), group_by_namespace=False)
+        assert "namespace" not in result.mermaid
+
+    def test_global_ns_classes_not_wrapped(self) -> None:
+        result = render_class_diagram(self._make_classes(), group_by_namespace=True)
+        assert "Config" in result.mermaid
+        mermaid_before_ns = result.mermaid.split("namespace audio")[0]
+        assert "Config" in mermaid_before_ns or "Config" in result.mermaid.split("}")[1]
+
+    def test_nested_namespace_sanitized(self) -> None:
+        classes = [
+            {
+                "name": "Widget",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "ui::widgets",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace ui_widgets {" in result.mermaid
 
 
 class TestPipelineDiagram:

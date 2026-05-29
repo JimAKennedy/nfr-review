@@ -5,6 +5,33 @@ per-file Evidence with structured payload for downstream NFR rules.
 
 Evidence payload contract (kind="python-ast-file"):
     file_path: str — path relative to repo_path
+    module_path: str — dotted module path derived from file path
+    classes: list[dict] — each with:
+        name: str
+        line: int — 1-based
+        is_abstract: bool — True when class inherits ABC or uses @abstractmethod
+        is_interface: bool — True when class inherits Protocol
+        base_classes: list[dict] — each with:
+            name: str — e.g. "ABC", "Plugin"
+            access: str — always "public" (Python has no access on inheritance)
+        fields: list[dict] — each with:
+            name: str
+            type: str — annotation type or ""
+            access: str — "public"/"private" per _ naming convention
+            line: int — 1-based
+        methods: list[dict] — each with:
+            name: str
+            return_type: str — annotation type or ""
+            access: str — "public"/"private" per _ naming convention
+            is_virtual: bool — always False
+            is_pure_virtual: bool — True for @abstractmethod
+            line: int — 1-based
+            parameters: list[dict] — each with:
+                name: str
+                type: str
+            decorators: list[str]
+        namespace: str — dotted module path
+        outer_class: str — name of enclosing class if nested, empty otherwise
     catch_blocks: list[dict] — each with:
         caught_type: str — e.g. 'Exception', '' for bare except
         rethrows: bool — handler contains raise
@@ -331,9 +358,277 @@ def _extract_async_calls(root: Node, source: bytes) -> list[dict[str, Any]]:
     return calls
 
 
+_ABSTRACT_BASES = frozenset({"ABC", "ABCMeta"})
+_PROTOCOL_BASES = frozenset({"Protocol", "runtime_checkable"})
+
+_PY_BUILTIN_TYPES = frozenset(
+    {
+        "str",
+        "int",
+        "float",
+        "bool",
+        "bytes",
+        "None",
+        "complex",
+        "object",
+        "type",
+        "list",
+        "dict",
+        "set",
+        "tuple",
+        "frozenset",
+    }
+)
+
+
+def _python_access(name: str) -> str:
+    if name.startswith("_"):
+        return "private"
+    return "public"
+
+
+def _extract_type_annotation(node: Node, source: bytes) -> str:
+    for child in node.children:
+        if child.type == "type":
+            return text(child, source)
+    return ""
+
+
+def _extract_return_type(func_node: Node, source: bytes) -> str:
+    saw_arrow = False
+    for child in func_node.children:
+        if child.type == "->":
+            saw_arrow = True
+        elif saw_arrow and child.type == "type":
+            return text(child, source)
+    return ""
+
+
+def _extract_method_parameters(func_node: Node, source: bytes) -> list[dict[str, str]]:
+    params: list[dict[str, str]] = []
+    for child in func_node.children:
+        if child.type != "parameters":
+            continue
+        for param in child.children:
+            if param.type == "identifier":
+                name = text(param, source)
+                if name == "self" or name == "cls":
+                    continue
+                params.append({"name": name, "type": ""})
+            elif param.type == "typed_parameter":
+                pname = ""
+                ptype = ""
+                for sub in param.children:
+                    if sub.type == "identifier" and not pname:
+                        pname = text(sub, source)
+                    elif sub.type == "type":
+                        ptype = text(sub, source)
+                if pname and pname not in ("self", "cls"):
+                    params.append({"name": pname, "type": ptype})
+            elif param.type == "typed_default_parameter":
+                pname = ""
+                ptype = ""
+                for sub in param.children:
+                    if sub.type == "identifier" and not pname:
+                        pname = text(sub, source)
+                    elif sub.type == "type":
+                        ptype = text(sub, source)
+                if pname and pname not in ("self", "cls"):
+                    params.append({"name": pname, "type": ptype})
+            elif param.type == "default_parameter":
+                pname = ""
+                for sub in param.children:
+                    if sub.type == "identifier" and not pname:
+                        pname = text(sub, source)
+                if pname and pname not in ("self", "cls"):
+                    params.append({"name": pname, "type": ""})
+    return params
+
+
+def _extract_class_fields(block_node: Node, source: bytes) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for child in block_node.children:
+        if child.type != "expression_statement":
+            continue
+        inner = child.children[0] if child.children else None
+        if inner is None or inner.type != "assignment":
+            continue
+        has_type_annotation = any(c.type == "type" for c in inner.children)
+        if not has_type_annotation:
+            continue
+        fname = ""
+        ftype = ""
+        for sub in inner.children:
+            if sub.type == "identifier" and not fname:
+                fname = text(sub, source)
+            elif sub.type == "type":
+                ftype = text(sub, source)
+        if fname and fname not in seen:
+            seen.add(fname)
+            fields.append(
+                {
+                    "name": fname,
+                    "type": ftype,
+                    "access": _python_access(fname),
+                    "line": inner.start_point[0] + 1,
+                }
+            )
+    return fields
+
+
+def _extract_class_methods(block_node: Node, source: bytes) -> list[dict[str, Any]]:
+    methods: list[dict[str, Any]] = []
+    for child in block_node.children:
+        if child.type == "function_definition":
+            _process_class_method(child, source, [], methods)
+        elif child.type == "decorated_definition":
+            decorators = _extract_decorators(child, source)
+            for sub in child.children:
+                if sub.type == "function_definition":
+                    _process_class_method(sub, source, decorators, methods)
+    return methods
+
+
+def _process_class_method(
+    func_node: Node,
+    source: bytes,
+    decorators: list[str],
+    methods: list[dict[str, Any]],
+) -> None:
+    name = ""
+    for child in func_node.children:
+        if child.type == "identifier" and not name:
+            name = text(child, source)
+            break
+    if not name:
+        return
+    return_type = _extract_return_type(func_node, source)
+    parameters = _extract_method_parameters(func_node, source)
+    is_pure_virtual = "abstractmethod" in decorators
+    methods.append(
+        {
+            "name": name,
+            "return_type": return_type,
+            "access": _python_access(name),
+            "is_virtual": False,
+            "is_pure_virtual": is_pure_virtual,
+            "line": func_node.start_point[0] + 1,
+            "parameters": parameters,
+            "decorators": decorators,
+        }
+    )
+
+
+def _extract_base_classes(class_node: Node, source: bytes) -> list[dict[str, str]]:
+    bases: list[dict[str, str]] = []
+    for child in class_node.children:
+        if child.type != "argument_list":
+            continue
+        for arg in child.children:
+            if arg.type == "identifier":
+                bases.append({"name": text(arg, source), "access": "public"})
+            elif arg.type == "keyword_argument":
+                pass
+            elif arg.type == "attribute":
+                bases.append({"name": _attribute_text(arg, source), "access": "public"})
+    return bases
+
+
+def _is_abstract_class(bases: list[dict[str, str]], methods: list[dict[str, Any]]) -> bool:
+    base_names = {b["name"] for b in bases}
+    if base_names & _ABSTRACT_BASES:
+        return True
+    return any(m.get("is_pure_virtual") for m in methods)
+
+
+def _is_protocol_class(bases: list[dict[str, str]]) -> bool:
+    return any(b["name"] in _PROTOCOL_BASES for b in bases)
+
+
+def _extract_class_or_nested(
+    class_node: Node,
+    source: bytes,
+    *,
+    outer_class: str = "",
+    namespace: str = "",
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    class_name = ""
+    for child in class_node.children:
+        if child.type == "identifier":
+            class_name = text(child, source)
+            break
+
+    if not class_name:
+        return results
+
+    bases = _extract_base_classes(class_node, source)
+    block_node = None
+    for child in class_node.children:
+        if child.type == "block":
+            block_node = child
+            break
+
+    fields: list[dict[str, Any]] = []
+    methods: list[dict[str, Any]] = []
+    if block_node is not None:
+        fields = _extract_class_fields(block_node, source)
+        methods = _extract_class_methods(block_node, source)
+
+    is_protocol = _is_protocol_class(bases)
+    is_abstract = is_protocol or _is_abstract_class(bases, methods)
+
+    results.append(
+        {
+            "name": class_name,
+            "line": class_node.start_point[0] + 1,
+            "is_abstract": is_abstract,
+            "is_interface": is_protocol,
+            "base_classes": bases,
+            "fields": fields,
+            "methods": methods,
+            "namespace": namespace,
+            "outer_class": outer_class,
+        }
+    )
+
+    if block_node is not None:
+        for child in block_node.children:
+            if child.type == "class_definition":
+                results.extend(
+                    _extract_class_or_nested(
+                        child,
+                        source,
+                        outer_class=class_name,
+                        namespace=namespace,
+                    )
+                )
+
+    return results
+
+
+def _module_path_from_rel(rel_path: str) -> str:
+    path = rel_path.replace("\\", "/")
+    if path.endswith(".py"):
+        path = path[:-3]
+    if path.endswith("/__init__"):
+        path = path[: -len("/__init__")]
+    return path.replace("/", ".")
+
+
+def _extract_classes(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
+    namespace = _module_path_from_rel(rel_path)
+    classes: list[dict[str, Any]] = []
+    for node in root.children:
+        if node.type == "class_definition":
+            classes.extend(_extract_class_or_nested(node, source, namespace=namespace))
+    return classes
+
+
 class PythonAstCollector(BaseASTCollector):
     name = "python-ast"
-    version = "0.1.0"
+    version = "0.2.0"
     language = "python"
     file_extensions = (".py",)
     evidence_kind = "python-ast-file"
@@ -343,6 +638,8 @@ class PythonAstCollector(BaseASTCollector):
         tree = self._parser.parse(source)
         root = tree.root_node
         return {
+            "module_path": _module_path_from_rel(rel_path),
+            "classes": _extract_classes(root, source, rel_path),
             "catch_blocks": _extract_catch_blocks(root, source, rel_path),
             "log_statements": _extract_log_statements(root, source, rel_path),
             "functions": _extract_functions(root, source),
