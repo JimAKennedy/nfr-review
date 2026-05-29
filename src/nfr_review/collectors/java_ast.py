@@ -5,14 +5,35 @@ per-file Evidence with structured payload for downstream NFR rules.
 
 Evidence payload contract (kind="java-ast-file"):
     file_path: str — path relative to repo_path
+    package: str — package name (e.g. "com.example.engine"), empty if none
     classes: list[dict] — each with:
         name: str
+        line: int — 1-based line number of class/interface declaration
         annotations: list[str] — e.g. ["RestController", "Service"]
+        is_abstract: bool — True for abstract classes and interfaces
+        is_interface: bool — True for interface declarations
+        base_classes: list[dict] — each with:
+            name: str — e.g. "Plugin" or "Serializable"
+            access: str — always "public" (Java has no access on inheritance)
+        fields: list[dict] — each with:
+            name: str
+            type: str — e.g. "Config", "int", "List<Plugin>"
+            access: str — "public", "protected", or "private"
+            line: int — 1-based line number
         methods: list[dict] — each with:
             name: str
             annotations: list[str]
             return_type: str
+            access: str — "public", "protected", or "private"
+            is_virtual: bool — always False (Java concept N/A)
+            is_pure_virtual: bool — True for abstract methods
+            line: int — 1-based line number
+            parameters: list[dict] — each with:
+                name: str
+                type: str
             mapping_paths: list[str] — path values from @*Mapping annotations
+        namespace: str — package name (same as top-level package)
+        outer_class: str — name of enclosing class if inner/nested, empty otherwise
     methods: list[dict] — top-level method list (same shape as class methods)
     catch_blocks: list[dict] — each with:
         caught_type: str — e.g. "Exception"
@@ -154,6 +175,112 @@ def _extract_return_type(method_node: Any, source: bytes) -> str:
     return "void"
 
 
+_ACCESS_KEYWORDS = frozenset({"public", "protected", "private"})
+
+
+def _extract_access(modifiers_node: Any | None, source: bytes) -> str:
+    if modifiers_node is None:
+        return "private"
+    for child in modifiers_node.children:
+        if child.type in _ACCESS_KEYWORDS:
+            return _text(child, source)
+    return "private"
+
+
+def _has_modifier(modifiers_node: Any | None, keyword: str) -> bool:
+    if modifiers_node is None:
+        return False
+    return any(child.type == keyword for child in modifiers_node.children)
+
+
+def _extract_type_node(node: Any, source: bytes) -> str:
+    for child in node.children:
+        if child.type in (
+            "type_identifier",
+            "void_type",
+            "integral_type",
+            "floating_point_type",
+            "boolean_type",
+            "generic_type",
+            "array_type",
+            "scoped_type_identifier",
+        ):
+            return _text(child, source)
+    return ""
+
+
+def _extract_parameters(method_node: Any, source: bytes) -> list[dict[str, str]]:
+    params: list[dict[str, str]] = []
+    for child in method_node.children:
+        if child.type == "formal_parameters":
+            for param in child.children:
+                if param.type == "formal_parameter":
+                    ptype = _extract_type_node(param, source)
+                    pname = ""
+                    for sub in param.children:
+                        if sub.type == "identifier":
+                            pname = _text(sub, source)
+                    if pname:
+                        params.append({"name": pname, "type": ptype})
+    return params
+
+
+def _extract_fields(class_body_node: Any, source: bytes) -> list[dict[str, Any]]:
+    fields: list[dict[str, Any]] = []
+    for child in class_body_node.children:
+        if child.type == "field_declaration":
+            modifiers_node = None
+            for sub in child.children:
+                if sub.type == "modifiers":
+                    modifiers_node = sub
+                    break
+            access = _extract_access(modifiers_node, source)
+            ftype = _extract_type_node(child, source)
+            for sub in child.children:
+                if sub.type == "variable_declarator":
+                    for var_child in sub.children:
+                        if var_child.type == "identifier":
+                            fields.append(
+                                {
+                                    "name": _text(var_child, source),
+                                    "type": ftype,
+                                    "access": access,
+                                    "line": child.start_point[0] + 1,
+                                }
+                            )
+                            break
+    return fields
+
+
+def _extract_base_classes(class_node: Any, source: bytes) -> list[dict[str, str]]:
+    bases: list[dict[str, str]] = []
+    for child in class_node.children:
+        if child.type == "superclass":
+            for sub in child.children:
+                if sub.type in ("type_identifier", "generic_type", "scoped_type_identifier"):
+                    bases.append({"name": _text(sub, source), "access": "public"})
+        elif child.type in ("super_interfaces", "extends_interfaces"):
+            for sub in child.children:
+                if sub.type == "type_list":
+                    for iface in sub.children:
+                        if iface.type in (
+                            "type_identifier",
+                            "generic_type",
+                            "scoped_type_identifier",
+                        ):
+                            bases.append({"name": _text(iface, source), "access": "public"})
+    return bases
+
+
+def _extract_package(root: Any, source: bytes) -> str:
+    for child in root.children:
+        if child.type == "package_declaration":
+            for sub in child.children:
+                if sub.type in ("scoped_identifier", "identifier"):
+                    return _text(sub, source)
+    return ""
+
+
 def _extract_methods(class_body_node: Any, source: bytes) -> list[dict[str, Any]]:
     methods: list[dict[str, Any]] = []
     for child in class_body_node.children:
@@ -161,18 +288,28 @@ def _extract_methods(class_body_node: Any, source: bytes) -> list[dict[str, Any]
             name = ""
             annotations: list[str] = []
             mapping_paths: list[str] = []
+            modifiers_node = None
             for sub in child.children:
                 if sub.type == "identifier":
                     name = _text(sub, source)
                 elif sub.type == "modifiers":
+                    modifiers_node = sub
                     annotations = _extract_annotations(sub, source)
                     mapping_paths = _extract_mapping_paths(sub, source)
+            access = _extract_access(modifiers_node, source)
+            is_abstract = _has_modifier(modifiers_node, "abstract")
             return_type = _extract_return_type(child, source)
+            parameters = _extract_parameters(child, source)
             methods.append(
                 {
                     "name": name,
                     "annotations": annotations,
                     "return_type": return_type,
+                    "access": access,
+                    "is_virtual": False,
+                    "is_pure_virtual": is_abstract,
+                    "line": child.start_point[0] + 1,
+                    "parameters": parameters,
                     "mapping_paths": mapping_paths,
                 }
             )
@@ -329,10 +466,92 @@ def _extract_log_statements(root: Any, source: bytes) -> list[dict[str, Any]]:
     return statements
 
 
+def _extract_class_or_interface(
+    node: Any,
+    source: bytes,
+    *,
+    is_interface: bool = False,
+    outer_class: str = "",
+    namespace: str = "",
+) -> list[dict[str, Any]]:
+    """Extract one class/interface and any inner classes it contains."""
+    results: list[dict[str, Any]] = []
+
+    class_name = ""
+    annotations: list[str] = []
+    modifiers_node = None
+    for child in node.children:
+        if child.type == "identifier":
+            class_name = _text(child, source)
+        elif child.type == "modifiers":
+            modifiers_node = child
+            annotations = _extract_annotations(child, source)
+
+    is_abstract = is_interface or _has_modifier(modifiers_node, "abstract")
+    base_classes = _extract_base_classes(node, source)
+
+    body_type = "interface_body" if is_interface else "class_body"
+    body_node = None
+    for child in node.children:
+        if child.type == body_type:
+            body_node = child
+            break
+
+    methods: list[dict[str, Any]] = []
+    fields: list[dict[str, Any]] = []
+    if body_node is not None:
+        methods = _extract_methods(body_node, source)
+        if not is_interface:
+            fields = _extract_fields(body_node, source)
+        else:
+            for m in methods:
+                m["access"] = "public"
+
+    cls_dict: dict[str, Any] = {
+        "name": class_name,
+        "line": node.start_point[0] + 1,
+        "annotations": annotations,
+        "is_abstract": is_abstract,
+        "is_interface": is_interface,
+        "base_classes": base_classes,
+        "fields": fields,
+        "methods": methods,
+        "namespace": namespace,
+        "outer_class": outer_class,
+    }
+    results.append(cls_dict)
+
+    if body_node is not None:
+        for child in body_node.children:
+            if child.type == "class_declaration":
+                results.extend(
+                    _extract_class_or_interface(
+                        child,
+                        source,
+                        is_interface=False,
+                        outer_class=class_name,
+                        namespace=namespace,
+                    )
+                )
+            elif child.type == "interface_declaration":
+                results.extend(
+                    _extract_class_or_interface(
+                        child,
+                        source,
+                        is_interface=True,
+                        outer_class=class_name,
+                        namespace=namespace,
+                    )
+                )
+
+    return results
+
+
 def _parse_file(parser: Parser, source: bytes) -> dict[str, Any]:
     tree = parser.parse(source)
     root = tree.root_node
 
+    package = _extract_package(root, source)
     imports = _extract_imports(root, source)
     catch_blocks = _extract_catch_blocks(root, source)
     thread_pools = _extract_thread_pools(root, source)
@@ -341,29 +560,22 @@ def _parse_file(parser: Parser, source: bytes) -> dict[str, Any]:
     classes: list[dict[str, Any]] = []
     all_methods: list[dict[str, Any]] = []
 
-    for node in _find_nodes(root, "class_declaration"):
-        class_name = ""
-        class_annotations: list[str] = []
-        for child in node.children:
-            if child.type == "identifier":
-                class_name = _text(child, source)
-            elif child.type == "modifiers":
-                class_annotations = _extract_annotations(child, source)
-        methods: list[dict[str, Any]] = []
-        for child in node.children:
-            if child.type == "class_body":
-                methods = _extract_methods(child, source)
-                break
-        classes.append(
-            {
-                "name": class_name,
-                "annotations": class_annotations,
-                "methods": methods,
-            }
-        )
-        all_methods.extend(methods)
+    for node in root.children:
+        if node.type == "class_declaration":
+            for cls in _extract_class_or_interface(
+                node, source, is_interface=False, namespace=package
+            ):
+                classes.append(cls)
+                all_methods.extend(cls["methods"])
+        elif node.type == "interface_declaration":
+            for cls in _extract_class_or_interface(
+                node, source, is_interface=True, namespace=package
+            ):
+                classes.append(cls)
+                all_methods.extend(cls["methods"])
 
     return {
+        "package": package,
         "classes": classes,
         "methods": all_methods,
         "catch_blocks": catch_blocks,
