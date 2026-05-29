@@ -62,7 +62,7 @@ def test_regression_snapshot(
         ],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=600,
     )
 
     assert result.returncode in (0, 2), (

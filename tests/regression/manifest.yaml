@@ -65,3 +65,107 @@ repos:
       - nodejs
       - csharp
     description: OTel demo app with Collector configs, K8s manifests, Helm charts, Dockerfiles, Go, Python, Node.js, C#
+
+  # --- Class Diagram Corpus (M030-S05) ---
+  # Selected for rich class/struct hierarchies, multiple packages/namespaces,
+  # and diverse relationship types (inheritance, composition, interfaces).
+
+  # C++ repos
+  - name: spdlog
+    url: https://github.com/gabime/spdlog
+    commit_sha: d5275e3343c4dca4feb9fa772199181509f2a657
+    license: MIT
+    expected_techs:
+      - cpp
+    description: C++ logging library — deep sink hierarchy (base_sink<Mutex> -> 15+ concrete sinks), namespaces (spdlog, spdlog::sinks, spdlog::details), CRTP templates, composition (logger owns vector<sink_ptr>)
+    class_diagram_expects:
+      classes_min: 20
+      namespaces: [spdlog, "spdlog::sinks", "spdlog::details"]
+      patterns: [inheritance, composition, templates, strategy]
+
+  - name: sfml
+    url: https://github.com/SFML/SFML
+    commit_sha: 05cea679aa29733c92f77d8b341994abda9e576e
+    license: Zlib
+    expected_techs:
+      - cpp
+    description: C++ multimedia library — multi-inheritance (Shape from Drawable+Transformable), 5 module namespaces (sf::Audio, sf::Graphics, sf::Network, sf::System, sf::Window), 3-level hierarchies, abstract bases
+    class_diagram_expects:
+      classes_min: 50
+      namespaces: ["sf", "sf::priv"]
+      patterns: [multi-inheritance, composition, abstract-base, templates]
+
+  # Java repos
+  - name: mybatis-3
+    url: https://github.com/mybatis/mybatis-3
+    commit_sha: eb000ff0a69770550c33ee0878033ac4e91d8b6a
+    license: Apache-2.0
+    expected_techs:
+      - java
+    description: Java persistence framework — 20 packages, Executor hierarchy (BaseExecutor -> Simple/Reuse/Batch), decorator pattern in cache, proxy pattern in binding, generics (TypeHandler<T>)
+    class_diagram_expects:
+      classes_min: 100
+      packages: ["org.apache.ibatis.executor", "org.apache.ibatis.cache", "org.apache.ibatis.mapping", "org.apache.ibatis.session"]
+      patterns: [inheritance, interfaces, generics, decorator, proxy]
+
+  - name: jackson-databind
+    url: https://github.com/FasterXML/jackson-databind
+    commit_sha: d9250ece4879b81f5689414b37e41a95bac0122c
+    license: Apache-2.0
+    expected_techs:
+      - java
+    description: Java JSON data binding — deep hierarchies (Annotated -> AnnotatedMember -> AnnotatedField/Method), heavy generics (JsonSerializer<T>, JsonDeserializer<T>), complex composition (ObjectMapper)
+    class_diagram_expects:
+      classes_min: 150
+      packages: ["com.fasterxml.jackson.databind.ser", "com.fasterxml.jackson.databind.deser", "com.fasterxml.jackson.databind.type"]
+      patterns: [deep-inheritance, generics, composition, template-method]
+
+  # Python repos
+  - name: rich
+    url: https://github.com/Textualize/rich
+    commit_sha: 46cebbb032f920eb096efbaf23cdc6fe9dd541f7
+    license: MIT
+    expected_techs:
+      - python
+    description: Python terminal rendering — class hierarchies (JupyterMixin), dataclasses (Column, Row, Span), composition (Table contains List[Column]), protocol-based polymorphism (__rich_console__)
+    class_diagram_expects:
+      classes_min: 40
+      modules: ["rich.table", "rich.console", "rich.text", "rich.panel"]
+      patterns: [inheritance, dataclasses, composition, protocols]
+
+  - name: httpx
+    url: https://github.com/encode/httpx
+    commit_sha: b5addb64f0161ff6bfe94c124ef76f6a1fba5254
+    license: BSD-3-Clause
+    expected_techs:
+      - python
+    description: Python HTTP client — BaseClient hierarchy (Client/AsyncClient), transport abstraction (BaseTransport/AsyncBaseTransport), stream hierarchy, composition (Request contains URL, Headers)
+    class_diagram_expects:
+      classes_min: 20
+      modules: ["httpx._client", "httpx._transports", "httpx._models"]
+      patterns: [inheritance, composition, abstract-base, sync-async-split]
+
+  # Go repos
+  - name: prometheus-client-golang
+    url: https://github.com/prometheus/client_golang
+    commit_sha: d61fb3f8aa4b436256dd20d703ca796ab1eeafa5
+    license: Apache-2.0
+    expected_techs:
+      - go
+    description: Go metrics client — interface hierarchy (Collector, Metric, Gatherer, Registerer), struct embedding, interface composition (Gauge embeds Metric+Collector), parallel type families (Counter/Gauge/Histogram/Summary)
+    class_diagram_expects:
+      structs_min: 15
+      packages: ["prometheus", "promhttp", "promauto"]
+      patterns: [interfaces, embedding, interface-composition, parallel-families]
+
+  - name: gin
+    url: https://github.com/gin-gonic/gin
+    commit_sha: 5f4f9643258dc2a65e684b63f12c8d543c936c67
+    license: MIT
+    expected_techs:
+      - go
+    description: Go HTTP framework — struct embedding (Engine embeds RouterGroup), interface implementations (IRouter, IRoutes), render strategy pattern (JSON/XML/HTML/String), binding interfaces
+    class_diagram_expects:
+      structs_min: 15
+      packages: ["gin", "render", "binding"]
+      patterns: [embedding, interfaces, strategy, composition]

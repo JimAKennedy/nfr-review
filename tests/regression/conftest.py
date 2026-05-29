@@ -158,6 +158,12 @@ def normalize_findings(jsonl_path: Path) -> list[dict]:
             continue
         if record.get("rag") == "skipped":
             continue
+        # adr-gap findings from LLM-derived decisions are non-deterministic;
+        # the LLM produces different specific decisions on each run.
+        if record.get("rule_id") == "adr-gap" and record.get(
+            "evidence_locator", ""
+        ).startswith("adr-derived:"):
+            continue
         record.pop("record_type", None)
         loc = record.get("evidence_locator", "")
         if loc.startswith("/"):
