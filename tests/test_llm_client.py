@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,8 +14,15 @@ from nfr_review.llm_client import (
     serialize_evidence_bundle,
 )
 
+
+@pytest.fixture(autouse=True)
+def _default_api_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure tests default to the 'api' backend unless overridden."""
+    monkeypatch.delenv("NFR_LLM_BACKEND", raising=False)
+
+
 # ---------------------------------------------------------------------------
-# ClaudeClient availability
+# ClaudeClient availability — API backend
 # ---------------------------------------------------------------------------
 
 
@@ -45,7 +53,43 @@ class TestClaudeClientAvailability:
 
 
 # ---------------------------------------------------------------------------
-# ClaudeClient.analyze
+# ClaudeClient availability — CLI backend
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeClientCliAvailability:
+    def test_available_when_cli_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+        assert client.available is True
+
+    def test_unavailable_when_cli_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("nfr_review.llm_client.shutil.which", return_value=None):
+            client = ClaudeClient()
+        assert client.available is False
+
+    def test_does_not_need_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+        assert client.available is True
+        assert client._client is None
+
+    def test_unknown_backend_falls_back_to_api(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "bogus")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        client = ClaudeClient()
+        assert client._backend == "api"
+        assert client.available is False
+
+
+# ---------------------------------------------------------------------------
+# ClaudeClient.analyze — API backend
 # ---------------------------------------------------------------------------
 
 
@@ -85,6 +129,64 @@ class TestClaudeClientAnalyze:
                 },
             ],
         )
+
+
+# ---------------------------------------------------------------------------
+# ClaudeClient.analyze — CLI backend
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeClientAnalyzeCli:
+    def test_raises_when_cli_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value=None):
+            client = ClaudeClient()
+        with pytest.raises(LlmUnavailableError, match="claude CLI not found"):
+            client.analyze("prompt", "evidence")
+
+    def test_returns_stdout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="  analysis result\n", stderr=""
+        )
+        with patch(
+            "nfr_review.llm_client.subprocess.run", return_value=mock_result
+        ) as mock_run:
+            result = client.analyze("Check PII", '{"files":[]}')
+
+        assert result == "analysis result"
+        call_args = mock_run.call_args
+        cmd = call_args[0][0]
+        assert cmd[0] == "/usr/bin/claude"
+        assert "-p" in cmd
+        assert "--output-format" in cmd
+
+    def test_raises_on_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="something broke"
+        )
+        with patch("nfr_review.llm_client.subprocess.run", return_value=mock_result):
+            with pytest.raises(LlmUnavailableError, match="exited 1"):
+                client.analyze("prompt", "evidence")
+
+    def test_raises_on_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+
+        with patch(
+            "nfr_review.llm_client.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=120),
+        ):
+            with pytest.raises(LlmUnavailableError, match="timed out"):
+                client.analyze("prompt", "evidence")
 
 
 # ---------------------------------------------------------------------------
