@@ -361,13 +361,37 @@ def run_cmd(
         raise click.exceptions.Exit(1) from exc
     _phase_done("NFR scan", t0, quiet=quiet)
 
+    from nfr_review.suppression import apply_suppressions
+
+    active_findings, suppressed_findings = apply_suppressions(
+        result.findings, target_root=target.resolve()
+    )
+    if suppressed_findings:
+        _ts_echo(
+            f"Suppressed: {len(suppressed_findings)} finding(s) via inline markers",
+            quiet=quiet,
+        )
+        result = RunResult(
+            findings=active_findings,
+            rule_results=result.rule_results,
+            run_metadata=result.run_metadata,
+            warnings=result.warnings,
+            evidence=result.evidence,
+        )
+
+    classification = None
     if baseline_path is not None:
-        from nfr_review.baseline import filter_new_findings, load_baseline
+        from nfr_review.baseline import classify_findings, filter_new_findings, load_baseline
 
         baseline = load_baseline(baseline_path)
+        classification = classify_findings(result.findings, baseline)
         new_findings = filter_new_findings(result.findings, baseline)
         _ts_echo(f"Baseline loaded: {baseline.finding_count} findings")
-        _ts_echo(f"New findings: {len(new_findings)} (was {len(result.findings)})")
+        _ts_echo(
+            f"New findings: {len(new_findings)} "
+            f"({len(classification.shifted)} shifted, "
+            f"{len(classification.resolved)} resolved)"
+        )
         result = RunResult(
             findings=new_findings,
             rule_results=result.rule_results,
@@ -412,7 +436,12 @@ def run_cmd(
     run_logger.info("Writing output files")
     try:
         write_csv(result, csv_path)
-        write_jsonl(result, jsonl_path)
+        write_jsonl(
+            result,
+            jsonl_path,
+            classification=classification,
+            suppressed_findings=suppressed_findings or None,
+        )
     except OutputError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc

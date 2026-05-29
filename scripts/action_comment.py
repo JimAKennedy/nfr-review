@@ -149,6 +149,101 @@ def _full_details(records: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _classify_records(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Partition finding records by classification tag.
+
+    Returns (new, shifted, resolved) lists. If no classification tags are
+    present, all findings are treated as new (backward compat).
+    """
+    new: list[dict[str, Any]] = []
+    shifted: list[dict[str, Any]] = []
+    resolved: list[dict[str, Any]] = []
+
+    findings = [r for r in records if r.get("record_type") == "finding"]
+    has_classification = any(r.get("classification") for r in findings)
+
+    if not has_classification:
+        return findings, [], []
+
+    for r in findings:
+        cls = r.get("classification", "new")
+        if cls == "shifted":
+            shifted.append(r)
+        elif cls == "resolved":
+            resolved.append(r)
+        else:
+            new.append(r)
+
+    return new, shifted, resolved
+
+
+def _classification_summary(
+    new: list[dict[str, Any]],
+    shifted: list[dict[str, Any]],
+    resolved: list[dict[str, Any]],
+) -> str:
+    """One-line summary of classified findings."""
+    parts = [f"**{len(new)} new**"]
+    if shifted:
+        parts.append(f"{len(shifted)} shifted")
+    if resolved:
+        parts.append(f"{len(resolved)} resolved")
+    return " | ".join(parts)
+
+
+def _shifted_section(shifted: list[dict[str, Any]]) -> str:
+    """Render a collapsible section for shifted findings."""
+    if not shifted:
+        return ""
+    lines = [
+        "<details>",
+        f"<summary>Shifted findings ({len(shifted)})"
+        " — line numbers changed, no action needed</summary>",
+        "",
+        "| Rule | Pattern | Old Location | New Location |",
+        "|------|---------|-------------|-------------|",
+    ]
+    for r in shifted:
+        rule = r.get("rule_id", "")
+        tag = r.get("pattern_tag", "")
+        old_loc = r.get("baseline_locator", "?")
+        new_loc = r.get("evidence_locator", "?")
+        lines.append(f"| {rule} | {tag} | `{old_loc}` | `{new_loc}` |")
+    lines.append("")
+    lines.append("</details>")
+    return "\n".join(lines)
+
+
+def _resolved_section(resolved: list[dict[str, Any]]) -> str:
+    """Render a collapsible section for resolved findings."""
+    if not resolved:
+        return ""
+    lines = [
+        "<details>",
+        f"<summary>✅ Resolved findings ({len(resolved)}) — no longer present</summary>",
+        "",
+        "| Rule | Pattern | Last Location |",
+        "|------|---------|--------------|",
+    ]
+    for r in resolved:
+        rule = r.get("rule_id", "")
+        tag = r.get("pattern_tag", "")
+        loc = r.get("evidence_locator", "?")
+        lines.append(f"| {rule} | {tag} | `{loc}` |")
+    lines.append("")
+    lines.append("</details>")
+    return "\n".join(lines)
+
+
+def _suppressed_count(records: list[dict[str, Any]]) -> int:
+    """Count finding records tagged as suppressed."""
+    return sum(
+        1 for r in records if r.get("record_type") == "finding" and r.get("suppressed") is True
+    )
+
+
 def _tool_version(records: list[dict[str, Any]]) -> str:
     """Extract tool version from run_metadata, if present."""
     for rec in records:
@@ -187,6 +282,11 @@ def generate_comment(jsonl_path: Path) -> str:
     version = _tool_version(records)
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    new_records, shifted_records, resolved_records = _classify_records(records)
+    has_classification = bool(shifted_records or resolved_records)
+
+    suppressed_count = _suppressed_count(records)
+
     total_findings = counts["red"] + counts["amber"] + counts["green"]
 
     parts: list[str] = [
@@ -195,16 +295,31 @@ def generate_comment(jsonl_path: Path) -> str:
         "",
         _status_line(counts),
         "",
-        "### RAG Summary",
-        "",
-        "| Status | Count |",
-        "|--------|-------|",
-        f"| \U0001f534 Red | {counts['red']} |",
-        f"| \U0001f7e0 Amber | {counts['amber']} |",
-        f"| \U0001f7e2 Green | {counts['green']} |",
-        f"| **Total** | **{total_findings}** |",
-        "",
     ]
+
+    if has_classification:
+        parts.append(_classification_summary(new_records, shifted_records, resolved_records))
+        parts.append("")
+
+    if suppressed_count > 0:
+        parts.append(
+            f"*{suppressed_count} finding(s) suppressed via inline `nfr-review:skip` markers*"
+        )
+        parts.append("")
+
+    parts.extend(
+        [
+            "### RAG Summary",
+            "",
+            "| Status | Count |",
+            "|--------|-------|",
+            f"| \U0001f534 Red | {counts['red']} |",
+            f"| \U0001f7e0 Amber | {counts['amber']} |",
+            f"| \U0001f7e2 Green | {counts['green']} |",
+            f"| **Total** | **{total_findings}** |",
+            "",
+        ]
+    )
 
     top = _top_findings(records)
     if top:
@@ -215,6 +330,17 @@ def generate_comment(jsonl_path: Path) -> str:
     if details:
         parts.append(details)
         parts.append("")
+
+    if has_classification:
+        shifted_sec = _shifted_section(shifted_records)
+        if shifted_sec:
+            parts.append(shifted_sec)
+            parts.append("")
+
+        resolved_sec = _resolved_section(resolved_records)
+        if resolved_sec:
+            parts.append(resolved_sec)
+            parts.append("")
 
     parts.append("---")
     parts.append(f"*Generated by nfr-review v{version} at {timestamp}*")

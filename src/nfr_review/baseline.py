@@ -18,6 +18,28 @@ from nfr_review.models import Finding, _strip_line_from_locator
 
 
 @dataclass
+class ShiftedFinding:
+    """A finding that matches the baseline via content hash but at a different line."""
+
+    finding: Finding
+    baseline_locator: str
+
+
+@dataclass
+class FindingClassification:
+    """Classified findings after comparing against a baseline.
+
+    - ``new``: not present in the baseline at all
+    - ``shifted``: same content at a different line number
+    - ``resolved``: present in the baseline but absent from the current scan
+    """
+
+    new: list[Finding] = field(default_factory=list)
+    shifted: list[ShiftedFinding] = field(default_factory=list)
+    resolved: list[tuple[str, ...]] = field(default_factory=list)
+
+
+@dataclass
 class BaselineData:
     """Parsed baseline: the set of identity keys from a prior run.
 
@@ -93,4 +115,95 @@ def filter_new_findings(findings: list[Finding], baseline: BaselineData) -> list
     return new
 
 
-__all__ = ["BaselineData", "filter_new_findings", "load_baseline"]
+def _build_baseline_locator_index(
+    baseline: BaselineData,
+) -> dict[tuple[str, str, str, str], str]:
+    """Map stable keys to their original evidence_locator (with line number).
+
+    This requires re-parsing the baseline file — but BaselineData doesn't store
+    the original locators alongside stable keys.  As a lightweight alternative,
+    we reconstruct from legacy_keys: for each stable key, find the legacy key
+    that shares (rule_id, pattern_tag) and whose file path matches.
+    """
+    index: dict[tuple[str, str, str, str], str] = {}
+    for legacy_key in baseline.legacy_keys:
+        rule_id, locator, pattern_tag = legacy_key
+        file_path = _strip_line_from_locator(locator)
+        for stable_key in baseline.stable_keys:
+            s_rule, s_file, s_tag, s_hash = stable_key
+            if s_rule == rule_id and s_file == file_path and s_tag == pattern_tag:
+                index[stable_key] = locator
+    return index
+
+
+def classify_findings(
+    findings: list[Finding], baseline: BaselineData
+) -> FindingClassification:
+    """Classify findings as new, shifted, or resolved relative to a baseline.
+
+    - **new**: finding not in baseline by either stable or legacy key
+    - **shifted**: finding matches via stable key (content hash) but NOT
+      via legacy key (line number changed)
+    - **resolved**: baseline entries not matched by any current finding
+
+    ``filter_new_findings()`` remains the simpler backward-compatible API;
+    this function provides richer information for PR comments.
+    """
+    matched_stable_keys: set[tuple[str, ...]] = set()
+    matched_legacy_keys: set[tuple[str, str, str]] = set()
+    locator_index = _build_baseline_locator_index(baseline)
+
+    new_findings: list[Finding] = []
+    shifted_findings: list[ShiftedFinding] = []
+
+    for f in findings:
+        stable_match = f.content_hash and f.stable_identity_key in baseline.stable_keys
+        legacy_match = f.identity_key in baseline.legacy_keys
+
+        if stable_match:
+            matched_stable_keys.add(f.stable_identity_key)
+        if legacy_match:
+            matched_legacy_keys.add(f.identity_key)
+
+        if stable_match and not legacy_match:
+            bl_locator = locator_index.get(
+                f.stable_identity_key,  # type: ignore[arg-type]
+                "(unknown)",
+            )
+            shifted_findings.append(ShiftedFinding(finding=f, baseline_locator=bl_locator))
+        elif not stable_match and not legacy_match:
+            new_findings.append(f)
+
+    resolved: list[tuple[str, ...]] = []
+    for stable_key in baseline.stable_keys:
+        if stable_key not in matched_stable_keys:
+            resolved.append(stable_key)
+    for legacy_key in baseline.legacy_keys:
+        if legacy_key not in matched_legacy_keys:
+            file_path = _strip_line_from_locator(legacy_key[1])
+            pseudo_stable = (legacy_key[0], file_path, legacy_key[2])
+            already_resolved = any(
+                r[0] == pseudo_stable[0]
+                and r[1] == pseudo_stable[1]
+                and r[2] == pseudo_stable[2]
+                for r in resolved
+                if len(r) >= 3
+            )
+            if not already_resolved:
+                resolved.append(legacy_key)
+
+    return FindingClassification(
+        new=new_findings,
+        shifted=shifted_findings,
+        resolved=resolved,
+    )
+
+
+__all__ = [
+    "BaselineData",
+    "FindingClassification",
+    "ShiftedFinding",
+    "classify_findings",
+    "filter_new_findings",
+    "load_baseline",
+]
