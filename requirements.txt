@@ -5,7 +5,7 @@
 #    pip-compile --annotation-style=line --output-file=requirements.txt --strip-extras pyproject.toml
 #
 annotated-types==0.7.0    # via pydantic
-anthropic==0.104.1        # via nfr-review (pyproject.toml)
+anthropic==0.105.2        # via nfr-review (pyproject.toml)
 anyio==4.13.0             # via anthropic, httpx
 certifi==2026.5.20        # via httpcore, httpx
 click==8.4.1              # via nfr-review (pyproject.toml)
@@ -14,7 +14,7 @@ docstring-parser==0.18.0  # via anthropic
 h11==0.16.0               # via httpcore
 httpcore==1.0.9           # via httpx
 httpx==0.28.1             # via anthropic
-idna==3.16                # via anyio, httpx
+idna==3.17                # via anyio, httpx
 jiter==0.15.0             # via anthropic
 packaging==26.2           # via nfr-review (pyproject.toml)
 pydantic==2.13.4          # via anthropic, nfr-review (pyproject.toml)
