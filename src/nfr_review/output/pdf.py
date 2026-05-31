@@ -87,7 +87,7 @@ _CSS = (  # noqa: E501
     ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
     ".urgency-short-term { color: #fd7e14; }\n"
     ".urgency-medium-term { color: #6c757d; }\n"
-    ".diagram-container { page-break-before: always;"
+    ".diagram-container { page-break-inside: avoid;"
     " margin: 0.5em 0; }\n"
     ".diagram-img { display: block; margin: 0 auto; }\n"
     ".finding { margin: 0.4em 0; padding: 6px 10px;"
@@ -105,6 +105,7 @@ _CSS = (  # noqa: E501
     ".provenance code { background: #f5f5f5; padding: 1px 4px;"
     " border-radius: 2px; }\n"
     ".section-break { page-break-before: always; }\n"
+    ".section-flow { page-break-before: auto; margin-top: 1.5em; }\n"
 )
 
 
@@ -467,11 +468,11 @@ def render_pdf(
         sections.append("<h2>Executive Summary (AI-generated)</h2>")
         sections.append(_exec_summary_html(exec_summary))
 
-    sections.append('<div class="section-break"></div>')
+    sections.append('<div class="section-flow"></div>')
     sections.append(_category_severity_table_html(all_findings, "Findings Summary"))
 
     if score_section_md:
-        sections.append('<div class="section-break"></div>')
+        sections.append('<div class="section-flow"></div>')
         sections.append(_md_deps_to_html(score_section_md))
 
     if diagram_paths:
@@ -485,17 +486,17 @@ def render_pdf(
                     f"{_embed_image(path)}</div>"
                 )
 
-    sections.append('<div class="section-break"></div>')
+    sections.append('<div class="section-flow"></div>')
     sections.append(_test_results_html(pytest_result))
 
     sections.append('<div class="section-break"></div>')
     sections.append(_findings_html(source_findings, "Source Code Findings"))
 
-    sections.append('<div class="section-break"></div>')
+    sections.append('<div class="section-flow"></div>')
     sections.append(_findings_html(test_findings, "Test Code Findings"))
 
     if adr_section_md:
-        sections.append('<div class="section-break"></div>')
+        sections.append('<div class="section-flow"></div>')
         adr_body = adr_section_md
         if adr_body.startswith("## "):
             adr_body = adr_body.split("\n", 1)[1] if "\n" in adr_body else ""
@@ -503,7 +504,7 @@ def render_pdf(
         sections.append(_md_deps_to_html(adr_body))
 
     if jdepend_section_md:
-        sections.append('<div class="section-break"></div>')
+        sections.append('<div class="section-flow"></div>')
         jdepend_body = jdepend_section_md
         if jdepend_body.startswith("## "):
             jdepend_body = jdepend_body.split("\n", 1)[1] if "\n" in jdepend_body else ""
@@ -511,7 +512,7 @@ def render_pdf(
         sections.append(_md_deps_to_html(jdepend_body))
 
     if derived_adrs_section_md:
-        sections.append('<div class="section-break"></div>')
+        sections.append('<div class="section-flow"></div>')
         derived_body = derived_adrs_section_md
         if derived_body.startswith("## "):
             derived_body = derived_body.split("\n", 1)[1] if "\n" in derived_body else ""
