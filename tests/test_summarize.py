@@ -79,7 +79,16 @@ _VALID_LLM_RESPONSE = json.dumps(
 
 class TestGenerateExecSummary:
     def test_returns_none_when_no_api_key(self) -> None:
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}, clear=False):
+        import nfr_review.llm_client as _lc
+
+        with (
+            patch.dict(
+                os.environ,
+                {"ANTHROPIC_API_KEY": "", "NFR_LLM_BACKEND": "api"},
+                clear=False,
+            ),
+            patch.object(_lc, "_ENV_LOADED", True),
+        ):
             result = generate_executive_summary(_make_run_result())
         assert result is None
 

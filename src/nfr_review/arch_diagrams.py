@@ -811,8 +811,9 @@ _MAX_MEMBERS_PER_CLASS = 15
 
 
 def _sanitize_member_type(raw: str) -> str:
-    """Escape characters in C++ type strings that break Mermaid syntax."""
-    return raw.replace("::", ".").replace("<", "~").replace(">", "~")
+    """Escape characters in type strings that break Mermaid syntax."""
+    s = raw.replace("::", ".").replace("<", "~").replace(">", "~")
+    return s.replace("[", "~").replace("]", "~").replace('"', "").replace("'", "")
 
 
 # Tokens to ignore when extracting type references from C++ field/return types.

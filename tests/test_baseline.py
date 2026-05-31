@@ -409,6 +409,10 @@ class TestCLIBaseline:
         """When all findings match the baseline, exit 0 (no regressions)."""
         # Suppress LLM-powered rules (adr-gap etc.) which are non-deterministic
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setenv("NFR_LLM_BACKEND", "api")
+        import nfr_review.llm_client as _lc
+
+        monkeypatch.setattr(_lc, "_ENV_LOADED", True)
 
         target = tmp_path / "repo"
         target.mkdir()
