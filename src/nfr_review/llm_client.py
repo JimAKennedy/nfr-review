@@ -151,7 +151,8 @@ class ClaudeClient:
             "text",
             "--max-turns",
             "1",
-            "--no-input",
+            "--allowedTools",
+            "",
         ]
         try:
             result = subprocess.run(  # nosec B603 — cmd is hardcoded, no user input
