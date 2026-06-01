@@ -36,7 +36,13 @@ _HIDDEN_DIRS = frozenset({".git", ".svn", ".hg", ".idea", ".vscode", "node_modul
 
 _TEST_PATTERNS = re.compile(
     r"(mvn\s+test|gradle\s+test|npm\s+test|pytest|go\s+test|cargo\s+test"
-    r"|dotnet\s+test|rake\s+test|bundle\s+exec\s+rspec)",
+    r"|dotnet\s+test|rake\s+test|bundle\s+exec\s+rspec"
+    r"|ctest\b|cmake\s+--build\s+\S+\s+--target\s+test)",
+    re.IGNORECASE,
+)
+
+_CMAKE_TEST_SIGNALS = re.compile(
+    r"(enable_testing\s*\(|add_test\s*\(|gtest_discover_tests\s*\()",
     re.IGNORECASE,
 )
 
@@ -83,6 +89,29 @@ def _has_test_step_in_text(text: str) -> bool:
 def _has_security_in_text(text: str) -> bool:
     text_lower = text.lower()
     return any(kw in text_lower for kw in _SECURITY_KEYWORDS)
+
+
+def _scan_cmake_test_signals(repo_path: Path) -> list[dict[str, Any]]:
+    """Scan CMakeLists.txt for test framework signals."""
+    results: list[dict[str, Any]] = []
+    for cmake_file in sorted(repo_path.rglob("CMakeLists.txt")):
+        rel = cmake_file.relative_to(repo_path)
+        if _is_hidden(rel):
+            continue
+        try:
+            text = cmake_file.read_text(errors="replace")
+        except OSError:
+            continue
+        matches = _CMAKE_TEST_SIGNALS.findall(text)
+        if matches:
+            signals = [m.split("(")[0].strip().lower() for m in matches]
+            results.append(
+                {
+                    "file_path": str(rel),
+                    "signals": sorted(set(signals)),
+                }
+            )
+    return results
 
 
 def _parse_github_actions(yaml_data: dict[str, Any]) -> dict[str, Any]:
@@ -245,11 +274,30 @@ class CiArtifactCollector:
                 )
             )
 
+        # Scan CMakeLists.txt for test framework signals
+        cmake_signals = _scan_cmake_test_signals(repo_path)
+        if cmake_signals:
+            evidence.append(
+                Evidence(
+                    collector_name=self.name,
+                    collector_version=self.version,
+                    locator="cmake-test-signals",
+                    kind="cmake-test-signals",
+                    payload={
+                        "files": cmake_signals,
+                        "has_test_framework": True,
+                    },
+                )
+            )
+
         # Emit summary
         if evidence:
-            ci_systems = list({ev.payload["ci_system"] for ev in evidence})
-            any_test = any(ev.payload["has_test_step"] for ev in evidence)
-            any_security = any(ev.payload["has_security_scan"] for ev in evidence)
+            pipelines = [e for e in evidence if e.kind == "ci-pipeline"]
+            ci_systems = list({ev.payload["ci_system"] for ev in pipelines})
+            any_test = any(ev.payload["has_test_step"] for ev in pipelines) or bool(
+                cmake_signals
+            )
+            any_security = any(ev.payload["has_security_scan"] for ev in pipelines)
             evidence.append(
                 Evidence(
                     collector_name=self.name,
@@ -257,7 +305,7 @@ class CiArtifactCollector:
                     locator="ci-summary",
                     kind="ci-summary",
                     payload={
-                        "total_pipelines": len(evidence),
+                        "total_pipelines": len(pipelines),
                         "ci_systems": ci_systems,
                         "any_test_step": any_test,
                         "any_security_scan": any_security,
