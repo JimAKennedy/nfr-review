@@ -239,7 +239,7 @@ class TestCollectorMetadata:
     def test_collects_all_fixture_files(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         file_paths = {e.payload["file_path"] for e in results}
-        assert len(file_paths) == 8
+        assert len(file_paths) == 9
 
     def test_log_statements_contract(self, collector: CppAstCollector) -> None:
         results = collector.collect(FIXTURES, config=None)

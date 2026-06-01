@@ -93,6 +93,153 @@ class TestCppRawMemory:
         result = rule.evaluate([], context=None)
         assert result.skipped
 
+    def test_suppresses_ownership_transfer_call(self) -> None:
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "ui.cpp",
+                "new_expressions": [
+                    {
+                        "line": 10,
+                        "file": "ui.cpp",
+                        "expression": 'new CTextLabel(CRect(), "Hi")',
+                        "parent_call": "addView",
+                        "line_comment": "",
+                    },
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "cpp-raw-new-suppressed"
+
+    def test_suppresses_refcount_safe_comment(self) -> None:
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "ui.cpp",
+                "new_expressions": [
+                    {
+                        "line": 20,
+                        "file": "ui.cpp",
+                        "expression": "new CView()",
+                        "parent_call": "",
+                        "line_comment": "REFCOUNT-SAFE: transferred to framework",
+                    },
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "cpp-raw-new-suppressed"
+
+    def test_suppresses_nolint_comment(self) -> None:
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "ui.cpp",
+                "new_expressions": [
+                    {
+                        "line": 30,
+                        "file": "ui.cpp",
+                        "expression": "new Foo()",
+                        "parent_call": "",
+                        "line_comment": "NOLINT",
+                    },
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "cpp-raw-new-suppressed"
+
+    def test_does_not_suppress_unknown_call(self) -> None:
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "ui.cpp",
+                "new_expressions": [
+                    {
+                        "line": 40,
+                        "file": "ui.cpp",
+                        "expression": "new int(42)",
+                        "parent_call": "doSomething",
+                        "line_comment": "",
+                    },
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].pattern_tag == "cpp-raw-new"
+
+    def test_backward_compat_no_new_fields(self) -> None:
+        """Evidence from older collector versions without parent_call/line_comment."""
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "old.cpp",
+                "new_expressions": [
+                    {"line": 5, "file": "old.cpp", "expression": "new int(1)"},
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].pattern_tag == "cpp-raw-new"
+
+
+# ---------------------------------------------------------------------------
+# CPP-001: Raw Memory — live fixture (vstgui_refcount.cpp via collector)
+# ---------------------------------------------------------------------------
+class TestCppRawMemoryRefcount:
+    @pytest.fixture()
+    def refcount_evidence(self, collector: CppAstCollector) -> list[Evidence]:
+        return collector.collect(AST_FIXTURES, config=None)
+
+    def test_fixture_has_suppressed_and_unsuppressed(
+        self, refcount_evidence: list[Evidence]
+    ) -> None:
+        rule = CppRawMemoryRule()
+        result = rule.evaluate(refcount_evidence, context=None)
+        tags = [f.pattern_tag for f in result.findings]
+        assert "cpp-raw-new-suppressed" in tags, (
+            "ownership-transfer patterns should be suppressed"
+        )
+        assert "cpp-raw-new" in tags, "plain raw new should still fire"
+
+    def test_addview_new_is_suppressed(self, refcount_evidence: list[Evidence]) -> None:
+        vstgui_ev = [
+            e
+            for e in refcount_evidence
+            if e.payload.get("file_path", "").endswith("vstgui_refcount.cpp")
+        ]
+        assert vstgui_ev, "vstgui_refcount.cpp fixture should produce evidence"
+        rule = CppRawMemoryRule()
+        result = rule.evaluate(vstgui_ev, context=None)
+        suppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new-suppressed"]
+        unsuppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new"]
+        assert len(suppressed) >= 4, f"expected >=4 suppressed, got {len(suppressed)}"
+        assert len(unsuppressed) >= 2, f"expected >=2 unsuppressed, got {len(unsuppressed)}"
+
 
 # ---------------------------------------------------------------------------
 # CPP-002: Include Guards

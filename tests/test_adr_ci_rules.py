@@ -133,7 +133,29 @@ class TestCiTestStageMissingRule:
         assert not result.skipped
         assert result.findings[0].rag == "red"
 
-    def test_skipped_when_no_evidence(self) -> None:
+    def test_green_when_cmake_test_signals_only(self) -> None:
+        ci_ev = _ci_evidence(has_test=False, has_security=False)
+        cmake_ev = Evidence(
+            collector_name="ci-artifact",
+            collector_version="0.1.0",
+            locator="cmake-test-signals",
+            kind="cmake-test-signals",
+            payload={
+                "has_test_framework": True,
+                "files": [
+                    {
+                        "file_path": "CMakeLists.txt",
+                        "signals": ["enable_testing", "add_test"],
+                    }
+                ],
+            },
+        )
+        result = self.rule.evaluate([ci_ev, cmake_ev], context=None)
+        assert not result.skipped
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].evidence_locator == "CMakeLists.txt"
+
+    def test_skipped_when_no_ci_evidence(self) -> None:
         result = self.rule.evaluate([], context=None)
         assert result.skipped
         assert "no CI pipeline evidence" in (result.skip_reason or "")

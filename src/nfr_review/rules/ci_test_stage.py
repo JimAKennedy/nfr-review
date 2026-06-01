@@ -33,12 +33,22 @@ class CiTestStageMissingRule:
 
         any_test = any(e.payload.get("has_test_step") for e in ci_pipelines)
 
-        if any_test:
-            pipelines_with = [
-                e.payload.get("file_path", e.locator)
-                for e in ci_pipelines
-                if e.payload.get("has_test_step")
-            ]
+        cmake_signals = [
+            e
+            for e in evidence
+            if e.collector_name == "ci-artifact" and e.kind == "cmake-test-signals"
+        ]
+        has_cmake_tests = any(e.payload.get("has_test_framework") for e in cmake_signals)
+
+        if any_test or has_cmake_tests:
+            if any_test:
+                locator = next(
+                    e.payload.get("file_path", e.locator)
+                    for e in ci_pipelines
+                    if e.payload.get("has_test_step")
+                )
+            else:
+                locator = cmake_signals[0].payload["files"][0]["file_path"]
             return RuleResult(
                 rule_id=self.id,
                 findings=[
@@ -47,8 +57,8 @@ class CiTestStageMissingRule:
                         rag="green",
                         severity="info",
                         summary="CI pipeline includes a test step.",
-                        recommendation="No action required — test step is present.",
-                        evidence_locator=pipelines_with[0],
+                        recommendation=("No action required — test step is present."),
+                        evidence_locator=locator,
                         collector_name="ci-artifact",
                         collector_version="0.1.0",
                         confidence=0.9,
