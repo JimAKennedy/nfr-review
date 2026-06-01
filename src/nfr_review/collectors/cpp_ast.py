@@ -38,6 +38,8 @@ Evidence payload contract (kind="cpp-ast-file"):
         line: int
         file: str
         expression: str — new type or new[]
+        parent_call: str — enclosing call function name, or "" if none
+        line_comment: str — trailing // comment text on the same line, or ""
     delete_expressions: list[dict] — each with:
         line: int
         file: str
@@ -414,6 +416,39 @@ def _extract_includes(root: Node, source: bytes) -> list[dict[str, Any]]:
     return includes
 
 
+def _parent_call_name(node: Node, source: bytes) -> str:
+    """If *node* is an argument to a call_expression, return the function name."""
+    cursor = node.parent
+    while cursor:
+        if cursor.type == "argument_list":
+            call = cursor.parent
+            if call and call.type == "call_expression":
+                func = call.child_by_field_name("function")
+                if func:
+                    if func.type == "field_expression":
+                        field = func.child_by_field_name("field")
+                        if field:
+                            return text(field, source)
+                    return text(func, source)
+            break
+        if cursor.type in ("call_expression", "declaration", "expression_statement"):
+            break
+        cursor = cursor.parent
+    return ""
+
+
+def _same_line_comment(node: Node, source: bytes) -> str:
+    """Return the text of a ``//`` comment on the same line as *node*, or ``""``."""
+    line_no = node.start_point[0]
+    src_lines = source.split(b"\n")
+    if line_no < len(src_lines):
+        line_text = src_lines[line_no].decode("utf-8", errors="replace")
+        idx = line_text.find("//")
+        if idx != -1:
+            return line_text[idx + 2 :].strip()
+    return ""
+
+
 def _extract_new_expressions(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for node in find_nodes(root, "new_expression"):
@@ -422,6 +457,8 @@ def _extract_new_expressions(root: Node, source: bytes, rel_path: str) -> list[d
                 "line": node.start_point[0] + 1,
                 "file": rel_path,
                 "expression": text(node, source).strip(),
+                "parent_call": _parent_call_name(node, source),
+                "line_comment": _same_line_comment(node, source),
             }
         )
     return results

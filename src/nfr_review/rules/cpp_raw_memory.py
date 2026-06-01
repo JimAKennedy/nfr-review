@@ -1,14 +1,42 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: CPP-001 — detects raw new/delete and malloc/free usage."""
+"""Rule: CPP-001 — detects raw new/delete and malloc/free usage.
+
+Ownership-transfer suppression: ``new`` inside a call to an ownership-
+transfer function (e.g. ``addView``, ``addParameter``) or annotated with
+a ``// REFCOUNT-SAFE`` line comment is treated as intentional and emits
+a green finding instead of amber/red.
+"""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+
+_OWNERSHIP_TRANSFER_RE = re.compile(
+    r"(?i)^(add(View|Parameter|Component|Unit|SubController|Entry|Animation)"
+    r"|remove(View|Component)|replace(View|Component)"
+    r"|attach(View|TextEdit)|registerController"
+    r"|shared|owned|makeOwned"
+    r"|create(Instance|View|Controller)?)"
+    r"$"
+)
+
+_SUPPRESS_COMMENT_RE = re.compile(r"(?i)REFCOUNT[- _]?SAFE|NOLINT|ownership.transfer")
+
+
+def _is_ownership_suppressed(expr: dict[str, Any]) -> bool:
+    parent = expr.get("parent_call", "")
+    if parent and _OWNERSHIP_TRANSFER_RE.match(parent):
+        return True
+    comment = expr.get("line_comment", "")
+    if comment and _SUPPRESS_COMMENT_RE.search(comment):
+        return True
+    return False
 
 
 class CppRawMemoryRule:
@@ -33,6 +61,26 @@ class CppRawMemoryRule:
                 has_smart_ptrs = True
 
             for expr in ev.payload.get("new_expressions", []):
+                if _is_ownership_suppressed(expr):
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            rag="green",
+                            severity="info",
+                            summary=(
+                                "Raw new expression suppressed — "
+                                "ownership-transfer or REFCOUNT-SAFE annotation."
+                            ),
+                            recommendation="No action required.",
+                            evidence_locator=f"{expr['file']}:{expr['line']}",
+                            collector_name=ev.collector_name,
+                            collector_version=ev.collector_version,
+                            confidence=0.9,
+                            pattern_tag="cpp-raw-new-suppressed",
+                            content_hash=compute_content_hash(expr.get("expression", "")),
+                        )
+                    )
+                    continue
                 findings.append(
                     Finding(
                         rule_id=self.id,
