@@ -39,6 +39,15 @@ void annotated_patterns() {
     auto* label = new CTextLabel(CRect(), "test"); // ownership transfer
 }
 
+// --- Safe: declare-then-pass (two-line ownership transfer) ---
+void two_line_patterns(CViewContainer* container) {
+    auto* label = new CTextLabel(CRect(), "test");
+    container->addView(label);
+
+    auto* view = new CView();
+    container->replaceView(nullptr, view);
+}
+
 // --- Unsafe: plain raw new, no suppression ---
 void bad_patterns() {
     int* leaked = new int(42);
