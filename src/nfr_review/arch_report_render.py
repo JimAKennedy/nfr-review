@@ -530,7 +530,7 @@ def _pdf_executive_summary_html(report: ArchReport) -> str:
 def _pdf_components_html(report: ArchReport) -> str:
     """Render components table as HTML on a landscape page."""
     if not report.components:
-        return "<h2>Components</h2><p>No components discovered.</p>"
+        return ""
     rows = []
     for comp in report.components:
         rows.append(
@@ -550,7 +550,7 @@ def _pdf_components_html(report: ArchReport) -> str:
 def _pdf_integrations_html(report: ArchReport) -> str:
     """Render integration points table as HTML on a landscape page."""
     if not report.integration_points:
-        return "<h2>Integration Points</h2><p>No integration points discovered.</p>"
+        return ""
     rows = []
     for ip in report.integration_points:
         protocol = _h(ip.protocol) if ip.protocol else "-"
@@ -621,13 +621,17 @@ def _pdf_test_coverage_html(report: ArchReport) -> str:
 def _pdf_risk_findings_html(report: ArchReport) -> str:
     """Render risk findings grouped by severity as HTML."""
     if not report.risk_findings:
-        return "<h2>Risk Findings</h2><p>No risks identified.</p>"
+        return (
+            '<div class="section-break">'
+            "<h2>Risk Findings</h2><p>No risks identified.</p>"
+            "</div>"
+        )
 
     by_severity: dict[str, list] = defaultdict(list)
     for risk in report.risk_findings:
         by_severity[risk.severity].append(risk)
 
-    parts = ["<h2>Risk Findings</h2>"]
+    parts = ['<div class="section-break">', "<h2>Risk Findings</h2>"]
     for sev in _SEVERITY_ORDER:
         group = by_severity.get(sev, [])
         if not group:
@@ -648,6 +652,7 @@ def _pdf_risk_findings_html(report: ArchReport) -> str:
             if risk.affected_component_ids:
                 parts.append(f"<br/>Affected: {_h(', '.join(risk.affected_component_ids))}")
             parts.append("</div>")
+    parts.append("</div>")
     return "\n".join(parts)
 
 
@@ -739,13 +744,17 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
 def _pdf_recommendations_html(report: ArchReport) -> str:
     """Render recommendations grouped by priority as HTML."""
     if not report.recommendations:
-        return "<h2>Recommendations</h2><p>No recommendations.</p>"
+        return (
+            '<div class="section-break">'
+            "<h2>Recommendations</h2><p>No recommendations.</p>"
+            "</div>"
+        )
 
     by_priority: dict[str, list] = defaultdict(list)
     for rec in report.recommendations:
         by_priority[rec.priority].append(rec)
 
-    parts = ["<h2>Recommendations</h2>"]
+    parts = ['<div class="section-break">', "<h2>Recommendations</h2>"]
     for pri in _PRIORITY_ORDER:
         group = by_priority.get(pri, [])
         if not group:
@@ -762,6 +771,7 @@ def _pdf_recommendations_html(report: ArchReport) -> str:
             if rec.affected_component_ids:
                 parts.append(f"<br/>Affected: {_h(', '.join(rec.affected_component_ids))}")
             parts.append("</div>")
+    parts.append("</div>")
     return "\n".join(parts)
 
 
@@ -790,17 +800,13 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
         "<h1>Architecture Report</h1>",
         _pdf_metadata_html(report),
         _pdf_executive_summary_html(report),
-        '<div class="section-break"></div>',
         _pdf_components_html(report),
-        '<div class="section-break"></div>',
         _pdf_integrations_html(report),
         _pdf_diagrams_html(report),
         _pdf_test_coverage_html(report),
-        '<div class="section-break"></div>',
         _pdf_risk_findings_html(report),
         _pdf_domain_model_html(report),
         _pdf_market_analysis_html(report),
-        '<div class="section-break"></div>',
         _pdf_recommendations_html(report),
     ]
 
@@ -888,6 +894,22 @@ def render_arch_report(
         else:
             logger.warning("Unknown format %r; skipping", fmt)
             results[fmt] = None
+
+    if report.diagrams:
+        from nfr_review.arch_diagrams import detect_orphan_nodes, render_orphans_markdown
+
+        orphans = detect_orphan_nodes(report.diagrams)
+        orphan_md = render_orphans_markdown(orphans)
+        orphan_path = output_dir / f"{prefix}-orphan-nodes.md"
+        orphan_path.write_text(orphan_md)
+        results["orphans"] = orphan_path
+        if orphans:
+            logger.info(
+                "Orphan nodes report: %d orphans across %d diagrams → %s",
+                len(orphans),
+                len({o.diagram_title for o in orphans}),
+                orphan_path,
+            )
 
     return results
 
