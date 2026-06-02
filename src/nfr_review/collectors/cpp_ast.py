@@ -416,6 +416,19 @@ def _extract_includes(root: Node, source: bytes) -> list[dict[str, Any]]:
     return includes
 
 
+def _call_func_name(func: Node, source: bytes) -> str:
+    """Extract the bare function name from a call_expression's function node."""
+    if func.type == "field_expression":
+        field = func.child_by_field_name("field")
+        if field:
+            return text(field, source)
+    if func.type == "qualified_identifier":
+        for child in reversed(func.children):
+            if child.type in ("identifier", "type_identifier", "destructor_name"):
+                return text(child, source)
+    return text(func, source)
+
+
 def _parent_call_name(node: Node, source: bytes) -> str:
     """If *node* is an argument to a call_expression, return the function name."""
     cursor = node.parent
@@ -425,15 +438,68 @@ def _parent_call_name(node: Node, source: bytes) -> str:
             if call and call.type == "call_expression":
                 func = call.child_by_field_name("function")
                 if func:
-                    if func.type == "field_expression":
-                        field = func.child_by_field_name("field")
-                        if field:
-                            return text(field, source)
-                    return text(func, source)
+                    return _call_func_name(func, source)
             break
         if cursor.type in ("call_expression", "declaration", "expression_statement"):
             break
         cursor = cursor.parent
+    return ""
+
+
+def _declared_var_name(node: Node, source: bytes) -> str:
+    """If *node* (a new_expression) is the initializer of a local variable,
+    return the variable name; otherwise ``""``."""
+    cursor = node.parent
+    while cursor:
+        if cursor.type == "init_declarator":
+            decl = cursor.child_by_field_name("declarator")
+            if decl:
+                target = decl
+                while target.type in ("pointer_declarator", "reference_declarator"):
+                    for child in target.children:
+                        if child.type in ("identifier", "field_identifier"):
+                            return text(child, source)
+                    break
+                if target.type in ("identifier", "field_identifier"):
+                    return text(target, source)
+            return ""
+        if cursor.type in (
+            "compound_statement",
+            "expression_statement",
+            "return_statement",
+        ):
+            return ""
+        cursor = cursor.parent
+    return ""
+
+
+def _scope_transfer_call(node: Node, source: bytes) -> str:
+    """If *node* is a new_expression assigned to a variable that is later
+    passed to a call within the same block, return that call's function name."""
+    var_name = _declared_var_name(node, source)
+    if not var_name:
+        return ""
+
+    stmt = node
+    while stmt.parent and stmt.parent.type != "compound_statement":
+        stmt = stmt.parent
+    if not stmt.parent or stmt.parent.type != "compound_statement":
+        return ""
+
+    sibling = stmt.next_named_sibling
+    checked = 0
+    while sibling and checked < 10:
+        for call_node in find_nodes(sibling, "call_expression"):
+            args = call_node.child_by_field_name("arguments")
+            if not args:
+                continue
+            for arg in args.children:
+                if arg.type == "identifier" and text(arg, source) == var_name:
+                    func = call_node.child_by_field_name("function")
+                    if func:
+                        return _call_func_name(func, source)
+        sibling = sibling.next_named_sibling
+        checked += 1
     return ""
 
 
@@ -452,12 +518,15 @@ def _same_line_comment(node: Node, source: bytes) -> str:
 def _extract_new_expressions(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for node in find_nodes(root, "new_expression"):
+        parent_call = _parent_call_name(node, source)
+        if not parent_call:
+            parent_call = _scope_transfer_call(node, source)
         results.append(
             {
                 "line": node.start_point[0] + 1,
                 "file": rel_path,
                 "expression": text(node, source).strip(),
-                "parent_call": _parent_call_name(node, source),
+                "parent_call": parent_call,
                 "line_comment": _same_line_comment(node, source),
             }
         )

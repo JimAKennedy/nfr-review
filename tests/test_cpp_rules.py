@@ -188,6 +188,31 @@ class TestCppRawMemory:
         result = rule.evaluate([ev], context=None)
         assert result.findings[0].pattern_tag == "cpp-raw-new"
 
+    def test_suppresses_qualified_call_name(self) -> None:
+        """Qualified names like FObject::createInstance are stripped to bare name."""
+        rule = CppRawMemoryRule()
+        ev = _make_evidence(
+            "cpp-ast-file",
+            {
+                "file_path": "ui.cpp",
+                "new_expressions": [
+                    {
+                        "line": 10,
+                        "file": "ui.cpp",
+                        "expression": "new FObject()",
+                        "parent_call": "createInstance",
+                        "line_comment": "",
+                    },
+                ],
+                "delete_expressions": [],
+                "smart_pointers": [],
+                "malloc_calls": [],
+            },
+        )
+        result = rule.evaluate([ev], context=None)
+        assert result.findings[0].rag == "green"
+        assert result.findings[0].pattern_tag == "cpp-raw-new-suppressed"
+
     def test_backward_compat_no_new_fields(self) -> None:
         """Evidence from older collector versions without parent_call/line_comment."""
         rule = CppRawMemoryRule()
@@ -226,6 +251,26 @@ class TestCppRawMemoryRefcount:
         )
         assert "cpp-raw-new" in tags, "plain raw new should still fire"
 
+    def test_scope_analysis_sets_parent_call(self, collector: CppAstCollector) -> None:
+        """Declare-then-pass populates parent_call via scope analysis."""
+        evidence = collector.collect(AST_FIXTURES, config=None)
+        vstgui_ev = [
+            e
+            for e in evidence
+            if e.payload.get("file_path", "").endswith("vstgui_refcount.cpp")
+        ]
+        assert vstgui_ev
+        new_exprs = vstgui_ev[0].payload["new_expressions"]
+        scope_hits = [
+            n
+            for n in new_exprs
+            if n.get("parent_call") in ("addView", "replaceView") and not n.get("line_comment")
+        ]
+        assert len(scope_hits) >= 2, (
+            f"expected >=2 scope-resolved parent_calls, got {len(scope_hits)}: "
+            f"{[(n['line'], n['parent_call']) for n in scope_hits]}"
+        )
+
     def test_addview_new_is_suppressed(self, refcount_evidence: list[Evidence]) -> None:
         vstgui_ev = [
             e
@@ -237,7 +282,7 @@ class TestCppRawMemoryRefcount:
         result = rule.evaluate(vstgui_ev, context=None)
         suppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new-suppressed"]
         unsuppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new"]
-        assert len(suppressed) >= 4, f"expected >=4 suppressed, got {len(suppressed)}"
+        assert len(suppressed) >= 7, f"expected >=7 suppressed, got {len(suppressed)}"
         assert len(unsuppressed) >= 2, f"expected >=2 unsuppressed, got {len(unsuppressed)}"
 
 

@@ -424,6 +424,34 @@ class TestCiHasTestsRule:
         )
         assert result.findings[0].rag == "green"
 
+    def test_green_ctest(self) -> None:
+        rule = CiHasTestsRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["ctest --output-on-failure"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
+    def test_green_cmake_target_test(self) -> None:
+        rule = CiHasTestsRule()
+        result = rule.evaluate(
+            _make_evidence(
+                _ci_payload(
+                    has_ci=True,
+                    ci_systems=["github-actions"],
+                    configs=[_gha_config(steps=["cmake --build build --target test"])],
+                )
+            ),
+            None,
+        )
+        assert result.findings[0].rag == "green"
+
     def test_amber_tests_in_one_of_many(self) -> None:
         rule = CiHasTestsRule()
         result = rule.evaluate(

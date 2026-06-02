@@ -13,7 +13,8 @@ from nfr_review.protocols import Band
 
 _TEST_PATTERNS = re.compile(
     r"(?:^|\s|/)(pytest|jest|mocha|cargo\s+test|go\s+test|dotnet\s+test|mvn\s+test"
-    r"|npm\s+test|yarn\s+test|phpunit|rspec|unittest|nose2|tox)(?:\s|$|\")",
+    r"|npm\s+test|yarn\s+test|phpunit|rspec|unittest|nose2|tox"
+    r"|ctest|cmake\s+--build\s+\S+\s+--target\s+test)(?:\s|$|\")",
     re.IGNORECASE,
 )
 
