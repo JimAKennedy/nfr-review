@@ -7,8 +7,10 @@ from __future__ import annotations
 import pytest
 
 from nfr_review.arch_diagrams import (
+    OrphanNode,
     _package_boundary,
     _safe_id,
+    detect_orphan_nodes,
     generate_all_diagrams,
     render_c4_code,
     render_c4_component,
@@ -17,6 +19,7 @@ from nfr_review.arch_diagrams import (
     render_c4_container,
     render_c4_context,
     render_class_diagram,
+    render_orphans_markdown,
     render_pipeline_diagram,
 )
 from nfr_review.arch_discovery import DvcPipeline, DvcStage
@@ -2044,3 +2047,117 @@ class TestPipelineDiagram:
         diagrams = generate_all_diagrams([comp], [])
         pipeline_diagrams = [d for d in diagrams if d.scope == "pipeline"]
         assert len(pipeline_diagrams) == 0
+
+
+# ---------------------------------------------------------------------------
+# Orphan node detection
+# ---------------------------------------------------------------------------
+
+
+class TestOrphanDetection:
+    def test_no_orphans_when_all_connected(self) -> None:
+        diagram = C4Diagram(
+            level="component",
+            title="All Connected",
+            scope="test",
+            mermaid=(
+                "flowchart TD\n"
+                "    subgraph grp[Group]\n"
+                "        svc_a[A]\n"
+                "        svc_b[B]\n"
+                "    end\n"
+                '    svc_a -->|"http"| svc_b\n'
+            ),
+            component_ids=[],
+        )
+        orphans = detect_orphan_nodes([diagram])
+        assert orphans == []
+
+    def test_detects_disconnected_node(self) -> None:
+        diagram = C4Diagram(
+            level="component",
+            title="Has Orphan",
+            scope="test",
+            mermaid=(
+                "flowchart TD\n"
+                "    subgraph grp[Group]\n"
+                "        svc_a[A]\n"
+                "        svc_b[B]\n"
+                "        svc_c[C]\n"
+                "    end\n"
+                '    svc_a -->|"http"| svc_b\n'
+            ),
+            component_ids=[],
+        )
+        orphans = detect_orphan_nodes([diagram])
+        assert len(orphans) == 1
+        assert orphans[0].node_id == "svc_c"
+        assert orphans[0].diagram_title == "Has Orphan"
+
+    def test_skips_class_diagrams(self) -> None:
+        diagram = C4Diagram(
+            level="code",
+            title="Class Diagram",
+            scope="classes",
+            mermaid="classDiagram\n    class Foo\n",
+            component_ids=[],
+        )
+        orphans = detect_orphan_nodes([diagram])
+        assert orphans == []
+
+    def test_skips_legend_nodes(self) -> None:
+        diagram = C4Diagram(
+            level="container",
+            title="Container",
+            scope="containers",
+            mermaid=(
+                "flowchart TD\n"
+                "    svc_a[A]\n"
+                "    svc_b[B]\n"
+                "    svc_a --> svc_b\n"
+                '    subgraph legend["Test Coverage"]\n'
+                "        leg_none[None]\n"
+                "        leg_minimal[Minimal]\n"
+                "    end\n"
+            ),
+            component_ids=[],
+        )
+        orphans = detect_orphan_nodes([diagram])
+        assert orphans == []
+
+    def test_multiple_diagrams(self) -> None:
+        d1 = C4Diagram(
+            level="component",
+            title="D1",
+            scope="s1",
+            mermaid="flowchart TD\n    orphan_a[A]\n",
+            component_ids=[],
+        )
+        d2 = C4Diagram(
+            level="component",
+            title="D2",
+            scope="s2",
+            mermaid=("flowchart TD\n    x[X]\n    y[Y]\n    x --> y\n"),
+            component_ids=[],
+        )
+        orphans = detect_orphan_nodes([d1, d2])
+        assert len(orphans) == 1
+        assert orphans[0].diagram_title == "D1"
+
+    def test_render_orphans_markdown_empty(self) -> None:
+        md = render_orphans_markdown([])
+        assert "No orphan nodes detected" in md
+
+    def test_render_orphans_markdown_with_data(self) -> None:
+        orphans = [
+            OrphanNode(
+                diagram_title="Container",
+                diagram_scope="containers",
+                diagram_level="container",
+                node_id="svc_orphan",
+            ),
+        ]
+        md = render_orphans_markdown(orphans)
+        assert "Total orphans: 1" in md
+        assert "svc_orphan" in md
+        assert "## Container" in md

@@ -9,6 +9,7 @@ from discovered components, integrations, and test coverage data.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from nfr_review.arch_discovery import DvcPipeline
@@ -1269,7 +1270,117 @@ def generate_all_diagrams(
     return diagrams
 
 
+# ===================================================================
+# Orphan detection — nodes with no edges in C4 diagrams
+# ===================================================================
+
+_MERMAID_EDGE_RE = re.compile(
+    r"^\s+(\S+)\s+(?:-->|-.->|<\|--|o--|\.\.>|\*--)"
+    r"(?:\|[^|]*\|)?\s*(\S+)",
+)
+_MERMAID_NODE_RE = re.compile(
+    r"^\s{4,}(\S+)\s*[\[({]",
+)
+_MERMAID_SUBGRAPH_RE = re.compile(r"^\s+subgraph\s+(\S+)")
+_MERMAID_CLASSDECL_RE = re.compile(r"^\s+class\s+(\S+)")
+_SKIP_IDS = frozenset({"end", "direction", "style", "classDef", "linkStyle"})
+
+
+@dataclass
+class OrphanNode:
+    """A node declared in a diagram but not connected by any edge."""
+
+    diagram_title: str
+    diagram_scope: str | None
+    diagram_level: str
+    node_id: str
+
+
+def detect_orphan_nodes(diagrams: list[C4Diagram]) -> list[OrphanNode]:
+    """Scan generated Mermaid diagrams for nodes that have no edges."""
+    orphans: list[OrphanNode] = []
+    for diagram in diagrams:
+        if diagram.mermaid.startswith("classDiagram"):
+            continue
+
+        lines = diagram.mermaid.split("\n")
+        declared: set[str] = set()
+        connected: set[str] = set()
+        subgraph_ids: set[str] = set()
+
+        for line in lines:
+            sg_m = _MERMAID_SUBGRAPH_RE.match(line)
+            if sg_m:
+                subgraph_ids.add(sg_m.group(1))
+                continue
+
+            edge_m = _MERMAID_EDGE_RE.match(line)
+            if edge_m:
+                connected.add(edge_m.group(1))
+                connected.add(edge_m.group(2))
+                continue
+
+            node_m = _MERMAID_NODE_RE.match(line)
+            if node_m:
+                nid = node_m.group(1)
+                if nid not in _SKIP_IDS and not nid.startswith("leg_"):
+                    declared.add(nid)
+
+        orphan_ids = declared - connected - subgraph_ids
+        for nid in sorted(orphan_ids):
+            orphans.append(
+                OrphanNode(
+                    diagram_title=diagram.title,
+                    diagram_scope=diagram.scope,
+                    diagram_level=diagram.level,
+                    node_id=nid,
+                )
+            )
+
+    return orphans
+
+
+def render_orphans_markdown(orphans: list[OrphanNode]) -> str:
+    """Render orphan node report as Markdown."""
+    lines = [
+        "# Mermaid Diagram Orphan Nodes",
+        "",
+        "Nodes declared in C4 diagrams but not connected by any edge.",
+        "These may indicate missing integration data or discovery gaps.",
+        "",
+    ]
+
+    if not orphans:
+        lines.append("No orphan nodes detected.")
+        lines.append("")
+        return "\n".join(lines)
+
+    by_diagram: dict[str, list[OrphanNode]] = {}
+    for o in orphans:
+        by_diagram.setdefault(o.diagram_title, []).append(o)
+
+    lines.append(f"**Total orphans: {len(orphans)}**")
+    lines.append("")
+
+    for title in sorted(by_diagram):
+        group = by_diagram[title]
+        scope = group[0].diagram_scope or "-"
+        level = group[0].diagram_level
+        lines.append(f"## {title}")
+        lines.append(f"*Scope: {scope} | Level: {level}*")
+        lines.append("")
+        lines.append("| Node ID | Notes |")
+        lines.append("|---------|-------|")
+        for o in group:
+            lines.append(f"| `{o.node_id}` | Investigate missing edges |")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 __all__ = [
+    "OrphanNode",
+    "detect_orphan_nodes",
     "generate_all_diagrams",
     "render_c4_code",
     "render_c4_component",
@@ -1278,5 +1389,6 @@ __all__ = [
     "render_c4_container",
     "render_c4_context",
     "render_class_diagram",
+    "render_orphans_markdown",
     "render_pipeline_diagram",
 ]
