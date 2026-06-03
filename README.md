@@ -55,7 +55,8 @@ nfr-review run /path/to/your/repo
 Optional extras:
 
 ```bash
-pip install "nfr-review[llm-anthropic]"  # LLM-powered analysis (executive summary, ADR drift, PII)
+pip install "nfr-review[llm-anthropic]"  # LLM via Anthropic API
+pip install "nfr-review[llm-openai]"     # LLM via OpenAI-compatible APIs (Ollama, Azure, OpenRouter)
 pip install "nfr-review[pdf]"            # PDF report generation
 pip install "nfr-review[scancode]"       # license compliance scanning
 pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
@@ -78,7 +79,7 @@ Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` s
 
 ### Optional: LLM features
 
-Install the `[llm-anthropic]` extra and set `ANTHROPIC_API_KEY` to enable LLM-powered analysis (executive summary, ADR drift detection, PII confirmation). Without it, these features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Three LLM backends are supported: Anthropic API (`[llm-anthropic]` extra), OpenAI-compatible APIs like Ollama (`[llm-openai]` extra), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
@@ -93,6 +94,7 @@ pip install nfr-review
 | Extra | What it adds |
 |-------|-------------|
 | `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
@@ -115,17 +117,43 @@ pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-## API key (optional)
+## LLM backend (optional)
 
-LLM-assisted rules (PII detection, ADR drift analysis) require the `[llm-anthropic]` extra and an API key:
+LLM-assisted rules (PII detection, ADR drift analysis) require an LLM backend. Three backends are supported:
 
+**Anthropic API** (default):
 ```bash
 pip install "nfr-review[llm-anthropic]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review run /path/to/repo
 ```
 
-Without the extra or the key, these rules are skipped gracefully and all other rules still run normally.
+**OpenAI-compatible** (Ollama, Azure OpenAI, OpenRouter):
+```bash
+pip install "nfr-review[llm-openai]"
+export NFR_LLM_PROVIDER=openai
+export NFR_LLM_MODEL=llama3
+export NFR_LLM_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama   # Ollama ignores this but the SDK requires it
+nfr-review run /path/to/repo
+```
+
+**Claude CLI** (Claude Code subscription, no API key needed):
+```bash
+export NFR_LLM_PROVIDER=claude-cli
+nfr-review run /path/to/repo
+```
+
+Configure via `nfr-review.yaml` for persistent settings:
+```yaml
+llm:
+  provider: openai              # anthropic | openai | claude-cli
+  model: llama3
+  base_url: http://localhost:11434/v1
+  api_key_env_var: OPENAI_API_KEY
+```
+
+Env vars (`NFR_LLM_PROVIDER`, `NFR_LLM_MODEL`, `NFR_LLM_BASE_URL`) override the config file. Without a backend configured, LLM features are skipped gracefully and all other rules still run normally.
 
 ## Usage
 
