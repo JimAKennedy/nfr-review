@@ -29,6 +29,7 @@ def _default_api_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure tests default to the 'api' backend and bypass .env loading."""
     monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
     monkeypatch.setenv("NFR_LLM_BACKEND", "api")
+    monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
 
@@ -335,6 +336,7 @@ class TestLlmConfig:
 
     def test_resolve_no_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("NFR_LLM_BACKEND", raising=False)
         monkeypatch.delenv("NFR_LLM_MODEL", raising=False)
         monkeypatch.delenv("NFR_LLM_BASE_URL", raising=False)
         cfg = LlmConfig()
@@ -356,6 +358,7 @@ class TestLlmConfig:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("NFR_LLM_BACKEND", raising=False)
         monkeypatch.delenv("NFR_LLM_MODEL", raising=False)
         monkeypatch.delenv("NFR_LLM_BASE_URL", raising=False)
         cfg = LlmConfig()
@@ -421,6 +424,35 @@ class TestCreateLlmClient:
         with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
             client = create_llm_client(cfg)
         assert isinstance(client, ClaudeCliClient)
+
+    def test_legacy_backend_env_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = create_llm_client()
+        assert isinstance(client, ClaudeCliClient)
+
+    def test_legacy_backend_api_maps_to_anthropic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.setenv("NFR_LLM_BACKEND", "api")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        client = create_llm_client()
+        assert isinstance(client, AnthropicClient)
+
+    def test_provider_takes_precedence_over_legacy_backend(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        cfg = LlmConfig(api_key_env_var="OPENAI_API_KEY")
+        client = create_llm_client(cfg)
+        assert isinstance(client, OpenAICompatibleClient)
 
 
 # ---------------------------------------------------------------------------
