@@ -45,16 +45,20 @@ See [docs/install.md](docs/install.md) for the full install guide (inputs, outpu
 ### Local CLI
 
 ```bash
-# Clone and install (requires Python 3.11+)
-git clone https://github.com/JimAKennedy/nfr-review.git
-cd nfr-review
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[dev]"
+# Install from PyPI (requires Python 3.11+)
+pip install nfr-review
 
 # Run against a target repository
 nfr-review run /path/to/your/repo
+```
+
+Optional extras:
+
+```bash
+pip install "nfr-review[llm-anthropic]"  # LLM-powered analysis (executive summary, ADR drift, PII)
+pip install "nfr-review[pdf]"            # PDF report generation
+pip install "nfr-review[scancode]"       # license compliance scanning
+pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
 ```
 
 ## Requirements
@@ -74,38 +78,54 @@ Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` s
 
 ### Optional: LLM features
 
-Set `ANTHROPIC_API_KEY` to enable LLM-powered analysis (executive summary, ADR drift detection, PII confirmation). Without it, these features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Install the `[llm-anthropic]` extra and set `ANTHROPIC_API_KEY` to enable LLM-powered analysis (executive summary, ADR drift detection, PII confirmation). Without it, these features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
+### From PyPI
+
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e .              # core CLI only
-pip install -e ".[scancode]"  # adds scancode-toolkit for license scanning
-pip install -e ".[dev]"       # includes pytest, ruff, pytest-cov
+pip install nfr-review
 ```
 
-Optional extras:
+### Optional extras
 
 | Extra | What it adds |
 |-------|-------------|
+| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
-## API key (optional)
-
-LLM-assisted rules (PII detection, ADR drift analysis) require an Anthropic API key. Set it as an environment variable:
+Install extras individually or combine them:
 
 ```bash
+pip install "nfr-review[llm-anthropic,pdf]"
+```
+
+### Development install (from source)
+
+```bash
+git clone https://github.com/JimAKennedy/nfr-review.git
+cd nfr-review
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+## API key (optional)
+
+LLM-assisted rules (PII detection, ADR drift analysis) require the `[llm-anthropic]` extra and an API key:
+
+```bash
+pip install "nfr-review[llm-anthropic]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review run /path/to/repo
 ```
 
-Without the key, these rules are skipped gracefully and all other rules still run normally.
+Without the extra or the key, these rules are skipped gracefully and all other rules still run normally.
 
 ## Usage
 
@@ -239,7 +259,7 @@ nfr-review deps --dot deps.dot --render-diagrams /path/to/target/repo
 | `--max-resolve-rounds N` | `2000` | Maximum resolver iterations for dependency analysis |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
-### Generate architecture documentation
+### Generate architecture documentation \[experimental\]
 
 ```bash
 # Generate architecture docs for a single repo (JSON + Markdown + PDF)

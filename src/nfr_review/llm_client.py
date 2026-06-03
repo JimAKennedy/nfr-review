@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Thin wrapper around the Anthropic SDK (or Claude CLI) for Band 2 LLM-augmented rules.
 
+The Anthropic SDK is an **optional** dependency.  Install it with::
+
+    pip install nfr-review[llm-anthropic]
+
 Set ``NFR_LLM_BACKEND`` to choose the backend:
 
 * ``api`` (default) — uses ``ANTHROPIC_API_KEY`` and the Anthropic Python SDK.
@@ -17,8 +21,12 @@ import os
 import shutil
 import subprocess  # nosec B404 — intentional: shells out to claude CLI
 from pathlib import Path
+from typing import Any
 
-import anthropic
+try:
+    import anthropic
+except ImportError:
+    anthropic = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +90,21 @@ class ClaudeClient:
 
         if self._backend == _BACKEND_CLI:
             self._cli_path: str | None = shutil.which("claude")
-            self._client: anthropic.Anthropic | None = None
+            self._client: Any | None = None
             if self._cli_path is None:
                 logger.warning("claude CLI not found on PATH; LLM calls will be unavailable")
         else:
             self._cli_path = None
             key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
             if key:
-                self._client = anthropic.Anthropic(api_key=key)
+                if anthropic is None:
+                    logger.warning(
+                        "anthropic SDK not installed; "
+                        "install nfr-review[llm-anthropic] for API access"
+                    )
+                    self._client = None
+                else:
+                    self._client = anthropic.Anthropic(api_key=key)
             else:
                 self._client = None
 
@@ -109,6 +124,11 @@ class ClaudeClient:
             if self._backend == _BACKEND_CLI:
                 raise LlmUnavailableError(
                     "claude CLI not found on PATH; cannot perform LLM analysis"
+                )
+            if anthropic is None:
+                raise LlmUnavailableError(
+                    "anthropic SDK not installed; "
+                    "install nfr-review[llm-anthropic] for LLM analysis"
                 )
             raise LlmUnavailableError(
                 "ANTHROPIC_API_KEY is not set; cannot perform LLM analysis"

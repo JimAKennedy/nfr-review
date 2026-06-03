@@ -1802,7 +1802,11 @@ def init_cmd(target: Path, dry_run: bool) -> None:
 
 @cli.command(
     "arch",
-    help="Generate architecture documentation for TARGET repository/repositories.",
+    help=(
+        "[EXPERIMENTAL] Generate architecture documentation for TARGET"
+        " repository/repositories."
+    ),
+    epilog="This command is experimental and its output format may change.",
 )
 @click.argument(
     "targets",
@@ -1868,6 +1872,11 @@ def arch_cmd(
     """Generate architecture documentation report."""
     from nfr_review.arch_orchestrator import run_arch_review
     from nfr_review.arch_report_render import render_arch_report
+
+    click.echo(
+        "WARNING: The arch command is experimental and subject to change.",
+        err=True,
+    )
 
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
