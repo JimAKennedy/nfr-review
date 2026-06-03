@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import struct
 import subprocess  # nosec B404 — args are hardcoded tool names, not user input
 import tempfile
 from pathlib import Path
@@ -99,9 +100,24 @@ def render_mermaid_to_png(
         if cfg_path is not None:
             cfg_path.unlink(missing_ok=True)
 
-    if output_path.exists() and output_path.stat().st_size > 0:
-        return output_path
-    return None
+    if not (output_path.exists() and output_path.stat().st_size > 0):
+        return None
+
+    if width is not None and scale >= 2:
+        raw = output_path.read_bytes()
+        if len(raw) >= 24 and raw[:8] == b"\x89PNG\r\n\x1a\n":
+            img_w = struct.unpack(">I", raw[16:20])[0]
+            min_expected = width * scale * 0.15
+            if img_w < min_expected:
+                logger.warning(
+                    "mmdc produced a %dpx-wide image (expected >=%dpx)"
+                    " — likely an error placeholder",
+                    img_w,
+                    int(min_expected),
+                )
+                return None
+
+    return output_path
 
 
 def render_mermaid_to_svg(

@@ -809,11 +809,13 @@ def render_c4_code(
 
 _ACCESS_SYMBOL = {"public": "+", "protected": "#", "private": "-"}
 _MAX_MEMBERS_PER_CLASS = 15
+_MAX_CLASSES_PER_DIAGRAM = 50
 
 
 def _sanitize_member_type(raw: str) -> str:
     """Escape characters in type strings that break Mermaid syntax."""
-    s = raw.replace("::", ".").replace("<", "~").replace(">", "~")
+    s = " ".join(raw.split())
+    s = s.replace("::", ".").replace("<", "~").replace(">", "~")
     s = s.replace("[", "~").replace("]", "~").replace('"', "").replace("'", "")
     s = s.replace(",", " |")
     return s
@@ -913,6 +915,7 @@ def render_class_diagram(
     title: str | None = None,
     *,
     group_by_namespace: bool = False,
+    suppress_external: set[str] | None = None,
 ) -> C4Diagram:
     """Render a Mermaid class diagram from enriched C++ AST class data.
 
@@ -933,6 +936,9 @@ def render_class_diagram(
             mermaid="classDiagram\n",
             component_ids=[],
         )
+
+    if len(class_data) > _MAX_CLASSES_PER_DIAGRAM:
+        class_data = class_data[:_MAX_CLASSES_PER_DIAGRAM]
 
     lines: list[str] = ["classDiagram"]
     known_names = {c["name"] for c in class_data if c.get("name")}
@@ -1010,6 +1016,8 @@ def render_class_diagram(
                 lines.append(f"    {bid} <|-- {cid}")
                 inheritance_pairs.add((name, base_name))
             else:
+                if suppress_external and base_name in suppress_external:
+                    continue
                 ext_id = _safe_id(base_name)
                 lines.append(f"    class {ext_id}")
                 lines.append(f"    <<external>> {ext_id}")
@@ -1107,6 +1115,323 @@ def render_class_diagram(
         mermaid=mermaid,
         component_ids=[],
     )
+
+
+# ===================================================================
+# Class diagram partitioning — multi-diagram with proxy cross-refs
+# ===================================================================
+
+_MIN_PARTITION_SIZE = 3
+
+
+@dataclass
+class ClassPartition:
+    """A group of classes rendered as a single diagram."""
+
+    diagram_index: int
+    label: str
+    classes: list[dict]
+
+
+def _build_class_adjacency(
+    class_data: list[dict],
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    """Build directed and undirected adjacency from class relationships.
+
+    Returns ``(directed, undirected)`` where *directed[A]* contains classes
+    that *A* references and *undirected[A]* contains all classes connected
+    to *A* in either direction.
+    """
+    known = {c["name"] for c in class_data if c.get("name")}
+    directed: dict[str, set[str]] = {n: set() for n in known}
+    undirected: dict[str, set[str]] = {n: set() for n in known}
+
+    for cls in class_data:
+        name = cls.get("name", "")
+        if not name or name not in known:
+            continue
+
+        refs: set[str] = set()
+        for base in cls.get("base_classes", []):
+            bname = base.get("name", "")
+            if bname in known and bname != name:
+                refs.add(bname)
+
+        for field in cls.get("fields", []):
+            for ref, _ in _extract_type_refs(field.get("type", ""), known):
+                if ref != name:
+                    refs.add(ref)
+
+        for method in cls.get("methods", []):
+            type_strs = [method.get("return_type", "")]
+            type_strs += [p.get("type", "") for p in method.get("parameters", [])]
+            for ts in type_strs:
+                for ref, _ in _extract_type_refs(ts, known):
+                    if ref != name:
+                        refs.add(ref)
+
+        for friend in cls.get("friends", []):
+            if friend in known and friend != name:
+                refs.add(friend)
+
+        outer = cls.get("outer_class", "")
+        if outer in known and outer != name:
+            refs.add(outer)
+
+        directed[name] = refs
+        for ref in refs:
+            undirected[name].add(ref)
+            undirected[ref].add(name)
+
+    return directed, undirected
+
+
+def partition_classes(
+    class_data: list[dict],
+    max_per_diagram: int = _MAX_CLASSES_PER_DIAGRAM,
+) -> list[ClassPartition]:
+    """Partition classes into diagram-sized groups using hybrid clustering.
+
+    Uses namespace groups as seeds, merges small groups, splits oversized
+    groups via BFS from the most-connected node, then enforces per-diagram
+    proxy budgets.
+    """
+    if not class_data:
+        return []
+
+    named = [c for c in class_data if c.get("name")]
+    if len(named) <= max_per_diagram:
+        return [ClassPartition(diagram_index=1, label="", classes=named)]
+
+    _, undirected = _build_class_adjacency(named)
+    cls_by_name: dict[str, dict] = {c["name"]: c for c in named}
+
+    ns_groups: dict[str, list[str]] = {}
+    for cls in named:
+        ns = cls.get("namespace", "") or ""
+        ns_groups.setdefault(ns, []).append(cls["name"])
+    partitions: list[set[str]] = [set(names) for names in ns_groups.values()]
+
+    def _cross_count(a: set[str], b: set[str]) -> int:
+        return sum(1 for n in a for nb in undirected.get(n, set()) if nb in b)
+
+    changed = True
+    while changed:
+        changed = False
+        for i in range(len(partitions)):
+            if len(partitions[i]) >= _MIN_PARTITION_SIZE:
+                continue
+            best_j, best_score = -1, -1
+            for j in range(len(partitions)):
+                if i == j or len(partitions[i]) + len(partitions[j]) > max_per_diagram:
+                    continue
+                score = _cross_count(partitions[i], partitions[j])
+                if score > best_score:
+                    best_score = score
+                    best_j = j
+            if best_j == -1:
+                for j in range(len(partitions)):
+                    if i != j and len(partitions[i]) + len(partitions[j]) <= max_per_diagram:
+                        best_j = j
+                        break
+            if best_j >= 0:
+                partitions[best_j] |= partitions[i]
+                partitions.pop(i)
+                changed = True
+                break
+
+    split: list[set[str]] = []
+    for part in partitions:
+        if len(part) <= max_per_diagram:
+            split.append(part)
+            continue
+        remaining = set(part)
+        while remaining:
+            budget = max(max_per_diagram - 3, max_per_diagram // 2)
+            if len(remaining) <= budget:
+                split.append(remaining)
+                break
+            start = max(
+                remaining,
+                key=lambda n: len(undirected.get(n, set()) & remaining),
+            )
+            cluster: set[str] = set()
+            queue = [start]
+            visited: set[str] = set()
+            while queue and len(cluster) < budget:
+                node = queue.pop(0)
+                if node in visited or node not in remaining:
+                    continue
+                visited.add(node)
+                cluster.add(node)
+                nbs = sorted(
+                    (undirected.get(node, set()) & remaining) - visited,
+                    key=lambda n: len(undirected.get(n, set()) & remaining),
+                    reverse=True,
+                )
+                queue.extend(nbs)
+            if not cluster:
+                cluster.add(remaining.pop())
+            split.append(cluster)
+            remaining -= cluster
+
+    partition_lists = [list(p) for p in split]
+
+    def _connected_diagrams(idx: int) -> int:
+        names = set(partition_lists[idx])
+        return sum(
+            1
+            for j, other in enumerate(partition_lists)
+            if j != idx and _cross_count(names, set(other)) > 0
+        )
+
+    final: list[list[str]] = []
+    for i, plist in enumerate(partition_lists):
+        proxy_count = _connected_diagrams(i)
+        budget = max_per_diagram - proxy_count
+        if len(plist) <= budget or budget < 1:
+            final.append(plist)
+        else:
+            final.append(plist[:budget])
+            overflow = plist[budget:]
+            if overflow:
+                final.append(overflow)
+
+    result: list[ClassPartition] = []
+    for i, names in enumerate(final):
+        classes = [cls_by_name[n] for n in names if n in cls_by_name]
+        if not classes:
+            continue
+        ns_counts: dict[str, int] = {}
+        for cls in classes:
+            ns = cls.get("namespace", "") or ""
+            ns_counts[ns] = ns_counts.get(ns, 0) + 1
+        label = max(ns_counts, key=lambda k: ns_counts[k]) if ns_counts else ""
+        result.append(ClassPartition(diagram_index=i + 1, label=label, classes=classes))
+
+    return result
+
+
+def render_partitioned_class_diagrams(
+    class_data: list[dict],
+    title_prefix: str = "Class Diagram",
+    *,
+    group_by_namespace: bool = False,
+    max_per_diagram: int = _MAX_CLASSES_PER_DIAGRAM,
+) -> list[C4Diagram]:
+    """Render class data as one or more diagrams with proxy cross-references.
+
+    When the data fits in a single diagram, delegates to
+    ``render_class_diagram``.  Otherwise partitions the classes and
+    adds proxy nodes with labelled edges for cross-partition
+    relationships.
+    """
+    partitions = partition_classes(class_data, max_per_diagram)
+
+    if not partitions:
+        return [
+            C4Diagram(
+                level="code",
+                title=title_prefix,
+                scope="classes",
+                mermaid="classDiagram\n",
+                component_ids=[],
+            )
+        ]
+
+    if len(partitions) == 1:
+        return [
+            render_class_diagram(
+                partitions[0].classes,
+                title=title_prefix,
+                group_by_namespace=group_by_namespace,
+            )
+        ]
+
+    name_to_part: dict[str, int] = {}
+    for part in partitions:
+        for cls in part.classes:
+            name = cls.get("name", "")
+            if name:
+                name_to_part[name] = part.diagram_index
+
+    directed, _ = _build_class_adjacency(class_data)
+    all_partitioned: set[str] = set(name_to_part.keys())
+
+    diagrams: list[C4Diagram] = []
+    for part in partitions:
+        title = f"{title_prefix} {part.diagram_index}"
+        if part.label:
+            title += f" — {part.label}"
+
+        local_names = {c["name"] for c in part.classes if c.get("name")}
+        cross_names = all_partitioned - local_names
+
+        diagram = render_class_diagram(
+            part.classes,
+            title=title,
+            group_by_namespace=group_by_namespace,
+            suppress_external=cross_names,
+        )
+
+        outgoing: dict[int, list[tuple[str, str]]] = {}
+        for cls in part.classes:
+            name = cls.get("name", "")
+            if not name:
+                continue
+            for ref in directed.get(name, set()):
+                if ref not in local_names:
+                    tgt = name_to_part.get(ref)
+                    if tgt is not None and tgt != part.diagram_index:
+                        outgoing.setdefault(tgt, []).append((name, ref))
+
+        incoming: dict[int, list[tuple[str, str]]] = {}
+        for other in partitions:
+            if other.diagram_index == part.diagram_index:
+                continue
+            for cls in other.classes:
+                oname = cls.get("name", "")
+                if not oname:
+                    continue
+                for ref in directed.get(oname, set()):
+                    if ref in local_names:
+                        incoming.setdefault(other.diagram_index, []).append((oname, ref))
+
+        connected = set(outgoing.keys()) | set(incoming.keys())
+        if connected:
+            extra: list[str] = []
+            for diag_idx in sorted(connected):
+                target = next(p for p in partitions if p.diagram_index == diag_idx)
+                proxy_id = _safe_id(f"proxy_D{diag_idx}")
+                label_text = f"Diagram {diag_idx}"
+                if target.label:
+                    label_text += f": {target.label}"
+                extra.append(f"    class {proxy_id}")
+                extra.append(f"    <<{label_text}>> {proxy_id}")
+
+                seen: set[tuple[str, str, str]] = set()
+                for local_cls, remote_cls in outgoing.get(diag_idx, []):
+                    key = (local_cls, remote_cls, "to")
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    lid = _safe_id(local_cls)
+                    extra.append(f'    {lid} ..> {proxy_id} : "to {remote_cls}"')
+
+                for remote_cls, local_cls in incoming.get(diag_idx, []):
+                    key = (remote_cls, local_cls, "from")
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    lid = _safe_id(local_cls)
+                    extra.append(f'    {proxy_id} ..> {lid} : "from {remote_cls}"')
+
+            augmented = diagram.mermaid.rstrip("\n") + "\n" + "\n".join(extra) + "\n"
+            diagram = diagram.model_copy(update={"mermaid": augmented})
+
+        diagrams.append(diagram)
+
+    return diagrams
 
 
 # ===================================================================
@@ -1259,11 +1584,17 @@ def generate_all_diagrams(
             by_lang.setdefault(lang, []).append(cls)
         if len(by_lang) > 1:
             for lang in sorted(by_lang):
-                diagrams.append(
-                    render_class_diagram(by_lang[lang], title=f"Class Diagram ({lang})")
+                diagrams.extend(
+                    render_partitioned_class_diagrams(
+                        by_lang[lang],
+                        title_prefix=f"Class Diagram ({lang})",
+                        group_by_namespace=True,
+                    )
                 )
         else:
-            diagrams.append(render_class_diagram(class_data))
+            diagrams.extend(
+                render_partitioned_class_diagrams(class_data, group_by_namespace=True)
+            )
 
     if pipeline_data:
         for pipeline in pipeline_data:
@@ -1381,9 +1712,11 @@ def render_orphans_markdown(orphans: list[OrphanNode]) -> str:
 
 
 __all__ = [
+    "ClassPartition",
     "OrphanNode",
     "detect_orphan_nodes",
     "generate_all_diagrams",
+    "partition_classes",
     "render_c4_code",
     "render_c4_component",
     "render_c4_component_detail",
@@ -1392,5 +1725,6 @@ __all__ = [
     "render_c4_context",
     "render_class_diagram",
     "render_orphans_markdown",
+    "render_partitioned_class_diagrams",
     "render_pipeline_diagram",
 ]

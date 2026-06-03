@@ -665,7 +665,7 @@ def _pdf_domain_model_html(report: ArchReport) -> str:
         return ""
 
     dm = report.domain_model
-    parts = ['<div class="section-break"></div>', "<h2>Domain Model</h2>"]
+    parts: list[str] = []
 
     if dm.entities:
         rows = []
@@ -678,18 +678,25 @@ def _pdf_domain_model_html(report: ArchReport) -> str:
                 f"<td>{ctx}</td><td>{attrs}</td></tr>"
             )
         parts.append(
+            '<div class="landscape-page">'
+            "<h2>Domain Model</h2>"
             "<h3>Entities</h3>"
-            "<table><thead><tr><th>Name</th><th>Description</th>"
+            '<table class="wide-table"><thead><tr><th>Name</th><th>Description</th>'
             "<th>Bounded Context</th><th>Attributes</th>"
             f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+            "</div>"
         )
+    else:
+        parts.append('<div class="section-break"><h2>Domain Model</h2></div>')
 
     if dm.bounded_contexts:
+        parts.append('<div class="section-break">')
         parts.append("<h3>Bounded Contexts</h3>")
         for bc in dm.bounded_contexts:
             parts.append(f"<p><strong>{_h(bc.name)}</strong> &mdash; {_h(bc.description)}</p>")
             if bc.entities:
                 parts.append(f"<p>Entities: {_h(', '.join(bc.entities))}</p>")
+        parts.append("</div>")
 
     if dm.context_map_mermaid:
         result = _render_mermaid_to_img(dm.context_map_mermaid)
@@ -716,7 +723,7 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
         return ""
 
     ma = report.market_analysis
-    parts = ['<div class="section-break"></div>', "<h2>Market Analysis</h2>"]
+    parts = ['<div class="section-break">', "<h2>Market Analysis</h2>"]
 
     parts.append(f"<p><strong>Overall maturity:</strong> {_h(ma.overall_maturity)}</p>")
     if ma.maturity_rationale:
@@ -725,6 +732,7 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
         parts.append(
             f"<p><strong>Differentiation:</strong> {_h(ma.differentiation_summary)}</p>"
         )
+    parts.append("</div>")
 
     if ma.comparisons:
         rows = []
@@ -735,10 +743,12 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
                 f"<td>{_h(comp.relative_positioning)}</td></tr>"
             )
         parts.append(
+            '<div class="landscape-page">'
             "<h3>Comparisons</h3>"
-            "<table><thead><tr><th>Name</th><th>Description</th>"
+            '<table class="wide-table"><thead><tr><th>Name</th><th>Description</th>'
             "<th>Maturity</th><th>Positioning</th>"
             f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+            "</div>"
         )
 
     return "\n".join(parts)
