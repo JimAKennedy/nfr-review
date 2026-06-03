@@ -1,4 +1,4 @@
-"""Tests for nfr_review.llm_client — ClaudeClient and serialize_evidence_bundle."""
+"""Tests for nfr_review.llm_client — backends, factory, serialize."""
 
 from __future__ import annotations
 
@@ -11,12 +11,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import nfr_review.llm_client as _llm_mod
+from nfr_review.config import LlmConfig
 from nfr_review.llm_client import (
-    LLM_MODEL,
+    AnthropicClient,
+    ClaudeCliClient,
     ClaudeClient,
     LlmUnavailableError,
+    OpenAICompatibleClient,
+    create_llm_client,
     serialize_evidence_bundle,
 )
+from nfr_review.protocols import LlmClient
 
 
 @pytest.fixture(autouse=True)
@@ -185,7 +190,7 @@ class TestClaudeClientAnalyze:
 
         assert result == "LLM says no PII found"
         mock_client_instance.messages.create.assert_called_once_with(
-            model=LLM_MODEL,
+            model="claude-sonnet-4-6-20250514",
             max_tokens=1024,
             messages=[
                 {
@@ -290,3 +295,412 @@ class TestSerializeEvidenceBundle:
         result = serialize_evidence_bundle(items, max_bytes=100)
         assert result == "[]"
         assert len(result.encode()) <= 100
+
+
+# ---------------------------------------------------------------------------
+# LlmClient protocol conformance
+# ---------------------------------------------------------------------------
+
+
+class TestLlmClientProtocol:
+    def test_claude_client_satisfies_protocol(self) -> None:
+        assert isinstance(ClaudeClient(), LlmClient)
+
+    def test_anthropic_client_satisfies_protocol(self) -> None:
+        client = AnthropicClient(model="test", api_key="k")
+        assert isinstance(client, LlmClient)
+
+    def test_claude_cli_client_satisfies_protocol(self) -> None:
+        with patch("nfr_review.llm_client.shutil.which", return_value=None):
+            client = ClaudeCliClient()
+        assert isinstance(client, LlmClient)
+
+    def test_openai_client_satisfies_protocol(self) -> None:
+        client = OpenAICompatibleClient(model="test", api_key="k")
+        assert isinstance(client, LlmClient)
+
+
+# ---------------------------------------------------------------------------
+# LlmConfig
+# ---------------------------------------------------------------------------
+
+
+class TestLlmConfig:
+    def test_defaults(self) -> None:
+        cfg = LlmConfig()
+        assert cfg.provider == "anthropic"
+        assert cfg.model == "claude-sonnet-4-6-20250514"
+        assert cfg.base_url is None
+        assert cfg.api_key_env_var == "ANTHROPIC_API_KEY"
+
+    def test_resolve_no_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("NFR_LLM_MODEL", raising=False)
+        monkeypatch.delenv("NFR_LLM_BASE_URL", raising=False)
+        cfg = LlmConfig()
+        resolved = cfg.resolve()
+        assert resolved.provider == "anthropic"
+        assert resolved.model == "claude-sonnet-4-6-20250514"
+
+    def test_resolve_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("NFR_LLM_MODEL", "gpt-4o")
+        monkeypatch.setenv("NFR_LLM_BASE_URL", "http://localhost:11434/v1")
+        cfg = LlmConfig()
+        resolved = cfg.resolve()
+        assert resolved.provider == "openai"
+        assert resolved.model == "gpt-4o"
+        assert resolved.base_url == "http://localhost:11434/v1"
+
+    def test_resolve_returns_self_when_no_changes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("NFR_LLM_MODEL", raising=False)
+        monkeypatch.delenv("NFR_LLM_BASE_URL", raising=False)
+        cfg = LlmConfig()
+        resolved = cfg.resolve()
+        assert resolved is cfg
+
+    def test_invalid_provider_rejected(self) -> None:
+        with pytest.raises(ValueError, match="Input should be"):
+            LlmConfig(provider="bogus")  # type: ignore[arg-type]
+
+    def test_custom_api_key_env_var(self) -> None:
+        cfg = LlmConfig(provider="openai", api_key_env_var="OPENAI_API_KEY")
+        assert cfg.api_key_env_var == "OPENAI_API_KEY"
+
+
+# ---------------------------------------------------------------------------
+# create_llm_client factory
+# ---------------------------------------------------------------------------
+
+
+class TestCreateLlmClient:
+    def test_default_creates_anthropic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        client = create_llm_client()
+        assert isinstance(client, AnthropicClient)
+
+    def test_anthropic_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+        cfg = LlmConfig(provider="anthropic", model="claude-haiku-4-5-20251001")
+        client = create_llm_client(cfg)
+        assert isinstance(client, AnthropicClient)
+        assert client._model == "claude-haiku-4-5-20251001"
+
+    def test_openai_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+        cfg = LlmConfig(
+            provider="openai",
+            model="gpt-4o",
+            api_key_env_var="OPENAI_API_KEY",
+            base_url="http://localhost:11434/v1",
+        )
+        client = create_llm_client(cfg)
+        assert isinstance(client, OpenAICompatibleClient)
+        assert client._model == "gpt-4o"
+
+    def test_claude_cli_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        cfg = LlmConfig(provider="claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = create_llm_client(cfg)
+        assert isinstance(client, ClaudeCliClient)
+        assert client.available is True
+
+    def test_env_override_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "claude-cli")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        cfg = LlmConfig(provider="anthropic")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = create_llm_client(cfg)
+        assert isinstance(client, ClaudeCliClient)
+
+
+# ---------------------------------------------------------------------------
+# AnthropicClient
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicClientNew:
+    def test_unavailable_when_sdk_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "anthropic", None)
+        client = AnthropicClient(model="test", api_key="key")
+        assert client.available is False
+
+    def test_raises_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "anthropic", None)
+        client = AnthropicClient(model="test", api_key="key")
+        with pytest.raises(LlmUnavailableError, match="anthropic SDK not installed"):
+            client.analyze("prompt", "evidence")
+
+    @patch("nfr_review.llm_client.anthropic", create=True)
+    def test_analyze_returns_text(
+        self, mock_anthropic: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_block = MagicMock()
+        mock_block.text = "result text"
+        mock_response = MagicMock()
+        mock_response.content = [mock_block]
+        mock_instance = MagicMock()
+        mock_instance.messages.create.return_value = mock_response
+        mock_anthropic.Anthropic.return_value = mock_instance
+
+        client = AnthropicClient(model="claude-test", api_key="key")
+        result = client.analyze("prompt", "evidence")
+        assert result == "result text"
+        mock_instance.messages.create.assert_called_once_with(
+            model="claude-test",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": "prompt\n\nevidence"}],
+        )
+
+
+# ---------------------------------------------------------------------------
+# ClaudeCliClient
+# ---------------------------------------------------------------------------
+
+
+class TestClaudeCliClientNew:
+    def test_unavailable_when_missing(self) -> None:
+        with patch("nfr_review.llm_client.shutil.which", return_value=None):
+            client = ClaudeCliClient()
+        assert client.available is False
+
+    def test_available_when_found(self) -> None:
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeCliClient()
+        assert client.available is True
+
+    def test_raises_when_unavailable(self) -> None:
+        with patch("nfr_review.llm_client.shutil.which", return_value=None):
+            client = ClaudeCliClient()
+        with pytest.raises(LlmUnavailableError, match="claude CLI not found"):
+            client.analyze("prompt", "evidence")
+
+    def test_returns_stdout(self) -> None:
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeCliClient()
+        mock_result = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="  result\n", stderr=""
+        )
+        with patch("nfr_review.llm_client.subprocess.run", return_value=mock_result):
+            result = client.analyze("prompt", "evidence")
+        assert result == "result"
+
+
+# ---------------------------------------------------------------------------
+# OpenAICompatibleClient
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAICompatibleClient:
+    def test_unavailable_when_sdk_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "openai_mod", None)
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        assert client.available is False
+
+    def test_raises_when_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "openai_mod", None)
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        with pytest.raises(LlmUnavailableError, match="openai SDK not installed"):
+            client.analyze("prompt", "evidence")
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_available_when_sdk_present(self, mock_openai: MagicMock) -> None:
+        mock_openai.OpenAI.return_value = MagicMock()
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        assert client.available is True
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_analyze_returns_text(self, mock_openai: MagicMock) -> None:
+        mock_message = MagicMock()
+        mock_message.content = "OpenAI says hello"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_instance = MagicMock()
+        mock_instance.chat.completions.create.return_value = mock_response
+        mock_openai.OpenAI.return_value = mock_instance
+
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        result = client.analyze("prompt", "evidence")
+        assert result == "OpenAI says hello"
+        mock_instance.chat.completions.create.assert_called_once_with(
+            model="gpt-4o",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": "prompt\n\nevidence"}],
+        )
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_analyze_custom_max_tokens(self, mock_openai: MagicMock) -> None:
+        mock_message = MagicMock()
+        mock_message.content = "short"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_instance = MagicMock()
+        mock_instance.chat.completions.create.return_value = mock_response
+        mock_openai.OpenAI.return_value = mock_instance
+
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        client.analyze("prompt", "evidence", max_tokens=512)
+        call_kwargs = mock_instance.chat.completions.create.call_args[1]
+        assert call_kwargs["max_tokens"] == 512
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_analyze_raises_on_null_content(self, mock_openai: MagicMock) -> None:
+        mock_message = MagicMock()
+        mock_message.content = None
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_instance = MagicMock()
+        mock_instance.chat.completions.create.return_value = mock_response
+        mock_openai.OpenAI.return_value = mock_instance
+
+        client = OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        with pytest.raises(TypeError, match="no content"):
+            client.analyze("prompt", "evidence")
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_base_url_passed_to_sdk(self, mock_openai: MagicMock) -> None:
+        mock_openai.OpenAI.return_value = MagicMock()
+        OpenAICompatibleClient(
+            model="llama3", api_key="ollama", base_url="http://localhost:11434/v1"
+        )
+        mock_openai.OpenAI.assert_called_once_with(
+            api_key="ollama", base_url="http://localhost:11434/v1"
+        )
+
+    @patch("nfr_review.llm_client.openai_mod", create=True)
+    def test_no_base_url_omits_kwarg(self, mock_openai: MagicMock) -> None:
+        mock_openai.OpenAI.return_value = MagicMock()
+        OpenAICompatibleClient(model="gpt-4o", api_key="key")
+        mock_openai.OpenAI.assert_called_once_with(api_key="key")
+
+
+# ---------------------------------------------------------------------------
+# Factory — OpenAI-specific paths
+# ---------------------------------------------------------------------------
+
+
+class TestCreateLlmClientOpenAI:
+    def test_openai_with_base_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+        cfg = LlmConfig(
+            provider="openai",
+            model="llama3",
+            api_key_env_var="OPENAI_API_KEY",
+            base_url="http://localhost:11434/v1",
+        )
+        client = create_llm_client(cfg)
+        assert isinstance(client, OpenAICompatibleClient)
+        assert client._model == "llama3"
+
+    def test_openai_env_override_from_anthropic(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("NFR_LLM_MODEL", "gpt-4o-mini")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+        cfg = LlmConfig(provider="anthropic")
+        client = create_llm_client(cfg)
+        assert isinstance(client, OpenAICompatibleClient)
+        assert client._model == "gpt-4o-mini"
+
+    def test_openai_missing_key_still_creates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        cfg = LlmConfig(provider="openai", api_key_env_var="OPENAI_API_KEY")
+        client = create_llm_client(cfg)
+        assert isinstance(client, OpenAICompatibleClient)
+
+
+# ---------------------------------------------------------------------------
+# Cross-backend integration: config YAML → load_config → create_llm_client
+# ---------------------------------------------------------------------------
+
+
+class TestCrossBackendConfigIntegration:
+    """Verify the full config → factory → client flow for each provider."""
+
+    def test_cross_backend_anthropic_from_yaml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        cfg_file = tmp_path / "nfr-review.yaml"
+        cfg_file.write_text(
+            "version: 1\nllm:\n  provider: anthropic\n  model: claude-haiku-4-5-20251001\n"
+        )
+        from nfr_review.config import load_config
+
+        config = load_config(cfg_file)
+        client = create_llm_client(config.llm)
+        assert isinstance(client, AnthropicClient)
+        assert client._model == "claude-haiku-4-5-20251001"
+
+    def test_cross_backend_openai_from_yaml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        cfg_file = tmp_path / "nfr-review.yaml"
+        cfg_file.write_text(
+            "version: 1\n"
+            "llm:\n"
+            "  provider: openai\n"
+            "  model: llama3\n"
+            "  base_url: http://localhost:11434/v1\n"
+            "  api_key_env_var: OPENAI_API_KEY\n"
+        )
+        from nfr_review.config import load_config
+
+        config = load_config(cfg_file)
+        client = create_llm_client(config.llm)
+        assert isinstance(client, OpenAICompatibleClient)
+        assert client._model == "llama3"
+
+    def test_cross_backend_claude_cli_from_yaml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.delenv("NFR_LLM_PROVIDER", raising=False)
+        cfg_file = tmp_path / "nfr-review.yaml"
+        cfg_file.write_text("version: 1\nllm:\n  provider: claude-cli\n")
+        from nfr_review.config import load_config
+
+        config = load_config(cfg_file)
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = create_llm_client(config.llm)
+        assert isinstance(client, ClaudeCliClient)
+        assert client.available is True
+
+    def test_cross_backend_env_overrides_yaml(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setattr(_llm_mod, "_ENV_LOADED", True)
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "claude-cli")
+        cfg_file = tmp_path / "nfr-review.yaml"
+        cfg_file.write_text("version: 1\nllm:\n  provider: anthropic\n")
+        from nfr_review.config import load_config
+
+        config = load_config(cfg_file)
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = create_llm_client(config.llm)
+        assert isinstance(client, ClaudeCliClient)

@@ -235,22 +235,16 @@ include breaking changes without notice.
 
 ## 7. LLM features
 
-nfr-review includes optional LLM-powered analysis. Install the `[llm-anthropic]`
-extra to enable it:
+nfr-review includes optional LLM-powered analysis with three backend options:
 
-```bash
-pip install "nfr-review[llm-anthropic]"
-```
+| Backend | Extra to install | Auth | Best for |
+|---------|-----------------|------|----------|
+| **Anthropic API** (default) | `[llm-anthropic]` | `ANTHROPIC_API_KEY` | CI, production use |
+| **OpenAI-compatible** | `[llm-openai]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
+| **Claude CLI** | None | Claude Code subscription | Local dev, no API key needed |
 
-Two backends are supported:
-
-- **Anthropic API** (`NFR_LLM_BACKEND=api`) — pay-per-call, requires `ANTHROPIC_API_KEY`.
-- **Claude CLI** (`NFR_LLM_BACKEND=claude-cli`) — uses your Claude Max subscription
-  via the `claude` CLI binary. No API key needed.
-
-When the extra is not installed or no backend is configured, these features are
-**skipped gracefully** — the scan runs normally and all static-analysis findings
-are still produced.
+When no backend is configured, LLM features are **skipped gracefully** — the
+scan runs normally and all static-analysis findings are still produced.
 
 ### What LLM features provide
 
@@ -261,6 +255,26 @@ are still produced.
 | PII detection confirmation | `run` | Uses LLM to confirm potential PII logging patterns |
 | Domain model inference | `arch` | Infers bounded contexts and domain models from code |
 | Market comparison | `arch` | Compares architecture patterns against industry norms |
+
+### Configuration
+
+LLM settings live in `nfr-review.yaml` under the `llm:` key. Environment
+variables override the config file.
+
+```yaml
+# nfr-review.yaml
+llm:
+  provider: anthropic           # anthropic | openai | claude-cli
+  model: claude-sonnet-4-6-20250514
+  base_url: null                # override for custom endpoints
+  api_key_env_var: ANTHROPIC_API_KEY  # which env var holds the API key
+```
+
+| Env var | Overrides | Example |
+|---------|-----------|---------|
+| `NFR_LLM_PROVIDER` | `llm.provider` | `openai` |
+| `NFR_LLM_MODEL` | `llm.model` | `gpt-4o` |
+| `NFR_LLM_BASE_URL` | `llm.base_url` | `http://localhost:11434/v1` |
 
 ### Setting up in GitHub Actions
 
@@ -294,24 +308,47 @@ choose a backend interactively. You can also configure it manually:
 
 ```bash
 pip install "nfr-review[llm-anthropic]"
-export NFR_LLM_BACKEND=api
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review report /path/to/repo
 ```
 
-**Option B — Claude CLI (Claude Max):**
+**Option B — OpenAI-compatible (Ollama):**
 
 ```bash
-pip install "nfr-review[llm-anthropic]"
-export NFR_LLM_BACKEND=claude-cli
+pip install "nfr-review[llm-openai]"
+export NFR_LLM_PROVIDER=openai
+export NFR_LLM_MODEL=llama3
+export NFR_LLM_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama   # Ollama ignores this but the SDK requires it
+nfr-review report /path/to/repo
+```
+
+Or configure persistently in `nfr-review.yaml`:
+
+```yaml
+llm:
+  provider: openai
+  model: llama3
+  base_url: http://localhost:11434/v1
+  api_key_env_var: OPENAI_API_KEY
+```
+
+This also works with Azure OpenAI (set `base_url` to your Azure endpoint) and
+OpenRouter (set `base_url: https://openrouter.ai/api/v1`).
+
+**Option C — Claude CLI (Claude Max):**
+
+```bash
+export NFR_LLM_PROVIDER=claude-cli
 nfr-review report /path/to/repo
 ```
 
 Requires the `claude` binary on your `$PATH` (installed with Claude Code).
+No API key or Python SDK needed.
 
 ### Opting out
 
-If the key is set but you want to skip LLM features for a specific run:
+If a backend is configured but you want to skip LLM features for a specific run:
 
 ```bash
 nfr-review report /path/to/repo --no-summary   # skip executive summary
@@ -320,10 +357,11 @@ nfr-review arch /path/to/repo --no-llm         # skip all LLM analysis
 
 ### Cost and data scope
 
-LLM features send code snippets and structural metadata to the Anthropic API
-(or Claude CLI). See [SECURITY.md](../SECURITY.md) for the full data scope
-disclosure. With the Anthropic API, typical cost is under $0.10 per scan.
-With Claude CLI, calls are covered by your Claude Max subscription.
+LLM features send code snippets and structural metadata to the configured
+backend. See [SECURITY.md](../SECURITY.md) for the full data scope disclosure.
+With the Anthropic API, typical cost is under $0.10 per scan. With Claude CLI,
+calls are covered by your Claude Max subscription. With Ollama, calls are free
+and stay on your local machine.
 
 ---
 
@@ -401,6 +439,7 @@ pip install nfr-review
 | Extra | What it adds |
 |-------|-------------|
 | `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
@@ -529,9 +568,10 @@ Security tab was skipped. To fix:
 ### LLM summary or ADR drift analysis is missing
 
 No LLM backend is configured, or the configured backend is unavailable. LLM
-features are silently skipped when neither the API key nor Claude CLI is
-available. Configure a backend as described in [LLM features](#7-llm-features)
-and rerun the scan. Use `-v` to see which features were skipped.
+features are silently skipped when no provider is ready. Check your `llm:`
+config in `nfr-review.yaml` or env vars (`NFR_LLM_PROVIDER`, API key). See
+[LLM features](#7-llm-features) for setup. Use `-v` to see which features
+were skipped and why.
 
 ### Code Scanning check shows "skipping" on a PR
 

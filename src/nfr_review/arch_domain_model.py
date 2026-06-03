@@ -23,10 +23,10 @@ from nfr_review.arch_models import (
     EntityRelationship,
 )
 from nfr_review.llm_client import (
-    ClaudeClient,
     LlmUnavailableError,
     serialize_evidence_bundle,
 )
+from nfr_review.protocols import LlmClient
 
 logger = logging.getLogger(__name__)
 
@@ -575,7 +575,7 @@ def enhance_domain_model_with_llm(
     entities: list[DomainEntity],
     contexts: list[BoundedContext],
     components: list[Component],
-    llm: ClaudeClient,
+    llm: LlmClient,
 ) -> DomainModelSection:
     """Use an LLM to enhance the structurally-inferred domain model.
 
@@ -714,7 +714,7 @@ def enhance_domain_model_with_llm(
 def analyze_domain_model(
     repo_paths: list[Path],
     components: list[Component],
-    llm: ClaudeClient | None = None,
+    llm: LlmClient | None = None,
 ) -> DomainModelSection | None:
     """Infer a domain model from repository source code.
 

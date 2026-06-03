@@ -97,7 +97,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.return_value = _VALID_LLM_RESPONSE
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
 
         assert result is not None
@@ -113,7 +113,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.return_value = fenced
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
 
         assert result is not None
@@ -124,7 +124,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.return_value = "This is not JSON at all"
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
 
         assert result is None
@@ -135,7 +135,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.return_value = bad_response
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
 
         assert result is None
@@ -145,7 +145,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.side_effect = RuntimeError("API down")
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
 
         assert result is None
@@ -160,7 +160,7 @@ class TestGenerateExecSummary:
         mock_client.available = True
         mock_client.analyze.return_value = _VALID_LLM_RESPONSE
 
-        with patch("nfr_review.output.summarize.ClaudeClient", return_value=mock_client):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result(findings))
 
         assert result is not None

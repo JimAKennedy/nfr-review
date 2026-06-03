@@ -8,6 +8,7 @@ from nfr_review.config import (
     CollectorsConfig,
     Config,
     ConfigError,
+    LlmConfig,
     RulesConfig,
     load_config,
 )
@@ -179,3 +180,52 @@ def test_config_model_copy_exclude_test_paths() -> None:
     updated = cfg.model_copy(update={"exclude_test_paths": False})
     assert updated.exclude_test_paths is False
     assert cfg.exclude_test_paths is True
+
+
+# ---------------------------------------------------------------------------
+# LlmConfig in nfr-review.yaml
+# ---------------------------------------------------------------------------
+
+
+def test_config_default_llm_config() -> None:
+    cfg = Config()
+    assert isinstance(cfg.llm, LlmConfig)
+    assert cfg.llm.provider == "anthropic"
+
+
+def test_config_llm_from_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text(
+        "llm:\n  provider: openai\n  model: gpt-4o\n"
+        "  base_url: http://localhost:11434/v1\n"
+        "  api_key_env_var: OPENAI_API_KEY\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.llm.provider == "openai"
+    assert cfg.llm.model == "gpt-4o"
+    assert cfg.llm.base_url == "http://localhost:11434/v1"
+    assert cfg.llm.api_key_env_var == "OPENAI_API_KEY"
+
+
+def test_config_llm_claude_cli_from_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("llm:\n  provider: claude-cli\n", encoding="utf-8")
+    cfg = load_config(p)
+    assert cfg.llm.provider == "claude-cli"
+
+
+def test_config_llm_invalid_provider_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("llm:\n  provider: bogus\n", encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(p)
+    assert "provider" in str(excinfo.value)
+
+
+def test_config_llm_unknown_key_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("llm:\n  unknown_field: 1\n", encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(p)
+    assert "unknown_field" in str(excinfo.value)

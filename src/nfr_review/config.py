@@ -14,8 +14,9 @@ exit code; this module never calls ``sys.exit`` directly.
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ruamel.yaml import YAML, YAMLError
@@ -49,6 +50,37 @@ class CollectorsConfig(BaseModel):
     skip: list[str] = Field(default_factory=list)
 
 
+LlmProvider = Literal["anthropic", "openai", "claude-cli"]
+
+
+class LlmConfig(BaseModel):
+    """LLM backend configuration.
+
+    Env-var overrides: ``NFR_LLM_PROVIDER``, ``NFR_LLM_MODEL``,
+    ``NFR_LLM_BASE_URL``, and the var named by *api_key_env_var*.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: LlmProvider = "anthropic"
+    model: str = "claude-sonnet-4-6-20250514"
+    base_url: str | None = None
+    api_key_env_var: str = "ANTHROPIC_API_KEY"
+
+    def resolve(self) -> LlmConfig:
+        """Return a copy with env-var overrides applied."""
+        overrides: dict[str, Any] = {}
+        if v := os.environ.get("NFR_LLM_PROVIDER", "").strip():
+            overrides["provider"] = v
+        if v := os.environ.get("NFR_LLM_MODEL", "").strip():
+            overrides["model"] = v
+        if v := os.environ.get("NFR_LLM_BASE_URL", "").strip():
+            overrides["base_url"] = v
+        if not overrides:
+            return self
+        return self.model_copy(update=overrides)
+
+
 class Config(BaseModel):
     """Validated nfr-review.yaml configuration.
 
@@ -66,6 +98,7 @@ class Config(BaseModel):
     exclude_paths: list[str] = Field(default_factory=list)
     exclude_test_paths: bool = True
     max_resolve_rounds: int = 2000
+    llm: LlmConfig = Field(default_factory=LlmConfig)
     target: Path | None = Field(default=None, exclude=True)
 
 
@@ -138,6 +171,8 @@ __all__ = [
     "Config",
     "ConfigError",
     "CollectorsConfig",
+    "LlmConfig",
+    "LlmProvider",
     "RulesConfig",
     "load_config",
 ]

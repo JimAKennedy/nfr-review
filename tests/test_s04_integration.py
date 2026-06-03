@@ -20,7 +20,8 @@ from nfr_review.collectors.repo_structure import RepoStructureCollector
 from nfr_review.collectors.spring_config import SpringConfigCollector
 from nfr_review.config import Config
 from nfr_review.engine import Engine, RunResult
-from nfr_review.llm_client import ClaudeClient, LlmUnavailableError
+from nfr_review.llm_client import LlmUnavailableError
+from nfr_review.protocols import LlmClient
 from nfr_review.registry import Registry, rule_registry
 from nfr_review.rules.adr_drift import ArchitecturalDriftFromAdrRule
 from nfr_review.rules.adr_lifecycle import AdrLifecycleGapRule
@@ -50,22 +51,22 @@ ADR_REPO = FIXTURES / "adr-sample-repo"
 BAND2_RULE_IDS = {"pii-in-log-statements", "architectural-drift-from-adr"}
 
 
-def _unavailable_client() -> ClaudeClient:
-    client = MagicMock(spec=ClaudeClient)
+def _unavailable_client() -> LlmClient:
+    client = MagicMock(spec=LlmClient)
     client.available = False
     client.analyze.side_effect = LlmUnavailableError("no key")
     return client
 
 
-def _confirming_pii_client(verdicts: list[dict]) -> ClaudeClient:
-    client = MagicMock(spec=ClaudeClient)
+def _confirming_pii_client(verdicts: list[dict]) -> LlmClient:
+    client = MagicMock(spec=LlmClient)
     client.available = True
     client.analyze.return_value = json.dumps(verdicts)
     return client
 
 
-def _confirming_adr_client(drifts: list[dict], summary: str = "test") -> ClaudeClient:
-    client = MagicMock(spec=ClaudeClient)
+def _confirming_adr_client(drifts: list[dict], summary: str = "test") -> LlmClient:
+    client = MagicMock(spec=LlmClient)
     client.available = True
     client.analyze.return_value = json.dumps({"drifts": drifts, "summary": summary})
     return client
@@ -73,8 +74,8 @@ def _confirming_adr_client(drifts: list[dict], summary: str = "test") -> ClaudeC
 
 def _full_registries(
     *,
-    pii_llm: ClaudeClient | None = None,
-    adr_drift_llm: ClaudeClient | None = None,
+    pii_llm: LlmClient | None = None,
+    adr_drift_llm: LlmClient | None = None,
 ) -> tuple[Registry, Registry]:
     """Build registries with all 7 collectors and 20 rules."""
     cregistry: Registry = Registry("collector")
@@ -304,7 +305,7 @@ class TestEngineFaultIsolationLlmError:
     """Engine catches LLM errors; Band 2 rule appears skipped, other rules still run."""
 
     def test_llm_exception_becomes_skipped(self) -> None:
-        failing_llm = MagicMock(spec=ClaudeClient)
+        failing_llm = MagicMock(spec=LlmClient)
         failing_llm.available = True
         failing_llm.analyze.side_effect = RuntimeError("API exploded")
 

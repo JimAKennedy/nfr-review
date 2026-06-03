@@ -45,6 +45,7 @@ hygiene-report.jsonl
 package.json
 package-lock.json
 reports/
+docs/research/
 
 # ── Vendored skills (installed via skills-lock.json, not tracked) ──
 .agents/skills/docx/

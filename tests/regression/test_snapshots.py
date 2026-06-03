@@ -27,6 +27,7 @@ _REPO_MAP = {entry["name"]: entry for entry in _MANIFEST}
 
 
 @pytest.mark.regression
+@pytest.mark.timeout(600)
 @pytest.mark.parametrize("repo_name", _REPO_NAMES)
 def test_regression_snapshot(
     repo_name: str,

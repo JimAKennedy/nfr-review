@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from nfr_review.llm_client import ClaudeClient, LlmUnavailableError
+from nfr_review.llm_client import LlmUnavailableError
 from nfr_review.models import Evidence
+from nfr_review.protocols import LlmClient
 from nfr_review.rules.adr_drift import ArchitecturalDriftFromAdrRule
 
 
@@ -60,15 +61,15 @@ def _make_java_evidence(
     )
 
 
-def _unavailable_client() -> ClaudeClient:
-    client = MagicMock(spec=ClaudeClient)
+def _unavailable_client() -> LlmClient:
+    client = MagicMock(spec=LlmClient)
     client.available = False
     client.analyze.side_effect = LlmUnavailableError("no key")
     return client
 
 
-def _mock_client(response: str) -> ClaudeClient:
-    client = MagicMock(spec=ClaudeClient)
+def _mock_client(response: str) -> LlmClient:
+    client = MagicMock(spec=LlmClient)
     client.available = True
     client.analyze.return_value = response
     return client
@@ -234,7 +235,7 @@ class TestLlmErrors:
     def test_api_error_returns_skipped(self) -> None:
         adr_ev = _make_adr_evidence()
         java_ev = _make_java_evidence()
-        llm = MagicMock(spec=ClaudeClient)
+        llm = MagicMock(spec=LlmClient)
         llm.available = True
         llm.analyze.side_effect = RuntimeError("API timeout")
         rule = ArchitecturalDriftFromAdrRule(llm_client=llm)

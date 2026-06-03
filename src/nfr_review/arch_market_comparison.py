@@ -22,10 +22,10 @@ from nfr_review.arch_models import (
     MaturityLevel,
 )
 from nfr_review.llm_client import (
-    ClaudeClient,
     LlmUnavailableError,
     serialize_evidence_bundle,
 )
+from nfr_review.protocols import LlmClient
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +253,7 @@ managed=well-governed, optimizing=industry-leading.
 
 def generate_market_comparison(
     profile: dict,
-    llm: ClaudeClient,
+    llm: LlmClient,
     max_comparisons: int = 5,
 ) -> MarketAnalysisSection:
     """Use LLM to generate market comparison analysis.
@@ -531,7 +531,7 @@ def analyze_market(
     components: list[Component],
     integrations: list[IntegrationPoint],
     test_coverage: list[ComponentTestCoverage],
-    llm: ClaudeClient | None = None,
+    llm: LlmClient | None = None,
 ) -> MarketAnalysisSection | None:
     """Run market comparison analysis.
 

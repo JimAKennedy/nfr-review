@@ -35,4 +35,23 @@ class Rule(Protocol):
         ...
 
 
-__all__ = ["Band", "Collector", "Rule"]
+@runtime_checkable
+class LlmClient(Protocol):
+    """Pluggable LLM backend. Implementations call an LLM and return text."""
+
+    @property
+    def available(self) -> bool:
+        """Whether this backend is configured and ready to make calls."""
+        ...
+
+    def analyze(
+        self,
+        prompt: str,
+        evidence_bundle: str,
+        max_tokens: int = 1024,
+    ) -> str:
+        """Send *prompt* + *evidence_bundle* to the LLM and return the response text."""
+        ...
+
+
+__all__ = ["Band", "Collector", "LlmClient", "Rule"]
