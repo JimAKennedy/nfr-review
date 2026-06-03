@@ -2003,6 +2003,24 @@ class TestClassDiagramNamespaceGrouping:
         result = render_class_diagram(classes, group_by_namespace=True)
         assert "namespace ui_widgets {" in result.mermaid
 
+    def test_dotted_namespace_sanitized(self) -> None:
+        classes = [
+            {
+                "name": "ArchReport",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "src.nfr_review.arch_models",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace src_nfr_review_arch_models {" in result.mermaid
+        assert "." not in result.mermaid.split("namespace")[1].split("{")[0]
+
 
 class TestPipelineDiagram:
     def test_multi_stage_dag(self) -> None:

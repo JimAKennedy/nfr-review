@@ -93,6 +93,12 @@ _CSS = (
     ".wide-table th:nth-child(3),"
     " .wide-table td:nth-child(3) { min-width: 75px; white-space: nowrap; }\n"
     ".wide-table td:last-child { word-break: break-word; }\n"
+    ".domain-table { table-layout: fixed; width: 100%; }\n"
+    ".domain-table th:nth-child(1) { width: 12%; }\n"
+    ".domain-table th:nth-child(2) { width: 38%; }\n"
+    ".domain-table th:nth-child(3) { width: 15%; }\n"
+    ".domain-table th:nth-child(4) { width: 35%; }\n"
+    ".domain-table td { word-break: break-word; vertical-align: top; }\n"
 )
 
 
@@ -681,7 +687,7 @@ def _pdf_domain_model_html(report: ArchReport) -> str:
             '<div class="landscape-page">'
             "<h2>Domain Model</h2>"
             "<h3>Entities</h3>"
-            '<table class="wide-table"><thead><tr><th>Name</th><th>Description</th>'
+            '<table class="domain-table"><thead><tr><th>Name</th><th>Description</th>'
             "<th>Bounded Context</th><th>Attributes</th>"
             f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
             "</div>"
