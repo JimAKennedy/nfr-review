@@ -210,6 +210,8 @@ class AnthropicClient:
             logger.warning(
                 "anthropic SDK not installed; install nfr-review[llm-anthropic] for API access"
             )
+        elif not api_key:
+            self._client = None
         else:
             kwargs: dict[str, Any] = {"api_key": api_key}
             if base_url:
@@ -254,6 +256,8 @@ class OpenAICompatibleClient:
             logger.warning(
                 "openai SDK not installed; install nfr-review[llm-openai] for access"
             )
+        elif not api_key:
+            self._client = None
         else:
             kwargs: dict[str, Any] = {"api_key": api_key}
             if base_url:
@@ -356,9 +360,19 @@ def create_llm_client(config: LlmConfig | None = None) -> LlmClientImpl:
 
     _load_dotenv_once()
 
+    _apply_legacy = config is None
     if config is None:
         config = _LlmConfig()
     resolved = config.resolve()
+
+    # Legacy setup scripts wrote NFR_LLM_BACKEND (not NFR_LLM_PROVIDER).
+    # Only apply when no explicit config was passed and NFR_LLM_PROVIDER is absent.
+    if _apply_legacy and not os.environ.get("NFR_LLM_PROVIDER", "").strip():
+        _legacy_map = {"api": "anthropic", "claude-cli": "claude-cli"}
+        if legacy := os.environ.get("NFR_LLM_BACKEND", "").strip():
+            mapped = _legacy_map.get(legacy, legacy)
+            if mapped != resolved.provider:
+                resolved = resolved.model_copy(update={"provider": mapped})
 
     if resolved.provider == "claude-cli":
         return ClaudeCliClient()

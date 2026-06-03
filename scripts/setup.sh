@@ -77,7 +77,7 @@ LLM_BACKEND=""
 API_KEY_SET=false
 
 if [[ -f "$ENV_FILE" ]]; then
-  _existing_backend="$(grep '^NFR_LLM_BACKEND=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
+  _existing_backend="$(grep -E '^NFR_LLM_(PROVIDER|BACKEND)=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
   _existing_key="$(grep '^ANTHROPIC_API_KEY=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
 fi
 
@@ -106,9 +106,9 @@ if [[ -z "$LLM_BACKEND" ]] && [[ -t 0 ]]; then
       read -rp "ANTHROPIC_API_KEY: " api_key
       if [[ -n "$api_key" ]]; then
         if [[ -f "$ENV_FILE" ]]; then
-          sed -i.bak '/^NFR_LLM_BACKEND=/d; /^ANTHROPIC_API_KEY=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+          sed -i.bak '/^NFR_LLM_PROVIDER=/d; /^NFR_LLM_BACKEND=/d; /^ANTHROPIC_API_KEY=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
         fi
-        echo "NFR_LLM_BACKEND=api" >> "$ENV_FILE"
+        echo "NFR_LLM_PROVIDER=anthropic" >> "$ENV_FILE"
         echo "ANTHROPIC_API_KEY=$api_key" >> "$ENV_FILE"
         info "API key and backend written to .env"
         LLM_BACKEND="api"
@@ -126,7 +126,7 @@ if [[ -z "$LLM_BACKEND" ]] && [[ -t 0 ]]; then
       if [[ -f "$ENV_FILE" ]]; then
         sed -i.bak '/^NFR_LLM_BACKEND=/d; /^ANTHROPIC_API_KEY=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
       fi
-      echo "NFR_LLM_BACKEND=claude-cli" >> "$ENV_FILE"
+      echo "NFR_LLM_PROVIDER=claude-cli" >> "$ENV_FILE"
       info "Claude CLI backend written to .env"
       LLM_BACKEND="claude-cli"
       ;;
