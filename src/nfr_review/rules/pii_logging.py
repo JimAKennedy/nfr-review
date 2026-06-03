@@ -9,9 +9,13 @@ import logging
 import re
 from typing import Any, cast
 
-from nfr_review.llm_client import ClaudeClient, LlmUnavailableError, serialize_evidence_bundle
+from nfr_review.llm_client import (
+    LlmUnavailableError,
+    create_llm_client,
+    serialize_evidence_bundle,
+)
 from nfr_review.models import RAG, Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
+from nfr_review.protocols import Band, LlmClient
 from nfr_review.registry import rule_registry
 
 logger = logging.getLogger(__name__)
@@ -47,8 +51,8 @@ class PiiInLogStatementsRule:
     band: Band = 2
     required_collectors: list[str] = ["java-ast"]
 
-    def __init__(self, llm_client: ClaudeClient | None = None) -> None:
-        self._llm = llm_client if llm_client is not None else ClaudeClient()
+    def __init__(self, llm_client: LlmClient | None = None) -> None:
+        self._llm = llm_client if llm_client is not None else create_llm_client()
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         java_evidence = [

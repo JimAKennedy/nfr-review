@@ -92,7 +92,7 @@ def _make_coverage(
 
 
 def _make_llm_mock(available: bool = True, response: str = "{}") -> MagicMock:
-    """Create a mock ClaudeClient."""
+    """Create a mock LlmClient."""
     mock = MagicMock()
     type(mock).available = PropertyMock(return_value=available)
     mock.analyze.return_value = response

@@ -31,7 +31,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from nfr_review.llm_client import ClaudeClient, serialize_evidence_bundle
+from nfr_review.llm_client import create_llm_client, serialize_evidence_bundle
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -178,7 +178,7 @@ class AdrDeriveCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
-        client = ClaudeClient()
+        client = create_llm_client()
 
         if not client.available:
             return [

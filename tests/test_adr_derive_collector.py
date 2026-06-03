@@ -64,7 +64,7 @@ class TestRegistration:
 
 
 class TestLlmUnavailable:
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_returns_skip_evidence_when_llm_unavailable(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -79,7 +79,7 @@ class TestLlmUnavailable:
         assert results[0].kind == "adr-derive-skip"
         assert "ANTHROPIC_API_KEY" in results[0].payload["reason"]
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_skip_evidence_has_correct_collector_info(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -130,7 +130,7 @@ class TestJsonExtraction:
 
 
 class TestEvidenceShape:
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_produces_derived_and_summary_evidence(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -147,7 +147,7 @@ class TestEvidenceShape:
         assert len(derived) == 3
         assert len(summaries) == 1
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_derived_evidence_payload_keys(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
@@ -161,7 +161,7 @@ class TestEvidenceShape:
         expected_keys = {"title", "rationale", "category", "confidence", "evidence_refs"}
         assert set(derived.payload.keys()) == expected_keys
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_summary_evidence_payload_keys(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
@@ -179,7 +179,7 @@ class TestEvidenceShape:
         assert isinstance(summary.payload["avg_confidence"], float)
         assert 0.0 <= summary.payload["avg_confidence"] <= 1.0
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_collector_metadata_on_derived(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
@@ -195,7 +195,7 @@ class TestEvidenceShape:
 
 
 class TestPromptConstruction:
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_prompt_includes_repo_context(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
@@ -220,7 +220,7 @@ class TestPromptConstruction:
         assert "requirements.txt" in bundle
         assert "Dockerfile" in bundle
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_analyze_called_with_max_tokens_2048(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -236,7 +236,7 @@ class TestPromptConstruction:
         max_tokens = call_kwargs.kwargs.get("max_tokens") or call_kwargs[1].get("max_tokens")
         assert max_tokens == 2048
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_existing_adrs_included_in_bundle(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -261,7 +261,7 @@ class TestPromptConstruction:
 
 
 class TestGracefulDegradation:
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_garbage_llm_response_returns_skip(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:
@@ -277,7 +277,7 @@ class TestGracefulDegradation:
         assert results[0].kind == "adr-derive-skip"
         assert "parse" in results[0].payload["reason"].lower()
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_llm_exception_returns_skip(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
@@ -291,7 +291,7 @@ class TestGracefulDegradation:
         assert results[0].kind == "adr-derive-skip"
         assert "API timeout" in results[0].payload["reason"]
 
-    @patch("nfr_review.collectors.adr_derive.ClaudeClient")
+    @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_empty_json_array_returns_no_evidence(
         self, mock_cls: MagicMock, tmp_path: Path
     ) -> None:

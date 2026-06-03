@@ -225,9 +225,9 @@ def run_arch_review(
     # --- LLM client ---
     llm = None
     if not skip_llm:
-        from nfr_review.llm_client import ClaudeClient
+        from nfr_review.llm_client import create_llm_client
 
-        client = ClaudeClient()
+        client = create_llm_client()
         if client.available:
             llm = client
             cb("LLM available — domain model and market analysis enabled")

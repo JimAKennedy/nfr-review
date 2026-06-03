@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pydantic
 
-from nfr_review.llm_client import ClaudeClient, LlmUnavailableError
+from nfr_review.llm_client import LlmUnavailableError, create_llm_client
 from nfr_review.output.summary_models import ExecSummary
 
 if TYPE_CHECKING:
@@ -146,7 +146,7 @@ def generate_executive_summary(
 
     Returns ``None`` when the Anthropic API key is not configured.
     """
-    client = ClaudeClient()
+    client = create_llm_client()
     if not client.available:
         logger.info("ANTHROPIC_API_KEY not set — skipping executive summary generation")
         return None
