@@ -66,11 +66,11 @@ def clone_repo(
             ["git", "clone", "--depth", "1", url, str(clone_dir)],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,
             check=True,
         )
     except subprocess.TimeoutExpired:
-        pytest.skip(f"clone timed out after 300s: {url}")
+        pytest.skip(f"clone timed out after 600s: {url}")
     except subprocess.CalledProcessError as exc:
         pytest.skip(f"clone failed: {exc.stderr.strip()}")
 
@@ -79,7 +79,7 @@ def clone_repo(
             ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,
             check=False,
         )
         subprocess.run(

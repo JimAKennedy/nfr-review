@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess  # nosec B404 — git commands with hardcoded args
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -224,7 +225,6 @@ def run_arch_review(
     # --- LLM client ---
     llm = None
     if not skip_llm:
-        from nfr_review import llm_client
         from nfr_review.llm_client import ClaudeClient
 
         client = ClaudeClient()
@@ -322,7 +322,9 @@ def run_arch_review(
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         repos_analyzed=repos_info,
         llm_available=llm is not None,
-        llm_model=llm_client.LLM_MODEL if llm is not None else None,
+        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-20250514")
+        if llm is not None
+        else None,
     )
 
     report = ArchReport(

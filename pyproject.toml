@@ -58,6 +58,9 @@ pdf = [
 llm-anthropic = [
     "anthropic>=0.40",
 ]
+llm-openai = [
+    "openai>=1.0",
+]
 scancode = [
     "scancode-toolkit>=32.0,<34",
     "typecode-libmagic>=5.39",
@@ -106,6 +109,7 @@ module = [
     "tree_sitter_typescript.*",
     "tree_sitter_cpp.*",
     "scancode.*",
+    "openai.*",
 ]
 ignore_missing_imports = true
 
