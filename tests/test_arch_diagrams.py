@@ -12,6 +12,7 @@ from nfr_review.arch_diagrams import (
     _safe_id,
     detect_orphan_nodes,
     generate_all_diagrams,
+    partition_classes,
     render_c4_code,
     render_c4_component,
     render_c4_component_detail,
@@ -20,6 +21,7 @@ from nfr_review.arch_diagrams import (
     render_c4_context,
     render_class_diagram,
     render_orphans_markdown,
+    render_partitioned_class_diagrams,
     render_pipeline_diagram,
 )
 from nfr_review.arch_discovery import DvcPipeline, DvcStage
@@ -1478,6 +1480,51 @@ class TestClassDiagram:
         assert "PyWidget" in py_diag.mermaid
         assert "CppWidget" not in py_diag.mermaid
 
+    def test_multiline_type_collapsed_to_single_line(self) -> None:
+        classes = [
+            {
+                "name": "Widget",
+                "fields": [
+                    {
+                        "name": "mode",
+                        "type": "Literal<\n    fast, slow, auto\n>",
+                        "access": "public",
+                    },
+                ],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        result = render_class_diagram(classes)
+        for line in result.mermaid.splitlines():
+            if "mode" in line:
+                assert "\n" not in line
+                assert "Literal~" in line
+                assert "fast" in line
+                break
+        else:
+            pytest.fail("mode field not found in mermaid output")
+
+    def test_class_count_capped(self) -> None:
+        from nfr_review.arch_diagrams import _MAX_CLASSES_PER_DIAGRAM
+
+        classes = [
+            {
+                "name": f"Cls{i}",
+                "fields": [],
+                "methods": [],
+                "base_classes": [],
+            }
+            for i in range(_MAX_CLASSES_PER_DIAGRAM + 20)
+        ]
+        result = render_class_diagram(classes)
+        declared = [
+            line
+            for line in result.mermaid.splitlines()
+            if line.strip().startswith("class Cls")
+        ]
+        assert len(declared) == _MAX_CLASSES_PER_DIAGRAM
+
     def test_generate_all_no_class_data(self) -> None:
         comp = Component(
             id="test-comp",
@@ -2047,6 +2094,298 @@ class TestPipelineDiagram:
         diagrams = generate_all_diagrams([comp], [])
         pipeline_diagrams = [d for d in diagrams if d.scope == "pipeline"]
         assert len(pipeline_diagrams) == 0
+
+
+# ---------------------------------------------------------------------------
+# Class diagram partitioning
+# ---------------------------------------------------------------------------
+
+
+class TestClassPartitioning:
+    def test_empty_input(self) -> None:
+        assert partition_classes([]) == []
+
+    def test_small_set_single_partition(self) -> None:
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(10)
+        ]
+        parts = partition_classes(classes)
+        assert len(parts) == 1
+        assert len(parts[0].classes) == 10
+        assert parts[0].diagram_index == 1
+
+    def test_splits_when_over_limit(self) -> None:
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(20)
+        ]
+        parts = partition_classes(classes, max_per_diagram=10)
+        assert len(parts) >= 2
+        total = sum(len(p.classes) for p in parts)
+        assert total == 20
+
+    def test_preserves_all_classes(self) -> None:
+        from nfr_review.arch_diagrams import _MAX_CLASSES_PER_DIAGRAM
+
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(_MAX_CLASSES_PER_DIAGRAM + 30)
+        ]
+        parts = partition_classes(classes)
+        all_names = set()
+        for p in parts:
+            for c in p.classes:
+                all_names.add(c["name"])
+        expected = {f"Cls{i}" for i in range(_MAX_CLASSES_PER_DIAGRAM + 30)}
+        assert all_names == expected
+
+    def test_namespace_groups_stay_together(self) -> None:
+        classes = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"A{i}",
+                    "namespace": "audio",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"V{i}",
+                    "namespace": "video",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        parts = partition_classes(classes, max_per_diagram=10)
+        assert len(parts) >= 2
+        for part in parts:
+            namespaces = {c.get("namespace", "") for c in part.classes}
+            assert len(namespaces) == 1
+
+    def test_indices_sequential(self) -> None:
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(30)
+        ]
+        parts = partition_classes(classes, max_per_diagram=10)
+        indices = [p.diagram_index for p in parts]
+        assert indices == list(range(1, len(parts) + 1))
+
+    def test_connected_classes_cluster(self) -> None:
+        classes = []
+        for i in range(12):
+            fields = []
+            if i > 0:
+                fields = [{"name": "ref", "type": f"Cls{i - 1}", "access": "private"}]
+            classes.append(
+                {
+                    "name": f"Cls{i}",
+                    "fields": fields,
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        parts = partition_classes(classes, max_per_diagram=8)
+        assert len(parts) >= 2
+        for part in parts:
+            assert len(part.classes) > 0
+
+
+class TestPartitionedClassDiagrams:
+    def test_single_diagram_no_proxies(self) -> None:
+        diagrams = render_partitioned_class_diagrams(_SAMPLE_CLASSES)
+        assert len(diagrams) == 1
+        assert "proxy_D" not in diagrams[0].mermaid
+
+    def test_multi_diagram_has_proxies(self) -> None:
+        classes = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"A{i}",
+                    "namespace": "audio",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"V{i}",
+                    "namespace": "video",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        classes[0]["fields"] = [{"name": "video_ref", "type": "V0", "access": "private"}]
+
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        assert len(diagrams) >= 2
+        all_mermaid = "\n".join(d.mermaid for d in diagrams)
+        assert "proxy_D" in all_mermaid
+        assert "<<Diagram" in all_mermaid
+
+    def test_outgoing_proxy_shows_target_class(self) -> None:
+        classes = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Src{i}",
+                    "namespace": "src",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Tgt{i}",
+                    "namespace": "tgt",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        classes[0]["fields"] = [{"name": "dep", "type": "Tgt0", "access": "private"}]
+
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        src_diag = next(d for d in diagrams if "class Src0" in d.mermaid)
+        assert "class Tgt0" not in src_diag.mermaid
+        assert "to Tgt0" in src_diag.mermaid
+
+    def test_incoming_proxy_shows_source_class(self) -> None:
+        classes = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Src{i}",
+                    "namespace": "src",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Tgt{i}",
+                    "namespace": "tgt",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        classes[0]["fields"] = [{"name": "dep", "type": "Tgt0", "access": "private"}]
+
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        tgt_diag = next(d for d in diagrams if "class Tgt0" in d.mermaid)
+        assert "from Src0" in tgt_diag.mermaid
+
+    def test_titles_include_index(self) -> None:
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(20)
+        ]
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        for i, d in enumerate(diagrams, 1):
+            assert f" {i}" in d.title
+
+    def test_suppress_external_for_cross_partition_inheritance(self) -> None:
+        classes = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Base{i}",
+                    "namespace": "base",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            base_ref = [{"name": "Base0", "access": "public"}] if i == 0 else []
+            classes.append(
+                {
+                    "name": f"Derived{i}",
+                    "namespace": "derived",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": base_ref,
+                }
+            )
+
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        derived_diag = next(d for d in diagrams if "class Derived0" in d.mermaid)
+        assert "<<external>> Base0" not in derived_diag.mermaid
+        assert "to Base0" in derived_diag.mermaid
+
+    def test_generate_all_uses_partitioned(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        classes = [
+            {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}
+            for i in range(70)
+        ]
+        diagrams = generate_all_diagrams([comp], [], class_data=classes)
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        assert len(class_diagrams) >= 2
+
+    def test_namespace_grouping_enabled_by_default(self) -> None:
+        classes = [
+            {
+                "name": "Foo",
+                "namespace": "audio",
+                "fields": [],
+                "methods": [],
+                "base_classes": [],
+            },
+            {
+                "name": "Bar",
+                "namespace": "video",
+                "fields": [],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        diagrams = render_partitioned_class_diagrams(classes, group_by_namespace=True)
+        assert len(diagrams) == 1
+        assert "namespace audio" in diagrams[0].mermaid
+        assert "namespace video" in diagrams[0].mermaid
+
+    def test_generate_all_shows_namespaces(self) -> None:
+        comp = Component(
+            id="test-comp",
+            name="Test",
+            description="Test component",
+            component_type="library",
+        )
+        classes = [
+            {"name": "A", "namespace": "ns1", "fields": [], "methods": [], "base_classes": []},
+            {"name": "B", "namespace": "ns2", "fields": [], "methods": [], "base_classes": []},
+        ]
+        diagrams = generate_all_diagrams([comp], [], class_data=classes)
+        class_diagrams = [d for d in diagrams if d.scope == "classes"]
+        all_mermaid = "\n".join(d.mermaid for d in class_diagrams)
+        assert "namespace ns1" in all_mermaid
+        assert "namespace ns2" in all_mermaid
+
+    def test_empty_class_data(self) -> None:
+        diagrams = render_partitioned_class_diagrams([])
+        assert len(diagrams) == 1
+        assert diagrams[0].mermaid == "classDiagram\n"
 
 
 # ---------------------------------------------------------------------------
