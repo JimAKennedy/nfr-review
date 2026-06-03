@@ -190,7 +190,7 @@ class TestClaudeClientAnalyze:
 
         assert result == "LLM says no PII found"
         mock_client_instance.messages.create.assert_called_once_with(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6-20250514",
             max_tokens=1024,
             messages=[
                 {
@@ -329,7 +329,7 @@ class TestLlmConfig:
     def test_defaults(self) -> None:
         cfg = LlmConfig()
         assert cfg.provider == "anthropic"
-        assert cfg.model == "claude-sonnet-4-20250514"
+        assert cfg.model == "claude-sonnet-4-6-20250514"
         assert cfg.base_url is None
         assert cfg.api_key_env_var == "ANTHROPIC_API_KEY"
 
@@ -340,7 +340,7 @@ class TestLlmConfig:
         cfg = LlmConfig()
         resolved = cfg.resolve()
         assert resolved.provider == "anthropic"
-        assert resolved.model == "claude-sonnet-4-20250514"
+        assert resolved.model == "claude-sonnet-4-6-20250514"
 
     def test_resolve_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")

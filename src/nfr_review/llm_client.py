@@ -91,7 +91,7 @@ class ClaudeClient:
 
     def __init__(self) -> None:
         self._backend = _resolve_backend()
-        self._model = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-20250514")
+        self._model = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6-20250514")
 
         if self._backend == _BACKEND_CLI:
             self._cli_path: str | None = shutil.which("claude")

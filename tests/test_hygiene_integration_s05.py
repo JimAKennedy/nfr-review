@@ -166,6 +166,7 @@ class TestCleanRepoE2E:
 
 
 class TestDogfood:
+    @pytest.mark.timeout(300)
     def test_nfr_review_repo_exits_0(self, runner: CliRunner, tmp_path: Path) -> None:
         result = runner.invoke(
             cli,

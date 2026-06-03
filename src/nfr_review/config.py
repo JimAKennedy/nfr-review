@@ -63,7 +63,7 @@ class LlmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: LlmProvider = "anthropic"
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-sonnet-4-6-20250514"
     base_url: str | None = None
     api_key_env_var: str = "ANTHROPIC_API_KEY"
 
