@@ -7,6 +7,7 @@
 annotated-types==0.7.0    # via pydantic
 anthropic==0.105.2        # via nfr-review (pyproject.toml)
 anyio==4.13.0             # via anthropic, httpx
+build==1.5.0              # via nfr-review (pyproject.toml)
 certifi==2026.5.20        # via httpcore, httpx
 click==8.4.1              # via nfr-review (pyproject.toml)
 coverage==7.14.1          # via pytest-cov
@@ -15,14 +16,15 @@ docstring-parser==0.18.0  # via anthropic
 h11==0.16.0               # via httpcore
 httpcore==1.0.9           # via httpx
 httpx==0.28.1             # via anthropic
-idna==3.17                # via anyio, httpx
+idna==3.18                # via anyio, httpx
 iniconfig==2.3.0          # via pytest
 jiter==0.15.0             # via anthropic
-packaging==26.2           # via nfr-review (pyproject.toml), pytest
+packaging==26.2           # via build, nfr-review (pyproject.toml), pytest
 pluggy==1.6.0             # via pytest, pytest-cov
 pydantic==2.13.4          # via anthropic, nfr-review (pyproject.toml)
-pydantic-core==2.47.0     # via pydantic
+pydantic-core==2.46.4     # via pydantic
 pygments==2.20.0          # via pytest
+pyproject-hooks==1.2.0    # via build
 pytest==9.0.3             # via nfr-review (pyproject.toml), pytest-cov
 pytest-cov==7.1.0         # via nfr-review (pyproject.toml)
 resolvelib==1.2.1         # via nfr-review (pyproject.toml)

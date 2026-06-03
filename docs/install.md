@@ -235,14 +235,22 @@ include breaking changes without notice.
 
 ## 7. LLM features
 
-nfr-review includes optional LLM-powered analysis. Two backends are supported:
+nfr-review includes optional LLM-powered analysis. Install the `[llm-anthropic]`
+extra to enable it:
+
+```bash
+pip install "nfr-review[llm-anthropic]"
+```
+
+Two backends are supported:
 
 - **Anthropic API** (`NFR_LLM_BACKEND=api`) — pay-per-call, requires `ANTHROPIC_API_KEY`.
 - **Claude CLI** (`NFR_LLM_BACKEND=claude-cli`) — uses your Claude Max subscription
   via the `claude` CLI binary. No API key needed.
 
-When no backend is configured, these features are **skipped gracefully** —
-the scan runs normally and all static-analysis findings are still produced.
+When the extra is not installed or no backend is configured, these features are
+**skipped gracefully** — the scan runs normally and all static-analysis findings
+are still produced.
 
 ### What LLM features provide
 
@@ -285,6 +293,7 @@ choose a backend interactively. You can also configure it manually:
 **Option A — Anthropic API:**
 
 ```bash
+pip install "nfr-review[llm-anthropic]"
 export NFR_LLM_BACKEND=api
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review report /path/to/repo
@@ -293,6 +302,7 @@ nfr-review report /path/to/repo
 **Option B — Claude CLI (Claude Max):**
 
 ```bash
+pip install "nfr-review[llm-anthropic]"
 export NFR_LLM_BACKEND=claude-cli
 nfr-review report /path/to/repo
 ```
@@ -351,7 +361,7 @@ runner.
 ```
 
 - Sets up Python via `actions/setup-python`.
-- Installs nfr-review from the action directory via `pip install`.
+- Installs nfr-review via `pip install`.
 - Best for most repositories. No Docker required on the runner.
 
 ### container mode
@@ -379,23 +389,38 @@ image: "ghcr.io/jimakennedy/nfr-review:1.2.3"
 
 ## 10. Running locally
 
-### Install from source
+### Install from PyPI
 
 ```bash
 # Requires Python 3.11+
+pip install nfr-review
+```
+
+### Optional extras
+
+| Extra | What it adds |
+|-------|-------------|
+| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
+| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
+| `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
+| `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
+
+Install extras individually or combine them:
+
+```bash
+pip install "nfr-review[llm-anthropic,pdf,scancode]"
+```
+
+### Install from source (development)
+
+```bash
 git clone https://github.com/JimAKennedy/nfr-review.git
 cd nfr-review
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -e .
-```
-
-### Install with extras
-
-```bash
-pip install -e ".[scancode]"   # adds scancode-toolkit for license scanning
-pip install -e ".[dev]"        # adds pytest, ruff, pytest-cov
+pip install -e ".[dev]"
 ```
 
 ### CLI usage

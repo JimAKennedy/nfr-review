@@ -58,6 +58,33 @@ class TestClaudeClientAvailability:
 
 
 # ---------------------------------------------------------------------------
+# Optional dependency — anthropic not installed
+# ---------------------------------------------------------------------------
+
+
+class TestAnthropicOptional:
+    def test_unavailable_when_sdk_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "anthropic", None)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+        client = ClaudeClient()
+        assert client.available is False
+
+    def test_analyze_raises_when_sdk_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "anthropic", None)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-key")
+        client = ClaudeClient()
+        with pytest.raises(LlmUnavailableError, match="anthropic SDK not installed"):
+            client.analyze("prompt", "evidence")
+
+    def test_cli_backend_works_without_sdk(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(_llm_mod, "anthropic", None)
+        monkeypatch.setenv("NFR_LLM_BACKEND", "claude-cli")
+        with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
+            client = ClaudeClient()
+        assert client.available is True
+
+
+# ---------------------------------------------------------------------------
 # .env auto-loading
 # ---------------------------------------------------------------------------
 

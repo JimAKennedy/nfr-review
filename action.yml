@@ -130,7 +130,12 @@ runs:
     - name: Install nfr-review
       if: inputs.execution != 'container'
       shell: bash
-      run: pip install "${{ github.action_path }}"
+      run: |
+        if [ -n "${{ inputs.anthropic-api-key }}" ]; then
+          pip install "${{ github.action_path }}[llm-anthropic]"
+        else
+          pip install "${{ github.action_path }}"
+        fi
 
     # ── 3. Pull container image (container mode only) ───────────────────
     - name: Pull nfr-review image
