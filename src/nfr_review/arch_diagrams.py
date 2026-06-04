@@ -1412,10 +1412,10 @@ def render_partitioned_class_diagrams(
             for diag_idx in sorted(connected):
                 target = next(p for p in partitions if p.diagram_index == diag_idx)
                 proxy_id = _safe_id(f"proxy_D{diag_idx}")
-                label_text = f"Diagram {diag_idx}"
+                label_text = f"Diagram_{diag_idx}"
                 if target.label:
-                    safe_label = re.sub(r"[^a-zA-Z0-9_ ]", "_", target.label)
-                    label_text += f" {safe_label}"
+                    safe_label = re.sub(r"[^a-zA-Z0-9_]", "_", target.label)
+                    label_text = f"Diagram_{diag_idx}_{safe_label}"
                 extra.append(f"    class {proxy_id}")
                 extra.append(f"    <<{label_text}>> {proxy_id}")
 

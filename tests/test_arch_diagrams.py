@@ -4,7 +4,12 @@
 
 from __future__ import annotations
 
+import json
 import re as _re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -2434,10 +2439,10 @@ def _assert_annotations_inside_class_body(mermaid: str) -> None:
 
 
 def _assert_annotation_labels_safe(mermaid: str) -> None:
-    """Verify <<...>> labels contain only alphanumeric, underscore, space, colon."""
+    """Verify <<...>> labels contain only alphanumeric and underscore (no spaces)."""
     for m in _re.finditer(r"<<(.+?)>>", mermaid):
         content = m.group(1)
-        bad = _re.search(r"[^a-zA-Z0-9_ :]", content)
+        bad = _re.search(r"[^a-zA-Z0-9_]", content)
         assert bad is None, (
             f"Annotation label contains invalid char {bad.group()!r}: <<{content}>>"
         )
@@ -2756,3 +2761,209 @@ class TestOrphanDetection:
         assert "Total orphans: 1" in md
         assert "svc_orphan" in md
         assert "## Container" in md
+
+
+# ---------------------------------------------------------------------------
+# Real mmdc syntax validation — catches parse errors that substring tests miss
+# ---------------------------------------------------------------------------
+
+_MMDC = shutil.which("mmdc")
+requires_mmdc = pytest.mark.skipif(_MMDC is None, reason="mmdc not installed")
+
+
+def _assert_mmdc_parses(mermaid: str, label: str = "") -> None:
+    """Run mmdc on the Mermaid text and assert it exits 0 (syntax OK)."""
+    assert _MMDC is not None
+    with tempfile.TemporaryDirectory() as td:
+        inp = Path(td) / "input.mmd"
+        out = Path(td) / "output.png"
+        cfg = Path(td) / "config.json"
+        inp.write_text(mermaid)
+        cfg.write_text(json.dumps({"maxTextSize": 200_000}))
+        result = subprocess.run(
+            [_MMDC, "-i", str(inp), "-o", str(out), "-b", "transparent", "-c", str(cfg)],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            err = result.stderr.decode(errors="replace")[:500]
+            pytest.fail(f"mmdc parse failure{f' ({label})' if label else ''}: {err}")
+
+
+def _make_rich_classes(
+    *,
+    ns_prefix: str = "",
+    count: int = 6,
+    abstract_indices: set[int] | None = None,
+    struct_indices: set[int] | None = None,
+) -> list[dict]:
+    """Build a realistic set of class dicts with fields, methods, inheritance."""
+    abstract_indices = abstract_indices or set()
+    struct_indices = struct_indices or set()
+    classes: list[dict] = []
+    for i in range(count):
+        ns = f"{ns_prefix}.pkg{i // 3}" if ns_prefix else ""
+        cls: dict = {
+            "name": f"Class{i}",
+            "line": i * 10 + 1,
+            "has_destructor": False,
+            "is_struct": i in struct_indices,
+            "is_abstract": i in abstract_indices,
+            "namespace": ns,
+            "base_classes": [{"name": f"Class{i - 1}", "access": "public"}] if i > 0 else [],
+            "fields": [
+                {"name": f"field_{j}", "type": "string", "access": "private"} for j in range(3)
+            ],
+            "methods": [
+                {
+                    "name": f"method_{j}",
+                    "return_type": "void",
+                    "access": "public",
+                    "is_virtual": False,
+                    "is_pure_virtual": i in abstract_indices and j == 0,
+                    "line": i * 10 + j + 2,
+                    "parameters": [{"name": "arg", "type": f"Class{(i + 1) % count}"}],
+                }
+                for j in range(2)
+            ],
+        }
+        classes.append(cls)
+    return classes
+
+
+@requires_mmdc
+class TestMermaidSyntaxValidation:
+    """Validate generated Mermaid against the real mmdc parser.
+
+    Every test generates indicative class diagram output and pipes it
+    through mmdc.  These catch syntax errors (bad annotations, namespace
+    violations, illegal chars) that substring assertions miss.
+    """
+
+    def test_basic_class_diagram(self) -> None:
+        classes = _make_rich_classes()
+        d = render_class_diagram(classes, title="Basic")
+        _assert_mmdc_parses(d.mermaid, "basic class diagram")
+
+    def test_namespace_grouping(self) -> None:
+        classes = _make_rich_classes(ns_prefix="com.example")
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "namespace grouping")
+
+    def test_abstract_in_namespace(self) -> None:
+        classes = _make_rich_classes(ns_prefix="org.project", abstract_indices={0, 2})
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "abstract in namespace")
+
+    def test_struct_in_namespace(self) -> None:
+        classes = _make_rich_classes(ns_prefix="audio.dsp", struct_indices={1, 3})
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "struct in namespace")
+
+    def test_mixed_annotations_in_namespace(self) -> None:
+        classes = _make_rich_classes(
+            ns_prefix="engine.core", abstract_indices={0}, struct_indices={3, 5}
+        )
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "mixed annotations in namespace")
+
+    def test_partitioned_with_dotted_namespaces(self) -> None:
+        classes = _make_rich_classes(ns_prefix="src.nfr_review.arch", count=20)
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=8, group_by_namespace=True
+        )
+        for i, d in enumerate(diagrams):
+            _assert_mmdc_parses(d.mermaid, f"partition {i}")
+
+    def test_partitioned_with_proxy_crossrefs(self) -> None:
+        part_a = _make_rich_classes(ns_prefix="pkg.alpha", count=10)
+        part_b = _make_rich_classes(ns_prefix="pkg.beta", count=10)
+        for i, cls in enumerate(part_b):
+            cls["name"] = f"Beta{i}"
+        part_b[0]["base_classes"] = [{"name": "Class0", "access": "public"}]
+        diagrams = render_partitioned_class_diagrams(
+            part_a + part_b, max_per_diagram=12, group_by_namespace=True
+        )
+        for i, d in enumerate(diagrams):
+            _assert_mmdc_parses(d.mermaid, f"proxy crossref partition {i}")
+
+    def test_partitioned_abstract_with_proxies(self) -> None:
+        classes = _make_rich_classes(
+            ns_prefix="org.example.core", count=20, abstract_indices={0, 5, 10}
+        )
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=8, group_by_namespace=True
+        )
+        for i, d in enumerate(diagrams):
+            _assert_mmdc_parses(d.mermaid, f"abstract+proxy partition {i}")
+
+    def test_cpp_double_colon_namespaces(self) -> None:
+        classes = _make_rich_classes(ns_prefix="std::chrono", count=6, struct_indices={2})
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "C++ :: namespaces")
+
+    def test_nested_and_friend_classes(self) -> None:
+        classes = [
+            {
+                "name": "Container",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "is_abstract": False,
+                "namespace": "util",
+                "base_classes": [],
+                "fields": [{"name": "data", "type": "vector~int~", "access": "private"}],
+                "methods": [],
+                "friends": ["Inspector"],
+            },
+            {
+                "name": "Iterator",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "is_abstract": False,
+                "namespace": "util",
+                "base_classes": [],
+                "fields": [],
+                "methods": [
+                    {
+                        "name": "next",
+                        "return_type": "bool",
+                        "access": "public",
+                        "is_virtual": False,
+                        "is_pure_virtual": False,
+                        "line": 21,
+                    }
+                ],
+                "outer_class": "Container",
+            },
+            {
+                "name": "Inspector",
+                "line": 40,
+                "has_destructor": False,
+                "is_struct": False,
+                "is_abstract": False,
+                "namespace": "debug",
+                "base_classes": [],
+                "fields": [],
+                "methods": [],
+            },
+        ]
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "nested + friend classes in namespaces")
+
+    def test_single_class_no_members(self) -> None:
+        classes = [
+            {
+                "name": "Singleton",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "is_abstract": False,
+                "base_classes": [],
+                "fields": [],
+                "methods": [],
+            }
+        ]
+        d = render_class_diagram(classes)
+        _assert_mmdc_parses(d.mermaid, "single class")
