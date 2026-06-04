@@ -323,7 +323,7 @@ class SpdxValidationRule:
                     results.append(("pyproject.toml", lic))
                 elif isinstance(lic, dict) and "text" in lic:
                     results.append(("pyproject.toml", lic["text"]))
-            except Exception as e:  # nosec B110
+            except (OSError, ValueError) as e:  # nosec B110
                 logger.debug("Failed to parse pyproject.toml license: %s", e)
 
         pkg_json = repo_path / "package.json"
@@ -333,7 +333,7 @@ class SpdxValidationRule:
                 lic = data.get("license")
                 if isinstance(lic, str):
                     results.append(("package.json", lic))
-            except Exception as e:  # nosec B110
+            except (OSError, json.JSONDecodeError) as e:  # nosec B110
                 logger.debug("Failed to parse package.json license: %s", e)
 
         pom = repo_path / "pom.xml"
@@ -350,7 +350,7 @@ class SpdxValidationRule:
                     name_elem = lic_elem.find(f"{ns}name")
                     if name_elem is not None and name_elem.text:
                         results.append(("pom.xml", name_elem.text.strip()))
-            except Exception as e:  # nosec B110
+            except (ET.ParseError, OSError) as e:  # nosec B110
                 logger.debug("Failed to parse pom.xml license: %s", e)
 
         return results

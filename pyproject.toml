@@ -88,7 +88,7 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP"]
+select = ["E", "F", "W", "I", "B", "BLE", "UP"]
 
 [tool.bandit]
 # B101 flags `assert` statements. Production code uses 3 defensive asserts for

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
@@ -55,7 +55,7 @@ class CmakeMinimumVersionRule:
             else:
                 try:
                     ver = Version(version_str)
-                except Exception:
+                except InvalidVersion:
                     ver = Version("0.0")
                 if ver < _MODERN_CMAKE_VERSION:
                     findings.append(

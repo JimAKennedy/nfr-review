@@ -1039,6 +1039,7 @@ def run_report_pipeline(
                 score_section_md=score_section,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
+        # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
         except Exception as exc:  # noqa: BLE001
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None

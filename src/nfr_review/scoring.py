@@ -299,6 +299,7 @@ def load_baseline_score(
                             }
                         )
                     )
+                # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
                 except Exception:  # noqa: BLE001  # nosec B112
                     continue
 

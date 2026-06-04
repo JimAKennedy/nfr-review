@@ -162,7 +162,7 @@ class NoticeCompletenessRule:
             if p.is_file():
                 try:
                     return p.read_text(encoding="utf-8")
-                except Exception as e:
+                except OSError as e:
                     logger.debug("Failed to read NOTICE file %s: %s", p, e)
                     return None
         return None

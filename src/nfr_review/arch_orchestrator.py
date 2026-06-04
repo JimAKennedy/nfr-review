@@ -140,7 +140,7 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
         for target in targets:
             try:
                 evidence_list = collector.collect(target, config=None)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.debug("%s collection failed for %s", class_name, target, exc_info=True)
                 continue
             for ev in evidence_list:
