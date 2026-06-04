@@ -420,6 +420,7 @@ def run_cmd(
             result.findings,
             result.run_metadata.rules_run if result.run_metadata else [],
             result.run_metadata.rules_skipped if result.run_metadata else [],
+            config.scoring,
         )
         click.echo("", err=True)
         _ts_echo(f"Design Maturity Score: {score.overall}/100 (Grade: {score.grade})")
@@ -431,7 +432,9 @@ def run_cmd(
 
         if baseline_path is not None:
             bl_findings, bl_rules_run, bl_rules_skipped = load_baseline_score(baseline_path)
-            trend = compute_trend(score, bl_findings, bl_rules_run, bl_rules_skipped)
+            trend = compute_trend(
+                score, bl_findings, bl_rules_run, bl_rules_skipped, config.scoring
+            )
             arrow = (
                 "↑"
                 if trend.direction == "improved"
@@ -811,6 +814,20 @@ def run_report_pipeline(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    # Merge repo-local scoring overrides when a central config is provided
+    # and the target repo has its own nfr-review.yaml with scoring settings.
+    repo_local_cfg_path = target / "nfr-review.yaml"
+    if (
+        effective_config_path is not None
+        and repo_local_cfg_path.exists()
+        and repo_local_cfg_path.resolve() != effective_config_path.resolve()
+    ):
+        try:
+            repo_config = load_config(repo_local_cfg_path)
+            config = config.with_repo_scoring(repo_config)
+        except ConfigError:
+            pass  # repo-local config is malformed — use central defaults
+
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
@@ -922,6 +939,7 @@ def run_report_pipeline(
             all_report_findings,
             nfr_meta.rules_run if nfr_meta else [],
             nfr_meta.rules_skipped if nfr_meta else [],
+            config.scoring,
         )
         score_section = render_score_section(score)
 

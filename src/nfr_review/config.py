@@ -81,6 +81,69 @@ class LlmConfig(BaseModel):
         return self.model_copy(update=overrides)
 
 
+ISO_25010_CATEGORIES: tuple[str, ...] = (
+    "security",
+    "reliability",
+    "performance",
+    "maintainability",
+)
+
+DEFAULT_CATEGORY_WEIGHTS: dict[str, float] = {
+    "security": 1.0,
+    "reliability": 1.0,
+    "performance": 1.0,
+    "maintainability": 1.0,
+}
+
+DEFAULT_SEVERITY_DEDUCTIONS: dict[str, int] = {
+    "critical": 15,
+    "high": 8,
+    "medium": 3,
+    "low": 1,
+    "info": 0,
+}
+
+CATEGORY_ALIASES: dict[str, str] = {
+    "observability": "reliability",
+    "obs": "reliability",
+    "ops": "maintainability",
+}
+
+
+class ScoringConfig(BaseModel):
+    """Scoring weights and severity deductions aligned with ISO/IEC 25010.
+
+    Supports two-level configuration: a central config provides defaults,
+    and each repo can override specific weights via its own nfr-review.yaml.
+    Use :meth:`merge` to apply repo-local overrides onto central defaults.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_weights: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_CATEGORY_WEIGHTS),
+    )
+    severity_deductions: dict[str, int] = Field(
+        default_factory=lambda: dict(DEFAULT_SEVERITY_DEDUCTIONS),
+    )
+    category_aliases: dict[str, str] = Field(
+        default_factory=lambda: dict(CATEGORY_ALIASES),
+    )
+
+    def merge(self, overrides: ScoringConfig) -> ScoringConfig:
+        """Return a new ScoringConfig with *overrides* applied on top of self.
+
+        Dict fields are shallow-merged: keys present in *overrides* win,
+        keys only in *self* are preserved.  This lets a repo-local config
+        override ``security: 2.0`` without having to repeat every other weight.
+        """
+        return ScoringConfig(
+            category_weights={**self.category_weights, **overrides.category_weights},
+            severity_deductions={**self.severity_deductions, **overrides.severity_deductions},
+            category_aliases={**self.category_aliases, **overrides.category_aliases},
+        )
+
+
 class Config(BaseModel):
     """Validated nfr-review.yaml configuration.
 
@@ -99,7 +162,18 @@ class Config(BaseModel):
     exclude_test_paths: bool = True
     max_resolve_rounds: int = 2000
     llm: LlmConfig = Field(default_factory=LlmConfig)
+    scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     target: Path | None = Field(default=None, exclude=True)
+
+    def with_repo_scoring(self, repo_config: Config) -> Config:
+        """Return a copy with scoring merged from *repo_config*.
+
+        Central config provides defaults; repo-local config overrides
+        specific weights/deductions/aliases.  Non-scoring fields from
+        the repo config are ignored — only ``scoring`` is merged.
+        """
+        merged_scoring = self.scoring.merge(repo_config.scoring)
+        return self.model_copy(update={"scoring": merged_scoring})
 
 
 def _format_validation_error(exc: ValidationError) -> str:
@@ -168,11 +242,16 @@ def load_config(path: Path | None) -> Config:
 
 
 __all__ = [
+    "CATEGORY_ALIASES",
     "Config",
     "ConfigError",
     "CollectorsConfig",
+    "DEFAULT_CATEGORY_WEIGHTS",
+    "DEFAULT_SEVERITY_DEDUCTIONS",
+    "ISO_25010_CATEGORIES",
     "LlmConfig",
     "LlmProvider",
     "RulesConfig",
+    "ScoringConfig",
     "load_config",
 ]
