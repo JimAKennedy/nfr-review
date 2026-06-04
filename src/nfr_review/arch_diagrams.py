@@ -955,6 +955,12 @@ def render_class_diagram(
             return
         cid = _safe_id(name)
 
+        annotation = ""
+        if cls.get("is_abstract"):
+            annotation = "<<abstract>>"
+        elif cls.get("is_struct"):
+            annotation = "<<struct>>"
+
         members: list[str] = []
         member_count = 0
         for field in cls.get("fields", []):
@@ -978,18 +984,15 @@ def render_class_diagram(
             members.append(f"{sym}{mname}(){virt} {rtype}")
             member_count += 1
 
-        if members:
+        if members or annotation:
             lines.append(f"{indent}class {cid} {{")
+            if annotation:
+                lines.append(f"{indent}    {annotation}")
             for m in members:
                 lines.append(f"{indent}    {m}")
             lines.append(f"{indent}}}")
         else:
             lines.append(f"{indent}class {cid}")
-
-        if cls.get("is_abstract"):
-            lines.append(f"{indent}<<abstract>> {cid}")
-        elif cls.get("is_struct"):
-            lines.append(f"{indent}<<struct>> {cid}")
 
     if group_by_namespace:
         for ns in sorted(ns_groups):
@@ -1411,7 +1414,8 @@ def render_partitioned_class_diagrams(
                 proxy_id = _safe_id(f"proxy_D{diag_idx}")
                 label_text = f"Diagram {diag_idx}"
                 if target.label:
-                    label_text += f": {target.label}"
+                    safe_label = re.sub(r"[^a-zA-Z0-9_ ]", "_", target.label)
+                    label_text += f" {safe_label}"
                 extra.append(f"    class {proxy_id}")
                 extra.append(f"    <<{label_text}>> {proxy_id}")
 
