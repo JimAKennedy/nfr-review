@@ -79,6 +79,10 @@ inputs:
     description: "Docker image for container mode (default: ghcr.io/jimakennedy/nfr-review:latest)"
     required: false
     default: "ghcr.io/jimakennedy/nfr-review:latest"
+  workers:
+    description: "Number of parallel collector threads (1 = sequential)"
+    required: false
+    default: "4"
   anthropic-api-key:
     description: "Anthropic API key for LLM features (executive summary, ADR drift, PII detection). Omit to skip LLM features gracefully."
     required: false
@@ -229,6 +233,7 @@ runs:
           DOCKER_ARGS+=("${{ inputs.image }}")
           DOCKER_ARGS+=("run" "$CONTAINER_SCAN")
           DOCKER_ARGS+=("--jsonl" "/output/nfr-review-output.jsonl")
+          DOCKER_ARGS+=("--workers" "${{ inputs.workers }}")
 
           if [ -n "${{ inputs.config }}" ]; then
             DOCKER_ARGS+=("--config" "/repo/${{ inputs.config }}")
@@ -263,6 +268,8 @@ runs:
           if [ -n "$SARIF_PATH" ]; then
             ARGS+=("--sarif" "$SARIF_PATH")
           fi
+
+          ARGS+=("--workers" "${{ inputs.workers }}")
 
           nfr-review "${ARGS[@]}"
           EXIT_CODE=$?

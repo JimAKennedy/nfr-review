@@ -56,6 +56,8 @@ def test_regression_snapshot(
             "run",
             str(clone_dir),
             "--include-tests",
+            "--workers",
+            "4",
             "--jsonl",
             str(jsonl_out),
             "--csv",
