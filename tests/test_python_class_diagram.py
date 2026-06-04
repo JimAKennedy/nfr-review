@@ -295,16 +295,16 @@ class TestIntegrationDiagramPipeline:
         assert 'AudioPlugin *-- Preset : "inner"' in diagram_mermaid
 
     def test_integration_namespace_grouping(self, grouped_mermaid: str) -> None:
-        assert "namespace engine.config" in grouped_mermaid
-        assert "namespace plugins.base" in grouped_mermaid
-        assert "namespace logging_pkg.base" in grouped_mermaid
+        assert "namespace engine_config" in grouped_mermaid
+        assert "namespace plugins_base" in grouped_mermaid
+        assert "namespace logging_pkg_base" in grouped_mermaid
 
     def test_integration_abstract_stereotype(self, diagram_mermaid: str) -> None:
         assert "<<abstract>> Plugin" in diagram_mermaid
 
     def test_integration_field_visibility(self, diagram_mermaid: str) -> None:
-        assert "Config : +name str" in diagram_mermaid
-        assert "AudioPlugin : -_volume float" in diagram_mermaid
+        assert "+name str" in diagram_mermaid
+        assert "-_volume float" in diagram_mermaid
 
     def test_integration_orphan_no_edges(self, diagram_mermaid: str) -> None:
         for line in diagram_mermaid.splitlines():

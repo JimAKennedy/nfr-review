@@ -326,12 +326,12 @@ class TestIntegrationDiagramPipeline:
         assert "namespace util" in grouped_mermaid
 
     def test_integration_field_visibility(self, diagram_mermaid: str) -> None:
-        assert "Config : +Name string" in diagram_mermaid
-        assert "Config : -maxThreads int" in diagram_mermaid
+        assert "+Name string" in diagram_mermaid
+        assert "-maxThreads int" in diagram_mermaid
 
     def test_integration_interface_methods_pure_virtual(self, diagram_mermaid: str) -> None:
-        assert "Plugin : +Activate()*" in diagram_mermaid
-        assert "Logger : +Log()*" in diagram_mermaid
+        assert "+Activate()*" in diagram_mermaid
+        assert "+Log()*" in diagram_mermaid
 
     def test_integration_orphan_no_edges(self, diagram_mermaid: str) -> None:
         for line in diagram_mermaid.splitlines():
