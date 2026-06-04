@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 from ruamel.yaml import YAML
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -61,34 +62,39 @@ def clone_repo(
     if clone_dir.exists():
         return clone_dir
 
-    try:
-        subprocess.run(
-            ["git", "clone", "--depth", "1", url, str(clone_dir)],
-            capture_output=True,
-            text=True,
-            timeout=600,
-            check=True,
-        )
-    except subprocess.TimeoutExpired:
-        pytest.skip(f"clone timed out after 600s: {url}")
-    except subprocess.CalledProcessError as exc:
-        pytest.skip(f"clone failed: {exc.stderr.strip()}")
+    lock = FileLock(repos_dir / f".{name}.lock", timeout=900)
+    with lock:
+        if clone_dir.exists():
+            return clone_dir
 
-    if commit_sha is not None:
-        subprocess.run(
-            ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
-            capture_output=True,
-            text=True,
-            timeout=600,
-            check=False,
-        )
-        subprocess.run(
-            ["git", "-C", str(clone_dir), "checkout", commit_sha],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                ["git", "clone", "--depth", "1", url, str(clone_dir)],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=True,
+            )
+        except subprocess.TimeoutExpired:
+            pytest.skip(f"clone timed out after 600s: {url}")
+        except subprocess.CalledProcessError as exc:
+            pytest.skip(f"clone failed: {exc.stderr.strip()}")
+
+        if commit_sha is not None:
+            subprocess.run(
+                ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
+                capture_output=True,
+                text=True,
+                timeout=600,
+                check=False,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone_dir), "checkout", commit_sha],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
 
     return clone_dir
 

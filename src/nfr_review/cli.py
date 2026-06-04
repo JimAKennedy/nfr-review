@@ -276,6 +276,13 @@ def cli() -> None:
     default=False,
     help="Compute and display design maturity score.",
 )
+@click.option(
+    "--workers",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Number of parallel collector threads (1 = sequential).",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -288,6 +295,7 @@ def run_cmd(
     baseline_path: Path | None = None,
     sarif_path: Path | None = None,
     show_score: bool = False,
+    workers: int = 1,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -355,7 +363,7 @@ def run_cmd(
     t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     run_logger.info("Starting NFR engine scan")
     try:
-        result = Engine().run(target, config)
+        result = Engine(workers=workers).run(target, config)
     except EngineError as exc:
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
@@ -752,6 +760,7 @@ def run_report_pipeline(
     include_tests: bool = True,
     quiet: bool = False,
     stem: str | None = None,
+    workers: int = 1,
 ) -> ReportResult:
     """Run the full NFR + hygiene report pipeline and return structured results.
 
@@ -818,7 +827,7 @@ def run_report_pipeline(
     # NFR scan
     t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     try:
-        nfr_result: RunResult = Engine().run(target, config)
+        nfr_result: RunResult = Engine(workers=workers).run(target, config)
     except EngineError as exc:
         click.echo(f"error: NFR scan failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
@@ -830,6 +839,7 @@ def run_report_pipeline(
         hygiene_result: RunResult = Engine(
             collectors=hygiene_collector_registry,
             rules=hygiene_rule_registry,
+            workers=workers,
         ).run(target, config)
     except EngineError as exc:
         click.echo(f"error: hygiene scan failed: {exc}", err=True)
@@ -1161,6 +1171,13 @@ def run_report_pipeline(
     default=None,
     help="Maximum resolver iterations for dependency analysis (default: 2000).",
 )
+@click.option(
+    "--workers",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Number of parallel collector threads (1 = sequential).",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -1178,6 +1195,7 @@ def report_cmd(
     sarif_path: Path | None = None,
     no_score: bool = False,
     max_resolve_rounds: int | None = None,
+    workers: int = 1,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     if verbose and quiet:
@@ -1206,6 +1224,7 @@ def report_cmd(
         max_resolve_rounds=max_resolve_rounds,
         include_tests=not exclude_tests,
         quiet=quiet,
+        workers=workers,
     )
 
 
@@ -2047,6 +2066,13 @@ def arch_cmd(
     default=True,
     help="Exclude test and fixture directories from NFR analysis (default: exclude).",
 )
+@click.option(
+    "--workers",
+    type=int,
+    default=1,
+    show_default=True,
+    help="Number of parallel collector threads (1 = sequential).",
+)
 def all_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -2066,6 +2092,7 @@ def all_cmd(
     no_llm: bool,
     diagram_mode: str,
     exclude_tests: bool,
+    workers: int = 1,
 ) -> None:
     """Run architecture review across all targets, then NFR report per target."""
     if verbose and quiet:
@@ -2085,34 +2112,25 @@ def all_cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
     arch_result: dict[str, Any] | None = None
 
-    # Phase 1: Architecture review (cross-repo)
-    if not no_arch:
+    def _run_arch() -> dict[str, Any]:
         from nfr_review.arch_orchestrator import run_arch_review
         from nfr_review.arch_report_render import render_arch_report
 
         t0 = _phase("Running architecture review (all targets)", quiet=quiet)
-        try:
-            report = run_arch_review(
-                target_list,
-                repo_names=repo_names,
-                skip_llm=no_llm,
-                diagram_mode=diagram_mode,
-                progress=lambda msg: _ts_echo(msg, quiet=quiet),
-            )
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"error: architecture review failed: {exc}", err=True)
-            raise click.exceptions.Exit(1) from exc
+        report = run_arch_review(
+            target_list,
+            repo_names=repo_names,
+            skip_llm=no_llm,
+            diagram_mode=diagram_mode,
+            progress=lambda msg: _ts_echo(msg, quiet=quiet),
+        )
         _phase_done("Architecture review", t0, quiet=quiet)
 
         t0 = _phase("Rendering architecture output", quiet=quiet)
-        try:
-            arch_files = render_arch_report(report, output_dir, formats=None)
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"error: arch report rendering failed: {exc}", err=True)
-            raise click.exceptions.Exit(1) from exc
+        arch_files = render_arch_report(report, output_dir, formats=None)
         _phase_done("Architecture output", t0, quiet=quiet)
 
-        arch_result = {
+        return {
             "components": len(report.components),
             "integrations": len(report.integration_points),
             "risks": len(report.risk_findings),
@@ -2120,30 +2138,58 @@ def all_cmd(
             "files": {k: v for k, v in arch_files.items() if v is not None},
         }
 
-    # Phase 2: NFR report per target
-    report_results: list[tuple[str, ReportResult]] = []
-    for target, repo in zip(target_list, repo_names, strict=True):
-        if not quiet:
-            click.echo("", err=True)
-        _phase(f"Running NFR report for {repo}", quiet=quiet)
-        stem = f"{repo}-nfr-review-{timestamp}"
-        result = run_report_pipeline(
-            target,
-            output_dir=output_dir,
-            config_path=config_path,
-            no_tests=no_tests,
-            no_deps=no_deps,
-            no_diagrams=no_diagrams,
-            pdf=not no_pdf,
-            no_summary=no_summary,
-            test_timeout=test_timeout,
-            show_score=not no_score,
-            max_resolve_rounds=max_resolve_rounds,
-            include_tests=not exclude_tests,
-            quiet=quiet,
-            stem=stem,
-        )
-        report_results.append((repo, result))
+    def _run_nfr_reports() -> list[tuple[str, ReportResult]]:
+        results: list[tuple[str, ReportResult]] = []
+        for t, repo in zip(target_list, repo_names, strict=True):
+            if not quiet:
+                click.echo("", err=True)
+            _phase(f"Running NFR report for {repo}", quiet=quiet)
+            stem = f"{repo}-nfr-review-{timestamp}"
+            rr = run_report_pipeline(
+                t,
+                output_dir=output_dir,
+                config_path=config_path,
+                no_tests=no_tests,
+                no_deps=no_deps,
+                no_diagrams=no_diagrams,
+                pdf=not no_pdf,
+                no_summary=no_summary,
+                test_timeout=test_timeout,
+                show_score=not no_score,
+                max_resolve_rounds=max_resolve_rounds,
+                include_tests=not exclude_tests,
+                quiet=quiet,
+                stem=stem,
+                workers=workers,
+            )
+            results.append((repo, rr))
+        return results
+
+    if not no_arch and workers > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _phase("Running arch + NFR pipelines concurrently", quiet=quiet)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            arch_future = pool.submit(_run_arch)
+            nfr_future = pool.submit(_run_nfr_reports)
+            try:
+                arch_result = arch_future.result()
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"error: architecture review failed: {exc}", err=True)
+                raise click.exceptions.Exit(1) from exc
+            try:
+                report_results = nfr_future.result()
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"error: NFR report failed: {exc}", err=True)
+                raise click.exceptions.Exit(1) from exc
+    else:
+        if not no_arch:
+            try:
+                arch_result = _run_arch()
+            except Exception as exc:  # noqa: BLE001
+                click.echo(f"error: architecture review failed: {exc}", err=True)
+                raise click.exceptions.Exit(1) from exc
+        report_results = _run_nfr_reports()
 
     # Summary
     if not quiet:
