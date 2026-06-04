@@ -151,6 +151,7 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
                         cls.get("base_classes") or cls.get("methods") or cls.get("fields")
                     ):
                         cls["language"] = language
+                        cls["repo"] = target.name
                         all_classes.append(cls)
                         count += 1
 

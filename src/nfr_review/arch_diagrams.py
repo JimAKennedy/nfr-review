@@ -818,6 +818,10 @@ def _sanitize_member_type(raw: str) -> str:
     s = s.replace("::", ".").replace("<", "~").replace(">", "~")
     s = s.replace("[", "~").replace("]", "~").replace('"', "").replace("'", "")
     s = s.replace(",", " |")
+    s = s.replace("{", "(").replace("}", ")")
+    s = s.replace("*", "ptr")
+    s = s.replace(";", "")
+    s = s.replace(":", "")
     return s
 
 
@@ -949,6 +953,11 @@ def render_class_diagram(
         ns = cls.get("namespace", "") or ""
         ns_groups.setdefault(ns, []).append(cls)
 
+    # -- Detect multi-repo --
+    repos = {cls.get("repo", "") or "" for cls in class_data}
+    repos.discard("")
+    multi_repo = len(repos) > 1
+
     def _emit_class_block(cls: dict, indent: str) -> None:
         name = cls.get("name", "")
         if not name:
@@ -994,7 +1003,29 @@ def render_class_diagram(
         else:
             lines.append(f"{indent}class {cid}")
 
-    if group_by_namespace:
+    if group_by_namespace and multi_repo:
+        repo_ns: dict[str, dict[str, list[dict]]] = {}
+        for cls in class_data:
+            r = cls.get("repo", "") or ""
+            ns = cls.get("namespace", "") or ""
+            repo_ns.setdefault(r, {}).setdefault(ns, []).append(cls)
+        for repo in sorted(repo_ns):
+            safe_repo = re.sub(r"[^a-zA-Z0-9_]", "_", repo) if repo else "unknown"
+            lines.append(f"    namespace {safe_repo} {{")
+            for ns in sorted(repo_ns[repo]):
+                group = repo_ns[repo][ns]
+                if ns:
+                    safe_ns = ns.replace("::", "_")
+                    safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", safe_ns)
+                    lines.append(f"        namespace {safe_ns} {{")
+                    for cls in group:
+                        _emit_class_block(cls, "            ")
+                    lines.append("        }")
+                else:
+                    for cls in group:
+                        _emit_class_block(cls, "        ")
+            lines.append("    }")
+    elif group_by_namespace:
         for ns in sorted(ns_groups):
             group = ns_groups[ns]
             if ns:

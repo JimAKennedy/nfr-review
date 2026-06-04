@@ -17,6 +17,7 @@ from nfr_review.arch_diagrams import (
     OrphanNode,
     _package_boundary,
     _safe_id,
+    _sanitize_member_type,
     detect_orphan_nodes,
     generate_all_diagrams,
     partition_classes,
@@ -213,6 +214,57 @@ class TestSafeId:
 
     def test_already_safe(self) -> None:
         assert _safe_id("abc_123") == "abc_123"
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_member_type tests
+# ---------------------------------------------------------------------------
+
+
+class TestSanitizeMemberType:
+    def test_double_colon_namespace(self) -> None:
+        assert "::" not in _sanitize_member_type("std::vector")
+        assert "std.vector" == _sanitize_member_type("std::vector")
+
+    def test_angle_brackets(self) -> None:
+        result = _sanitize_member_type("vector<int>")
+        assert "<" not in result and ">" not in result
+
+    def test_curly_braces(self) -> None:
+        result = _sanitize_member_type("union { const void* p_data; int i; }")
+        assert "{" not in result and "}" not in result
+
+    def test_asterisk_pointer(self) -> None:
+        result = _sanitize_member_type("void*")
+        assert "*" not in result
+
+    def test_semicolons_stripped(self) -> None:
+        result = _sanitize_member_type("int;")
+        assert ";" not in result
+
+    def test_remaining_colon_stripped(self) -> None:
+        result = _sanitize_member_type("std::index_sequence<I...>")
+        assert ":" not in result
+
+    def test_nested_template_with_namespaces(self) -> None:
+        raw = "DispatcherImpl<Struct, std::index_sequence<Indices...>>"
+        result = _sanitize_member_type(raw)
+        assert ":" not in result
+        assert "<" not in result
+        assert ">" not in result
+
+    def test_union_with_pointer_members(self) -> None:
+        raw = "union { const void* p_data; size_t i_data; }"
+        result = _sanitize_member_type(raw)
+        assert "{" not in result
+        assert "}" not in result
+        assert "*" not in result
+        assert ";" not in result
+
+    def test_simple_type_unchanged(self) -> None:
+        assert _sanitize_member_type("int") == "int"
+        assert _sanitize_member_type("string") == "string"
+        assert _sanitize_member_type("bool") == "bool"
 
 
 # ---------------------------------------------------------------------------
@@ -2029,6 +2081,185 @@ class TestClassDiagramNamespaceGrouping:
         assert "." not in result.mermaid.split("namespace")[1].split("{")[0]
 
 
+class TestMultiRepoNamespaceGrouping:
+    """When classes come from multiple repos, repo wraps as an outer namespace."""
+
+    @staticmethod
+    def _make_multi_repo_classes() -> list[dict]:
+        return [
+            {
+                "name": "PluginProcessor",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "process", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "JKDigital",
+                "repo": "drumcore",
+            },
+            {
+                "name": "DrumEngine",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "run", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "JKDigital",
+                "repo": "DrumGenerator",
+            },
+            {
+                "name": "PostFilter",
+                "line": 30,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [{"name": "cutoff", "type": "float", "access": "private"}],
+                "is_abstract": False,
+                "namespace": "JKDigital",
+                "repo": "DrumPostProcessor",
+            },
+        ]
+
+    def test_multi_repo_wraps_repo_as_outer_namespace(self) -> None:
+        classes = self._make_multi_repo_classes()
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace drumcore {" in result.mermaid
+        assert "namespace DrumGenerator {" in result.mermaid
+        assert "namespace DrumPostProcessor {" in result.mermaid
+
+    def test_multi_repo_nests_cpp_namespace_inside_repo(self) -> None:
+        classes = self._make_multi_repo_classes()
+        result = render_class_diagram(classes, group_by_namespace=True)
+        lines = result.mermaid.splitlines()
+        for i, line in enumerate(lines):
+            if "namespace drumcore" in line:
+                block = "\n".join(lines[i : i + 10])
+                assert "namespace JKDigital {" in block
+                break
+        else:
+            raise AssertionError("namespace drumcore not found")
+
+    def test_multi_repo_classes_inside_correct_repo(self) -> None:
+        classes = self._make_multi_repo_classes()
+        result = render_class_diagram(classes, group_by_namespace=True)
+        mermaid = result.mermaid
+        gen_start = mermaid.index("namespace DrumGenerator")
+        gen_end = mermaid.index("namespace DrumPostProcessor")
+        gen_block = mermaid[gen_start:gen_end]
+        assert "DrumEngine" in gen_block
+        assert "PluginProcessor" not in gen_block
+
+    def test_single_repo_no_repo_namespace(self) -> None:
+        classes = [
+            {
+                "name": "Foo",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "bar", "return_type": "int", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "myns",
+                "repo": "solo-repo",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace myns {" in result.mermaid
+        assert "namespace solo_repo" not in result.mermaid
+
+    def test_no_repo_field_falls_back_to_ns_only(self) -> None:
+        classes = [
+            {
+                "name": "Bar",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "baz", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "ns1",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace ns1 {" in result.mermaid
+
+    def test_multi_repo_without_namespace_grouping(self) -> None:
+        classes = self._make_multi_repo_classes()
+        result = render_class_diagram(classes, group_by_namespace=False)
+        assert "namespace" not in result.mermaid
+
+    def test_multi_repo_with_global_ns_classes(self) -> None:
+        classes = [
+            {
+                "name": "Alpha",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "go", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "shared",
+                "repo": "repoA",
+            },
+            {
+                "name": "Beta",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "run", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "",
+                "repo": "repoB",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace repoA {" in result.mermaid
+        assert "namespace repoB {" in result.mermaid
+        assert "namespace shared {" in result.mermaid
+        assert "Beta" in result.mermaid
+
+    def test_multi_repo_repo_name_sanitized(self) -> None:
+        classes = [
+            {
+                "name": "Cls1",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "m", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "ns",
+                "repo": "my-repo.v2",
+            },
+            {
+                "name": "Cls2",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [{"name": "n", "return_type": "void", "access": "public"}],
+                "fields": [],
+                "is_abstract": False,
+                "namespace": "ns",
+                "repo": "other repo!",
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        assert "namespace my_repo_v2 {" in result.mermaid
+        assert "namespace other_repo_ {" in result.mermaid
+
+
 class TestPipelineDiagram:
     def test_multi_stage_dag(self) -> None:
         pipeline = DvcPipeline(
@@ -2967,3 +3198,67 @@ class TestMermaidSyntaxValidation:
         ]
         d = render_class_diagram(classes)
         _assert_mmdc_parses(d.mermaid, "single class")
+
+    def test_cpp_union_brace_fields(self) -> None:
+        """Regression: union { const void* p_data; } broke mmdc with OPEN_IN_STRUCT."""
+        classes = [
+            {
+                "name": "Variant",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": True,
+                "is_abstract": False,
+                "namespace": "audio",
+                "base_classes": [],
+                "fields": [
+                    {
+                        "name": "data",
+                        "type": "union { const void* p_data; size_t i_data; }",
+                        "access": "public",
+                    },
+                    {
+                        "name": "tag",
+                        "type": "int",
+                        "access": "public",
+                    },
+                ],
+                "methods": [],
+            }
+        ]
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "C++ union brace fields")
+
+    def test_cpp_nested_template_with_colons(self) -> None:
+        """Regression: std::index_sequence<I...> broke mmdc with unexpected COLON."""
+        classes = [
+            {
+                "name": "DispatcherImpl",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "is_abstract": False,
+                "namespace": "detail",
+                "base_classes": [],
+                "fields": [
+                    {
+                        "name": "seq",
+                        "type": "std::index_sequence<Indices...>",
+                        "access": "private",
+                    },
+                ],
+                "methods": [
+                    {
+                        "name": "dispatch",
+                        "return_type": (
+                            "DispatcherImpl<Struct, std::index_sequence<Indices...>>"
+                        ),
+                        "access": "public",
+                        "is_virtual": False,
+                        "is_pure_virtual": False,
+                        "line": 10,
+                    }
+                ],
+            }
+        ]
+        d = render_class_diagram(classes, group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "C++ nested template with colons")
