@@ -10,6 +10,7 @@ on the sanitizer alone have proven insufficient.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,9 @@ from pathlib import Path
 import pytest
 
 from tests.regression.conftest import clone_repo, load_manifest
+
+_MMDC = shutil.which("mmdc")
+requires_mmdc = pytest.mark.skipif(_MMDC is None, reason="mmdc not installed")
 
 _MANIFEST = load_manifest()
 _CPP_REPOS = [e for e in _MANIFEST if "cpp" in e.get("expected_techs", [])]
@@ -46,6 +50,7 @@ def _check_mmdc_warnings(stderr: str, label: str) -> None:
 # ── Corpus diagram rendering (C++ repos) ─────────────────────────────────
 
 
+@requires_mmdc
 @pytest.mark.regression
 @pytest.mark.timeout(600)
 @pytest.mark.parametrize("repo_name", _CPP_REPO_NAMES)
@@ -91,10 +96,13 @@ def test_corpus_diagram_rendering(
 # ── Self-scan architecture rendering ──────────────────────────────────────
 
 
+@requires_mmdc
 @pytest.mark.regression
 @pytest.mark.timeout(600)
 def test_self_scan_diagram_rendering(tmp_path: Path) -> None:
     """Run architecture review on the nfr-review repo itself and assert zero mmdc failures."""
+    wp = pytest.importorskip("weasyprint", reason="weasyprint not installed")  # noqa: F841
+
     result = subprocess.run(
         [
             sys.executable,
