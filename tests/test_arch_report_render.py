@@ -31,6 +31,8 @@ from nfr_review.arch_models import (
     TechStackEntry,
 )
 from nfr_review.arch_report_render import (
+    _pdf_market_analysis_html,
+    _pdf_test_coverage_html,
     render_arch_json,
     render_arch_markdown,
     render_arch_pdf,
@@ -459,6 +461,34 @@ class TestRenderArchMarkdown:
         assert "adequate" in content
         assert "No load testing" in content
 
+    def test_test_coverage_per_component_subsections(self, tmp_path: Path) -> None:
+        report = ArchReport(
+            metadata=_make_metadata(),
+            test_coverage=[
+                ComponentTestCoverage(
+                    component_id="comp-a",
+                    functional_coverage="adequate",
+                    nonfunctional_coverage="minimal",
+                    gaps=["No security tests", "No load tests"],
+                ),
+                ComponentTestCoverage(
+                    component_id="comp-b",
+                    functional_coverage="none",
+                    nonfunctional_coverage="none",
+                    gaps=[],
+                ),
+            ],
+        )
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "### comp-a" in content
+        assert "### comp-b" in content
+        assert "| No security tests |" in content
+        assert "| No load tests |" in content
+        assert "No gaps identified." in content
+
     def test_executive_summary_counts(self, tmp_path: Path) -> None:
         report = _make_full_report()
         out = tmp_path / "report.md"
@@ -530,6 +560,97 @@ class TestRenderArchPdf:
         result = render_arch_pdf(report, out)
         assert result == out
         assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# PDF HTML fragment tests (no weasyprint required)
+# ---------------------------------------------------------------------------
+
+
+class TestPdfTestCoverageHtml:
+    def test_per_component_subsections(self) -> None:
+        report = ArchReport(
+            metadata=_make_metadata(),
+            test_coverage=[
+                ComponentTestCoverage(
+                    component_id="comp-svc",
+                    functional_coverage="adequate",
+                    nonfunctional_coverage="minimal",
+                    gaps=["No security tests", "No load tests"],
+                ),
+                ComponentTestCoverage(
+                    component_id="comp-db",
+                    functional_coverage="none",
+                    nonfunctional_coverage="none",
+                    gaps=[],
+                ),
+            ],
+        )
+        html = _pdf_test_coverage_html(report)
+
+        assert "<h4>comp-svc</h4>" in html
+        assert "<h4>comp-db</h4>" in html
+        assert "Functional:</strong> adequate" in html
+        assert "NFR:</strong> minimal" in html
+        assert "<td>No security tests</td>" in html
+        assert "<td>No load tests</td>" in html
+        assert "No gaps identified." in html
+
+    def test_empty_coverage_returns_empty(self) -> None:
+        report = ArchReport(metadata=_make_metadata(), test_coverage=[])
+        assert _pdf_test_coverage_html(report) == ""
+
+    def test_gaps_table_class(self) -> None:
+        report = ArchReport(
+            metadata=_make_metadata(),
+            test_coverage=[
+                ComponentTestCoverage(
+                    component_id="comp-x",
+                    gaps=["Missing integration tests"],
+                ),
+            ],
+        )
+        html = _pdf_test_coverage_html(report)
+        assert 'class="gaps-table"' in html
+
+
+class TestPdfComparisonTableHtml:
+    def test_comparison_table_uses_fixed_layout_class(self) -> None:
+        report = ArchReport(
+            metadata=_make_metadata(),
+            market_analysis=MarketAnalysisSection(
+                comparisons=[
+                    MarketComparison(
+                        name="Tool A",
+                        description="A competing tool with many features",
+                        similarities=["REST"],
+                        differences=["GraphQL"],
+                        maturity="defined",
+                        relative_positioning="More mature platform",
+                    ),
+                ],
+                overall_maturity="developing",
+            ),
+        )
+        html = _pdf_market_analysis_html(report)
+
+        assert 'class="comparison-table"' in html
+        assert "wide-table" not in html
+        assert "Tool A" in html
+        assert "More mature platform" in html
+
+    def test_no_comparisons_skips_table(self) -> None:
+        report = ArchReport(
+            metadata=_make_metadata(),
+            market_analysis=MarketAnalysisSection(
+                comparisons=[],
+                overall_maturity="developing",
+            ),
+        )
+        html = _pdf_market_analysis_html(report)
+
+        assert "comparison-table" not in html
+        assert "developing" in html
 
 
 # ---------------------------------------------------------------------------

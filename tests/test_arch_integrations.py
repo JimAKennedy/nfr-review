@@ -2363,6 +2363,47 @@ class TestMaterializeInfraComponents:
         assert len(redis) >= 1
         assert redis[0].environment == "dev"
 
+    def test_infra_inherits_repo_from_peer(self) -> None:
+        """Materialized infra components inherit repo from connected app component."""
+        app = _make_component("myapp", repo="DrumGenerator")
+        integrations = [
+            IntegrationPoint(
+                id="intg-repo-001",
+                source_component_id=app.id,
+                target_component_id="infra-sqlite-abc123",
+                style="shared_database",
+                protocol="sqlite",
+                environment="dev",
+            )
+        ]
+        result = materialize_infra_components([app], integrations)
+        infra = [c for c in result if c.id == "infra-sqlite-abc123"]
+        assert len(infra) == 1
+        assert infra[0].repo == "DrumGenerator"
+
+    def test_infra_repo_none_when_no_peer(self) -> None:
+        """Infra component gets repo=None when no peer has a repo set."""
+        app = Component(
+            id="comp-orphan-000000",
+            name="orphan",
+            description="No repo set",
+            component_type="service",
+        )
+        integrations = [
+            IntegrationPoint(
+                id="intg-repo-002",
+                source_component_id=app.id,
+                target_component_id="infra-redis-def456",
+                style="shared_database",
+                protocol="redis",
+                environment="prod",
+            )
+        ]
+        result = materialize_infra_components([app], integrations)
+        infra = [c for c in result if c.id == "infra-redis-def456"]
+        assert len(infra) == 1
+        assert infra[0].repo is None
+
 
 # ---------------------------------------------------------------------------
 # Strategy 10: CMake FetchContent / add_subdirectory cross-repo deps

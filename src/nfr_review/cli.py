@@ -753,7 +753,7 @@ def run_report_pipeline(
     no_diagrams: bool = False,
     pdf: bool = True,
     no_summary: bool = False,
-    test_timeout: int = 420,
+    test_timeout: int = 900,
     sarif_path: Path | None = None,
     show_score: bool = True,
     max_resolve_rounds: int | None = None,
@@ -1148,9 +1148,9 @@ def run_report_pipeline(
 @click.option(
     "--test-timeout",
     type=int,
-    default=420,
+    default=900,
     show_default=True,
-    help="Maximum seconds to wait for pytest to complete (default: 420).",
+    help="Maximum seconds to wait for pytest to complete.",
 )
 @click.option(
     "--sarif",
@@ -2032,7 +2032,7 @@ def arch_cmd(
 @click.option(
     "--test-timeout",
     type=int,
-    default=420,
+    default=900,
     show_default=True,
     help="Maximum seconds to wait for pytest per repo.",
 )

@@ -93,6 +93,18 @@ _CSS = (
     ".wide-table th:nth-child(3),"
     " .wide-table td:nth-child(3) { min-width: 75px; white-space: nowrap; }\n"
     ".wide-table td:last-child { word-break: break-word; }\n"
+    ".comparison-table { table-layout: fixed; width: 100%; }\n"
+    ".comparison-table th:nth-child(1) { width: 14%; }\n"
+    ".comparison-table th:nth-child(2) { width: 36%; }\n"
+    ".comparison-table th:nth-child(3) { width: 10%; }\n"
+    ".comparison-table th:nth-child(4) { width: 40%; }\n"
+    ".comparison-table td { word-break: break-word;"
+    " vertical-align: top; }\n"
+    ".coverage-summary { margin-bottom: 0.3em; }\n"
+    ".coverage-summary span { display: inline-block;"
+    " margin-right: 1.5em; }\n"
+    ".gaps-table { table-layout: fixed; width: 100%; }\n"
+    ".gaps-table td { word-break: break-word; vertical-align: top; }\n"
     ".domain-table { table-layout: fixed; width: 100%; }\n"
     ".domain-table th:nth-child(1) { width: 12%; }\n"
     ".domain-table th:nth-child(2) { width: 38%; }\n"
@@ -324,23 +336,26 @@ def _md_diagrams(report: ArchReport) -> str:
 
 
 def _md_test_coverage(report: ArchReport) -> str:
-    """Render test coverage table."""
+    """Render test coverage as per-component subsections."""
     if not report.test_coverage:
         return ""
 
-    lines = [
-        "## Test Coverage",
-        "",
-        "| Component | Functional | NFR | Gaps |",
-        "|---|---|---|---|",
-    ]
+    lines = ["## Test Coverage", ""]
     for tc in report.test_coverage:
-        gaps = "; ".join(tc.gaps) if tc.gaps else "-"
+        lines.append(f"### {tc.component_id}")
+        lines.append("")
         lines.append(
-            f"| {tc.component_id} | {tc.functional_coverage}"
-            f" | {tc.nonfunctional_coverage} | {gaps} |"
+            f"**Functional:** {tc.functional_coverage} | **NFR:** {tc.nonfunctional_coverage}"
         )
-    lines.append("")
+        lines.append("")
+        if tc.gaps:
+            lines.append("| Gap |")
+            lines.append("|---|")
+            for gap in tc.gaps:
+                lines.append(f"| {gap} |")
+        else:
+            lines.append("No gaps identified.")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -606,25 +621,29 @@ def _pdf_diagrams_html(report: ArchReport) -> str:
 
 
 def _pdf_test_coverage_html(report: ArchReport) -> str:
-    """Render test coverage table as HTML on a landscape page."""
+    """Render test coverage as per-component subsections with gap tables."""
     if not report.test_coverage:
         return ""
-    rows = []
+    parts = ['<div class="section-break">', "<h2>Test Coverage</h2>"]
     for tc in report.test_coverage:
-        gaps = _h("; ".join(tc.gaps)) if tc.gaps else "-"
-        rows.append(
-            f"<tr><td>{_h(tc.component_id)}</td>"
-            f"<td>{_h(tc.functional_coverage)}</td>"
-            f"<td>{_h(tc.nonfunctional_coverage)}</td>"
-            f"<td>{gaps}</td></tr>"
+        parts.append(f"<h4>{_h(tc.component_id)}</h4>")
+        parts.append(
+            f'<p class="coverage-summary">'
+            f"<span><strong>Functional:</strong> {_h(tc.functional_coverage)}</span>"
+            f"<span><strong>NFR:</strong> {_h(tc.nonfunctional_coverage)}</span>"
+            f"</p>"
         )
-    return (
-        '<div class="landscape-page">'
-        "<h2>Test Coverage</h2>"
-        '<table class="wide-table"><thead><tr><th>Component</th>'
-        "<th>Functional</th><th>NFR</th><th>Gaps</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div>"
-    )
+        if tc.gaps:
+            gap_rows = "".join(f"<tr><td>{_h(g)}</td></tr>" for g in tc.gaps)
+            parts.append(
+                '<table class="gaps-table"><thead><tr>'
+                "<th>Gap</th></tr></thead>"
+                f"<tbody>{gap_rows}</tbody></table>"
+            )
+        else:
+            parts.append("<p>No gaps identified.</p>")
+    parts.append("</div>")
+    return "\n".join(parts)
 
 
 def _pdf_risk_findings_html(report: ArchReport) -> str:
@@ -751,8 +770,8 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
         parts.append(
             '<div class="landscape-page">'
             "<h3>Comparisons</h3>"
-            '<table class="wide-table"><thead><tr><th>Name</th><th>Description</th>'
-            "<th>Maturity</th><th>Positioning</th>"
+            '<table class="comparison-table"><thead><tr><th>Name</th>'
+            "<th>Description</th><th>Maturity</th><th>Positioning</th>"
             f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
             "</div>"
         )

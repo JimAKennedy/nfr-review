@@ -2546,6 +2546,39 @@ class TestPartitionedClassDiagrams:
         tgt_diag = next(d for d in diagrams if "class Tgt0" in d.mermaid)
         assert "from Src0" in tgt_diag.mermaid
 
+    def test_cross_partition_proxy_sanitizes_cpp_names(self) -> None:
+        """Class names with :: in proxy edge labels must be sanitized."""
+        classes = []
+        for i in range(8):
+            name = (
+                "std::DispatcherImpl<Struct, std::index_sequence<I>>" if i == 0 else f"Src{i}"
+            )
+            classes.append(
+                {
+                    "name": name,
+                    "namespace": "src",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Tgt{i}",
+                    "namespace": "tgt",
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        classes[0]["fields"] = [{"name": "dep", "type": "Tgt0", "access": "private"}]
+
+        diagrams = render_partitioned_class_diagrams(classes, max_per_diagram=10)
+        all_mermaid = "\n".join(d.mermaid for d in diagrams)
+        assert "::" not in all_mermaid
+        assert "from std.DispatcherImpl" in all_mermaid
+
     def test_titles_include_index(self) -> None:
         classes = [
             {"name": f"Cls{i}", "fields": [], "methods": [], "base_classes": []}

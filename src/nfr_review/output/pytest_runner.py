@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import subprocess  # nosec B404
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -74,14 +75,46 @@ def _parse_summary(output: str) -> PytestResult:
     )
 
 
-def run_pytest(target: Path, *, timeout: int = 300) -> PytestResult:
+_EXPENSIVE_MARKERS = frozenset({"regression", "slow"})
+
+
+def _detect_expensive_markers(target: Path) -> list[str]:
+    """Return marker names from pyproject.toml matching expensive categories."""
+    pyproject = target / "pyproject.toml"
+    if not pyproject.is_file():
+        return []
+    try:
+        with open(pyproject, "rb") as fh:
+            data = tomllib.load(fh)
+    except Exception:  # noqa: BLE001
+        return []
+    markers: list[str] = (
+        data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("markers", [])
+    )
+    found: list[str] = []
+    for m in markers:
+        name = m.split(":")[0].strip()
+        if name in _EXPENSIVE_MARKERS:
+            found.append(name)
+    return found
+
+
+def run_pytest(target: Path, *, timeout: int = 600) -> PytestResult:
     """Run pytest against target directory and return structured results.
 
-    Uses ``--tb=no -q`` for predictable summary output. If pytest is not
-    installed or the process fails to execute, returns a PytestResult with
-    exit_code set to the process return code (or -1 for execution errors).
+    Uses ``--tb=no -q`` for predictable summary output.  Automatically
+    deselects tests marked ``regression`` or ``slow`` when those markers
+    are declared in the target's ``pyproject.toml`` so that the health-check
+    stays within the timeout budget.
     """
-    cmd = ["python", "-m", "pytest", "--tb=no", "-q", str(target)]
+    cmd = ["python", "-m", "pytest", "--tb=no", "-q"]
+
+    expensive = _detect_expensive_markers(target)
+    if expensive:
+        expr = " and ".join(f"not {m}" for m in sorted(expensive))
+        cmd.extend(["-m", expr])
+
+    cmd.append(str(target))
 
     try:
         proc = subprocess.run(  # nosec B603
