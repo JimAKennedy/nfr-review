@@ -6,7 +6,12 @@ import subprocess as sp
 from pathlib import Path
 from unittest.mock import patch
 
-from nfr_review.output.pytest_runner import PytestResult, _parse_summary, run_pytest
+from nfr_review.output.pytest_runner import (
+    PytestResult,
+    _detect_expensive_markers,
+    _parse_summary,
+    run_pytest,
+)
 
 
 class TestParseSummary:
@@ -130,3 +135,92 @@ class TestRunPytest:
 
         assert "10 passed" in result.raw_output
         assert "some warning" in result.raw_output
+
+    def _pytest_args(self, mock_run: object) -> list[str]:
+        """Extract pytest args after 'python -m pytest' from the captured command."""
+        cmd = mock_run.call_args[0][0]  # type: ignore[union-attr]
+        pytest_idx = cmd.index("pytest")
+        return cmd[pytest_idx + 1 :]
+
+    def test_excludes_expensive_markers(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.pytest.ini_options]\n"
+            "markers = [\n"
+            '    "regression: clones repos",\n'
+            '    "slow: full pass",\n'
+            "]\n"
+        )
+        with patch(
+            "nfr_review.output.pytest_runner.subprocess.run",
+            return_value=self._mock_proc("40 passed, 5 deselected in 1.00s\n"),
+        ) as mock_run:
+            run_pytest(tmp_path)
+
+        args = self._pytest_args(mock_run)
+        assert "-m" in args
+        idx = args.index("-m")
+        expr = args[idx + 1]
+        assert "not regression" in expr
+        assert "not slow" in expr
+
+    def test_no_marker_exclusion_without_pyproject(self, tmp_path: Path) -> None:
+        with patch(
+            "nfr_review.output.pytest_runner.subprocess.run",
+            return_value=self._mock_proc("10 passed in 0.50s\n"),
+        ) as mock_run:
+            run_pytest(tmp_path)
+
+        args = self._pytest_args(mock_run)
+        assert "-m" not in args
+
+    def test_no_marker_exclusion_without_expensive_markers(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.pytest.ini_options]\nmarkers = [\n    "unit: fast tests",\n]\n'
+        )
+        with patch(
+            "nfr_review.output.pytest_runner.subprocess.run",
+            return_value=self._mock_proc("10 passed in 0.50s\n"),
+        ) as mock_run:
+            run_pytest(tmp_path)
+
+        args = self._pytest_args(mock_run)
+        assert "-m" not in args
+
+
+class TestDetectExpensiveMarkers:
+    """Tests for _detect_expensive_markers helper."""
+
+    def test_finds_regression_and_slow(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            "[tool.pytest.ini_options]\n"
+            "markers = [\n"
+            '    "regression: clones repos and diffs output",\n'
+            '    "slow: full analysis pass (may hit network)",\n'
+            '    "unit: fast tests",\n'
+            "]\n"
+        )
+        result = _detect_expensive_markers(tmp_path)
+        assert sorted(result) == ["regression", "slow"]
+
+    def test_no_pyproject(self, tmp_path: Path) -> None:
+        assert _detect_expensive_markers(tmp_path) == []
+
+    def test_no_markers_section(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("[tool.pytest.ini_options]\ntestpaths = ['tests']\n")
+        assert _detect_expensive_markers(tmp_path) == []
+
+    def test_only_regression(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.pytest.ini_options]\nmarkers = ["regression: clones repos"]\n'
+        )
+        assert _detect_expensive_markers(tmp_path) == ["regression"]
+
+    def test_invalid_toml(self, tmp_path: Path) -> None:
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text("not valid toml {{{\n")
+        assert _detect_expensive_markers(tmp_path) == []

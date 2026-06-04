@@ -1457,7 +1457,8 @@ def render_partitioned_class_diagrams(
                         continue
                     seen.add(key)
                     lid = _safe_id(local_cls)
-                    extra.append(f'    {lid} ..> {proxy_id} : "to {remote_cls}"')
+                    safe_remote = _sanitize_member_type(remote_cls)
+                    extra.append(f'    {lid} ..> {proxy_id} : "to {safe_remote}"')
 
                 for remote_cls, local_cls in incoming.get(diag_idx, []):
                     key = (remote_cls, local_cls, "from")
@@ -1465,7 +1466,8 @@ def render_partitioned_class_diagrams(
                         continue
                     seen.add(key)
                     lid = _safe_id(local_cls)
-                    extra.append(f'    {proxy_id} ..> {lid} : "from {remote_cls}"')
+                    safe_remote = _sanitize_member_type(remote_cls)
+                    extra.append(f'    {proxy_id} ..> {lid} : "from {safe_remote}"')
 
             augmented = diagram.mermaid.rstrip("\n") + "\n" + "\n".join(extra) + "\n"
             diagram = diagram.model_copy(update={"mermaid": augmented})

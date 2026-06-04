@@ -3051,10 +3051,27 @@ def materialize_infra_components(
 
             infra_envs.setdefault(target_id, {}).setdefault(intg.environment, []).append(idx)
 
+    comp_by_id = {c.id: c for c in components}
+
     new_components: dict[str, Component] = {}
 
     for base_id, env_map in infra_envs.items():
         name, comp_type = infra_meta[base_id]
+
+        # Inherit repo from a connected application component
+        repo: str | None = None
+        for intg_indices in env_map.values():
+            for idx in intg_indices:
+                intg = integrations[idx]
+                for cid in (intg.source_component_id, intg.target_component_id):
+                    peer = comp_by_id.get(cid)
+                    if peer and peer.repo:
+                        repo = peer.repo
+                        break
+                if repo:
+                    break
+            if repo:
+                break
 
         # Auto-tag embedded/in-memory databases as dev when env is unknown
         slug = base_id.split("-", 1)[1].rsplit("-", 1)[0]
@@ -3075,6 +3092,7 @@ def materialize_infra_components(
                 component_type=comp_type,
                 boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
                 environment=env,
+                repo=repo,
             )
         else:
             for env, intg_indices in env_map.items():
@@ -3088,6 +3106,7 @@ def materialize_infra_components(
                     component_type=comp_type,
                     boundaries=[ComponentBoundary(boundary_type="repo", path=".")],
                     environment=env,
+                    repo=repo,
                 )
                 for idx in intg_indices:
                     intg = integrations[idx]
