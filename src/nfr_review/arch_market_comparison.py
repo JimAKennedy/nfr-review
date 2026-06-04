@@ -339,7 +339,7 @@ def _parse_market_response(raw: str) -> MarketAnalysisSection:
                     relative_positioning=item.get("relative_positioning", ""),
                 )
             )
-        except Exception:
+        except (KeyError, ValueError, TypeError):
             logger.warning("Skipping malformed comparison entry: %s", item.get("name", "?"))
             continue
 

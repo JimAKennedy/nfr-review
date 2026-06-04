@@ -25,6 +25,7 @@ import os
 import shutil
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 from collections import defaultdict
 from pathlib import Path
@@ -143,7 +144,7 @@ def install_skills(project_root: Path, *, force: bool = False) -> int:
 
         try:
             tar = download_archive(source)
-        except Exception as e:
+        except (urllib.error.URLError, tarfile.TarError, OSError) as e:
             print(f"  Failed to download {source}: {e}", file=sys.stderr)
             failed += len(to_install)
             continue

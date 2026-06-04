@@ -11,7 +11,7 @@ def swallow_all():
 def broad_catch():
     try:
         int("abc")
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 

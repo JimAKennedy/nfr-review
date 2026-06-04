@@ -16,7 +16,7 @@ def broad_except_silent():
     """Catches Exception but does not log or rethrow — silent swallow."""
     try:
         risky()
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
 
 
@@ -24,7 +24,7 @@ def broad_base_exception_silent():
     """Catches BaseException silently."""
     try:
         risky()
-    except BaseException:
+    except BaseException:  # noqa: BLE001
         pass
 
 
@@ -32,7 +32,7 @@ def broad_except_with_logging():
     """Catches Exception but logs — should NOT trigger silent-catch."""
     try:
         risky()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error("Caught: %s", e)
 
 
@@ -48,7 +48,7 @@ def broad_except_with_print():
     """Catches Exception with print — has_logging should be True."""
     try:
         risky()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error: {e}")
 
 

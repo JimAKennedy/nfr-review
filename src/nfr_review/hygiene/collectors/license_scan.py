@@ -97,13 +97,13 @@ class LicenseScanCollector:
 
             try:
                 lic_data = get_licenses(str(fpath), min_score=min_score)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("License scan failed for %s", rel, exc_info=True)
                 lic_data = {}
 
             try:
                 cr_data = get_copyrights(str(fpath))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Copyright scan failed for %s", rel, exc_info=True)
                 cr_data = {}
 

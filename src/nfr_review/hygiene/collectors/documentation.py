@@ -69,7 +69,7 @@ def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
 
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, ValueError):
         logger.debug("Failed to parse %s", path)
         return None
 
@@ -99,7 +99,7 @@ def _parse_package_json(repo_path: Path) -> dict[str, Any] | None:
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         logger.debug("Failed to parse %s", path)
         return None
 
@@ -206,7 +206,7 @@ def _parse_cargo_toml(repo_path: Path) -> dict[str, Any] | None:
 
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, ValueError):
         logger.debug("Failed to parse %s", path)
         return None
 
@@ -236,7 +236,7 @@ def _parse_go_mod(repo_path: Path) -> dict[str, Any] | None:
 
     try:
         text = path.read_text(encoding="utf-8")
-    except Exception:
+    except OSError:
         logger.debug("Failed to read %s", path)
         return None
 
@@ -332,7 +332,7 @@ def _extract_classifiers(repo_path: Path) -> list[str]:
 
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, ValueError):
         return []
 
     project = data.get("project", {})
@@ -361,7 +361,7 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
                 tree = ast.parse(init.read_text(encoding="utf-8"))
                 if ast.get_docstring(tree):
                     return True
-            except Exception as e:  # nosec B112
+            except (OSError, SyntaxError) as e:  # nosec B112
                 logger.debug("Failed to parse %s for API docs hint: %s", init, e)
                 continue
     top_init = repo_path / "__init__.py"
@@ -370,7 +370,7 @@ def _check_api_docs_hint(repo_path: Path) -> bool:
             tree = ast.parse(top_init.read_text(encoding="utf-8"))
             if ast.get_docstring(tree):
                 return True
-        except Exception as e:  # nosec B110
+        except (OSError, SyntaxError) as e:  # nosec B110
             logger.debug("Failed to parse %s for API docs hint: %s", top_init, e)
             pass
     return False

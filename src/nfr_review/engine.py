@@ -91,7 +91,8 @@ class Engine:
         """Run a single collector and return (name, evidence, error_msg | None)."""
         try:
             produced = collector.collect(target, config)
-        except Exception as exc:  # R012: never abort the run
+        # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
+        except Exception as exc:  # noqa: BLE001  # R012: never abort the run
             return collector.name, [], f"collector {collector.name} failed: {exc}"
         produced = [
             e
@@ -275,7 +276,8 @@ class Engine:
             t0 = time.monotonic()
             try:
                 result = rule.evaluate(evidence, config)
-            except Exception as exc:  # R012: never abort the run
+            # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
+            except Exception as exc:  # noqa: BLE001  # R012: never abort the run
                 reason = str(exc) or type(exc).__name__
                 logger.warning("rule %s failed: %s", rule.id, exc, exc_info=False)
                 rule_results.append(
