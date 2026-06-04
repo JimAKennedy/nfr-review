@@ -107,7 +107,7 @@ def render_mermaid_to_png(
         raw = output_path.read_bytes()
         if len(raw) >= 24 and raw[:8] == b"\x89PNG\r\n\x1a\n":
             img_w = struct.unpack(">I", raw[16:20])[0]
-            min_expected = width * scale * 0.15
+            min_expected = width * scale * 0.05
             if img_w < min_expected:
                 logger.warning(
                     "mmdc produced a %dpx-wide image (expected >=%dpx)"

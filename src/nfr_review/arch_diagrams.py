@@ -955,15 +955,7 @@ def render_class_diagram(
             return
         cid = _safe_id(name)
 
-        if cls.get("is_abstract"):
-            lines.append(f"{indent}class {cid}")
-            lines.append(f"{indent}<<abstract>> {cid}")
-        elif cls.get("is_struct"):
-            lines.append(f"{indent}class {cid}")
-            lines.append(f"{indent}<<struct>> {cid}")
-        else:
-            lines.append(f"{indent}class {cid}")
-
+        members: list[str] = []
         member_count = 0
         for field in cls.get("fields", []):
             if member_count >= _MAX_MEMBERS_PER_CLASS:
@@ -971,7 +963,7 @@ def render_class_diagram(
             sym = _ACCESS_SYMBOL.get(field.get("access", "private"), "-")
             ftype = _sanitize_member_type(field.get("type", ""))
             fname = field.get("name", "")
-            lines.append(f"{indent}{cid} : {sym}{fname} {ftype}")
+            members.append(f"{sym}{fname} {ftype}")
             member_count += 1
 
         for method in cls.get("methods", []):
@@ -983,14 +975,28 @@ def render_class_diagram(
             sym = _ACCESS_SYMBOL.get(method.get("access", "public"), "+")
             rtype = _sanitize_member_type(method.get("return_type", ""))
             virt = "*" if method.get("is_pure_virtual") else ""
-            lines.append(f"{indent}{cid} : {sym}{mname}(){virt} {rtype}")
+            members.append(f"{sym}{mname}(){virt} {rtype}")
             member_count += 1
+
+        if members:
+            lines.append(f"{indent}class {cid} {{")
+            for m in members:
+                lines.append(f"{indent}    {m}")
+            lines.append(f"{indent}}}")
+        else:
+            lines.append(f"{indent}class {cid}")
+
+        if cls.get("is_abstract"):
+            lines.append(f"{indent}<<abstract>> {cid}")
+        elif cls.get("is_struct"):
+            lines.append(f"{indent}<<struct>> {cid}")
 
     if group_by_namespace:
         for ns in sorted(ns_groups):
             group = ns_groups[ns]
             if ns:
                 safe_ns = ns.replace("::", "_")
+                safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", safe_ns)
                 lines.append(f"    namespace {safe_ns} {{")
                 for cls in group:
                     _emit_class_block(cls, "        ")
