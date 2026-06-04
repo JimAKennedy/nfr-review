@@ -9,6 +9,10 @@ generates correct Mermaid class diagrams from Java source.
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -239,3 +243,46 @@ class TestIntegrationDiagramPipeline:
             if "OrphanHelper" in line:
                 assert "<|--" not in line or "OrphanHelper" not in line.split("<|--")[1]
                 assert "*--" not in line.split("OrphanHelper")[0] if "*--" in line else True
+
+
+# ---------------------------------------------------------------------------
+# mmdc syntax validation — catches parse errors substring tests miss
+# ---------------------------------------------------------------------------
+
+_MMDC = shutil.which("mmdc")
+requires_mmdc = pytest.mark.skipif(_MMDC is None, reason="mmdc not installed")
+
+
+def _assert_mmdc_parses(mermaid: str, label: str = "") -> None:
+    assert _MMDC is not None
+    with tempfile.TemporaryDirectory() as td:
+        inp = Path(td) / "input.mmd"
+        out = Path(td) / "output.png"
+        cfg = Path(td) / "config.json"
+        inp.write_text(mermaid)
+        cfg.write_text(json.dumps({"maxTextSize": 200_000}))
+        result = subprocess.run(
+            [_MMDC, "-i", str(inp), "-o", str(out), "-b", "transparent", "-c", str(cfg)],
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode != 0:
+            err = result.stderr.decode(errors="replace")[:500]
+            pytest.fail(f"mmdc parse failure{f' ({label})' if label else ''}: {err}")
+
+
+@requires_mmdc
+class TestMmcdSyntaxValidation:
+    """Pipe real collector → diagram output through mmdc to catch syntax errors."""
+
+    def test_mmdc_validates_ungrouped(self, all_classes: list[dict]) -> None:
+        from nfr_review.arch_diagrams import render_class_diagram
+
+        d = render_class_diagram(all_classes, title="Java Ungrouped")
+        _assert_mmdc_parses(d.mermaid, "java ungrouped")
+
+    def test_mmdc_validates_grouped(self, all_classes: list[dict]) -> None:
+        from nfr_review.arch_diagrams import render_class_diagram
+
+        d = render_class_diagram(all_classes, title="Java Grouped", group_by_namespace=True)
+        _assert_mmdc_parses(d.mermaid, "java grouped")
