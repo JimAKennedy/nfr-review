@@ -21,6 +21,7 @@ JSONL) can be piped from stdout-equivalent file paths without contamination.
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import sys
 import time
@@ -502,13 +503,42 @@ def run_cmd(
 
 
 @cli.command("list-rules", help="List every registered rule (id, band, summary).")
-def list_rules_cmd() -> None:
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format (default: text).",
+)
+def list_rules_cmd(fmt: str) -> None:
     """List all registered rules."""
+    from nfr_review.rule_metadata import get_metadata
+
     rules = rule_registry.all()
     if not rules:
         return
-    for rule in rules:
-        click.echo(f"{rule.id}\tband={rule.band}\t{_rule_summary(rule)}")
+
+    if fmt == "json":
+        entries = []
+        for rule in rules:
+            meta = get_metadata(rule.id)
+            entry: dict[str, Any] = {
+                "id": rule.id,
+                "band": rule.band,
+                "required_collectors": rule.required_collectors,
+                "required_tech": getattr(rule, "required_tech", []),
+            }
+            if meta is not None:
+                entry["severity"] = meta.severity
+                entry["category"] = meta.category
+                entry["tags"] = meta.tags
+                entry["description"] = meta.description
+                entry["compliance_refs"] = meta.compliance_refs
+            entries.append(entry)
+        click.echo(json.dumps(entries, indent=2))
+    else:
+        for rule in rules:
+            click.echo(f"{rule.id}\tband={rule.band}\t{_rule_summary(rule)}")
 
 
 @cli.command("explain", help="Print the full description of a single rule.")
