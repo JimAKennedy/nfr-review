@@ -745,3 +745,88 @@ def test_engine_end_to_end_with_sample_collector_and_rule(tmp_path: Path) -> Non
     assert result.run_metadata.rules_skipped == []
     assert result.run_metadata.collector_versions == {"repo-structure": "0.1.0"}
     assert result.warnings == []
+
+
+# ----- Parallel execution ----------------------------------------------------
+
+
+def test_parallel_produces_same_results_as_sequential(tmp_path: Path) -> None:
+    """workers=4 must produce identical findings/evidence to workers=1."""
+    import time
+
+    class _SlowCollector:
+        def __init__(self, name: str, delay: float, evidence: list[Evidence]) -> None:
+            self.name = name
+            self.version = "0.0.1"
+            self._delay = delay
+            self._evidence = evidence
+
+        def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+            time.sleep(self._delay)
+            return list(self._evidence)
+
+    ev = [
+        Evidence(
+            collector_name=f"c{i}",
+            collector_version="0.0.1",
+            locator=f"src/f{i}.py",
+            kind="x",
+            payload={"idx": i},
+        )
+        for i in range(5)
+    ]
+
+    def _build_engine(workers: int) -> Engine:
+        creg: Registry = Registry("collector")
+        rreg: Registry = Registry("rule")
+        for i in range(5):
+            creg.register(f"c{i}", _SlowCollector(f"c{i}", 0.01, [ev[i]]))
+        rreg.register(
+            "count",
+            _StaticRule(
+                "count",
+                RuleResult(rule_id="count", findings=[_make_finding("count")]),
+            ),
+        )
+        return Engine(collectors=creg, rules=rreg, workers=workers)
+
+    seq_result = _build_engine(1).run(tmp_path, Config(exclude_test_paths=False))
+    par_result = _build_engine(4).run(tmp_path, Config(exclude_test_paths=False))
+
+    seq_locs = sorted(e.locator for e in seq_result.evidence)
+    par_locs = sorted(e.locator for e in par_result.evidence)
+    assert seq_locs == par_locs
+
+    assert len(seq_result.findings) == len(par_result.findings)
+    assert seq_result.warnings == par_result.warnings
+
+
+def test_parallel_collector_failure_does_not_abort(tmp_path: Path) -> None:
+    """A failing collector in parallel mode must not abort other collectors."""
+    creg: Registry = Registry("collector")
+    rreg: Registry = Registry("rule")
+    good_ev = Evidence(
+        collector_name="good",
+        collector_version="0.0.1",
+        locator="src/ok.py",
+        kind="x",
+        payload={},
+    )
+    creg.register("good", _StaticCollector("good", [good_ev]))
+    creg.register("bad", _RaisingCollector())
+
+    rreg.register(
+        "needs-good",
+        _StaticRule(
+            "needs-good",
+            RuleResult(rule_id="needs-good", findings=[_make_finding("needs-good")]),
+            required=["good"],
+        ),
+    )
+
+    engine = Engine(collectors=creg, rules=rreg, workers=4)
+    result = engine.run(tmp_path, Config(exclude_test_paths=False))
+
+    assert any("raises" in w or "bad" in w for w in result.warnings)
+    assert len(result.findings) == 1
+    assert result.findings[0].rule_id == "needs-good"

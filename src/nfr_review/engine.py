@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -72,11 +73,107 @@ class Engine:
         *,
         collectors: Registry[Collector] | None = None,
         rules: Registry[Rule] | None = None,
+        workers: int = 1,
     ) -> None:
         self._collectors: Registry[Collector] = (
             collectors if collectors is not None else _default_collector_registry
         )
         self._rules: Registry[Rule] = rules if rules is not None else _default_rule_registry
+        self._workers = max(1, workers)
+
+    @staticmethod
+    def _run_one_collector(
+        collector: Collector,
+        target: Path,
+        config: Config,
+        exclude_pats: Any,
+    ) -> tuple[str, list[Evidence], str | None]:
+        """Run a single collector and return (name, evidence, error_msg | None)."""
+        try:
+            produced = collector.collect(target, config)
+        except Exception as exc:  # R012: never abort the run
+            return collector.name, [], f"collector {collector.name} failed: {exc}"
+        produced = [
+            e
+            for e in produced
+            if not should_exclude_path(
+                e.locator,
+                exclude_test_paths=config.exclude_test_paths,
+                exclude_patterns=exclude_pats,
+            )
+        ]
+        return collector.name, produced, None
+
+    def _collect_sequential(
+        self,
+        collectors: list[Collector],
+        target: Path,
+        config: Config,
+        exclude_pats: Any,
+        evidence: list[Evidence],
+        warnings: list[str],
+        succeeded: set[str],
+    ) -> None:
+        total = len(collectors)
+        for i, collector in enumerate(collectors, 1):
+            logger.info("[%d/%d] Running collector: %s", i, total, collector.name)
+            t0 = time.monotonic()
+            name, produced, err = self._run_one_collector(
+                collector,
+                target,
+                config,
+                exclude_pats,
+            )
+            elapsed = time.monotonic() - t0
+            if err:
+                logger.warning("%s", err, exc_info=False)
+                warnings.append(err)
+                continue
+            evidence.extend(produced)
+            succeeded.add(name)
+            logger.info(
+                "  collector %s finished: %d evidence items in %.2fs",
+                name,
+                len(produced),
+                elapsed,
+            )
+
+    def _collect_parallel(
+        self,
+        collectors: list[Collector],
+        target: Path,
+        config: Config,
+        exclude_pats: Any,
+        evidence: list[Evidence],
+        warnings: list[str],
+        succeeded: set[str],
+    ) -> None:
+        total = len(collectors)
+        logger.info("Dispatching %d collectors across %d threads", total, self._workers)
+        ordered_results: list[tuple[str, list[Evidence], str | None]] = [
+            ("", [], None) for _ in range(total)
+        ]
+        with ThreadPoolExecutor(max_workers=self._workers) as pool:
+            future_to_idx = {
+                pool.submit(self._run_one_collector, c, target, config, exclude_pats): i
+                for i, c in enumerate(collectors)
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                ordered_results[idx] = future.result()
+
+        for name, produced, err in ordered_results:
+            if err:
+                logger.warning("%s", err, exc_info=False)
+                warnings.append(err)
+                continue
+            evidence.extend(produced)
+            succeeded.add(name)
+            logger.info(
+                "  collector %s finished: %d evidence items",
+                name,
+                len(produced),
+            )
 
     def run(self, target: Path, config: Config) -> RunResult:
         if not target.exists():
@@ -96,59 +193,40 @@ class Engine:
         warnings: list[str] = []
         succeeded_collectors: set[str] = set()
 
+        n_collectors = len(active_collectors)
         logger.info(
-            "Collection phase: %d collectors to run",
-            len(active_collectors),
+            "Collection phase: %d collectors to run (workers=%d)",
+            n_collectors,
+            self._workers,
         )
         collection_t0 = time.monotonic()
 
-        for i, collector in enumerate(active_collectors, 1):
-            logger.info(
-                "[%d/%d] Running collector: %s",
-                i,
-                len(active_collectors),
-                collector.name,
+        if self._workers <= 1:
+            self._collect_sequential(
+                active_collectors,
+                target,
+                config,
+                exclude_pats,
+                evidence,
+                warnings,
+                succeeded_collectors,
             )
-            t0 = time.monotonic()
-            try:
-                produced = collector.collect(target, config)
-            except Exception as exc:  # R012: never abort the run
-                logger.warning("collector %s failed: %s", collector.name, exc, exc_info=False)
-                warnings.append(f"collector {collector.name} failed: {exc}")
-                continue
-            elapsed = time.monotonic() - t0
-            pre_filter_count = len(produced)
-            produced = [
-                e
-                for e in produced
-                if not should_exclude_path(
-                    e.locator,
-                    exclude_test_paths=config.exclude_test_paths,
-                    exclude_patterns=exclude_pats,
-                )
-            ]
-            filtered_count = pre_filter_count - len(produced)
-            if filtered_count:
-                logger.debug(
-                    "  collector %s: filtered %d/%d evidence items by path exclusion",
-                    collector.name,
-                    filtered_count,
-                    pre_filter_count,
-                )
-            evidence.extend(produced)
-            succeeded_collectors.add(collector.name)
-            logger.info(
-                "  collector %s finished: %d evidence items in %.2fs",
-                collector.name,
-                len(produced),
-                elapsed,
+        else:
+            self._collect_parallel(
+                active_collectors,
+                target,
+                config,
+                exclude_pats,
+                evidence,
+                warnings,
+                succeeded_collectors,
             )
 
         collection_elapsed = time.monotonic() - collection_t0
         logger.info(
             "Collection phase complete: %d/%d succeeded, %d evidence items, %.2fs total",
             len(succeeded_collectors),
-            len(active_collectors),
+            n_collectors,
             len(evidence),
             collection_elapsed,
         )
