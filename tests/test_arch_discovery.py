@@ -867,7 +867,7 @@ class TestClassDiagramIntegration:
         assert "AudioProcessor" in diagram.mermaid
         assert "PluginProcessor" in diagram.mermaid
         assert "AudioProcessor <|-- PluginProcessor" in diagram.mermaid
-        assert "<<abstract>> AudioProcessor" in diagram.mermaid
+        assert "<<abstract>>" in diagram.mermaid
         assert "+processBlock()" in diagram.mermaid
 
     def test_class_diagram_from_integration_repo(self) -> None:

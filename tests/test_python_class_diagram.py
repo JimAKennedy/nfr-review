@@ -300,7 +300,7 @@ class TestIntegrationDiagramPipeline:
         assert "namespace logging_pkg_base" in grouped_mermaid
 
     def test_integration_abstract_stereotype(self, diagram_mermaid: str) -> None:
-        assert "<<abstract>> Plugin" in diagram_mermaid
+        assert "<<abstract>>" in diagram_mermaid
 
     def test_integration_field_visibility(self, diagram_mermaid: str) -> None:
         assert "+name str" in diagram_mermaid

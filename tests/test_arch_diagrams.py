@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import re as _re
+
 import pytest
 
 from nfr_review.arch_diagrams import (
@@ -1384,11 +1386,11 @@ class TestClassDiagram:
 
     def test_abstract_annotation(self) -> None:
         result = render_class_diagram(_SAMPLE_CLASSES)
-        assert "<<abstract>> AudioProcessor" in result.mermaid
+        assert "<<abstract>>" in result.mermaid
 
     def test_struct_annotation(self) -> None:
         result = render_class_diagram(_SAMPLE_CLASSES)
-        assert "<<struct>> Config" in result.mermaid
+        assert "<<struct>>" in result.mermaid
 
     def test_inheritance_edge(self) -> None:
         result = render_class_diagram(_SAMPLE_CLASSES)
@@ -2404,6 +2406,242 @@ class TestPartitionedClassDiagrams:
         diagrams = render_partitioned_class_diagrams([])
         assert len(diagrams) == 1
         assert diagrams[0].mermaid == "classDiagram\n"
+
+
+# ---------------------------------------------------------------------------
+# Mermaid syntax validation helpers
+# ---------------------------------------------------------------------------
+
+
+def _assert_annotations_inside_class_body(mermaid: str) -> None:
+    """Verify <<annotation>> lines only appear between class { and }."""
+    in_class = False
+    brace_depth = 0
+    for line in mermaid.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("class ") and stripped.endswith("{"):
+            in_class = True
+            brace_depth += 1
+        elif in_class and stripped == "}":
+            brace_depth -= 1
+            if brace_depth == 0:
+                in_class = False
+        elif "<<" in stripped and ">>" in stripped:
+            if stripped.startswith("<<") and stripped.endswith(">>"):
+                assert in_class, (
+                    f"Annotation on standalone line outside class body: {stripped!r}"
+                )
+
+
+def _assert_annotation_labels_safe(mermaid: str) -> None:
+    """Verify <<...>> labels contain only alphanumeric, underscore, space, colon."""
+    for m in _re.finditer(r"<<(.+?)>>", mermaid):
+        content = m.group(1)
+        bad = _re.search(r"[^a-zA-Z0-9_ :]", content)
+        assert bad is None, (
+            f"Annotation label contains invalid char {bad.group()!r}: <<{content}>>"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Combinatorial class diagram tests — regression coverage for Bug 1 & Bug 2
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotationsInsideNamespaces:
+    """Bug 1 regression: <<abstract>>/<<struct>> must be inside class body, not
+    standalone lines inside namespace blocks (Mermaid parser rejects them)."""
+
+    def test_abstract_inside_namespace(self) -> None:
+        classes = [
+            {
+                "name": "Base",
+                "namespace": "com.example.engine",
+                "is_abstract": True,
+                "is_struct": False,
+                "fields": [{"name": "x", "type": "int", "access": "protected"}],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        _assert_annotations_inside_class_body(result.mermaid)
+        assert "<<abstract>>" in result.mermaid
+        assert "namespace com_example_engine" in result.mermaid
+
+    def test_struct_inside_namespace(self) -> None:
+        classes = [
+            {
+                "name": "Config",
+                "namespace": "data.models",
+                "is_abstract": False,
+                "is_struct": True,
+                "fields": [{"name": "val", "type": "str", "access": "public"}],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        _assert_annotations_inside_class_body(result.mermaid)
+        assert "<<struct>>" in result.mermaid
+
+    def test_mixed_abstract_and_plain_in_same_namespace(self) -> None:
+        classes = [
+            {
+                "name": "AbstractBase",
+                "namespace": "core.services",
+                "is_abstract": True,
+                "is_struct": False,
+                "fields": [],
+                "methods": [{"name": "run", "return_type": "void", "access": "public"}],
+                "base_classes": [],
+            },
+            {
+                "name": "ConcreteImpl",
+                "namespace": "core.services",
+                "is_abstract": False,
+                "is_struct": False,
+                "fields": [],
+                "methods": [{"name": "run", "return_type": "void", "access": "public"}],
+                "base_classes": [{"name": "AbstractBase", "access": "public"}],
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        _assert_annotations_inside_class_body(result.mermaid)
+        assert "<<abstract>>" in result.mermaid
+        assert "namespace core_services" in result.mermaid
+
+    def test_annotation_only_class_in_namespace(self) -> None:
+        """Abstract class with no fields/methods — annotation is the only body content."""
+        classes = [
+            {
+                "name": "Marker",
+                "namespace": "util",
+                "is_abstract": True,
+                "is_struct": False,
+                "fields": [],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        result = render_class_diagram(classes, group_by_namespace=True)
+        _assert_annotations_inside_class_body(result.mermaid)
+        assert "<<abstract>>" in result.mermaid
+
+    def test_no_namespace_annotation_still_valid(self) -> None:
+        """Annotations without namespace grouping remain valid (baseline)."""
+        classes = [
+            {
+                "name": "Generic",
+                "is_abstract": True,
+                "is_struct": False,
+                "fields": [{"name": "id", "type": "int", "access": "private"}],
+                "methods": [],
+                "base_classes": [],
+            },
+        ]
+        result = render_class_diagram(classes)
+        _assert_annotations_inside_class_body(result.mermaid)
+
+
+class TestProxyLabelSanitization:
+    """Bug 2 regression: proxy cross-reference labels like <<Diagram N: pkg.mod>>
+    must not contain dots — Mermaid's annotation parser rejects them."""
+
+    def _make_two_partition_data(self, ns_a: str, ns_b: str) -> list[dict]:
+        classes: list[dict] = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"A{i}",
+                    "namespace": ns_a,
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"B{i}",
+                    "namespace": ns_b,
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        classes[0]["fields"] = [{"name": "ref", "type": "B0", "access": "private"}]
+        return classes
+
+    def test_dotted_namespace_proxy_label(self) -> None:
+        classes = self._make_two_partition_data(
+            "src.nfr_review.arch_diagrams", "src.nfr_review.models"
+        )
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=10, group_by_namespace=True
+        )
+        for d in diagrams:
+            _assert_annotation_labels_safe(d.mermaid)
+
+    def test_colons_in_namespace_proxy_label(self) -> None:
+        classes = self._make_two_partition_data("com::example::core", "com::example::util")
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=10, group_by_namespace=True
+        )
+        for d in diagrams:
+            _assert_annotation_labels_safe(d.mermaid)
+
+    def test_special_chars_in_namespace_proxy_label(self) -> None:
+        classes = self._make_two_partition_data("my-pkg/sub.module", "other-pkg/sub.module")
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=10, group_by_namespace=True
+        )
+        for d in diagrams:
+            _assert_annotation_labels_safe(d.mermaid)
+
+    def test_proxy_label_contains_diagram_number(self) -> None:
+        classes = self._make_two_partition_data("audio", "video")
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=10, group_by_namespace=True
+        )
+        all_mermaid = "\n".join(d.mermaid for d in diagrams)
+        assert "<<Diagram" in all_mermaid
+
+    def test_abstract_in_namespace_with_proxy_labels(self) -> None:
+        """Combined scenario: abstract class + namespace + multi-partition proxies."""
+        classes: list[dict] = []
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Base{i}",
+                    "namespace": "org.example.core",
+                    "is_abstract": i == 0,
+                    "is_struct": False,
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [],
+                }
+            )
+        for i in range(8):
+            classes.append(
+                {
+                    "name": f"Impl{i}",
+                    "namespace": "org.example.impl",
+                    "is_abstract": False,
+                    "is_struct": False,
+                    "fields": [],
+                    "methods": [],
+                    "base_classes": [{"name": "Base0", "access": "public"}] if i == 0 else [],
+                }
+            )
+        diagrams = render_partitioned_class_diagrams(
+            classes, max_per_diagram=10, group_by_namespace=True
+        )
+        all_mermaid = "\n".join(d.mermaid for d in diagrams)
+        assert "<<abstract>>" in all_mermaid
+        for d in diagrams:
+            _assert_annotations_inside_class_body(d.mermaid)
+            _assert_annotation_labels_safe(d.mermaid)
 
 
 # ---------------------------------------------------------------------------
