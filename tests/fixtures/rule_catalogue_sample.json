@@ -1,0 +1,68 @@
+[
+  {
+    "id": "apim-auth-policy-missing",
+    "band": 1,
+    "required_collectors": ["apim-policy"],
+    "required_tech": ["apim"],
+    "severity": "critical",
+    "category": "security",
+    "tags": ["apim", "azure", "auth"],
+    "description": "Flags Azure API Management policies that lack authentication configuration.",
+    "compliance_refs": ["ISO 25010:Security", "OWASP:A01"]
+  },
+  {
+    "id": "dockerfile-secret-leakage",
+    "band": 1,
+    "required_collectors": ["dockerfile"],
+    "required_tech": ["dockerfile"],
+    "severity": "critical",
+    "category": "security",
+    "tags": ["docker", "secrets"],
+    "description": "Flags Dockerfiles that COPY/ADD secret files or expose secrets via ARG/ENV.",
+    "compliance_refs": ["ISO 25010:Security", "OWASP:A02"]
+  },
+  {
+    "id": "architectural-drift-from-adr",
+    "band": 2,
+    "required_collectors": ["adr", "java-ast"],
+    "required_tech": [],
+    "severity": "high",
+    "category": "maintainability",
+    "tags": ["adr", "architecture", "llm"],
+    "description": "Detects divergence between architecture decision records and actual codebase.",
+    "compliance_refs": ["ISO 25010:Maintainability"]
+  },
+  {
+    "id": "apim-rate-limit-missing",
+    "band": 1,
+    "required_collectors": ["apim-policy"],
+    "required_tech": ["apim"],
+    "severity": "high",
+    "category": "security",
+    "tags": ["apim", "azure", "rate-limiting"],
+    "description": "Flags APIM policies without rate limiting in the inbound section.",
+    "compliance_refs": ["ISO 25010:Security", "OWASP:A04"]
+  },
+  {
+    "id": "adr-gap",
+    "band": 2,
+    "required_collectors": ["adr-derive", "adr"],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": ["adr", "architecture"],
+    "description": "Flags implicit architectural decisions in code that lack a corresponding ADR.",
+    "compliance_refs": ["ISO 25010:Maintainability"]
+  },
+  {
+    "id": "adr-lifecycle-gap",
+    "band": 1,
+    "required_collectors": ["adr"],
+    "required_tech": [],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": ["adr", "architecture", "documentation"],
+    "description": "Flags ADRs that exist but lack lifecycle status tracking.",
+    "compliance_refs": ["ISO 25010:Maintainability"]
+  }
+]

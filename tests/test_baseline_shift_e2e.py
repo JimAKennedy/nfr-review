@@ -215,7 +215,7 @@ class TestSuppressionIntegration:
         assert len(suppressed) == 2
         assert len(active) == 2
 
-        suppressed_locators = {f.evidence_locator for f in suppressed}
+        suppressed_locators = {f.evidence_locator for f, _ in suppressed}
         assert "controller_suppressed.cpp:7" in suppressed_locators
         assert "controller_suppressed.cpp:14" in suppressed_locators
 
@@ -285,5 +285,5 @@ class TestSuppressionIntegration:
         suppressed_f = _make_finding("controller_suppressed.cpp:7", HASH_LABEL1)
         unsuppressed_f = _make_finding("controller_suppressed.cpp:10", HASH_LABEL2)
 
-        assert is_finding_suppressed(suppressed_f, cache, target_root=FIXTURE_DIR) is True
-        assert is_finding_suppressed(unsuppressed_f, cache, target_root=FIXTURE_DIR) is False
+        assert is_finding_suppressed(suppressed_f, cache, target_root=FIXTURE_DIR) is not None
+        assert is_finding_suppressed(unsuppressed_f, cache, target_root=FIXTURE_DIR) is None

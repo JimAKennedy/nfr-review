@@ -372,12 +372,14 @@ def run_cmd(
 
     from nfr_review.suppression import apply_suppressions
 
-    active_findings, suppressed_findings = apply_suppressions(
+    active_findings, suppressed_pairs = apply_suppressions(
         result.findings, target_root=target.resolve()
     )
-    if suppressed_findings:
+    if suppressed_pairs:
+        with_reason = sum(1 for _, info in suppressed_pairs if info.reason)
         _ts_echo(
-            f"Suppressed: {len(suppressed_findings)} finding(s) via inline markers",
+            f"Suppressed: {len(suppressed_pairs)} finding(s) via inline markers"
+            f" ({with_reason} with justification)",
             quiet=quiet,
         )
         result = RunResult(
@@ -448,12 +450,12 @@ def run_cmd(
     t0 = _phase("Writing output files", quiet=quiet)
     run_logger.info("Writing output files")
     try:
-        write_csv(result, csv_path)
+        write_csv(result, csv_path, suppressed_findings=suppressed_pairs or None)
         write_jsonl(
             result,
             jsonl_path,
             classification=classification,
-            suppressed_findings=suppressed_findings or None,
+            suppressed_findings=suppressed_pairs or None,
         )
     except OutputError as exc:
         click.echo(f"error: {exc}", err=True)
@@ -893,6 +895,21 @@ def run_report_pipeline(
         raise click.exceptions.Exit(1) from exc
     _phase_done("Hygiene scan", t0, quiet=quiet)
 
+    # Suppressions
+    from nfr_review.suppression import apply_suppressions
+
+    all_findings = list(nfr_result.findings) + list(hygiene_result.findings)
+    active_report_findings, suppressed_report_pairs = apply_suppressions(
+        all_findings, target_root=target.resolve()
+    )
+    if suppressed_report_pairs:
+        with_reason = sum(1 for _, info in suppressed_report_pairs if info.reason)
+        _ts_echo(
+            f"Suppressed: {len(suppressed_report_pairs)} finding(s) via inline markers"
+            f" ({with_reason} with justification)",
+            quiet=quiet,
+        )
+
     # Pytest execution
     pytest_result = None
     if not no_tests:
@@ -985,6 +1002,7 @@ def run_report_pipeline(
         derived_adrs_section=derived_adrs_section,
         diagrams=diagrams,
         score_section=score_section,
+        suppressed_findings=suppressed_report_pairs or None,
     )
 
     # Write output files
@@ -1007,8 +1025,16 @@ def run_report_pipeline(
             run_metadata=nfr_result.run_metadata,
             warnings=list(nfr_result.warnings) + list(hygiene_result.warnings),
         )
-        write_csv(combined_result, csv_path)
-        write_jsonl(combined_result, jsonl_path)
+        write_csv(
+            combined_result,
+            csv_path,
+            suppressed_findings=suppressed_report_pairs or None,
+        )
+        write_jsonl(
+            combined_result,
+            jsonl_path,
+            suppressed_findings=suppressed_report_pairs or None,
+        )
         actual_sarif: Path | None = None
         if sarif_path is not None:
             from nfr_review.output.sarif import write_sarif

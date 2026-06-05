@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from nfr_review.engine import RunResult
     from nfr_review.output.pytest_runner import PytestResult
     from nfr_review.scoring import MaturityScore, ScoreTrend
+    from nfr_review.suppression import SuppressionInfo
 
 _RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
 _SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
@@ -132,6 +133,42 @@ def _skipped_rules_section(nfr_result: RunResult, hygiene_result: RunResult | No
         rule_id = entry.get("rule_id", "unknown")
         reason = entry.get("reason", "")
         lines.append(f"| {rule_id} | {reason} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _suppression_audit_section(
+    suppressed: list[tuple[Finding, SuppressionInfo]],
+) -> str:
+    """Render a suppression audit section listing suppressed findings."""
+    if not suppressed:
+        return ""
+
+    with_reason = [(f, i) for f, i in suppressed if i.reason]
+    without_reason = [(f, i) for f, i in suppressed if not i.reason]
+
+    lines = [
+        "## Suppression Audit",
+        "",
+        f"**Total suppressed:** {len(suppressed)} "
+        f"({len(with_reason)} with justification, "
+        f"{len(without_reason)} without)",
+        "",
+    ]
+
+    if without_reason:
+        lines.append(
+            "> **Warning:** "
+            f"{len(without_reason)} suppression(s) have no justification. "
+            "Add `reason: <ticket or explanation>` to the marker for audit compliance."
+        )
+        lines.append("")
+
+    lines.append("| Rule | Location | Justification |")
+    lines.append("|------|----------|---------------|")
+    for finding, info in suppressed:
+        reason_text = info.reason or "*no justification provided*"
+        lines.append(f"| {finding.rule_id} | `{finding.evidence_locator}` | {reason_text} |")
     lines.append("")
     return "\n".join(lines)
 
@@ -445,11 +482,15 @@ def render_markdown_report(
     title: str = "NFR Review Report",
     diagrams: dict[str, str] | None = None,
     score_section: str = "",
+    suppressed_findings: list[tuple[Finding, SuppressionInfo]] | None = None,
 ) -> str:
     """Render a complete Markdown report from scan results.
 
     Partitions all findings into source and test sections, renders summary
     tables, and includes test execution results and provenance metadata.
+    When ``suppressed_findings`` is provided, a Suppression Audit section
+    lists every suppressed finding with its justification (or a warning
+    when missing).
     """
     all_findings = list(nfr_result.findings)
     if hygiene_result:
@@ -519,6 +560,10 @@ def render_markdown_report(
     skipped_section = _skipped_rules_section(nfr_result, hygiene_result)
     if skipped_section:
         sections.append(skipped_section)
+
+    # Suppression audit
+    if suppressed_findings:
+        sections.append(_suppression_audit_section(suppressed_findings))
 
     # Architecture Decision Records
     if adr_section:
