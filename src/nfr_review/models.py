@@ -6,10 +6,35 @@ import hashlib
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
 RAG = Literal["red", "amber", "green", "skipped"]
 Severity = Literal["critical", "high", "medium", "low", "info"]
+
+
+class BasePayload(BaseModel):
+    """Base class for typed collector payloads.
+
+    Subclass this for each collector's evidence kind. The ``extra="forbid"``
+    config catches typos and drift between collector output and rule expectations
+    at Evidence construction time.
+
+    Provides dict-compatible ``get()`` and ``__getitem__()`` so existing rules
+    using ``ev.payload.get("key")`` work without changes during migration.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dict-compatible attribute access for gradual migration."""
+        return getattr(self, key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        """Dict-compatible subscript access for gradual migration."""
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key) from None
 
 
 class Evidence(BaseModel):
@@ -21,7 +46,7 @@ class Evidence(BaseModel):
     collector_version: str
     locator: str
     kind: str
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: SerializeAsAny[BasePayload] | dict[str, Any] = Field(default_factory=dict)
 
 
 class Finding(BaseModel):
@@ -112,6 +137,7 @@ def compute_content_hash(text: str) -> str:
 __all__ = [
     "RAG",
     "Severity",
+    "BasePayload",
     "Evidence",
     "Finding",
     "RuleResult",

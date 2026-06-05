@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.llm_client import LlmUnavailableError
 from nfr_review.models import Evidence
 from nfr_review.protocols import LlmClient
@@ -21,14 +22,14 @@ def _make_adr_evidence(
         collector_version="0.1.0",
         locator=file_path,
         kind="adr-document",
-        payload={
-            "file_path": file_path,
-            "title": title,
-            "status": status,
-            "date": "2024-01-15",
-            "superseded_by": None,
-            "has_frontmatter": True,
-        },
+        payload=AdrDocumentPayload(
+            file_path=file_path,
+            title=title,
+            status=status,
+            date="2024-01-15",
+            superseded_by=None,
+            has_frontmatter=True,
+        ),
     )
 
 
@@ -274,14 +275,14 @@ class TestAdrsWithoutTitles:
             collector_version="0.1.0",
             locator="docs/adr/draft.md",
             kind="adr-document",
-            payload={
-                "file_path": "docs/adr/draft.md",
-                "title": None,
-                "status": None,
-                "date": None,
-                "superseded_by": None,
-                "has_frontmatter": False,
-            },
+            payload=AdrDocumentPayload(
+                file_path="docs/adr/draft.md",
+                title=None,
+                status=None,
+                date=None,
+                superseded_by=None,
+                has_frontmatter=False,
+            ),
         )
         java_ev = _make_java_evidence()
         rule = ArchitecturalDriftFromAdrRule(llm_client=_unavailable_client())

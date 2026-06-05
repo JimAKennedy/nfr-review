@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload, AdrSummaryPayload
 from nfr_review.models import Evidence
 from nfr_review.output.diagrams import (
     render_jdepend_mermaid,
@@ -104,7 +105,16 @@ def build_adr_section(evidence: list[Evidence]) -> str:
 
     lines = ["## Architecture Decision Records", ""]
 
-    if summary_ev:
+    if summary_ev and isinstance(summary_ev.payload, AdrSummaryPayload):
+        total = summary_ev.payload.total_adrs
+        statuses = summary_ev.payload.statuses
+        has_lifecycle = summary_ev.payload.has_lifecycle_tracking
+        lines.append(f"**{total} ADRs** found in repository.")
+        if has_lifecycle:
+            status_parts = [f"{v} {k}" for k, v in sorted(statuses.items())]
+            lines.append(f"Status breakdown: {', '.join(status_parts)}.")
+        lines.append("")
+    elif summary_ev:
         total = summary_ev.payload.get("total_adrs", len(docs))
         statuses = summary_ev.payload.get("statuses", {})
         has_lifecycle = summary_ev.payload.get("has_lifecycle_tracking", False)
@@ -122,9 +132,14 @@ def build_adr_section(evidence: list[Evidence]) -> str:
     )
 
     for i, ev in enumerate(docs, 1):
-        title = ev.payload.get("title") or ev.payload.get("file_path", "Unknown")
-        status = ev.payload.get("status") or "—"
-        superseded = ev.payload.get("superseded_by") or "—"
+        if isinstance(ev.payload, AdrDocumentPayload):
+            title = ev.payload.title or ev.payload.file_path
+            status = ev.payload.status or "—"
+            superseded = ev.payload.superseded_by or "—"
+        else:
+            title = ev.payload.get("title") or ev.payload.get("file_path", "Unknown")
+            status = ev.payload.get("status") or "—"
+            superseded = ev.payload.get("superseded_by") or "—"
         lines.append(f"| {i} | {title} | {status} | {superseded} |")
 
     lines.append("")

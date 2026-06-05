@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import rule_registry
 from nfr_review.rules.adr_gap import AdrGapRule
@@ -39,14 +40,14 @@ def _existing(
         collector_version="0.1.0",
         locator=f"docs/adr/{title}.md",
         kind="adr-document",
-        payload={
-            "file_path": f"docs/adr/{title}.md",
-            "title": title,
-            "status": status,
-            "date": None,
-            "superseded_by": None,
-            "has_frontmatter": True,
-        },
+        payload=AdrDocumentPayload(
+            file_path=f"docs/adr/{title}.md",
+            title=title,
+            status=status,
+            date=None,
+            superseded_by=None,
+            has_frontmatter=True,
+        ),
     )
 
 
