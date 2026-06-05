@@ -9,11 +9,9 @@ import sys
 
 import pytest
 
-
 import nfr_review.rules  # noqa: F401 — triggers auto-registration
 from nfr_review.registry import rule_registry
 from nfr_review.rule_metadata import RULE_METADATA, RuleMetadata, get_metadata
-
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +21,6 @@ def _ensure_rules_registered() -> None:
         mod_name = f"nfr_review.rules.{name}"
         if mod_name in sys.modules:
             importlib.reload(sys.modules[mod_name])
-
 
 
 VALID_CATEGORIES = {"security", "reliability", "performance", "maintainability"}
