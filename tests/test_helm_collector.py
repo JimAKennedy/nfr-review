@@ -75,9 +75,9 @@ class TestCollectWithoutHelm:
     def test_values_parsed(self, collector: HelmCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         payload = _payload(results)
-        assert isinstance(payload["values"], dict)
-        assert payload["values"]["replicaCount"] == 1
-        assert payload["values"]["database"]["password"] == "supersecretpassword123"
+        assert isinstance(payload["chart_values"], dict)
+        assert payload["chart_values"]["replicaCount"] == 1
+        assert payload["chart_values"]["database"]["password"] == "supersecretpassword123"
 
     def test_template_files_listed(self, collector: HelmCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
@@ -97,7 +97,7 @@ class TestCollectWithoutHelm:
         payload = _payload(results)
         assert payload["chart_name"] == "good-app"
         assert payload["chart_version"] == "1.2.3"
-        assert payload["values"]["resources"]["limits"]["cpu"] == "500m"
+        assert payload["chart_values"]["resources"]["limits"]["cpu"] == "500m"
 
 
 @pytest.mark.skipif(not _HELM_AVAILABLE, reason="helm binary not on PATH")
@@ -132,7 +132,7 @@ class TestGracefulDegradation:
         assert payload["helm_available"] is False
         assert payload["rendered_manifests"] == []
         assert payload["chart_name"] == "sample-app"
-        assert isinstance(payload["values"], dict)
+        assert isinstance(payload["chart_values"], dict)
 
     def test_no_crash_when_helm_missing(
         self, collector: HelmCollector, monkeypatch: pytest.MonkeyPatch
@@ -219,7 +219,7 @@ class TestEdgeCases:
         assert len(results) == 1
         payload = _payload(results)
         assert payload["template_files"] == []
-        assert payload["values"] == {}
+        assert payload["chart_values"] == {}
 
     def test_no_values_yaml(self, collector: HelmCollector, tmp_path: Path) -> None:
         (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: noval\nversion: 0.1.0\n")
@@ -227,7 +227,7 @@ class TestEdgeCases:
         (tmp_path / "templates" / "svc.yaml").write_text("kind: Service\n")
         results = collector.collect(tmp_path, config=None)
         assert len(results) == 1
-        assert _payload(results)["values"] == {}
+        assert _payload(results)["chart_values"] == {}
 
     def test_collector_name_and_version(self, collector: HelmCollector) -> None:
         assert collector.name == "helm"

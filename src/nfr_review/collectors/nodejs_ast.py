@@ -44,12 +44,22 @@ Evidence payload contract (kind="nodejs-ast-file"):
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tree_sitter import Node
 
 from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
+from nfr_review.collectors.payloads.nodejs_ast import (
+    NodejsAstFilePayload,
+    NodejsAwaitExpression,
+    NodejsCallbackPattern,
+    NodejsCatchBlock,
+    NodejsFunction,
+    NodejsLogStatement,
+    NodejsPromiseChain,
+    NodejsSyncCall,
+)
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.nodejs_ast")
@@ -109,8 +119,8 @@ def _has_logging_call(block: Node, source: bytes) -> bool:
     return False
 
 
-def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    blocks: list[dict[str, Any]] = []
+def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[NodejsCatchBlock]:
+    blocks: list[NodejsCatchBlock] = []
     for catch in find_nodes(root, "catch_clause"):
         rethrows = len(find_nodes(catch, "throw_statement")) > 0
 
@@ -122,13 +132,13 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
         has_logging = _has_logging_call(block_node, source) if block_node else False
 
         blocks.append(
-            {
-                "caught_type": "",
-                "rethrows": rethrows,
-                "has_logging": has_logging,
-                "line": catch.start_point[0] + 1,
-                "file": rel_path,
-            }
+            NodejsCatchBlock(
+                caught_type="",
+                rethrows=rethrows,
+                has_logging=has_logging,
+                line=catch.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return blocks
 
@@ -136,8 +146,10 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
 _PROCESS_LOG_NAMES = frozenset({"process.stdout.write", "process.stderr.write"})
 
 
-def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    stmts: list[dict[str, Any]] = []
+def _extract_log_statements(
+    root: Node, source: bytes, rel_path: str
+) -> list[NodejsLogStatement]:
+    stmts: list[NodejsLogStatement] = []
     for call in find_nodes(root, "call_expression"):
         name = _call_name(call, source)
         is_log = False
@@ -148,12 +160,14 @@ def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[di
             if len(parts) == 2 and parts[0] == "console" and parts[1] in _CONSOLE_METHODS:
                 is_log = True
         if is_log:
-            stmts.append({"method": name, "line": call.start_point[0] + 1, "file": rel_path})
+            stmts.append(
+                NodejsLogStatement(method=name, line=call.start_point[0] + 1, file=rel_path)
+            )
     return stmts
 
 
-def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
-    functions: list[dict[str, Any]] = []
+def _extract_functions(root: Node, source: bytes) -> list[NodejsFunction]:
+    functions: list[NodejsFunction] = []
 
     for func in find_nodes(root, "function_declaration"):
         name = ""
@@ -164,12 +178,12 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
             elif child.type == "async":
                 is_async = True
         functions.append(
-            {
-                "name": name,
-                "line": func.start_point[0] + 1,
-                "is_async": is_async,
-                "kind": "function",
-            }
+            NodejsFunction(
+                name=name,
+                line=func.start_point[0] + 1,
+                is_async=is_async,
+                kind="function",
+            )
         )
 
     for method in find_nodes(root, "method_definition"):
@@ -181,12 +195,12 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
             elif child.type == "async":
                 is_async = True
         functions.append(
-            {
-                "name": name,
-                "line": method.start_point[0] + 1,
-                "is_async": is_async,
-                "kind": "method",
-            }
+            NodejsFunction(
+                name=name,
+                line=method.start_point[0] + 1,
+                is_async=is_async,
+                kind="method",
+            )
         )
 
     for arrow in find_nodes(root, "arrow_function"):
@@ -199,12 +213,12 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
                     name = text(child, source)
                     break
         functions.append(
-            {
-                "name": name,
-                "line": arrow.start_point[0] + 1,
-                "is_async": is_async,
-                "kind": "arrow",
-            }
+            NodejsFunction(
+                name=name,
+                line=arrow.start_point[0] + 1,
+                is_async=is_async,
+                kind="arrow",
+            )
         )
 
     return functions
@@ -212,8 +226,8 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
 
 def _extract_await_expressions(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    awaits: list[dict[str, Any]] = []
+) -> list[NodejsAwaitExpression]:
+    awaits: list[NodejsAwaitExpression] = []
     for await_node in find_nodes(root, "await_expression"):
         expr_text = ""
         for child in await_node.children:
@@ -221,11 +235,11 @@ def _extract_await_expressions(
                 expr_text = text(child, source)
                 break
         awaits.append(
-            {
-                "expression": expr_text,
-                "line": await_node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            NodejsAwaitExpression(
+                expression=expr_text,
+                line=await_node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return awaits
 
@@ -249,9 +263,11 @@ def _node_key(node: Node) -> tuple[int, int]:
     return (node.start_byte, node.end_byte)
 
 
-def _extract_promise_chains(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
+def _extract_promise_chains(
+    root: Node, source: bytes, rel_path: str
+) -> list[NodejsPromiseChain]:
     """Detect .then() chains and whether they have a .catch()."""
-    chains: list[dict[str, Any]] = []
+    chains: list[NodejsPromiseChain] = []
     seen: set[tuple[int, int]] = set()
 
     for call in find_nodes(root, "call_expression"):
@@ -286,29 +302,29 @@ def _extract_promise_chains(root: Node, source: bytes, rel_path: str) -> list[di
         seen.add(key)
         seen.add(_node_key(call))
         chains.append(
-            {
-                "expression": text(outermost, source),
-                "has_catch": has_catch,
-                "line": outermost.start_point[0] + 1,
-                "file": rel_path,
-            }
+            NodejsPromiseChain(
+                expression=text(outermost, source),
+                has_catch=has_catch,
+                line=outermost.start_point[0] + 1,
+                file=rel_path,
+            )
         )
 
     return chains
 
 
-def _extract_sync_calls(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_sync_calls(root: Node, source: bytes, rel_path: str) -> list[NodejsSyncCall]:
+    results: list[NodejsSyncCall] = []
     for call in find_nodes(root, "call_expression"):
         name = _call_name(call, source)
         parts = name.split(".")
         if len(parts) == 2 and parts[1] in _SYNC_METHODS:
             results.append(
-                {
-                    "method": name,
-                    "line": call.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                NodejsSyncCall(
+                    method=name,
+                    line=call.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
     return results
 
@@ -340,8 +356,8 @@ _PROMISE_METHODS = frozenset({"then", "catch", "finally"})
 
 def _extract_callback_patterns(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+) -> list[NodejsCallbackPattern]:
+    results: list[NodejsCallbackPattern] = []
     for call in find_nodes(root, "call_expression"):
         func_name = _call_name(call, source)
         if not func_name or func_name in _PROMISE_METHODS:
@@ -381,13 +397,13 @@ def _extract_callback_patterns(
                         _checks_error_param(block, first_param, source) if block else False
                     )
                     results.append(
-                        {
-                            "function_name": func_name,
-                            "callback_param": first_param,
-                            "checks_error": checks,
-                            "line": call.start_point[0] + 1,
-                            "file": rel_path,
-                        }
+                        NodejsCallbackPattern(
+                            function_name=func_name,
+                            callback_param=first_param,
+                            checks_error=checks,
+                            line=call.start_point[0] + 1,
+                            file=rel_path,
+                        )
                     )
                 params_node = None
                 break
@@ -407,13 +423,13 @@ def _extract_callback_patterns(
 
         checks = _checks_error_param(block, first_param, source) if block else False
         results.append(
-            {
-                "function_name": func_name,
-                "callback_param": first_param,
-                "checks_error": checks,
-                "line": call.start_point[0] + 1,
-                "file": rel_path,
-            }
+            NodejsCallbackPattern(
+                function_name=func_name,
+                callback_param=first_param,
+                checks_error=checks,
+                line=call.start_point[0] + 1,
+                file=rel_path,
+            )
         )
 
     return results
@@ -426,19 +442,20 @@ class NodejsAstCollector(BaseASTCollector):
     file_extensions = (".js", ".ts", ".jsx", ".tsx")
     evidence_kind = "nodejs-ast-file"
 
-    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+    def _parse_file(self, source: bytes, rel_path: str) -> NodejsAstFilePayload:
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
-        return {
-            "catch_blocks": _extract_catch_blocks(root, source, rel_path),
-            "log_statements": _extract_log_statements(root, source, rel_path),
-            "functions": _extract_functions(root, source),
-            "await_expressions": _extract_await_expressions(root, source, rel_path),
-            "promise_chains": _extract_promise_chains(root, source, rel_path),
-            "sync_calls": _extract_sync_calls(root, source, rel_path),
-            "callback_patterns": _extract_callback_patterns(root, source, rel_path),
-        }
+        return NodejsAstFilePayload(
+            file_path=rel_path,
+            catch_blocks=_extract_catch_blocks(root, source, rel_path),
+            log_statements=_extract_log_statements(root, source, rel_path),
+            functions=_extract_functions(root, source),
+            await_expressions=_extract_await_expressions(root, source, rel_path),
+            promise_chains=_extract_promise_chains(root, source, rel_path),
+            sync_calls=_extract_sync_calls(root, source, rel_path),
+            callback_patterns=_extract_callback_patterns(root, source, rel_path),
+        )
 
 
 def _register() -> None:

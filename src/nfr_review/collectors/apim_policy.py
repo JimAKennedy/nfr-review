@@ -21,6 +21,7 @@ import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.apim import ApimPolicyPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -62,7 +63,7 @@ def _discover_xml_files(repo_path: Path) -> list[Path]:
     return files
 
 
-def _parse_policy(xml_path: Path, repo_path: Path) -> dict[str, Any] | None:
+def _parse_policy(xml_path: Path, repo_path: Path) -> ApimPolicyPayload | None:
     """Parse a single APIM policy XML file and return the payload dict.
 
     Returns None if the file is not a valid APIM policy (no <policies> root).
@@ -107,15 +108,15 @@ def _parse_policy(xml_path: Path, repo_path: Path) -> dict[str, Any] | None:
     uses_named_values = any(_NAMED_VALUE_RE.search(url) for url in backend_urls)
 
     rel_path = xml_path.relative_to(repo_path)
-    return {
-        "file_path": str(rel_path),
-        "has_rate_limit": has_rate_limit,
-        "has_auth_policy": has_auth_policy,
-        "backend_urls": backend_urls,
-        "uses_named_values": uses_named_values,
-        "inbound_policies": inbound_policies,
-        "outbound_policies": outbound_policies,
-    }
+    return ApimPolicyPayload(
+        file_path=str(rel_path),
+        has_rate_limit=has_rate_limit,
+        has_auth_policy=has_auth_policy,
+        backend_urls=backend_urls,
+        uses_named_values=uses_named_values,
+        inbound_policies=inbound_policies,
+        outbound_policies=outbound_policies,
+    )
 
 
 class ApimPolicyCollector:

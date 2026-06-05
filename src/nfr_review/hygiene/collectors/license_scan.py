@@ -10,6 +10,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.license_scan import (
+    CopyleftFlags,
+    LicenseDetection,
+    LicenseScanPayload,
+    LicenseScanSummaryPayload,
+)
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 from nfr_review.path_filter import iter_repo_files
@@ -112,19 +118,20 @@ class LicenseScanCollector:
             copyrights = cr_data.get("copyrights", [])
             holders = cr_data.get("holders", [])
 
-            licenses_found: list[dict[str, Any]] = []
+            licenses_found: list[LicenseDetection] = []
             for det in detections:
                 for match in det.get("matches", []):
                     spdx = match.get("license_expression_spdx", "")
                     score = match.get("score", 0)
                     if score >= min_score:
-                        entry: dict[str, Any] = {
-                            "spdx_key": spdx,
-                            "score": score,
-                            "start_line": match.get("start_line", 0),
-                            "end_line": match.get("end_line", 0),
-                        }
-                        licenses_found.append(entry)
+                        licenses_found.append(
+                            LicenseDetection(
+                                spdx_key=spdx,
+                                score=score,
+                                start_line=match.get("start_line", 0),
+                                end_line=match.get("end_line", 0),
+                            )
+                        )
                         all_licenses.append(spdx)
                         spdx_lower = spdx.lower()
                         if "agpl" in spdx_lower:
@@ -134,12 +141,12 @@ class LicenseScanCollector:
                         elif "gpl" in spdx_lower:
                             copyleft_flags["has_gpl"] = True
 
-            payload: dict[str, Any] = {
-                "licenses": licenses_found,
-                "copyrights": [c.get("copyright", "") for c in copyrights],
-                "holders": [h.get("holder", "") for h in holders],
-                "detected_expression_spdx": expr,
-            }
+            payload = LicenseScanPayload(
+                licenses=licenses_found,
+                copyrights=[c.get("copyright", "") for c in copyrights],
+                holders=[h.get("holder", "") for h in holders],
+                detected_expression_spdx=expr,
+            )
 
             evidence.append(
                 Evidence(
@@ -152,11 +159,11 @@ class LicenseScanCollector:
             )
 
         unique_licenses = sorted(set(all_licenses))
-        summary_payload: dict[str, Any] = {
-            "total_files_scanned": len(all_files),
-            "unique_licenses": unique_licenses,
-            "copyleft_flags": copyleft_flags,
-        }
+        summary_payload = LicenseScanSummaryPayload(
+            total_files_scanned=len(all_files),
+            unique_licenses=unique_licenses,
+            copyleft_flags=CopyleftFlags(**copyleft_flags),
+        )
 
         evidence.append(
             Evidence(

@@ -25,6 +25,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -120,18 +121,18 @@ class HelmCollector:
                     collector_version=self.version,
                     locator=rel_chart,
                     kind="helm-analysis",
-                    payload={
-                        "chart_path": rel_chart,
-                        "chart_name": chart_meta.get("name"),
-                        "chart_version": chart_meta.get("version"),
-                        "app_version": chart_meta.get("appVersion"),
-                        "description": chart_meta.get("description"),
-                        "maintainers": chart_meta.get("maintainers"),
-                        "values": values,
-                        "rendered_manifests": rendered_manifests,
-                        "template_files": template_files,
-                        "helm_available": helm_bin is not None,
-                    },
+                    payload=HelmAnalysisPayload(
+                        chart_path=rel_chart,
+                        chart_name=chart_meta.get("name"),
+                        chart_version=chart_meta.get("version"),
+                        app_version=chart_meta.get("appVersion"),
+                        description=chart_meta.get("description"),
+                        maintainers=chart_meta.get("maintainers"),
+                        chart_values=values,
+                        rendered_manifests=rendered_manifests,
+                        template_files=template_files,
+                        helm_available=helm_bin is not None,
+                    ),
                 )
             )
         return evidence

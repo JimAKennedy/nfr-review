@@ -12,6 +12,12 @@ import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.jdepend import (
+    JDependPackageMetrics,
+    JDependPackagesPayload,
+    JDependSkipPayload,
+    JDependSummaryPayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -102,28 +108,13 @@ def _try_compile_java(repo_path: Path) -> str | None:
     return "no pom.xml or build.gradle found — cannot auto-compile"
 
 
-def _parse_package_stats(pkg_el: ET.Element) -> dict[str, Any]:
+def _parse_package_stats(pkg_el: ET.Element) -> JDependPackageMetrics:
     """Extract metrics from a <Package> element's <Stats> child."""
     stats_el = pkg_el.find("Stats")
     name = pkg_el.get("name", "unknown")
 
-    metrics: dict[str, Any] = {"name": name}
-
     if stats_el is None:
-        metrics.update(
-            {
-                "total_classes": 0,
-                "concrete_classes": 0,
-                "abstract_classes": 0,
-                "ca": 0,
-                "ce": 0,
-                "a": 0.0,
-                "i": 0.0,
-                "d": 0.0,
-                "v": 0,
-            }
-        )
-        return metrics
+        return JDependPackageMetrics(name=name)
 
     def _int(tag: str, default: int = 0) -> int:
         el = stats_el.find(tag)  # type: ignore[union-attr]
@@ -143,17 +134,18 @@ def _parse_package_stats(pkg_el: ET.Element) -> dict[str, Any]:
                 return default
         return default
 
-    metrics["total_classes"] = _int("TotalClasses")
-    metrics["concrete_classes"] = _int("ConcreteClasses")
-    metrics["abstract_classes"] = _int("AbstractClasses")
-    metrics["ca"] = _int("Ca")
-    metrics["ce"] = _int("Ce")
-    metrics["a"] = _float("A")
-    metrics["i"] = _float("I")
-    metrics["d"] = _float("D")
-    metrics["v"] = _int("V")
-
-    return metrics
+    return JDependPackageMetrics(
+        name=name,
+        total_classes=_int("TotalClasses"),
+        concrete_classes=_int("ConcreteClasses"),
+        abstract_classes=_int("AbstractClasses"),
+        ca=_int("Ca"),
+        ce=_int("Ce"),
+        a=_float("A"),
+        i=_float("I"),
+        d=_float("D"),
+        v=_int("V"),
+    )
 
 
 def _parse_cycles(root: ET.Element) -> list[list[str]]:
@@ -178,11 +170,13 @@ def _parse_cycles(root: ET.Element) -> list[list[str]]:
     return groups
 
 
-def _parse_jdepend_xml(xml_text: str) -> tuple[list[dict[str, Any]], list[list[str]]]:
+def _parse_jdepend_xml(
+    xml_text: str,
+) -> tuple[list[JDependPackageMetrics], list[list[str]]]:
     """Parse JDepend XML output, returning (packages, cycle_groups)."""
     root = ET.fromstring(xml_text)  # nosec B314
 
-    packages: list[dict[str, Any]] = []
+    packages: list[JDependPackageMetrics] = []
     packages_el = root.find("Packages")
     if packages_el is not None:
         for pkg_el in packages_el.findall("Package"):
@@ -245,10 +239,10 @@ class JDependCollector:
                         collector_version=self.version,
                         locator=".",
                         kind="jdepend-skip",
-                        payload={
-                            "reason": "Auto-compile succeeded but no bytecode "
+                        payload=JDependSkipPayload(
+                            reason="Auto-compile succeeded but no bytecode "
                             "directories were produced"
-                        },
+                        ),
                     )
                 ]
 
@@ -272,10 +266,10 @@ class JDependCollector:
                         collector_version=self.version,
                         locator=".",
                         kind="jdepend-skip",
-                        payload={
-                            "reason": "jdepend binary not found — "
+                        payload=JDependSkipPayload(
+                            reason="jdepend binary not found — "
                             "install jdepend and ensure it is on PATH"
-                        },
+                        ),
                     )
                 ]
             except subprocess.SubprocessError as exc:
@@ -286,7 +280,7 @@ class JDependCollector:
                         collector_version=self.version,
                         locator=".",
                         kind="jdepend-skip",
-                        payload={"reason": f"jdepend execution error: {exc}"},
+                        payload=JDependSkipPayload(reason=f"jdepend execution error: {exc}"),
                     )
                 ]
 
@@ -300,10 +294,10 @@ class JDependCollector:
                         collector_version=self.version,
                         locator=rel_dir,
                         kind="jdepend-skip",
-                        payload={
-                            "reason": f"jdepend exited with code {result.returncode}",
-                            "stderr": result.stderr[:500] if result.stderr else "",
-                        },
+                        payload=JDependSkipPayload(
+                            reason=f"jdepend exited with code {result.returncode}",
+                            stderr=result.stderr[:500] if result.stderr else "",
+                        ),
                     )
                 ]
 
@@ -318,7 +312,7 @@ class JDependCollector:
                         collector_version=self.version,
                         locator=rel_dir,
                         kind="jdepend-skip",
-                        payload={"reason": f"XML parse error: {exc}"},
+                        payload=JDependSkipPayload(reason=f"XML parse error: {exc}"),
                     )
                 ]
 
@@ -327,7 +321,7 @@ class JDependCollector:
             for group in cycle_groups:
                 cycle_package_names.update(group)
 
-            distances = [p["d"] for p in packages]
+            distances = [p.d for p in packages]
             avg_distance = sum(distances) / len(distances) if distances else 0.0
             max_distance = max(distances) if distances else 0.0
 
@@ -337,10 +331,10 @@ class JDependCollector:
                     collector_version=self.version,
                     locator=rel_dir,
                     kind="jdepend-packages",
-                    payload={
-                        "bytecode_dir": rel_dir,
-                        "packages": packages,
-                    },
+                    payload=JDependPackagesPayload(
+                        bytecode_dir=rel_dir,
+                        packages=packages,
+                    ),
                 )
             )
 
@@ -350,13 +344,13 @@ class JDependCollector:
                     collector_version=self.version,
                     locator=rel_dir,
                     kind="jdepend-summary",
-                    payload={
-                        "total_packages": len(packages),
-                        "packages_with_cycles": len(cycle_package_names),
-                        "cycle_groups": cycle_groups,
-                        "avg_distance": round(avg_distance, 4),
-                        "max_distance": round(max_distance, 4),
-                    },
+                    payload=JDependSummaryPayload(
+                        total_packages=len(packages),
+                        packages_with_cycles=len(cycle_package_names),
+                        cycle_groups=cycle_groups,
+                        avg_distance=round(avg_distance, 4),
+                        max_distance=round(max_distance, 4),
+                    ),
                 )
             )
 

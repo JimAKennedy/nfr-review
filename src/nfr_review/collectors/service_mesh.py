@@ -71,6 +71,19 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.service_mesh import (
+    ServiceMeshAnalysisArg,
+    ServiceMeshAnalysisMetric,
+    ServiceMeshAnalysisTemplatePayload,
+    ServiceMeshDestinationRulePayload,
+    ServiceMeshHttpRoute,
+    ServiceMeshRetries,
+    ServiceMeshRolloutPayload,
+    ServiceMeshRouteDestination,
+    ServiceMeshSubset,
+    ServiceMeshSummaryPayload,
+    ServiceMeshVirtualServicePayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -83,41 +96,41 @@ _ISTIO_API_RE = re.compile(r"^[a-z0-9-]+\.istio\.io/")
 _ARGO_ROLLOUTS_API = "argoproj.io/v1alpha1"
 
 
-def _extract_http_routes(spec: dict[str, Any]) -> list[dict[str, Any]]:
-    routes: list[dict[str, Any]] = []
+def _extract_http_routes(spec: dict[str, Any]) -> list[ServiceMeshHttpRoute]:
+    routes: list[ServiceMeshHttpRoute] = []
     for http_entry in spec.get("http", []) or []:
         if not isinstance(http_entry, dict):
             continue
-        destinations: list[dict[str, Any]] = []
+        destinations: list[ServiceMeshRouteDestination] = []
         for route in http_entry.get("route", []) or []:
             if not isinstance(route, dict):
                 continue
             dest = route.get("destination", {}) or {}
             destinations.append(
-                {
-                    "host": dest.get("host", ""),
-                    "subset": dest.get("subset") or None,
-                    "weight": route.get("weight"),
-                }
+                ServiceMeshRouteDestination(
+                    host=dest.get("host", ""),
+                    subset=dest.get("subset") or None,
+                    weight=route.get("weight"),
+                )
             )
 
         retries_raw = http_entry.get("retries") or None
-        retries = None
+        retries: ServiceMeshRetries | None = None
         if isinstance(retries_raw, dict):
-            retries = {
-                "attempts": retries_raw.get("attempts"),
-                "per_try_timeout": retries_raw.get("perTryTimeout"),
-                "retry_on": retries_raw.get("retryOn"),
-            }
+            retries = ServiceMeshRetries(
+                attempts=retries_raw.get("attempts"),
+                per_try_timeout=retries_raw.get("perTryTimeout"),
+                retry_on=retries_raw.get("retryOn"),
+            )
 
         routes.append(
-            {
-                "destinations": destinations,
-                "timeout": http_entry.get("timeout") or None,
-                "retries": retries,
-                "fault": http_entry.get("fault") or None,
-                "match": http_entry.get("match") or None,
-            }
+            ServiceMeshHttpRoute(
+                destinations=destinations,
+                timeout=http_entry.get("timeout") or None,
+                retries=retries,
+                fault=http_entry.get("fault") or None,
+                match=http_entry.get("match") or None,
+            )
         )
     return routes
 
@@ -132,18 +145,18 @@ def _extract_traffic_policy(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _extract_subsets(spec: dict[str, Any]) -> list[dict[str, Any]]:
-    subsets: list[dict[str, Any]] = []
+def _extract_subsets(spec: dict[str, Any]) -> list[ServiceMeshSubset]:
+    subsets: list[ServiceMeshSubset] = []
     for s in spec.get("subsets", []) or []:
         if not isinstance(s, dict):
             continue
         subset_tp = s.get("trafficPolicy")
         subsets.append(
-            {
-                "name": s.get("name", ""),
-                "labels": s.get("labels") or {},
-                "traffic_policy": subset_tp if isinstance(subset_tp, dict) else None,
-            }
+            ServiceMeshSubset(
+                name=s.get("name", ""),
+                labels=s.get("labels") or {},
+                traffic_policy=subset_tp if isinstance(subset_tp, dict) else None,
+            )
         )
     return subsets
 
@@ -178,35 +191,35 @@ def _extract_analysis_refs(strategy: dict[str, Any]) -> list[str]:
     return refs
 
 
-def _extract_metrics(spec: dict[str, Any]) -> list[dict[str, Any]]:
-    metrics: list[dict[str, Any]] = []
+def _extract_metrics(spec: dict[str, Any]) -> list[ServiceMeshAnalysisMetric]:
+    metrics: list[ServiceMeshAnalysisMetric] = []
     for m in spec.get("metrics", []) or []:
         if not isinstance(m, dict):
             continue
         provider = m.get("provider", {}) or {}
         metrics.append(
-            {
-                "name": m.get("name", ""),
-                "provider": provider if provider else None,
-                "success_condition": m.get("successCondition") or None,
-                "failure_condition": m.get("failureCondition") or None,
-                "interval": m.get("interval") or None,
-                "count": m.get("count"),
-            }
+            ServiceMeshAnalysisMetric(
+                name=m.get("name", ""),
+                provider=provider if provider else None,
+                success_condition=m.get("successCondition") or None,
+                failure_condition=m.get("failureCondition") or None,
+                interval=m.get("interval") or None,
+                count=m.get("count"),
+            )
         )
     return metrics
 
 
-def _extract_template_args(spec: dict[str, Any]) -> list[dict[str, Any]]:
-    args: list[dict[str, Any]] = []
+def _extract_template_args(spec: dict[str, Any]) -> list[ServiceMeshAnalysisArg]:
+    args: list[ServiceMeshAnalysisArg] = []
     for a in spec.get("args", []) or []:
         if not isinstance(a, dict):
             continue
         args.append(
-            {
-                "name": a.get("name", ""),
-                "value": a.get("value"),
-            }
+            ServiceMeshAnalysisArg(
+                name=a.get("name", ""),
+                value=a.get("value"),
+            )
         )
     return args
 
@@ -271,8 +284,7 @@ class ServiceMeshCollector:
                 if _ISTIO_API_RE.match(api_version) and kind == "VirtualService":
                     http_routes = _extract_http_routes(spec)
                     has_weighted = any(
-                        any(d.get("weight") is not None for d in r["destinations"])
-                        for r in http_routes
+                        any(d.weight is not None for d in r.destinations) for r in http_routes
                     )
                     evidence.append(
                         Evidence(
@@ -280,15 +292,15 @@ class ServiceMeshCollector:
                             collector_version=self.version,
                             locator=f"{rel}:{name}",
                             kind="service-mesh-virtual-service",
-                            payload={
-                                "file_path": str(rel),
-                                "name": name,
-                                "namespace": namespace,
-                                "hosts": spec.get("hosts", []) or [],
-                                "http_routes": http_routes,
-                                "has_weighted_routing": has_weighted,
-                                "total_routes": len(http_routes),
-                            },
+                            payload=ServiceMeshVirtualServicePayload(
+                                file_path=str(rel),
+                                name=name,
+                                namespace=namespace,
+                                hosts=spec.get("hosts", []) or [],
+                                http_routes=http_routes,
+                                has_weighted_routing=has_weighted,
+                                total_routes=len(http_routes),
+                            ),
                         )
                     )
                     vs_count += 1
@@ -303,18 +315,18 @@ class ServiceMeshCollector:
                             collector_version=self.version,
                             locator=f"{rel}:{name}",
                             kind="service-mesh-destination-rule",
-                            payload={
-                                "file_path": str(rel),
-                                "name": name,
-                                "namespace": namespace,
-                                "host": spec.get("host", ""),
-                                "connection_pool": tp["connection_pool"],
-                                "outlier_detection": tp["outlier_detection"],
-                                "tls_mode": tp["tls_mode"],
-                                "subsets": subsets,
-                                "has_connection_pool": tp["connection_pool"] is not None,
-                                "has_outlier_detection": tp["outlier_detection"] is not None,
-                            },
+                            payload=ServiceMeshDestinationRulePayload(
+                                file_path=str(rel),
+                                name=name,
+                                namespace=namespace,
+                                host=spec.get("host", ""),
+                                connection_pool=tp["connection_pool"],
+                                outlier_detection=tp["outlier_detection"],
+                                tls_mode=tp["tls_mode"],
+                                subsets=subsets,
+                                has_connection_pool=tp["connection_pool"] is not None,
+                                has_outlier_detection=tp["outlier_detection"] is not None,
+                            ),
                         )
                     )
                     dr_count += 1
@@ -353,23 +365,23 @@ class ServiceMeshCollector:
                             collector_version=self.version,
                             locator=f"{rel}:{name}",
                             kind="service-mesh-rollout",
-                            payload={
-                                "file_path": str(rel),
-                                "name": name,
-                                "namespace": namespace,
-                                "replicas": rollout_spec.get("replicas"),
-                                "strategy_type": strategy_type,
-                                "canary_steps": canary_steps,
-                                "canary_max_surge": str(max_surge)
+                            payload=ServiceMeshRolloutPayload(
+                                file_path=str(rel),
+                                name=name,
+                                namespace=namespace,
+                                replicas=rollout_spec.get("replicas"),
+                                strategy_type=strategy_type,
+                                canary_steps=canary_steps,
+                                canary_max_surge=str(max_surge)
                                 if max_surge is not None
                                 else None,
-                                "canary_max_unavailable": str(max_unavailable)
+                                canary_max_unavailable=str(max_unavailable)
                                 if max_unavailable is not None
                                 else None,
-                                "analysis_refs": analysis_refs,
-                                "anti_affinity": affinity.get("podAntiAffinity") or None,
-                                "has_analysis": len(analysis_refs) > 0,
-                            },
+                                analysis_refs=analysis_refs,
+                                anti_affinity=affinity.get("podAntiAffinity") or None,
+                                has_analysis=len(analysis_refs) > 0,
+                            ),
                         )
                     )
                     rollout_count += 1
@@ -377,21 +389,21 @@ class ServiceMeshCollector:
 
                 elif api_version == _ARGO_ROLLOUTS_API and kind == "AnalysisTemplate":
                     metrics = _extract_metrics(spec)
-                    args = _extract_template_args(spec)
+                    tmpl_args = _extract_template_args(spec)
                     evidence.append(
                         Evidence(
                             collector_name=self.name,
                             collector_version=self.version,
                             locator=f"{rel}:{name}",
                             kind="service-mesh-analysis-template",
-                            payload={
-                                "file_path": str(rel),
-                                "name": name,
-                                "namespace": namespace,
-                                "metrics": metrics,
-                                "args": args,
-                                "has_metrics": len(metrics) > 0,
-                            },
+                            payload=ServiceMeshAnalysisTemplatePayload(
+                                file_path=str(rel),
+                                name=name,
+                                namespace=namespace,
+                                metrics=metrics,
+                                args=tmpl_args,
+                                has_metrics=len(metrics) > 0,
+                            ),
                         )
                     )
                     at_count += 1
@@ -406,14 +418,14 @@ class ServiceMeshCollector:
                 collector_version=self.version,
                 locator=".",
                 kind="service-mesh-summary",
-                payload={
-                    "virtual_services": vs_count,
-                    "destination_rules": dr_count,
-                    "rollouts": rollout_count,
-                    "analysis_templates": at_count,
-                    "files_parsed": files_parsed,
-                    "files_failed": files_failed,
-                },
+                payload=ServiceMeshSummaryPayload(
+                    virtual_services=vs_count,
+                    destination_rules=dr_count,
+                    rollouts=rollout_count,
+                    analysis_templates=at_count,
+                    files_parsed=files_parsed,
+                    files_failed=files_failed,
+                ),
             )
         )
 

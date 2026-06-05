@@ -150,9 +150,12 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
                     if cls.get("name") and (
                         cls.get("base_classes") or cls.get("methods") or cls.get("fields")
                     ):
-                        cls["language"] = language
-                        cls["repo"] = target.name
-                        all_classes.append(cls)
+                        cls_dict = (
+                            cls.model_dump() if hasattr(cls, "model_dump") else dict(cls)
+                        )
+                        cls_dict["language"] = language
+                        cls_dict["repo"] = target.name
+                        all_classes.append(cls_dict)
                         count += 1
 
         if count:

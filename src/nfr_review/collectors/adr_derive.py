@@ -31,6 +31,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.adr_derive import (
+    AdrDerivedPayload,
+    AdrDeriveSkipPayload,
+    AdrDeriveSummaryPayload,
+)
 from nfr_review.llm_client import create_llm_client, serialize_evidence_bundle
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
@@ -187,9 +192,9 @@ class AdrDeriveCollector:
                     collector_version=self.version,
                     locator="adr-derive",
                     kind="adr-derive-skip",
-                    payload={
-                        "reason": "ANTHROPIC_API_KEY is not set; LLM analysis unavailable"
-                    },
+                    payload=AdrDeriveSkipPayload(
+                        reason="ANTHROPIC_API_KEY is not set; LLM analysis unavailable"
+                    ),
                 )
             ]
 
@@ -210,7 +215,7 @@ class AdrDeriveCollector:
                     collector_version=self.version,
                     locator="adr-derive",
                     kind="adr-derive-skip",
-                    payload={"reason": f"LLM analysis failed: {exc}"},
+                    payload=AdrDeriveSkipPayload(reason=f"LLM analysis failed: {exc}"),
                 )
             ]
 
@@ -223,7 +228,9 @@ class AdrDeriveCollector:
                     collector_version=self.version,
                     locator="adr-derive",
                     kind="adr-derive-skip",
-                    payload={"reason": "Failed to parse LLM response as JSON"},
+                    payload=AdrDeriveSkipPayload(
+                        reason="Failed to parse LLM response as JSON"
+                    ),
                 )
             ]
 
@@ -247,13 +254,13 @@ class AdrDeriveCollector:
                     collector_version=self.version,
                     locator=f"adr-derived:{title}",
                     kind="adr-derived",
-                    payload={
-                        "title": title,
-                        "rationale": rationale,
-                        "category": category,
-                        "confidence": confidence,
-                        "evidence_refs": evidence_refs,
-                    },
+                    payload=AdrDerivedPayload(
+                        title=title,
+                        rationale=rationale,
+                        category=category,
+                        confidence=confidence,
+                        evidence_refs=evidence_refs,
+                    ),
                 )
             )
 
@@ -265,11 +272,11 @@ class AdrDeriveCollector:
                     collector_version=self.version,
                     locator="adr-derive-summary",
                     kind="adr-derive-summary",
-                    payload={
-                        "total_derived": len([e for e in evidence if e.kind == "adr-derived"]),
-                        "categories": categories,
-                        "avg_confidence": round(avg_confidence, 3),
-                    },
+                    payload=AdrDeriveSummaryPayload(
+                        total_derived=len([e for e in evidence if e.kind == "adr-derived"]),
+                        categories=categories,
+                        avg_confidence=round(avg_confidence, 3),
+                    ),
                 )
             )
 

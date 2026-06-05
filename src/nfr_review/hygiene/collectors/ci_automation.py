@@ -10,6 +10,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.ci_automation import CiAutomationPayload, CiConfigEntry
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 
@@ -64,7 +65,7 @@ class CiAutomationCollector:
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         ci_systems: list[str] = []
-        configs: list[dict[str, Any]] = []
+        configs: list[CiConfigEntry] = []
 
         for pattern, provider in _CI_GLOBS:
             if "*" in pattern:
@@ -92,39 +93,50 @@ class CiAutomationCollector:
                     logger.debug("Could not read CI config: %s", rel_path)
                     continue
 
-                entry: dict[str, Any] = {
-                    "path": rel_path,
-                    "provider": provider,
-                    "raw_content_length": len(raw),
-                }
-
                 if provider == "github-actions":
                     parsed = _parse_github_actions(raw)
-                    entry["jobs"] = parsed["jobs"]
-                    entry["steps"] = parsed["steps"]
                     if parsed.get("parse_error"):
                         logger.debug("Malformed YAML in %s — skipping parse", rel_path)
+                    entry = CiConfigEntry(
+                        path=rel_path,
+                        provider=provider,
+                        raw_content_length=len(raw),
+                        jobs=parsed["jobs"],
+                        steps=parsed["steps"],
+                    )
                 else:
-                    entry["jobs"] = []
-                    entry["steps"] = []
-                    entry["has_content"] = len(raw.strip()) > 0
+                    extra_kwargs: dict[str, Any] = {
+                        "has_content": len(raw.strip()) > 0,
+                    }
+                    steps: list[str] = []
+                    raw_keys: list[str] | None = None
                     # For non-GHA, try to extract step-like content from YAML
                     if provider in ("gitlab-ci", "circleci", "azure-devops"):
                         try:
                             doc = _yaml.load(raw)
                             if isinstance(doc, dict):
-                                entry["raw_keys"] = list(doc.keys())
-                                _extract_script_steps(doc, entry)
+                                raw_keys = list(doc.keys())
+                                _extract_script_steps(doc, extra_kwargs)
+                                steps = extra_kwargs.pop("steps", [])
                         except YAMLError:
                             logger.debug("Malformed YAML in %s — skipping parse", rel_path)
+                    entry = CiConfigEntry(
+                        path=rel_path,
+                        provider=provider,
+                        raw_content_length=len(raw),
+                        jobs=[],
+                        steps=steps,
+                        raw_keys=raw_keys,
+                        **extra_kwargs,
+                    )
 
                 configs.append(entry)
 
-        payload = {
-            "ci_systems": ci_systems,
-            "configs": configs,
-            "has_ci": len(ci_systems) > 0,
-        }
+        payload = CiAutomationPayload(
+            ci_systems=ci_systems,
+            configs=configs,
+            has_ci=len(ci_systems) > 0,
+        )
 
         return [
             Evidence(

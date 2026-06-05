@@ -54,12 +54,27 @@ Evidence payload contract (kind="go-ast-file"):
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tree_sitter import Node
 
 from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
+from nfr_review.collectors.payloads.go_ast import (
+    GoAstFilePayload,
+    GoBaseClass,
+    GoCatchBlock,
+    GoDeferStatement,
+    GoErrorAssignment,
+    GoField,
+    GoFunction,
+    GoGoroutineLaunch,
+    GoHttpCall,
+    GoLogStatement,
+    GoMethod,
+    GoParameter,
+    GoStruct,
+)
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.go_ast")
@@ -149,8 +164,8 @@ def _has_panic_call(block: Node, source: bytes) -> bool:
     return False
 
 
-def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    blocks: list[dict[str, Any]] = []
+def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[GoCatchBlock]:
+    blocks: list[GoCatchBlock] = []
     for recover_call in find_nodes(root, "call_expression"):
         if _call_text(recover_call, source) != "recover":
             continue
@@ -162,12 +177,12 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
         if body is not None:
             rethrows = _has_panic_call(body, source)
         blocks.append(
-            {
-                "caught_type": "",
-                "rethrows": rethrows,
-                "line": recover_call.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoCatchBlock(
+                caught_type="",
+                rethrows=rethrows,
+                line=recover_call.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return blocks
 
@@ -182,8 +197,8 @@ def _find_enclosing_defer(node: Node) -> Node | None:
     return None
 
 
-def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    stmts: list[dict[str, Any]] = []
+def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[GoLogStatement]:
+    stmts: list[GoLogStatement] = []
     for call in find_nodes(root, "call_expression"):
         name = _call_text(call, source)
         parts = name.split(".")
@@ -191,11 +206,11 @@ def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[di
             pkg, method = parts
             if pkg == "fmt" and method in _FMT_STDOUT_METHODS:
                 stmts.append(
-                    {"method": name, "line": call.start_point[0] + 1, "file": rel_path}
+                    GoLogStatement(method=name, line=call.start_point[0] + 1, file=rel_path)
                 )
             elif pkg == "log" and method in _LOG_METHODS:
                 stmts.append(
-                    {"method": name, "line": call.start_point[0] + 1, "file": rel_path}
+                    GoLogStatement(method=name, line=call.start_point[0] + 1, file=rel_path)
                 )
     return stmts
 
@@ -218,15 +233,15 @@ def _extract_receiver_type(method_node: Node, source: bytes) -> str:
     return ""
 
 
-def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
-    funcs: list[dict[str, Any]] = []
+def _extract_functions(root: Node, source: bytes) -> list[GoFunction]:
+    funcs: list[GoFunction] = []
     for node in find_nodes(root, "function_declaration"):
         name = ""
         for child in node.children:
             if child.type == "identifier":
                 name = text(child, source)
                 break
-        funcs.append({"name": name, "line": node.start_point[0] + 1, "receiver": ""})
+        funcs.append(GoFunction(name=name, line=node.start_point[0] + 1, receiver=""))
 
     for node in find_nodes(root, "method_declaration"):
         name = ""
@@ -235,15 +250,15 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
                 name = text(child, source)
                 break
         receiver = _extract_receiver_type(node, source)
-        funcs.append({"name": name, "line": node.start_point[0] + 1, "receiver": receiver})
+        funcs.append(GoFunction(name=name, line=node.start_point[0] + 1, receiver=receiver))
 
     return funcs
 
 
 def _extract_error_assignments(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+) -> list[GoErrorAssignment]:
+    results: list[GoErrorAssignment] = []
 
     for node in find_nodes(root, "short_var_declaration"):
         lhs = None
@@ -267,12 +282,12 @@ def _extract_error_assignments(
             continue
         call_name = _call_text(calls[0], source)
         results.append(
-            {
-                "call": call_name,
-                "error_ignored": True,
-                "line": node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoErrorAssignment(
+                call=call_name,
+                error_ignored=True,
+                line=node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
 
     for node in find_nodes(root, "assignment_statement"):
@@ -297,12 +312,12 @@ def _extract_error_assignments(
             continue
         call_name = _call_text(calls[0], source)
         results.append(
-            {
-                "call": call_name,
-                "error_ignored": True,
-                "line": node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoErrorAssignment(
+                call=call_name,
+                error_ignored=True,
+                line=node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
 
     for stmt in find_nodes(root, "expression_statement"):
@@ -312,12 +327,12 @@ def _extract_error_assignments(
         call_name = _call_text(calls[0], source)
         if call_name in _ERROR_PATTERN_CALLS:
             results.append(
-                {
-                    "call": call_name,
-                    "error_ignored": True,
-                    "line": stmt.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                GoErrorAssignment(
+                    call=call_name,
+                    error_ignored=True,
+                    line=stmt.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
 
     return results
@@ -325,35 +340,35 @@ def _extract_error_assignments(
 
 def _extract_goroutine_launches(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    launches: list[dict[str, Any]] = []
+) -> list[GoGoroutineLaunch]:
+    launches: list[GoGoroutineLaunch] = []
     for go_stmt in find_nodes(root, "go_statement"):
         expr_parts = [c for c in go_stmt.children if c.type != "go"]
         expr_text = " ".join(text(p, source) for p in expr_parts).strip()
         launches.append(
-            {
-                "expression": expr_text,
-                "line": go_stmt.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoGoroutineLaunch(
+                expression=expr_text,
+                line=go_stmt.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return launches
 
 
-def _extract_http_calls(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_http_calls(root: Node, source: bytes, rel_path: str) -> list[GoHttpCall]:
+    results: list[GoHttpCall] = []
 
     for call in find_nodes(root, "call_expression"):
         name = _call_text(call, source)
         parts = name.split(".")
         if len(parts) == 2 and parts[0] == "http" and parts[1] in _HTTP_DEFAULT_CLIENT_CALLS:
             results.append(
-                {
-                    "call": name,
-                    "has_timeout": False,
-                    "line": call.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                GoHttpCall(
+                    call=name,
+                    has_timeout=False,
+                    line=call.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
 
     for lit in find_nodes(root, "composite_literal"):
@@ -379,12 +394,12 @@ def _extract_http_calls(root: Node, source: bytes, rel_path: str) -> list[dict[s
                                 has_timeout = True
                                 break
         results.append(
-            {
-                "call": "http.Client",
-                "has_timeout": has_timeout,
-                "line": lit.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoHttpCall(
+                call="http.Client",
+                has_timeout=has_timeout,
+                line=lit.start_point[0] + 1,
+                file=rel_path,
+            )
         )
 
     return results
@@ -392,19 +407,19 @@ def _extract_http_calls(root: Node, source: bytes, rel_path: str) -> list[dict[s
 
 def _extract_defer_statements(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    defers: list[dict[str, Any]] = []
+) -> list[GoDeferStatement]:
+    defers: list[GoDeferStatement] = []
     for defer_node in find_nodes(root, "defer_statement"):
         expr_parts = [c for c in defer_node.children if c.type != "defer"]
         expr_text = " ".join(text(p, source) for p in expr_parts).strip()
         in_loop = _is_inside_for(defer_node)
         defers.append(
-            {
-                "expression": expr_text,
-                "in_loop": in_loop,
-                "line": defer_node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            GoDeferStatement(
+                expression=expr_text,
+                in_loop=in_loop,
+                line=defer_node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return defers
 
@@ -451,13 +466,13 @@ def _extract_field_type(node: Node, source: bytes) -> str:
 
 def _extract_struct_fields(
     field_list_node: Node, source: bytes
-) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+) -> tuple[list[GoField], list[GoBaseClass]]:
     """Extract named fields and embedded types from a field_declaration_list.
 
     Returns (fields, embedded) where embedded types become base_classes.
     """
-    fields: list[dict[str, Any]] = []
-    embedded: list[dict[str, str]] = []
+    fields: list[GoField] = []
+    embedded: list[GoBaseClass] = []
 
     for child in field_list_node.children:
         if child.type != "field_declaration":
@@ -472,31 +487,31 @@ def _extract_struct_fields(
             ftype = _extract_field_type(child, source)
             if fname:
                 fields.append(
-                    {
-                        "name": fname,
-                        "type": ftype,
-                        "access": _go_access(fname),
-                        "line": child.start_point[0] + 1,
-                    }
+                    GoField(
+                        name=fname,
+                        type=ftype,
+                        access=_go_access(fname),
+                        line=child.start_point[0] + 1,
+                    )
                 )
         else:
             etype = _extract_field_type(child, source)
             if etype.startswith("*"):
                 etype = etype[1:]
             if etype:
-                embedded.append({"name": etype, "access": "public"})
+                embedded.append(GoBaseClass(name=etype, access="public"))
 
     return fields, embedded
 
 
-def _extract_interface_methods(iface_node: Node, source: bytes) -> list[dict[str, Any]]:
+def _extract_interface_methods(iface_node: Node, source: bytes) -> list[GoMethod]:
     """Extract method signatures from an interface_type node."""
-    methods: list[dict[str, Any]] = []
+    methods: list[GoMethod] = []
     for child in iface_node.children:
         if child.type != "method_elem":
             continue
         mname = ""
-        params: list[dict[str, str]] = []
+        params: list[GoParameter] = []
         return_type = ""
         param_lists_seen = 0
         for sub in child.children:
@@ -518,22 +533,22 @@ def _extract_interface_methods(iface_node: Node, source: bytes) -> list[dict[str
                 return_type = text(sub, source)
         if mname:
             methods.append(
-                {
-                    "name": mname,
-                    "return_type": return_type,
-                    "access": "public",
-                    "is_virtual": False,
-                    "is_pure_virtual": True,
-                    "line": child.start_point[0] + 1,
-                    "parameters": params,
-                }
+                GoMethod(
+                    name=mname,
+                    return_type=return_type,
+                    access="public",
+                    is_virtual=False,
+                    is_pure_virtual=True,
+                    line=child.start_point[0] + 1,
+                    parameters=params,
+                )
             )
     return methods
 
 
-def _extract_param_list(param_list_node: Node, source: bytes) -> list[dict[str, str]]:
+def _extract_param_list(param_list_node: Node, source: bytes) -> list[GoParameter]:
     """Extract parameters from a parameter_list node."""
-    params: list[dict[str, str]] = []
+    params: list[GoParameter] = []
     for child in param_list_node.children:
         if child.type != "parameter_declaration":
             continue
@@ -552,7 +567,7 @@ def _extract_param_list(param_list_node: Node, source: bytes) -> list[dict[str, 
             ):
                 ptype = text(sub, source)
         if pname and ptype:
-            params.append({"name": pname, "type": ptype})
+            params.append(GoParameter(name=pname, type=ptype))
         elif ptype and not pname:
             pass
     return params
@@ -581,9 +596,9 @@ def _return_type_from_param_list(param_list_node: Node, source: bytes) -> str:
 
 def _collect_methods_for_types(
     root: Node, source: bytes, type_names: set[str]
-) -> dict[str, list[dict[str, Any]]]:
+) -> dict[str, list[GoMethod]]:
     """Collect method declarations grouped by receiver type name."""
-    methods_by_type: dict[str, list[dict[str, Any]]] = {n: [] for n in type_names}
+    methods_by_type: dict[str, list[GoMethod]] = {n: [] for n in type_names}
 
     for node in find_nodes(root, "method_declaration"):
         receiver_type = _extract_receiver_type(node, source)
@@ -592,7 +607,7 @@ def _collect_methods_for_types(
             continue
 
         mname = ""
-        params: list[dict[str, str]] = []
+        params: list[GoParameter] = []
         return_type = ""
         param_lists_seen = 0
         for child in node.children:
@@ -615,26 +630,26 @@ def _collect_methods_for_types(
 
         if mname:
             methods_by_type[bare_type].append(
-                {
-                    "name": mname,
-                    "return_type": return_type,
-                    "access": _go_access(mname),
-                    "is_virtual": False,
-                    "is_pure_virtual": False,
-                    "line": node.start_point[0] + 1,
-                    "parameters": params,
-                }
+                GoMethod(
+                    name=mname,
+                    return_type=return_type,
+                    access=_go_access(mname),
+                    is_virtual=False,
+                    is_pure_virtual=False,
+                    line=node.start_point[0] + 1,
+                    parameters=params,
+                )
             )
     return methods_by_type
 
 
-def _extract_structs_and_interfaces(
-    root: Node, source: bytes, package: str
-) -> list[dict[str, Any]]:
+def _extract_structs_and_interfaces(root: Node, source: bytes, package: str) -> list[GoStruct]:
     """Extract all struct and interface type declarations with enriched data."""
-    results: list[dict[str, Any]] = []
+    results: list[GoStruct] = []
     type_names: set[str] = set()
-    pending: list[tuple[str, int, bool, bool, list[dict[str, Any]], list[dict[str, str]]]] = []
+    pending: list[
+        tuple[str, int, bool, bool, list[GoField | GoMethod], list[GoBaseClass]]
+    ] = []
 
     for decl in root.children:
         if decl.type != "type_declaration":
@@ -664,58 +679,51 @@ def _extract_structs_and_interfaces(
                     if sub.type == "field_declaration_list":
                         field_list = sub
                         break
-                fields: list[dict[str, Any]] = []
-                embedded: list[dict[str, str]] = []
+                raw_fields: list[GoField] = []
+                embedded: list[GoBaseClass] = []
                 if field_list is not None:
-                    fields, embedded = _extract_struct_fields(field_list, source)
-                pending.append((tname, line, True, False, fields, embedded))
+                    raw_fields, embedded = _extract_struct_fields(field_list, source)
+                members: list[GoField | GoMethod] = list(raw_fields)
+                pending.append((tname, line, True, False, members, embedded))
 
             elif iface_node is not None:
-                iface_methods = _extract_interface_methods(iface_node, source)
-                pending.append((tname, line, False, True, [], []))
-                results_placeholder_idx = len(pending) - 1
-                pending[results_placeholder_idx] = (
-                    tname,
-                    line,
-                    False,
-                    True,
-                    iface_methods,  # type: ignore[arg-type]
-                    [],
-                )
+                raw_methods = _extract_interface_methods(iface_node, source)
+                members_i: list[GoField | GoMethod] = list(raw_methods)
+                pending.append((tname, line, False, True, members_i, []))
 
     methods_by_type = _collect_methods_for_types(root, source, type_names)
 
     for tname, line, is_struct, _is_interface, fields_or_methods, embedded in pending:
         if is_struct:
-            methods = methods_by_type.get(tname, [])
+            struct_methods = methods_by_type.get(tname, [])
             results.append(
-                {
-                    "name": tname,
-                    "line": line,
-                    "is_struct": True,
-                    "is_abstract": False,
-                    "is_interface": False,
-                    "base_classes": embedded,
-                    "fields": fields_or_methods,
-                    "methods": methods,
-                    "namespace": package,
-                    "outer_class": "",
-                }
+                GoStruct(
+                    name=tname,
+                    line=line,
+                    is_struct=True,
+                    is_abstract=False,
+                    is_interface=False,
+                    base_classes=embedded,
+                    fields=[f for f in fields_or_methods if isinstance(f, GoField)],
+                    methods=struct_methods,
+                    namespace=package,
+                    outer_class="",
+                )
             )
         else:
             results.append(
-                {
-                    "name": tname,
-                    "line": line,
-                    "is_struct": False,
-                    "is_abstract": True,
-                    "is_interface": True,
-                    "base_classes": [],
-                    "fields": [],
-                    "methods": fields_or_methods,
-                    "namespace": package,
-                    "outer_class": "",
-                }
+                GoStruct(
+                    name=tname,
+                    line=line,
+                    is_struct=False,
+                    is_abstract=True,
+                    is_interface=True,
+                    base_classes=[],
+                    fields=[],
+                    methods=[m for m in fields_or_methods if isinstance(m, GoMethod)],
+                    namespace=package,
+                    outer_class="",
+                )
             )
     return results
 
@@ -727,23 +735,24 @@ class GoAstCollector(BaseASTCollector):
     file_extensions = (".go",)
     evidence_kind = "go-ast-file"
 
-    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+    def _parse_file(self, source: bytes, rel_path: str) -> GoAstFilePayload:
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
         package = _extract_package(root, source)
         structs = _extract_structs_and_interfaces(root, source, package)
-        return {
-            "package": package,
-            "structs": structs,
-            "catch_blocks": _extract_catch_blocks(root, source, rel_path),
-            "log_statements": _extract_log_statements(root, source, rel_path),
-            "functions": _extract_functions(root, source),
-            "error_assignments": _extract_error_assignments(root, source, rel_path),
-            "goroutine_launches": _extract_goroutine_launches(root, source, rel_path),
-            "http_calls": _extract_http_calls(root, source, rel_path),
-            "defer_statements": _extract_defer_statements(root, source, rel_path),
-        }
+        return GoAstFilePayload(
+            file_path=rel_path,
+            package=package,
+            structs=structs,
+            catch_blocks=_extract_catch_blocks(root, source, rel_path),
+            log_statements=_extract_log_statements(root, source, rel_path),
+            functions=_extract_functions(root, source),
+            error_assignments=_extract_error_assignments(root, source, rel_path),
+            goroutine_launches=_extract_goroutine_launches(root, source, rel_path),
+            http_calls=_extract_http_calls(root, source, rel_path),
+            defer_statements=_extract_defer_statements(root, source, rel_path),
+        )
 
 
 def _register() -> None:

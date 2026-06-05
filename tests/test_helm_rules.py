@@ -32,7 +32,7 @@ def _make_evidence(
         "chart_version": chart_version,
         "app_version": app_version,
         "description": description,
-        "values": values or {},
+        "chart_values": values or {},
         "rendered_manifests": rendered_manifests or [],
         "template_files": template_files or [],
         "helm_available": helm_available,

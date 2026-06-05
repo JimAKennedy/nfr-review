@@ -82,7 +82,7 @@ class HelmSecretLeakageRule:
         findings: list[Finding] = []
         for ev in helm_evidence:
             chart_path = ev.payload.get("chart_path", ev.locator)
-            values = ev.payload.get("values", {})
+            values = ev.payload.get("chart_values", {})
 
             for key_path, val in _scan_dict_for_secrets(values):
                 display_val = val[:20] + "..." if len(val) > 20 else val

@@ -45,6 +45,16 @@ if TYPE_CHECKING:
     from tree_sitter import Node, Parser
 
 from nfr_review.collectors.ast_common import make_parser
+from nfr_review.collectors.payloads.terraform import (
+    TerraformAnalysisPayload,
+    TerraformBlock,
+    TerraformDataBlock,
+    TerraformModuleBlock,
+    TerraformProviderBlock,
+    TerraformRequiredProvider,
+    TerraformResourceBlock,
+    TerraformVariableBlock,
+)
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -125,8 +135,8 @@ def _has_attr(body: Node, attr_name: str, source: bytes) -> bool:
 def _extract_terraform_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    blocks: list[dict[str, Any]] = []
+) -> list[TerraformBlock]:
+    blocks: list[TerraformBlock] = []
     for block in _find_nodes(root, "block"):
         if _get_block_type(block, source) != "terraform":
             continue
@@ -137,7 +147,7 @@ def _extract_terraform_blocks(
 
         backend_type: str | None = None
         required_version = _get_attr_value(body, "required_version", source)
-        required_providers: list[dict[str, Any]] = []
+        required_providers: list[TerraformRequiredProvider] = []
 
         for sub_block in body.children:
             if sub_block.type != "block":
@@ -186,19 +196,19 @@ def _extract_terraform_blocks(
                                 prov_version = val_text
 
                     required_providers.append(
-                        {
-                            "name": prov_name,
-                            "source": prov_source,
-                            "version_constraint": prov_version,
-                        }
+                        TerraformRequiredProvider(
+                            name=prov_name,
+                            source=prov_source,
+                            version_constraint=prov_version,
+                        )
                     )
 
         blocks.append(
-            {
-                "backend_type": backend_type,
-                "required_version": required_version,
-                "required_providers": required_providers,
-            }
+            TerraformBlock(
+                backend_type=backend_type,
+                required_version=required_version,
+                required_providers=required_providers,
+            )
         )
     return blocks
 
@@ -206,8 +216,8 @@ def _extract_terraform_blocks(
 def _extract_provider_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    providers: list[dict[str, Any]] = []
+) -> list[TerraformProviderBlock]:
+    providers: list[TerraformProviderBlock] = []
     for block in root.children:
         if block.type != "block":
             continue
@@ -224,12 +234,12 @@ def _extract_provider_blocks(
             alias = _get_attr_value(body, "alias", source)
 
         providers.append(
-            {
-                "name": name,
-                "version": version,
-                "alias": alias,
-                "line": block.start_point[0] + 1,
-            }
+            TerraformProviderBlock(
+                name=name,
+                version=version,
+                alias=alias,
+                line=block.start_point[0] + 1,
+            )
         )
     return providers
 
@@ -237,8 +247,8 @@ def _extract_provider_blocks(
 def _extract_resource_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    resources: list[dict[str, Any]] = []
+) -> list[TerraformResourceBlock]:
+    resources: list[TerraformResourceBlock] = []
     for block in root.children:
         if block.type != "block":
             continue
@@ -252,12 +262,12 @@ def _extract_resource_blocks(
         body_text = _text(body, source) if body is not None else ""
 
         resources.append(
-            {
-                "type": res_type,
-                "name": res_name,
-                "body_text": body_text,
-                "line": block.start_point[0] + 1,
-            }
+            TerraformResourceBlock(
+                type=res_type,
+                name=res_name,
+                body_text=body_text,
+                line=block.start_point[0] + 1,
+            )
         )
     return resources
 
@@ -265,8 +275,8 @@ def _extract_resource_blocks(
 def _extract_data_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    data_blocks: list[dict[str, Any]] = []
+) -> list[TerraformDataBlock]:
+    data_blocks: list[TerraformDataBlock] = []
     for block in root.children:
         if block.type != "block":
             continue
@@ -280,12 +290,12 @@ def _extract_data_blocks(
         body_text = _text(body, source) if body is not None else ""
 
         data_blocks.append(
-            {
-                "type": data_type,
-                "name": data_name,
-                "body_text": body_text,
-                "line": block.start_point[0] + 1,
-            }
+            TerraformDataBlock(
+                type=data_type,
+                name=data_name,
+                body_text=body_text,
+                line=block.start_point[0] + 1,
+            )
         )
     return data_blocks
 
@@ -293,8 +303,8 @@ def _extract_data_blocks(
 def _extract_variable_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    variables: list[dict[str, Any]] = []
+) -> list[TerraformVariableBlock]:
+    variables: list[TerraformVariableBlock] = []
     for block in root.children:
         if block.type != "block":
             continue
@@ -313,12 +323,12 @@ def _extract_variable_blocks(
             has_default = _has_attr(body, "default", source)
 
         variables.append(
-            {
-                "name": name,
-                "has_description": has_description,
-                "has_type": has_type,
-                "has_default": has_default,
-            }
+            TerraformVariableBlock(
+                name=name,
+                has_description=has_description,
+                has_type=has_type,
+                has_default=has_default,
+            )
         )
     return variables
 
@@ -326,8 +336,8 @@ def _extract_variable_blocks(
 def _extract_module_blocks(
     root: Node,
     source: bytes,
-) -> list[dict[str, Any]]:
-    modules: list[dict[str, Any]] = []
+) -> list[TerraformModuleBlock]:
+    modules: list[TerraformModuleBlock] = []
     for block in root.children:
         if block.type != "block":
             continue
@@ -344,11 +354,11 @@ def _extract_module_blocks(
             mod_version = _get_attr_value(body, "version", source)
 
         modules.append(
-            {
-                "name": name,
-                "source": mod_source,
-                "version": mod_version,
-            }
+            TerraformModuleBlock(
+                name=name,
+                source=mod_source,
+                version=mod_version,
+            )
         )
     return modules
 
@@ -420,11 +430,19 @@ class TerraformCollector:
                 logger.debug("Cannot read %s: %s", rel, exc)
                 continue
             try:
-                payload = _parse_tf_file(self._parser, source)  # type: ignore[arg-type]
+                parsed = _parse_tf_file(self._parser, source)  # type: ignore[arg-type]
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
-            payload["file_path"] = str(rel)
+            payload = TerraformAnalysisPayload(
+                file_path=str(rel),
+                terraform_blocks=parsed["terraform_blocks"],
+                provider_blocks=parsed["provider_blocks"],
+                resource_blocks=parsed["resource_blocks"],
+                data_blocks=parsed["data_blocks"],
+                variable_blocks=parsed["variable_blocks"],
+                module_blocks=parsed["module_blocks"],
+            )
             evidence.append(
                 Evidence(
                     collector_name=self.name,

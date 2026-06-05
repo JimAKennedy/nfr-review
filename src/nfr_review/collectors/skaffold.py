@@ -18,6 +18,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.skaffold import SkaffoldAnalysisPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -68,13 +69,13 @@ class SkaffoldCollector:
                     collector_version=self.version,
                     locator=str(rel),
                     kind="skaffold-analysis",
-                    payload={
-                        "file_path": str(rel),
-                        "api_version": api_version,
-                        "build": build,
-                        "deploy": deploy,
-                        "profiles": profiles,
-                    },
+                    payload=SkaffoldAnalysisPayload(
+                        file_path=str(rel),
+                        api_version=api_version,
+                        build=build,
+                        deploy=deploy,
+                        profiles=profiles,
+                    ),
                 )
             )
 

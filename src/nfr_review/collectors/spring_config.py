@@ -23,6 +23,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from nfr_review.collectors.payloads.spring import SpringConfigFilePayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -85,7 +86,7 @@ def _extract_payload(
     data: dict[str, Any],
     rel_path: str,
     profile: str | None,
-) -> dict[str, Any]:
+) -> SpringConfigFilePayload:
     """Build the evidence payload from parsed config data."""
     management = data.get("management", {}) or {}
     logging_section = data.get("logging", {}) or {}
@@ -104,16 +105,16 @@ def _extract_payload(
         if "exclude" in exposure:
             actuator["exclude"] = exposure["exclude"]
 
-    return {
-        "file_path": rel_path,
-        "profile": profile,
-        "management": management,
-        "logging": logging_section,
-        "server": server,
-        "spring_security": spring_security,
-        "actuator": actuator,
-        "raw_keys": sorted(data.keys()) if isinstance(data, dict) else [],
-    }
+    return SpringConfigFilePayload(
+        file_path=rel_path,
+        profile=profile,
+        management=management,
+        logging=logging_section,
+        server=server,
+        spring_security=spring_security,
+        actuator=actuator,
+        raw_keys=sorted(data.keys()) if isinstance(data, dict) else [],
+    )
 
 
 class SpringConfigCollector:
