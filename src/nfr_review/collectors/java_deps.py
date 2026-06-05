@@ -14,6 +14,7 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version
 
+from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
 from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
@@ -127,19 +128,19 @@ class JavaDepsCollector:
         client = DepsDevClient()
         client.prefetch_package_versions("maven", [name for _, name, _, _ in raw_deps])
         enrichment_errors: list[str] = []
-        dependencies: list[dict[str, Any]] = []
+        dependencies: list[DependencyItem] = []
 
         for source_file, name, version, scope in raw_deps:
             dep = _enrich(client, name, version, source_file, scope)
-            if dep["deps_dev_status"] != "ok":
-                enrichment_errors.append(f"{name}: {dep['deps_dev_status']}")
+            if dep.deps_dev_status != "ok":
+                enrichment_errors.append(f"{name}: {dep.deps_dev_status}")
             dependencies.append(dep)
 
-        payload: dict[str, Any] = {
-            "dependencies": dependencies,
-            "manifest_files_found": manifest_files,
-            "enrichment_errors": enrichment_errors,
-        }
+        payload = DepsPayload(
+            dependencies=dependencies,
+            manifest_files_found=manifest_files,
+            enrichment_errors=enrichment_errors,
+        )
 
         return [
             Evidence(
@@ -221,39 +222,42 @@ def _enrich(
     version: str,
     source_file: str,
     scope: str | None,
-) -> dict[str, Any]:
+) -> DependencyItem:
     normalized = _normalize_maven_version(version)
-    if normalized:
-        constraint = f">={normalized}"
-    else:
-        constraint = ""
-
-    result: dict[str, Any] = {
-        "name": name,
-        "declared_version": version,
-        "version_constraint": constraint,
-        "source_file": source_file,
-        "latest_version": None,
-        "latest_release_date": None,
-        "deps_dev_status": "error",
-    }
-    if scope is not None:
-        result["scope"] = scope
+    constraint = f">={normalized}" if normalized else ""
 
     data = client.get_package_versions("maven", name)
     if data is None:
-        return result
+        return DependencyItem(
+            name=name,
+            declared_version=version,
+            version_constraint=constraint,
+            source_file=source_file,
+            scope=scope,
+        )
 
     versions = data.get("versions", [])
     if not versions:
-        result["deps_dev_status"] = "not_found"
-        return result
+        return DependencyItem(
+            name=name,
+            declared_version=version,
+            version_constraint=constraint,
+            source_file=source_file,
+            scope=scope,
+            deps_dev_status="not_found",
+        )
 
     latest = pick_latest_version(versions)
-    result["latest_version"] = latest.get("versionKey", {}).get("version") if latest else None
-    result["latest_release_date"] = latest.get("publishedAt") if latest else None
-    result["deps_dev_status"] = "ok"
-    return result
+    return DependencyItem(
+        name=name,
+        declared_version=version,
+        version_constraint=constraint,
+        source_file=source_file,
+        scope=scope,
+        latest_version=latest.get("versionKey", {}).get("version") if latest else None,
+        latest_release_date=latest.get("publishedAt") if latest else None,
+        deps_dev_status="ok",
+    )
 
 
 def _register() -> None:

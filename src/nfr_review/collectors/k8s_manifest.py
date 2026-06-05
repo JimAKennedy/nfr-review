@@ -47,6 +47,13 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.k8s import (
+    K8sContainer,
+    K8sContainerEnvVar,
+    K8sManifestSummaryPayload,
+    K8sPdbPayload,
+    K8sResourcePayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -66,7 +73,7 @@ _RECOGNISED_KINDS = _WORKLOAD_KINDS | {
 _TEMPLATE_WORKLOADS = frozenset({"Deployment", "StatefulSet", "DaemonSet"})
 
 
-def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
+def _extract_containers(doc: dict[str, Any], kind: str) -> list[K8sContainer]:
     if kind in _TEMPLATE_WORKLOADS:
         containers_raw = (
             doc.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
@@ -76,29 +83,29 @@ def _extract_containers(doc: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     else:
         return []
 
-    result: list[dict[str, Any]] = []
+    result: list[K8sContainer] = []
     for c in containers_raw:
         if not isinstance(c, dict):
             continue
         lifecycle = c.get("lifecycle") or {}
         env_raw = c.get("env") or []
         env_out = [
-            {"name": e.get("name", ""), "value": e.get("value")}
+            K8sContainerEnvVar(name=e.get("name", ""), value=e.get("value"))
             for e in env_raw
             if isinstance(e, dict)
         ] or None
         result.append(
-            {
-                "name": c.get("name", ""),
-                "image": c.get("image", ""),
-                "resources": c.get("resources") or None,
-                "liveness_probe": c.get("livenessProbe") or None,
-                "readiness_probe": c.get("readinessProbe") or None,
-                "startup_probe": c.get("startupProbe") or None,
-                "security_context": c.get("securityContext") or None,
-                "pre_stop": lifecycle.get("preStop") or None,
-                "env": env_out,
-            }
+            K8sContainer(
+                name=c.get("name", ""),
+                image=c.get("image", ""),
+                resources=c.get("resources") or None,
+                liveness_probe=c.get("livenessProbe") or None,
+                readiness_probe=c.get("readinessProbe") or None,
+                startup_probe=c.get("startupProbe") or None,
+                security_context=c.get("securityContext") or None,
+                pre_stop=lifecycle.get("preStop") or None,
+                env=env_out,
+            )
         )
     return result
 
@@ -170,14 +177,14 @@ class K8sManifestCollector:
                             collector_version=self.version,
                             locator=f"{rel}:{resource_name}",
                             kind="k8s-pdb",
-                            payload={
-                                "file_path": str(rel),
-                                "name": resource_name,
-                                "namespace": namespace,
-                                "min_available": pdb_spec.get("minAvailable"),
-                                "max_unavailable": pdb_spec.get("maxUnavailable"),
-                                "match_labels": selector.get("matchLabels") or None,
-                            },
+                            payload=K8sPdbPayload(
+                                file_path=str(rel),
+                                name=resource_name,
+                                namespace=namespace,
+                                min_available=pdb_spec.get("minAvailable"),
+                                max_unavailable=pdb_spec.get("maxUnavailable"),
+                                match_labels=selector.get("matchLabels") or None,
+                            ),
                         )
                     )
                     continue
@@ -215,24 +222,24 @@ class K8sManifestCollector:
                         collector_version=self.version,
                         locator=f"{rel}:{resource_name}",
                         kind="k8s-resource",
-                        payload={
-                            "file_path": str(rel),
-                            "kind": kind,
-                            "name": resource_name,
-                            "namespace": namespace,
-                            "annotations": annotations,
-                            "labels": pod_labels,
-                            "replicas": spec.get("replicas"),
-                            "strategy": strategy,
-                            "node_selector": node_selector,
-                            "node_affinity": node_affinity,
-                            "anti_affinity": affinity.get("podAntiAffinity") or None,
-                            "termination_grace_period": pod_spec.get(
+                        payload=K8sResourcePayload(
+                            file_path=str(rel),
+                            kind=kind,
+                            name=resource_name,
+                            namespace=namespace,
+                            annotations=annotations,
+                            labels=pod_labels,
+                            replicas=spec.get("replicas"),
+                            strategy=strategy,
+                            node_selector=node_selector,
+                            node_affinity=node_affinity,
+                            anti_affinity=affinity.get("podAntiAffinity") or None,
+                            termination_grace_period=pod_spec.get(
                                 "terminationGracePeriodSeconds"
                             ),
-                            "security_context": pod_spec.get("securityContext") or None,
-                            "containers": containers,
-                        },
+                            security_context=pod_spec.get("securityContext") or None,
+                            containers=containers,
+                        ),
                     )
                 )
 
@@ -245,12 +252,12 @@ class K8sManifestCollector:
                 collector_version=self.version,
                 locator=".",
                 kind="k8s-manifest-summary",
-                payload={
-                    "resource_counts": resource_counts,
-                    "has_network_policy": has_network_policy,
-                    "files_parsed": files_parsed,
-                    "files_failed": files_failed,
-                },
+                payload=K8sManifestSummaryPayload(
+                    resource_counts=resource_counts,
+                    has_network_policy=has_network_policy,
+                    files_parsed=files_parsed,
+                    files_failed=files_failed,
+                ),
             )
         )
 

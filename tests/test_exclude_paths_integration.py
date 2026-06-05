@@ -78,7 +78,7 @@ def _mock_deps_dev_client():
     original = pdm.DepsDevClient
     mock_client = MagicMock()
     mock_client.prefetch_package_versions = MagicMock()
-    mock_client.get_package_version.return_value = None
+    mock_client.get_package_versions.return_value = None
     pdm.DepsDevClient = lambda: mock_client  # type: ignore[assignment,misc]
     return original
 

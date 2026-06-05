@@ -140,7 +140,7 @@ class TestPomXmlParsing:
         deps = evidences[0].payload["dependencies"]
         by_name = {d["name"]: d for d in deps}
         assert by_name["junit:junit"]["scope"] == "test"
-        assert "scope" not in by_name["org.springframework:spring-core"]
+        assert by_name["org.springframework:spring-core"]["scope"] is None
 
     @patch("nfr_review.collectors.java_deps.DepsDevClient")
     def test_pom_without_namespace(self, mock_cls: MagicMock, tmp_path: Path) -> None:

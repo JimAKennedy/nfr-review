@@ -122,7 +122,7 @@ def test_dep_collector_skips_fixture_manifests_e2e(tmp_path: Path) -> None:
     original_client_cls = pdm.DepsDevClient
     mock_client = MagicMock()
     mock_client.prefetch_package_versions = MagicMock()
-    mock_client.get_package_version.return_value = None
+    mock_client.get_package_versions.return_value = None
     pdm.DepsDevClient = lambda: mock_client  # type: ignore[assignment,misc]
     try:
         evidence = collector.collect(tmp_path, config)
