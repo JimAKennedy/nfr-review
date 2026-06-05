@@ -138,6 +138,7 @@ All inputs are optional. The action reference is `JimAKennedy/nfr-review@v1`.
 | `python-version` | `"3.12"` | Python version to use (pip mode only, ignored in container mode). |
 | `execution` | `"pip"` | Execution mode: `"pip"` or `"container"`. |
 | `image` | `"ghcr.io/jimakennedy/nfr-review:latest"` | Docker image for container mode. |
+| `workers` | `"4"` | Number of parallel collector threads (`1` = sequential). |
 | `anthropic-api-key` | `""` | Anthropic API key for LLM features. Omit to skip LLM features gracefully. |
 
 ---
@@ -413,6 +414,7 @@ runner.
 ```
 
 - Pulls a pre-built Docker image and runs the scan inside a container.
+- Multi-arch images available for `linux/amd64` and `linux/arm64`.
 - Useful when you want a fully isolated, reproducible environment.
 - The `python-version` input is ignored in container mode.
 - Mount points: the workspace is mounted at `/repo` and the runner temp
@@ -493,6 +495,9 @@ nfr-review deps /path/to/repo
 # Auto-detect technologies and generate config
 nfr-review init /path/to/repo
 
+# Preview config without writing (dry-run)
+nfr-review init /path/to/repo --dry-run
+
 # Sync issues to GitHub (requires GITHUB_TOKEN)
 export GITHUB_TOKEN="ghp_..."
 nfr-review issues sync findings.jsonl --repo owner/repo
@@ -502,6 +507,8 @@ nfr-review all /path/to/repo1 /path/to/repo2
 ```
 
 ### Docker
+
+Multi-arch images are published for `linux/amd64` and `linux/arm64`:
 
 ```bash
 docker run --rm \
