@@ -8,6 +8,7 @@ from pathlib import Path
 
 from nfr_review.models import Finding
 from nfr_review.suppression import (
+    SuppressionInfo,
     apply_suppressions,
     is_finding_suppressed,
     parse_suppression_marker,
@@ -38,43 +39,111 @@ def _make_finding(
 class TestParseSuppressionMarker:
     def test_cpp_single_rule(self) -> None:
         line = "auto* w = new CTextLabel(size);  // nfr-review:skip(cpp-raw-memory)"
-        assert parse_suppression_marker(line) == {"cpp-raw-memory"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory"}
+        assert reason is None
 
     def test_python_hash_comment(self) -> None:
         line = "# nfr-review:skip(python-broad-except)"
-        assert parse_suppression_marker(line) == {"python-broad-except"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"python-broad-except"}
+        assert reason is None
 
     def test_c_block_comment(self) -> None:
         line = "ptr = malloc(64); /* nfr-review:skip(cpp-raw-memory) */"
-        assert parse_suppression_marker(line) == {"cpp-raw-memory"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory"}
+        assert reason is None
 
     def test_multiple_rules(self) -> None:
         line = "// nfr-review:skip(cpp-raw-memory, cpp-manual-delete)"
-        assert parse_suppression_marker(line) == {"cpp-raw-memory", "cpp-manual-delete"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory", "cpp-manual-delete"}
+        assert reason is None
 
     def test_wildcard(self) -> None:
         line = "// nfr-review:skip(*)"
-        assert parse_suppression_marker(line) == {"*"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"*"}
+        assert reason is None
 
     def test_no_marker(self) -> None:
-        line = "auto* w = new CTextLabel(size);"
-        assert parse_suppression_marker(line) == set()
+        rule_ids, reason = parse_suppression_marker("auto* w = new CTextLabel(size);")
+        assert rule_ids == set()
+        assert reason is None
 
     def test_malformed_no_parens(self) -> None:
-        line = "// nfr-review:skip"
-        assert parse_suppression_marker(line) == set()
+        rule_ids, reason = parse_suppression_marker("// nfr-review:skip")
+        assert rule_ids == set()
+        assert reason is None
 
     def test_empty_parens(self) -> None:
-        line = "// nfr-review:skip()"
-        assert parse_suppression_marker(line) == set()
+        rule_ids, reason = parse_suppression_marker("// nfr-review:skip()")
+        assert rule_ids == set()
+        assert reason is None
 
     def test_case_insensitive(self) -> None:
         line = "// NFR-Review:Skip(cpp-raw-memory)"
-        assert parse_suppression_marker(line) == {"cpp-raw-memory"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory"}
+        assert reason is None
 
     def test_whitespace_in_rule_list(self) -> None:
         line = "// nfr-review:skip( cpp-raw-memory , cpp-manual-delete )"
-        assert parse_suppression_marker(line) == {"cpp-raw-memory", "cpp-manual-delete"}
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory", "cpp-manual-delete"}
+        assert reason is None
+
+    # --- reason parsing ---
+
+    def test_reason_cpp_line_comment(self) -> None:
+        line = "// nfr-review:skip(cpp-raw-memory) reason: JIRA-1234 legacy allocation"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory"}
+        assert reason == "JIRA-1234 legacy allocation"
+
+    def test_reason_python_hash(self) -> None:
+        line = "# nfr-review:skip(python-broad-except) reason: approved in review PR-99"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"python-broad-except"}
+        assert reason == "approved in review PR-99"
+
+    def test_reason_c_block_comment(self) -> None:
+        line = "/* nfr-review:skip(cpp-raw-memory) reason: VSTGUI requirement */"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory"}
+        assert reason == "VSTGUI requirement"
+
+    def test_reason_html_comment(self) -> None:
+        line = "<!-- nfr-review:skip(k8s-resource-limits) reason: dev-only manifest -->"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"k8s-resource-limits"}
+        assert reason == "dev-only manifest"
+
+    def test_reason_wildcard(self) -> None:
+        line = "// nfr-review:skip(*) reason: entire file excluded"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"*"}
+        assert reason == "entire file excluded"
+
+    def test_reason_multiple_rules(self) -> None:
+        line = (
+            "// nfr-review:skip(cpp-raw-memory, cpp-manual-delete) reason: RAII not available"
+        )
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"cpp-raw-memory", "cpp-manual-delete"}
+        assert reason == "RAII not available"
+
+    def test_reason_case_insensitive_keyword(self) -> None:
+        line = "// NFR-Review:Skip(rule-x) Reason: case test"
+        rule_ids, reason = parse_suppression_marker(line)
+        assert rule_ids == {"rule-x"}
+        assert reason == "case test"
+
+    def test_no_reason_returns_none(self) -> None:
+        line = "// nfr-review:skip(cpp-raw-memory)"
+        _, reason = parse_suppression_marker(line)
+        assert reason is None
 
 
 class TestIsFindingSuppressed:
@@ -85,7 +154,22 @@ class TestIsFindingSuppressed:
         )
         f = _make_finding(evidence_locator=f"{src}:2")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is True
+        info = is_finding_suppressed(f, cache)
+        assert info is not None
+        assert "cpp-raw-memory" in info.rule_ids
+        assert info.reason is None
+
+    def test_same_line_with_reason(self, tmp_path: Path) -> None:
+        src = tmp_path / "controller.cpp"
+        marker = "// nfr-review:skip(cpp-raw-memory) reason: JIRA-42"
+        src.write_text(f"line1\nauto* w = new CTextLabel(s);  {marker}\nline3\n")
+        f = _make_finding(evidence_locator=f"{src}:2")
+        cache: dict[str, list[str]] = {}
+        info = is_finding_suppressed(f, cache)
+        assert info is not None
+        assert info.reason == "JIRA-42"
+        assert info.source_file == str(src)
+        assert info.source_line == 2
 
     def test_line_above_marker(self, tmp_path: Path) -> None:
         src = tmp_path / "controller.cpp"
@@ -94,14 +178,31 @@ class TestIsFindingSuppressed:
         )
         f = _make_finding(evidence_locator=f"{src}:3")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is True
+        info = is_finding_suppressed(f, cache)
+        assert info is not None
+        assert info.source_line == 2
+
+    def test_line_above_with_reason(self, tmp_path: Path) -> None:
+        src = tmp_path / "controller.cpp"
+        src.write_text(
+            "line1\n"
+            "// nfr-review:skip(cpp-raw-memory) reason: approved\n"
+            "auto* w = new CTextLabel(s);\n"
+            "line4\n"
+        )
+        f = _make_finding(evidence_locator=f"{src}:3")
+        cache: dict[str, list[str]] = {}
+        info = is_finding_suppressed(f, cache)
+        assert info is not None
+        assert info.reason == "approved"
+        assert info.source_line == 2
 
     def test_no_marker_not_suppressed(self, tmp_path: Path) -> None:
         src = tmp_path / "controller.cpp"
         src.write_text("line1\nauto* w = new CTextLabel(s);\nline3\n")
         f = _make_finding(evidence_locator=f"{src}:2")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is False
+        assert is_finding_suppressed(f, cache) is None
 
     def test_wrong_rule_not_suppressed(self, tmp_path: Path) -> None:
         src = tmp_path / "controller.cpp"
@@ -115,7 +216,7 @@ class TestIsFindingSuppressed:
             evidence_locator=f"{src}:2",
         )
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is False
+        assert is_finding_suppressed(f, cache) is None
 
     def test_wildcard_suppresses_any_rule(self, tmp_path: Path) -> None:
         src = tmp_path / "code.py"
@@ -125,17 +226,19 @@ class TestIsFindingSuppressed:
             evidence_locator=f"{src}:2",
         )
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is True
+        info = is_finding_suppressed(f, cache)
+        assert info is not None
+        assert "*" in info.rule_ids
 
     def test_project_wide_locator_not_suppressed(self) -> None:
         f = _make_finding(evidence_locator="project-wide")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is False
+        assert is_finding_suppressed(f, cache) is None
 
     def test_missing_file_not_suppressed(self) -> None:
         f = _make_finding(evidence_locator="/nonexistent/file.cpp:10")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache) is False
+        assert is_finding_suppressed(f, cache) is None
 
     def test_target_root_resolution(self, tmp_path: Path) -> None:
         src = tmp_path / "src" / "controller.cpp"
@@ -143,7 +246,8 @@ class TestIsFindingSuppressed:
         src.write_text("auto* w = new CTextLabel(s);  // nfr-review:skip(cpp-raw-memory)\n")
         f = _make_finding(evidence_locator="src/controller.cpp:1")
         cache: dict[str, list[str]] = {}
-        assert is_finding_suppressed(f, cache, target_root=tmp_path) is True
+        info = is_finding_suppressed(f, cache, target_root=tmp_path)
+        assert info is not None
 
     def test_source_cache_reused(self, tmp_path: Path) -> None:
         src = tmp_path / "a.cpp"
@@ -154,8 +258,8 @@ class TestIsFindingSuppressed:
         cache: dict[str, list[str]] = {}
         f1 = _make_finding(evidence_locator=f"{src}:1")
         f2 = _make_finding(evidence_locator=f"{src}:2")
-        assert is_finding_suppressed(f1, cache) is True
-        assert is_finding_suppressed(f2, cache) is True
+        assert is_finding_suppressed(f1, cache) is not None
+        assert is_finding_suppressed(f2, cache) is not None
         assert str(src) in cache
 
 
@@ -173,7 +277,29 @@ class TestApplySuppressions:
         assert len(active) == 1
         assert len(suppressed) == 1
         assert active[0].evidence_locator == f"{src}:3"
-        assert suppressed[0].evidence_locator == f"{src}:1"
+        finding, info = suppressed[0]
+        assert finding.evidence_locator == f"{src}:1"
+        assert isinstance(info, SuppressionInfo)
+
+    def test_suppressed_with_reason(self, tmp_path: Path) -> None:
+        src = tmp_path / "code.cpp"
+        src.write_text(
+            "new Foo();  // nfr-review:skip(cpp-raw-memory) reason: ticket ABC-123\n"
+        )
+        f = _make_finding(evidence_locator=f"{src}:1")
+        _, suppressed = apply_suppressions([f])
+        assert len(suppressed) == 1
+        finding, info = suppressed[0]
+        assert info.reason == "ticket ABC-123"
+        assert info.source_line == 1
+
+    def test_suppressed_without_reason(self, tmp_path: Path) -> None:
+        src = tmp_path / "code.cpp"
+        src.write_text("new Foo();  // nfr-review:skip(cpp-raw-memory)\n")
+        f = _make_finding(evidence_locator=f"{src}:1")
+        _, suppressed = apply_suppressions([f])
+        _, info = suppressed[0]
+        assert info.reason is None
 
     def test_empty_input(self) -> None:
         active, suppressed = apply_suppressions([])

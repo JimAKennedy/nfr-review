@@ -18,6 +18,7 @@ from nfr_review.output._errors import OutputError
 
 if TYPE_CHECKING:
     from nfr_review.engine import RunResult
+    from nfr_review.suppression import SuppressionInfo
 
 _FINDING_FIELDS: tuple[str, ...] = tuple(Finding.model_fields.keys())
 
@@ -44,7 +45,7 @@ def write_jsonl(
     path: Path,
     *,
     classification: object | None = None,
-    suppressed_findings: list[Finding] | None = None,
+    suppressed_findings: list[tuple[Finding, SuppressionInfo]] | None = None,
 ) -> None:
     """Write ``run_result`` to ``path`` as R018 JSONL.
 
@@ -56,8 +57,10 @@ def write_jsonl(
     ``baseline.py``), findings are tagged with ``classification: "new"`` and
     shifted/resolved entries are appended as additional records.
 
-    When ``suppressed_findings`` is provided, they are emitted with
-    ``suppressed: true`` for downstream auditing.
+    When ``suppressed_findings`` is provided (a list of
+    ``(Finding, SuppressionInfo)`` tuples), they are emitted with
+    ``suppressed: true`` plus audit metadata (reason, source) for
+    downstream auditing.
     """
     if run_result.run_metadata is None:
         raise OutputError(f"cannot write JSONL to {path}: run_result.run_metadata is None")
@@ -68,6 +71,12 @@ def write_jsonl(
     }
     if suppressed_findings:
         metadata_record["suppressed_count"] = len(suppressed_findings)
+        metadata_record["suppressed_with_reason_count"] = sum(
+            1 for _, info in suppressed_findings if info.reason
+        )
+        metadata_record["suppressed_without_reason_count"] = sum(
+            1 for _, info in suppressed_findings if not info.reason
+        )
 
     new_finding_keys: set[tuple[str, ...]] | None = None
     shifted_map: dict[tuple[str, ...], str] | None = None
@@ -120,9 +129,11 @@ def write_jsonl(
                         fh.write("\n")
 
             if suppressed_findings:
-                for sf in suppressed_findings:
+                for sf, si in suppressed_findings:
                     record = _finding_record(sf)
                     record["suppressed"] = True
+                    record["suppression_reason"] = si.reason
+                    record["suppression_source"] = f"{si.source_file}:{si.source_line}"
                     fh.write(json.dumps(record, ensure_ascii=False))
                     fh.write("\n")
 

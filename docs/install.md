@@ -21,7 +21,8 @@ all the reference tables you need along the way.
 9. [Execution modes](#9-execution-modes)
 10. [Running locally](#10-running-locally)
 11. [Troubleshooting](#11-troubleshooting)
-12. [Uninstalling](#12-uninstalling)
+12. [Rule catalogue](#12-rule-catalogue)
+13. [Uninstalling](#13-uninstalling)
 
 ---
 
@@ -594,7 +595,25 @@ a genuinely new alert that was not present on main.
 
 ---
 
-## 12. Uninstalling
+## 12. Rule catalogue
+
+A browsable HTML catalogue of all rules is published to GitHub Pages on each
+release. Visit
+[jimakennedy.github.io/nfr-review](https://jimakennedy.github.io/nfr-review/)
+to search and filter rules by category, severity, and tags.
+
+To generate the catalogue locally:
+
+```bash
+nfr-review list-rules --format json | python scripts/generate_catalogue.py --output catalogue.html
+```
+
+The catalogue is self-contained (no external dependencies) and can be opened
+directly in a browser.
+
+---
+
+## 13. Uninstalling
 
 ### Remove the GitHub Action
 
