@@ -88,74 +88,74 @@ they introduced.
 
 ## 2. Control Mappings
 
-The tables below map nfr-review rule families to specific controls in three
+The tables below map nfr-review rule families to specific controls in four
 widely adopted compliance frameworks. These mappings are indicative -- your
 organization's control interpretation may differ, and you should validate
 mappings with your compliance team.
 
 ### 2.1 CI/CD Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `ci-test-stage-missing` | CC8.1 | A.8.25 | 6.2 | A test stage exists in the CI pipeline, demonstrating that changes undergo automated verification before deployment. |
-| `ci-security-scan-missing` | CC8.1, CC7.1 | A.8.25, A.8.8 | 6.3 | Security scanning (SAST/DAST/SCA) is integrated into the CI pipeline, proving that vulnerability detection is part of the change management process. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `ci-test-stage-missing` | CC8.1 | A.8.25 | 6.2 | SA-11, CM-3 | A test stage exists in the CI pipeline, demonstrating that changes undergo automated verification before deployment. |
+| `ci-security-scan-missing` | CC8.1, CC7.1 | A.8.25, A.8.8 | 6.3 | RA-5, SA-11 | Security scanning (SAST/DAST/SCA) is integrated into the CI pipeline, proving that vulnerability detection is part of the change management process. |
 
 ### 2.2 Kubernetes Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `probes-missing` | CC7.1 | A.8.9 | 10.1 | Health probes (liveness/readiness) are configured, proving that the platform can detect and recover from application failures automatically. |
-| `resource-limits-missing` | CC6.6 | A.8.9 | 6.5 | CPU and memory limits are set, demonstrating resource isolation that prevents a single workload from affecting others (system boundary enforcement). |
-| `network-policy-missing` | CC6.1, CC6.6 | A.8.9 | 6.5 | Network policies restrict pod-to-pod traffic, proving least-privilege network segmentation is enforced at the infrastructure layer. |
-| `non-root-container-violation` | CC6.1 | A.8.25, A.8.28 | 6.5 | Containers run as non-root with appropriate security contexts, demonstrating privilege minimization and secure deployment configuration. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `probes-missing` | CC7.1 | A.8.9 | 10.1 | SI-4, CP-10 | Health probes (liveness/readiness) are configured, proving that the platform can detect and recover from application failures automatically. |
+| `resource-limits-missing` | CC6.6 | A.8.9 | 6.5 | SC-7, CM-6 | CPU and memory limits are set, demonstrating resource isolation that prevents a single workload from affecting others (system boundary enforcement). |
+| `network-policy-missing` | CC6.1, CC6.6 | A.8.9 | 6.5 | SC-7, AC-3 | Network policies restrict pod-to-pod traffic, proving least-privilege network segmentation is enforced at the infrastructure layer. |
+| `non-root-container-violation` | CC6.1 | A.8.25, A.8.28 | 6.5 | AC-6, CM-6 | Containers run as non-root with appropriate security contexts, demonstrating privilege minimization and secure deployment configuration. |
 
 ### 2.3 Docker Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `dockerfile-base-pinning` | CC8.1 | A.8.25, A.8.8 | 6.2, 6.3 | Base images are pinned to specific digests or versions, proving builds are reproducible and not vulnerable to supply-chain tag mutation. |
-| `dockerfile-secret-leakage` | CC6.1 | A.8.28 | 6.5 | No secrets are embedded in Dockerfile instructions (ENV, ARG, COPY), demonstrating secure credential handling. |
-| `dockerfile-user-directive` | CC6.1 | A.8.25 | 6.5 | A USER directive is present so the container process does not run as root, proving least-privilege execution. |
-| `dockerfile-multistage` | CC6.8 | A.8.25 | 6.2 | Multi-stage builds are used to exclude build tools from the runtime image, reducing the attack surface. |
-| `dockerfile-k8s-user-conflict` | CC6.1 | A.8.9, A.8.25 | 6.5 | The UID in the Dockerfile USER directive is consistent with the Kubernetes securityContext runAsUser, proving no privilege escalation gap between build and deploy. |
-| `dockerfile-k8s-image-drift` | CC8.1 | A.8.9 | 6.2 | The image tag referenced in Kubernetes manifests matches the Dockerfile build output, proving there is no drift between what is built and what is deployed. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `dockerfile-base-pinning` | CC8.1 | A.8.25, A.8.8 | 6.2, 6.3 | CM-2, SI-7 | Base images are pinned to specific digests or versions, proving builds are reproducible and not vulnerable to supply-chain tag mutation. |
+| `dockerfile-secret-leakage` | CC6.1 | A.8.28 | 6.5 | IA-5, SC-28 | No secrets are embedded in Dockerfile instructions (ENV, ARG, COPY), demonstrating secure credential handling. |
+| `dockerfile-user-directive` | CC6.1 | A.8.25 | 6.5 | AC-6 | A USER directive is present so the container process does not run as root, proving least-privilege execution. |
+| `dockerfile-multistage` | CC6.8 | A.8.25 | 6.2 | CM-7 | Multi-stage builds are used to exclude build tools from the runtime image, reducing the attack surface. |
+| `dockerfile-k8s-user-conflict` | CC6.1 | A.8.9, A.8.25 | 6.5 | AC-6, CM-6 | The UID in the Dockerfile USER directive is consistent with the Kubernetes securityContext runAsUser, proving no privilege escalation gap between build and deploy. |
+| `dockerfile-k8s-image-drift` | CC8.1 | A.8.9 | 6.2 | CM-2, SI-7 | The image tag referenced in Kubernetes manifests matches the Dockerfile build output, proving there is no drift between what is built and what is deployed. |
 
 ### 2.4 Java/Spring Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `health-endpoint-missing` | CC7.1 | A.8.9 | 10.1 | A health endpoint exists for monitoring and orchestration, proving the application supports automated availability checks. |
-| `resilience-annotation-missing` | CC7.2 | A.8.25 | 6.5 | Resilience patterns (circuit breakers, retries, bulkheads) are declared, proving the application is designed to degrade gracefully under failure. |
-| `exception-handling-antipattern` | CC7.1, CC7.2 | A.8.28 | 6.5 | Exception handling follows best practices (no swallowed exceptions, no generic catches), proving errors are observable and actionable. |
-| `thread-pool-misconfiguration` | CC7.1 | A.8.9, A.8.25 | 6.5 | Thread pools have bounded sizes and rejection policies, proving the application is protected against resource exhaustion. |
-| `actuator-exposure-risk` | CC6.1 | A.8.9, A.8.28 | 6.5 | Spring Boot actuator endpoints are not exposed on the public port without authentication, proving sensitive management interfaces are access-controlled. |
-| `logging-config-missing` | CC7.1 | A.8.9 | 10.1 | A logging framework configuration exists (logback.xml, log4j2.xml), proving that log output is structured and controllable. |
-| `spring-profile-misconfiguration` | CC8.1 | A.8.9 | 6.2 | Spring profiles are correctly separated (no production secrets in default profile), proving environment-specific configuration is properly isolated. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `health-endpoint-missing` | CC7.1 | A.8.9 | 10.1 | SI-4, AU-6 | A health endpoint exists for monitoring and orchestration, proving the application supports automated availability checks. |
+| `resilience-annotation-missing` | CC7.2 | A.8.25 | 6.5 | CP-10, SI-13 | Resilience patterns (circuit breakers, retries, bulkheads) are declared, proving the application is designed to degrade gracefully under failure. |
+| `exception-handling-antipattern` | CC7.1, CC7.2 | A.8.28 | 6.5 | SI-4, SI-11 | Exception handling follows best practices (no swallowed exceptions, no generic catches), proving errors are observable and actionable. |
+| `thread-pool-misconfiguration` | CC7.1 | A.8.9, A.8.25 | 6.5 | SC-5, SI-4 | Thread pools have bounded sizes and rejection policies, proving the application is protected against resource exhaustion. |
+| `actuator-exposure-risk` | CC6.1 | A.8.9, A.8.28 | 6.5 | AC-3, AC-6 | Spring Boot actuator endpoints are not exposed on the public port without authentication, proving sensitive management interfaces are access-controlled. |
+| `logging-config-missing` | CC7.1 | A.8.9 | 10.1 | AU-2, AU-12 | A logging framework configuration exists (logback.xml, log4j2.xml), proving that log output is structured and controllable. |
+| `spring-profile-misconfiguration` | CC8.1 | A.8.9 | 6.2 | CM-6, CM-2 | Spring profiles are correctly separated (no production secrets in default profile), proving environment-specific configuration is properly isolated. |
 
 ### 2.5 Security Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `pii-in-log-statements` | CC6.1 | A.8.28, A.5.8 | 6.5, 10.1 | Log statements do not contain personally identifiable information (email, SSN, credit card patterns), proving data-at-rest minimization in log sinks. |
-| `apim-auth-policy-missing` | CC6.1 | A.8.25, A.8.28 | 6.5 | API Management policies require authentication on all inbound operations, proving API endpoints enforce identity verification. |
-| `apim-rate-limit-missing` | CC6.6 | A.8.25 | 6.5 | Rate limiting policies are applied to API operations, proving the system is protected against denial-of-service and abuse. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `pii-in-log-statements` | CC6.1 | A.8.28, A.5.8 | 6.5, 10.1 | SI-12, PT-2 | Log statements do not contain personally identifiable information (email, SSN, credit card patterns), proving data-at-rest minimization in log sinks. |
+| `apim-auth-policy-missing` | CC6.1 | A.8.25, A.8.28 | 6.5 | AC-3, IA-2 | API Management policies require authentication on all inbound operations, proving API endpoints enforce identity verification. |
+| `apim-rate-limit-missing` | CC6.6 | A.8.25 | 6.5 | SC-5 | Rate limiting policies are applied to API operations, proving the system is protected against denial-of-service and abuse. |
 
 ### 2.6 Architecture Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `adr-lifecycle-gap` | CC8.1 | A.5.8 | 6.2 | Architecture Decision Records follow a complete lifecycle (proposed, accepted, superseded, deprecated), proving architectural changes are formally governed. |
-| `architectural-drift-from-adr` | CC8.1 | A.5.8 | 6.2 | The codebase is consistent with accepted ADRs, proving that implementation matches documented architectural decisions. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `adr-lifecycle-gap` | CC8.1 | A.5.8 | 6.2 | PL-8, CM-3 | Architecture Decision Records follow a complete lifecycle (proposed, accepted, superseded, deprecated), proving architectural changes are formally governed. |
+| `architectural-drift-from-adr` | CC8.1 | A.5.8 | 6.2 | PL-8, CM-3 | The codebase is consistent with accepted ADRs, proving that implementation matches documented architectural decisions. |
 
 ### 2.7 C++ Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `cmake-build-config` | CC8.1 | A.8.25 | 6.2 | CMake build configuration follows best practices (out-of-source builds, modern target-based commands), proving reproducible and maintainable build infrastructure. |
-| `cpp-clang-format` | CC8.1 | A.8.25 | 6.2 | A .clang-format configuration exists and CI enforces it, proving code style is automated and consistent. |
-| `cpp-clang-tidy` | CC8.1, CC7.1 | A.8.25, A.8.28 | 6.3 | clang-tidy static analysis is configured and integrated into CI, proving automated defect detection for C++ code. |
-| `cpp-raw-memory` | CC6.8 | A.8.28 | 6.5 | Raw `new`/`delete` usage is flagged in favor of RAII and smart pointers, proving memory safety practices that prevent use-after-free and leak vulnerabilities. |
-| `cpp-sanitizer-ci` | CC8.1, CC7.1 | A.8.25, A.8.8 | 6.3 | Address, thread, or undefined-behavior sanitizers are enabled in CI, proving runtime defect detection is part of the test pipeline. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `cmake-build-config` | CC8.1 | A.8.25 | 6.2 | CM-3, SA-15 | CMake build configuration follows best practices (out-of-source builds, modern target-based commands), proving reproducible and maintainable build infrastructure. |
+| `cpp-clang-format` | CC8.1 | A.8.25 | 6.2 | SA-15 | A .clang-format configuration exists and CI enforces it, proving code style is automated and consistent. |
+| `cpp-clang-tidy` | CC8.1, CC7.1 | A.8.25, A.8.28 | 6.3 | SA-11, RA-5 | clang-tidy static analysis is configured and integrated into CI, proving automated defect detection for C++ code. |
+| `cpp-raw-memory` | CC6.8 | A.8.28 | 6.5 | SI-16, SA-11 | Raw `new`/`delete` usage is flagged in favor of RAII and smart pointers, proving memory safety practices that prevent use-after-free and leak vulnerabilities. |
+| `cpp-sanitizer-ci` | CC8.1, CC7.1 | A.8.25, A.8.8 | 6.3 | SA-11, SI-7 | Address, thread, or undefined-behavior sanitizers are enabled in CI, proving runtime defect detection is part of the test pipeline. |
 
 ### 2.8 Patching Rules (PATCH-*)
 
@@ -163,45 +163,45 @@ The 22 PATCH-* rules cover deployment patching readiness across five
 subcategories. They collectively prove that the organization can deploy
 patches safely, roll back when needed, and observe the impact.
 
-| Rule Subcategory | Rules | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|---|
-| PATCH-SCOPE (patch scoping) | PATCH-SCOPE-001, PATCH-SCOPE-002 | CC8.1 | A.8.8 | 6.2 | Patch class configuration and accelerated cadence for critical-security patches are defined, proving structured patch management. |
-| PATCH-ARCH (architecture readiness) | PATCH-ARCH-001 through PATCH-ARCH-004 | CC8.1, CC7.2 | A.8.9, A.8.25 | 6.2, 6.5 | Singleton avoidance, graceful shutdown, update strategy, and PodDisruptionBudgets are configured, proving the application architecture supports zero-downtime patching. |
-| PATCH-HEALTH (health readiness) | PATCH-HEALTH-001 through PATCH-HEALTH-004 | CC7.1 | A.8.9 | 10.1 | Liveness/readiness probes, non-trivial health checks, startup probes, and preStop hooks are properly configured, proving the platform can safely manage pod lifecycle during patches. |
-| PATCH-TRAFFIC (traffic management) | PATCH-TRAFFIC-001 through PATCH-TRAFFIC-003 | CC7.1, CC7.2 | A.8.9 | 6.5 | Traffic draining, connection handling, and load balancer integration are configured, proving in-flight requests are preserved during rolling updates. |
-| PATCH-DEPS (dependency patching) | PATCH-DEPS-001 through PATCH-DEPS-003 | CC8.1 | A.8.8 | 6.2, 6.3 | Dependency update automation, vulnerability scanning in lockfiles, and base image freshness are verified, proving third-party components are actively maintained. |
-| PATCH-TELEM (telemetry) | PATCH-TELEM-001 through PATCH-TELEM-003 | CC7.1 | A.8.9 | 10.1 | Deployment events are emitted to the observability pipeline, version labels are propagated, and rollout metrics are collected, proving patch deployments are observable and auditable. |
-| PATCH-ROLL (rollback) | PATCH-ROLL-001 through PATCH-ROLL-003 | CC8.1, CC7.2 | A.8.8 | 6.2 | Rollback procedures are documented, rollback is testable in CI, and forward-compatible database migrations support rollback, proving recovery capability for failed patches. |
+| Rule Subcategory | Rules | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|---|
+| PATCH-SCOPE (patch scoping) | PATCH-SCOPE-001, PATCH-SCOPE-002 | CC8.1 | A.8.8 | 6.2 | SI-2, CM-3 | Patch class configuration and accelerated cadence for critical-security patches are defined, proving structured patch management. |
+| PATCH-ARCH (architecture readiness) | PATCH-ARCH-001 through PATCH-ARCH-004 | CC8.1, CC7.2 | A.8.9, A.8.25 | 6.2, 6.5 | CP-10, CM-2 | Singleton avoidance, graceful shutdown, update strategy, and PodDisruptionBudgets are configured, proving the application architecture supports zero-downtime patching. |
+| PATCH-HEALTH (health readiness) | PATCH-HEALTH-001 through PATCH-HEALTH-004 | CC7.1 | A.8.9 | 10.1 | SI-4, CP-10 | Liveness/readiness probes, non-trivial health checks, startup probes, and preStop hooks are properly configured, proving the platform can safely manage pod lifecycle during patches. |
+| PATCH-TRAFFIC (traffic management) | PATCH-TRAFFIC-001 through PATCH-TRAFFIC-003 | CC7.1, CC7.2 | A.8.9 | 6.5 | CP-10, SC-5 | Traffic draining, connection handling, and load balancer integration are configured, proving in-flight requests are preserved during rolling updates. |
+| PATCH-DEPS (dependency patching) | PATCH-DEPS-001 through PATCH-DEPS-003 | CC8.1 | A.8.8 | 6.2, 6.3 | SI-2, RA-5 | Dependency update automation, vulnerability scanning in lockfiles, and base image freshness are verified, proving third-party components are actively maintained. |
+| PATCH-TELEM (telemetry) | PATCH-TELEM-001 through PATCH-TELEM-003 | CC7.1 | A.8.9 | 10.1 | AU-2, AU-12 | Deployment events are emitted to the observability pipeline, version labels are propagated, and rollout metrics are collected, proving patch deployments are observable and auditable. |
+| PATCH-ROLL (rollback) | PATCH-ROLL-001 through PATCH-ROLL-003 | CC8.1, CC7.2 | A.8.8 | 6.2 | CP-10, CM-3 | Rollback procedures are documented, rollback is testable in CI, and forward-compatible database migrations support rollback, proving recovery capability for failed patches. |
 
 ### 2.9 Dependency Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `dep-freshness` | CC8.1 | A.8.8 | 6.2, 6.3 | Dependencies are within acceptable age thresholds, proving the project does not rely on abandoned or unmaintained libraries that may harbor known vulnerabilities. |
-| `dep-upgrade-path` | CC8.1 | A.8.8 | 6.2 | Major-version upgrade paths exist for out-of-date dependencies, proving the team has a plan to address technical debt in third-party components. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `dep-freshness` | CC8.1 | A.8.8 | 6.2, 6.3 | SI-2, RA-5 | Dependencies are within acceptable age thresholds, proving the project does not rely on abandoned or unmaintained libraries that may harbor known vulnerabilities. |
+| `dep-upgrade-path` | CC8.1 | A.8.8 | 6.2 | SI-2, CM-3 | Major-version upgrade paths exist for out-of-date dependencies, proving the team has a plan to address technical debt in third-party components. |
 
 ### 2.10 Observability Rules
 
-| Rule ID | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|
-| `otel-exporter` | CC7.1 | A.8.9 | 10.1 | An OpenTelemetry exporter is configured, proving telemetry data (traces, metrics, logs) is shipped to a collection backend. |
-| `otel-pipeline` | CC7.1 | A.8.9 | 10.1 | The OpenTelemetry pipeline is fully wired (SDK, exporter, propagator), proving end-to-end observability is enabled, not just partially configured. |
-| `otel-sampling` | CC7.1 | A.8.9 | 10.1 | A sampling strategy is explicitly configured (not relying on defaults), proving the organization has made a deliberate decision about trace volume vs. coverage. |
-| `correlation-id` | CC7.1 | A.8.9 | 10.1 | Correlation IDs are propagated across service boundaries, proving distributed requests can be traced end-to-end for incident investigation. |
+| Rule ID | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|
+| `otel-exporter` | CC7.1 | A.8.9 | 10.1 | AU-2, SI-4 | An OpenTelemetry exporter is configured, proving telemetry data (traces, metrics, logs) is shipped to a collection backend. |
+| `otel-pipeline` | CC7.1 | A.8.9 | 10.1 | SI-4, AU-6 | The OpenTelemetry pipeline is fully wired (SDK, exporter, propagator), proving end-to-end observability is enabled, not just partially configured. |
+| `otel-sampling` | CC7.1 | A.8.9 | 10.1 | AU-2, AU-12 | A sampling strategy is explicitly configured (not relying on defaults), proving the organization has made a deliberate decision about trace volume vs. coverage. |
+| `correlation-id` | CC7.1 | A.8.9 | 10.1 | AU-6, IR-4 | Correlation IDs are propagated across service boundaries, proving distributed requests can be traced end-to-end for incident investigation. |
 
 ### 2.11 Hygiene Rules
 
 Hygiene rules are prefixed `HYG-` and span seven subcategories. They verify
 foundational project health that underpins all compliance programs.
 
-| Rule Subcategory | Example Rule IDs | SOC 2 | ISO 27001 | PCI DSS | What it proves |
-|---|---|---|---|---|---|
-| Documentation (HYG-DOC-*) | HYG-DOC-001, HYG-DOC-002, HYG-DOC-003 | CC8.1 | A.5.8 | 6.2 | API documentation, a docs directory, and package metadata exist, proving the project is documented for maintainers and consumers. |
-| CI Automation (HYG-CI-*) | HYG-CI-001 through HYG-CI-007 | CC8.1 | A.8.25 | 6.2, 6.3 | CI pipeline, test stage, lint stage, SAST, coverage gates, pinned actions, and release publishing are present, proving automated quality gates exist. |
-| Community Standards (HYG-COM-*) | HYG-COM-001 through HYG-COM-006 | CC8.1 | A.5.8 | 6.2 | README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, CODEOWNERS, and CHANGELOG exist, proving the project follows open-source community standards. |
-| Build Readiness (HYG-BLD-*) | HYG-BLD-001 through HYG-BLD-005 | CC8.1 | A.8.25 | 6.2 | Build system, entry points, pre-commit hooks, version strategy, and code debt markers are tracked, proving the project is buildable and maintainable. |
-| Privacy (HYG-PRV-*) | HYG-PRV-001 through HYG-PRV-003 | CC6.1 | A.8.28, A.5.8 | 6.5 | PII patterns, internal references, and tracking IDs are absent from source, proving the codebase does not leak sensitive data. |
-| License Compliance (HYG-LIC-*) | HYG-LIC-001 through HYG-LIC-004 | CC8.1 | A.5.8 | 6.2 | License headers, SPDX identifiers, LICENSE/NOTICE files, and copyleft dependency checks are present, proving intellectual property governance. |
+| Rule Subcategory | Example Rule IDs | SOC 2 | ISO 27001 | PCI DSS | NIST 800-53 | What it proves |
+|---|---|---|---|---|---|---|
+| Documentation (HYG-DOC-*) | HYG-DOC-001, HYG-DOC-002, HYG-DOC-003 | CC8.1 | A.5.8 | 6.2 | SA-5, PL-8 | API documentation, a docs directory, and package metadata exist, proving the project is documented for maintainers and consumers. |
+| CI Automation (HYG-CI-*) | HYG-CI-001 through HYG-CI-007 | CC8.1 | A.8.25 | 6.2, 6.3 | SA-11, CM-3 | CI pipeline, test stage, lint stage, SAST, coverage gates, pinned actions, and release publishing are present, proving automated quality gates exist. |
+| Community Standards (HYG-COM-*) | HYG-COM-001 through HYG-COM-006 | CC8.1 | A.5.8 | 6.2 | SA-5, PL-1 | README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY.md, CODEOWNERS, and CHANGELOG exist, proving the project follows open-source community standards. |
+| Build Readiness (HYG-BLD-*) | HYG-BLD-001 through HYG-BLD-005 | CC8.1 | A.8.25 | 6.2 | CM-3, SA-15 | Build system, entry points, pre-commit hooks, version strategy, and code debt markers are tracked, proving the project is buildable and maintainable. |
+| Privacy (HYG-PRV-*) | HYG-PRV-001 through HYG-PRV-003 | CC6.1 | A.8.28, A.5.8 | 6.5 | PT-2, SI-12 | PII patterns, internal references, and tracking IDs are absent from source, proving the codebase does not leak sensitive data. |
+| License Compliance (HYG-LIC-*) | HYG-LIC-001 through HYG-LIC-004 | CC8.1 | A.5.8 | 6.2 | SA-4, SA-22 | License headers, SPDX identifiers, LICENSE/NOTICE files, and copyleft dependency checks are present, proving intellectual property governance. |
 
 ### Control Reference Summary
 
@@ -234,6 +234,42 @@ For quick lookup, the controls referenced above are:
 | 6.5 | Common software attacks are prevented |
 | 10.1 | Audit trails link access to individual accountability |
 | 11.3 | External and internal penetration testing methodology |
+
+**NIST 800-53 Rev 5**
+| Control | Description |
+|---|---|
+| AC-3 | Access Enforcement |
+| AC-6 | Least Privilege |
+| AU-2 | Event Logging |
+| AU-6 | Audit Record Review, Analysis, and Reporting |
+| AU-12 | Audit Record Generation |
+| CM-2 | Baseline Configuration |
+| CM-3 | Configuration Change Control |
+| CM-6 | Configuration Settings |
+| CM-7 | Least Functionality |
+| CP-10 | System Recovery and Reconstitution |
+| IA-2 | Identification and Authentication (Organizational Users) |
+| IA-5 | Authenticator Management |
+| IR-4 | Incident Handling |
+| PL-1 | Planning Policy and Procedures |
+| PL-8 | Security and Privacy Architectures |
+| PT-2 | Authority to Process Personally Identifiable Information |
+| RA-5 | Vulnerability Monitoring and Scanning |
+| SA-4 | Acquisition Process |
+| SA-5 | System Documentation |
+| SA-11 | Developer Testing and Evaluation |
+| SA-15 | Development Process, Standards, and Tools |
+| SA-22 | Unsupported System Components |
+| SC-5 | Denial-of-Service Protection |
+| SC-7 | Boundary Protection |
+| SC-28 | Protection of Information at Rest |
+| SI-2 | Flaw Remediation |
+| SI-4 | System Monitoring |
+| SI-7 | Software, Firmware, and Information Integrity |
+| SI-11 | Error Handling |
+| SI-12 | Information Management and Retention |
+| SI-13 | Predictable Failure Prevention |
+| SI-16 | Memory Protection |
 
 ---
 
@@ -442,9 +478,9 @@ for maturity when LLM summarization is enabled.
 
 ## 6. Adding New Frameworks
 
-The control mappings in Section 2 are not exhaustive. Organizations subject to
-additional frameworks (NIST 800-53, HIPAA, FedRAMP, CIS Benchmarks, etc.) can
-extend the mappings by following this process.
+The control mappings in Section 2 cover four major frameworks but are not
+exhaustive. Organizations subject to additional frameworks (HIPAA, FedRAMP,
+CIS Benchmarks, etc.) can extend the mappings by following this process.
 
 ### Step 1: Identify Applicable Controls
 
@@ -464,13 +500,13 @@ evidence. Use the "What it proves" column in Section 2 as a guide -- if the
 evidence a rule produces addresses the control's objective, the mapping is
 valid.
 
-Example mapping for NIST 800-53:
+Example mapping for HIPAA:
 
-| Rule Family | NIST 800-53 | Rationale |
+| Rule Family | HIPAA | Rationale |
 |---|---|---|
-| CI/CD rules | CM-3 (Configuration Change Control) | Proves changes go through automated testing and security scanning before deployment. |
-| Kubernetes rules | SC-7 (Boundary Protection), CM-6 (Configuration Settings) | Proves network segmentation and hardened container configuration. |
-| Observability rules | AU-6 (Audit Record Review), SI-4 (System Monitoring) | Proves telemetry pipeline is configured for monitoring and incident investigation. |
+| Security rules | § 164.312(a) Access Control | Proves API endpoints enforce authentication and rate limiting to protect ePHI. |
+| Observability rules | § 164.312(b) Audit Controls | Proves telemetry pipeline captures system activity for audit trail requirements. |
+| Kubernetes rules | § 164.312(e) Transmission Security | Proves network policies enforce segmentation that protects data in transit between services. |
 
 ### Step 3: Document and Review
 
