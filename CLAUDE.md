@@ -4,7 +4,7 @@
 
 - Python 3.11+ CLI tool for non-functional design reviews
 - Uses: Pydantic v2, ruff, pytest, src-layout
-- Run tests: `python -m pytest tests/`
+- Run tests: `python -m pytest -n auto tests/`
 - Lint: `ruff check src/ tests/`
 - Format: `ruff format src/ tests/`
 
