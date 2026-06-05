@@ -10,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.code_debt import CodeDebtFileEntry, CodeDebtPayload
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 from nfr_review.path_filter import iter_repo_files
@@ -76,7 +77,7 @@ class CodeDebtCollector:
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         total = 0
         per_marker: Counter[str] = Counter()
-        file_counts: list[dict[str, Any]] = []
+        file_counts: list[CodeDebtFileEntry] = []
 
         for path in iter_repo_files(repo_path):
             if path.suffix not in _SOURCE_SUFFIXES:
@@ -90,21 +91,17 @@ class CodeDebtCollector:
                 total += file_total
                 per_marker += counts
                 file_counts.append(
-                    {
-                        "path": str(rel),
-                        "count": file_total,
-                        "markers": dict(counts),
-                    }
+                    CodeDebtFileEntry(path=str(rel), count=file_total, markers=dict(counts))
                 )
 
-        file_counts.sort(key=lambda f: f["count"], reverse=True)
+        file_counts.sort(key=lambda f: f.count, reverse=True)
 
-        payload: dict[str, Any] = {
-            "total_markers": total,
-            "per_marker": dict(per_marker),
-            "file_count": len(file_counts),
-            "top_files": file_counts[:10],
-        }
+        payload = CodeDebtPayload(
+            total_markers=total,
+            per_marker=dict(per_marker),
+            file_count=len(file_counts),
+            top_files=file_counts[:10],
+        )
 
         return [
             Evidence(

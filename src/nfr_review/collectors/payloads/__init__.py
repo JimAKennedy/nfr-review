@@ -15,16 +15,60 @@ from nfr_review.collectors.payloads.adr_derive import (
     AdrDeriveSummaryPayload,
 )
 from nfr_review.collectors.payloads.apim import ApimPolicyPayload
+from nfr_review.collectors.payloads.build_readiness import (
+    BuildReadinessPayload,
+    BuildSystem,
+    EntryPoints,
+    PreCommit,
+    VersionInfo,
+)
 from nfr_review.collectors.payloads.ci import (
     CiPipelinePayload,
     CiSummaryPayload,
     CmakeTestSignalFile,
     CmakeTestSignalsPayload,
 )
+from nfr_review.collectors.payloads.ci_automation import (
+    CiAutomationPayload,
+    CiConfigEntry,
+)
 from nfr_review.collectors.payloads.cmake import (
     CmakeConfigPayload,
     CmakeFetchContentDeclare,
     CmakeOption,
+)
+from nfr_review.collectors.payloads.code_debt import CodeDebtFileEntry, CodeDebtPayload
+from nfr_review.collectors.payloads.community import (
+    ChangelogStructure,
+    CommunityFileInfo,
+    CommunityPayload,
+    ReadmeSections,
+)
+from nfr_review.collectors.payloads.cpp_ast import (
+    CppAstFilePayload,
+    CppBaseClass,
+    CppCatchBlock,
+    CppClassInfo,
+    CppDeleteExpression,
+    CppField,
+    CppFunction,
+    CppInclude,
+    CppMallocCall,
+    CppMethod,
+    CppNewExpression,
+    CppParameter,
+    CppRawPointer,
+    CppSmartPointer,
+    CppTypeAlias,
+)
+from nfr_review.collectors.payloads.csharp_ast import (
+    CSharpAstFilePayload,
+    CSharpAwaitExpression,
+    CSharpBlockingCall,
+    CSharpCatchBlock,
+    CSharpLogStatement,
+    CSharpMethod,
+    CSharpObjectCreation,
 )
 from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
 from nfr_review.collectors.payloads.dockerfile import (
@@ -35,9 +79,28 @@ from nfr_review.collectors.payloads.dockerfile import (
     DockerStage,
     DockerUserDirective,
 )
+from nfr_review.collectors.payloads.documentation import (
+    DocumentationPayload,
+    ManifestEntry,
+)
 from nfr_review.collectors.payloads.gatling import (
     GatlingResultPayload,
     GatlingSummaryPayload,
+)
+from nfr_review.collectors.payloads.go_ast import (
+    GoAstFilePayload,
+    GoBaseClass,
+    GoCatchBlock,
+    GoDeferStatement,
+    GoErrorAssignment,
+    GoField,
+    GoFunction,
+    GoGoroutineLaunch,
+    GoHttpCall,
+    GoLogStatement,
+    GoMethod,
+    GoParameter,
+    GoStruct,
 )
 from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
 from nfr_review.collectors.payloads.istio import IstioAnalysisPayload, IstioResource
@@ -70,7 +133,24 @@ from nfr_review.collectors.payloads.k8s import (
     K8sPdbPayload,
     K8sResourcePayload,
 )
+from nfr_review.collectors.payloads.license_scan import (
+    CopyleftFlags,
+    LicenseDetection,
+    LicenseScanPayload,
+    LicenseScanSummaryPayload,
+)
+from nfr_review.collectors.payloads.nodejs_ast import (
+    NodejsAstFilePayload,
+    NodejsAwaitExpression,
+    NodejsCallbackPattern,
+    NodejsCatchBlock,
+    NodejsFunction,
+    NodejsLogStatement,
+    NodejsPromiseChain,
+    NodejsSyncCall,
+)
 from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
+from nfr_review.collectors.payloads.privacy import PrivacyMatch, PrivacyPayload
 from nfr_review.collectors.payloads.proto import (
     ProtoAnalysisPayload,
     ProtoEnum,
@@ -80,6 +160,20 @@ from nfr_review.collectors.payloads.proto import (
     ProtoReservedRange,
     ProtoRpcMethod,
     ProtoService,
+)
+from nfr_review.collectors.payloads.python_ast import (
+    PythonAstFilePayload,
+    PythonAsyncCall,
+    PythonBaseClass,
+    PythonCatchBlock,
+    PythonClassInfo,
+    PythonDefaultArg,
+    PythonField,
+    PythonFunction,
+    PythonImport,
+    PythonLogStatement,
+    PythonMethod,
+    PythonParameter,
 )
 from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.collectors.payloads.service_mesh import (
@@ -122,6 +216,11 @@ __all__ = [
     "AdrDocumentPayload",
     "AdrSummaryPayload",
     "ApimPolicyPayload",
+    "BuildReadinessPayload",
+    "BuildSystem",
+    "ChangelogStructure",
+    "CiAutomationPayload",
+    "CiConfigEntry",
     "CiPipelinePayload",
     "CiSummaryPayload",
     "CmakeConfigPayload",
@@ -129,6 +228,33 @@ __all__ = [
     "CmakeOption",
     "CmakeTestSignalFile",
     "CmakeTestSignalsPayload",
+    "CodeDebtFileEntry",
+    "CodeDebtPayload",
+    "CommunityFileInfo",
+    "CommunityPayload",
+    "CopyleftFlags",
+    "CppAstFilePayload",
+    "CppBaseClass",
+    "CppCatchBlock",
+    "CppClassInfo",
+    "CppDeleteExpression",
+    "CppField",
+    "CppFunction",
+    "CppInclude",
+    "CppMallocCall",
+    "CppMethod",
+    "CppNewExpression",
+    "CppParameter",
+    "CppRawPointer",
+    "CppSmartPointer",
+    "CppTypeAlias",
+    "CSharpAstFilePayload",
+    "CSharpAwaitExpression",
+    "CSharpBlockingCall",
+    "CSharpCatchBlock",
+    "CSharpLogStatement",
+    "CSharpMethod",
+    "CSharpObjectCreation",
     "DependencyItem",
     "DepsPayload",
     "DockerCopyAddCommand",
@@ -137,8 +263,23 @@ __all__ = [
     "DockerRunCommand",
     "DockerStage",
     "DockerUserDirective",
+    "DocumentationPayload",
+    "EntryPoints",
     "GatlingResultPayload",
     "GatlingSummaryPayload",
+    "GoAstFilePayload",
+    "GoBaseClass",
+    "GoCatchBlock",
+    "GoDeferStatement",
+    "GoErrorAssignment",
+    "GoField",
+    "GoFunction",
+    "GoGoroutineLaunch",
+    "GoHttpCall",
+    "GoLogStatement",
+    "GoMethod",
+    "GoParameter",
+    "GoStruct",
     "HelmAnalysisPayload",
     "IstioAnalysisPayload",
     "IstioResource",
@@ -163,7 +304,22 @@ __all__ = [
     "K8sManifestSummaryPayload",
     "K8sPdbPayload",
     "K8sResourcePayload",
+    "LicenseDetection",
+    "LicenseScanPayload",
+    "LicenseScanSummaryPayload",
+    "ManifestEntry",
+    "NodejsAstFilePayload",
+    "NodejsAwaitExpression",
+    "NodejsCallbackPattern",
+    "NodejsCatchBlock",
+    "NodejsFunction",
+    "NodejsLogStatement",
+    "NodejsPromiseChain",
+    "NodejsSyncCall",
     "OtelAnalysisPayload",
+    "PreCommit",
+    "PrivacyMatch",
+    "PrivacyPayload",
     "ProtoAnalysisPayload",
     "ProtoEnum",
     "ProtoEnumValue",
@@ -172,6 +328,19 @@ __all__ = [
     "ProtoReservedRange",
     "ProtoRpcMethod",
     "ProtoService",
+    "PythonAstFilePayload",
+    "PythonAsyncCall",
+    "PythonBaseClass",
+    "PythonCatchBlock",
+    "PythonClassInfo",
+    "PythonDefaultArg",
+    "PythonField",
+    "PythonFunction",
+    "PythonImport",
+    "PythonLogStatement",
+    "PythonMethod",
+    "PythonParameter",
+    "ReadmeSections",
     "RepoStructureSummaryPayload",
     "ServiceMeshAnalysisArg",
     "ServiceMeshAnalysisMetric",
@@ -199,4 +368,5 @@ __all__ = [
     "TerraformRequiredProvider",
     "TerraformResourceBlock",
     "TerraformVariableBlock",
+    "VersionInfo",
 ]

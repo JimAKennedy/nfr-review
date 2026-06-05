@@ -24,7 +24,7 @@ import tree_sitter
 if TYPE_CHECKING:
     from tree_sitter import Node, Parser
 
-from nfr_review.models import Evidence
+from nfr_review.models import BasePayload, Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 
 logger = logging.getLogger("nfr_review.collectors.ast_common")
@@ -109,12 +109,13 @@ class BaseASTCollector(ABC):
         return self._parser
 
     @abstractmethod
-    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
-        """Parse *source* and return the evidence payload dict.
+    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any] | BasePayload:
+        """Parse *source* and return the evidence payload.
 
         *rel_path* is the file path relative to the repo root (useful for
-        logging / diagnostics).  The returned dict is stored as-is in
-        ``Evidence.payload``; ``file_path`` is added by the caller.
+        logging / diagnostics).  Returns either a typed ``BasePayload``
+        subclass (preferred) or a raw dict; ``file_path`` is added by the
+        caller when a dict is returned.
         """
         ...
 
@@ -145,7 +146,8 @@ class BaseASTCollector(ABC):
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Parse error in %s: %s", rel, exc)
                     continue
-                payload["file_path"] = str(rel)
+                if not isinstance(payload, BasePayload):
+                    payload["file_path"] = str(rel)
                 evidence.append(
                     Evidence(
                         collector_name=self.name,

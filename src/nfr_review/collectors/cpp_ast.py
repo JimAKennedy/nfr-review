@@ -70,12 +70,29 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tree_sitter import Node
 
 from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
+from nfr_review.collectors.payloads.cpp_ast import (
+    CppAstFilePayload,
+    CppBaseClass,
+    CppCatchBlock,
+    CppClassInfo,
+    CppDeleteExpression,
+    CppField,
+    CppFunction,
+    CppInclude,
+    CppMallocCall,
+    CppMethod,
+    CppNewExpression,
+    CppParameter,
+    CppRawPointer,
+    CppSmartPointer,
+    CppTypeAlias,
+)
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.cpp_ast")
@@ -86,8 +103,8 @@ _INCLUDE_GUARD_RE = re.compile(r"^\s*#\s*ifndef\s+\w+", re.MULTILINE)
 _PRAGMA_ONCE_RE = re.compile(r"^\s*#\s*pragma\s+once", re.MULTILINE)
 
 
-def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
-    funcs: list[dict[str, Any]] = []
+def _extract_functions(root: Node, source: bytes) -> list[CppFunction]:
+    funcs: list[CppFunction] = []
     for node in find_nodes(root, "function_definition"):
         name = ""
         return_type = ""
@@ -123,19 +140,19 @@ def _extract_functions(root: Node, source: bytes) -> list[dict[str, Any]]:
         if "noexcept" in src_text:
             is_noexcept = True
         funcs.append(
-            {
-                "name": name,
-                "return_type": return_type,
-                "line": node.start_point[0] + 1,
-                "is_noexcept": is_noexcept,
-            }
+            CppFunction(
+                name=name,
+                return_type=return_type,
+                line=node.start_point[0] + 1,
+                is_noexcept=is_noexcept,
+            )
         )
     return funcs
 
 
-def _extract_parameters(func_decl: Node, source: bytes) -> list[dict[str, str]]:
+def _extract_parameters(func_decl: Node, source: bytes) -> list[CppParameter]:
     """Extract parameter name and type from a function_declarator node."""
-    params: list[dict[str, str]] = []
+    params: list[CppParameter] = []
     param_list: Node | None = None
     for child in func_decl.children:
         if child.type == "parameter_list":
@@ -167,13 +184,13 @@ def _extract_parameters(func_decl: Node, source: bytes) -> list[dict[str, str]]:
                             pname = text(dc, source)
                             break
             if ptype or pname:
-                params.append({"name": pname, "type": ptype})
+                params.append(CppParameter(name=pname, type=ptype))
     return params
 
 
-def _extract_base_classes(node: Node, source: bytes) -> list[dict[str, str]]:
+def _extract_base_classes(node: Node, source: bytes) -> list[CppBaseClass]:
     """Extract base classes from a class/struct specifier node."""
-    bases: list[dict[str, str]] = []
+    bases: list[CppBaseClass] = []
     for child in node.children:
         if child.type == "base_class_clause":
             current_access = "private"
@@ -181,20 +198,22 @@ def _extract_base_classes(node: Node, source: bytes) -> list[dict[str, str]]:
                 if bc_child.type == "access_specifier":
                     current_access = text(bc_child, source).strip()
                 elif bc_child.type in ("type_identifier", "qualified_identifier"):
-                    bases.append({"name": text(bc_child, source), "access": current_access})
+                    bases.append(
+                        CppBaseClass(name=text(bc_child, source), access=current_access)
+                    )
             break
     return bases
 
 
 def _extract_members(
     body: Node, source: bytes, is_struct: bool
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, list[str]]:
+) -> tuple[list[CppMethod], list[CppField], bool, list[str]]:
     """Extract methods, fields, destructor presence, and friends from a class body.
 
     Returns (methods, fields, has_destructor, friends).
     """
-    methods: list[dict[str, Any]] = []
-    fields: list[dict[str, Any]] = []
+    methods: list[CppMethod] = []
+    fields: list[CppField] = []
     friends: list[str] = []
     has_destructor = False
     current_access = "public" if is_struct else "private"
@@ -220,20 +239,20 @@ def _extract_members(
             if type_node:
                 rtype = text(type_node, source)
             is_virtual = "virtual" in text(child, source).split("(")[0]
-            params: list[dict[str, str]] = []
+            params: list[CppParameter] = []
             func_decl = _find_descendant(decl, "function_declarator") if decl else None
             if func_decl:
                 params = _extract_parameters(func_decl, source)
             methods.append(
-                {
-                    "name": fname,
-                    "return_type": rtype,
-                    "access": current_access,
-                    "is_virtual": is_virtual,
-                    "is_pure_virtual": False,
-                    "line": child.start_point[0] + 1,
-                    "parameters": params,
-                }
+                CppMethod(
+                    name=fname,
+                    return_type=rtype,
+                    access=current_access,
+                    is_virtual=is_virtual,
+                    is_pure_virtual=False,
+                    line=child.start_point[0] + 1,
+                    parameters=params,
+                )
             )
             continue
 
@@ -256,15 +275,15 @@ def _extract_members(
                 if func_decl:
                     params = _extract_parameters(func_decl, source)
                 methods.append(
-                    {
-                        "name": fname,
-                        "return_type": rtype,
-                        "access": current_access,
-                        "is_virtual": is_virtual,
-                        "is_pure_virtual": is_pure,
-                        "line": child.start_point[0] + 1,
-                        "parameters": params,
-                    }
+                    CppMethod(
+                        name=fname,
+                        return_type=rtype,
+                        access=current_access,
+                        is_virtual=is_virtual,
+                        is_pure_virtual=is_pure,
+                        line=child.start_point[0] + 1,
+                        parameters=params,
+                    )
                 )
             elif decl:
                 field_name = ""
@@ -281,12 +300,12 @@ def _extract_members(
                     ftype = text(type_node, source)
                 if field_name:
                     fields.append(
-                        {
-                            "name": field_name,
-                            "type": ftype,
-                            "access": current_access,
-                            "line": child.start_point[0] + 1,
-                        }
+                        CppField(
+                            name=field_name,
+                            type=ftype,
+                            access=current_access,
+                            line=child.start_point[0] + 1,
+                        )
                     )
 
     return methods, fields, has_destructor, friends
@@ -353,8 +372,8 @@ def _enclosing_class(node: Node, source: bytes) -> str:
     return ""
 
 
-def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
-    classes: list[dict[str, Any]] = []
+def _extract_classes(root: Node, source: bytes) -> list[CppClassInfo]:
+    classes: list[CppClassInfo] = []
     for node_type in ("class_specifier", "struct_specifier"):
         is_struct = node_type == "struct_specifier"
         for node in find_nodes(root, node_type):
@@ -362,29 +381,29 @@ def _extract_classes(root: Node, source: bytes) -> list[dict[str, Any]]:
             name = text(name_node, source) if name_node else ""
             base_classes = _extract_base_classes(node, source)
             has_destructor = False
-            methods: list[dict[str, Any]] = []
-            fields: list[dict[str, Any]] = []
+            methods: list[CppMethod] = []
+            fields: list[CppField] = []
             friends: list[str] = []
             body = node.child_by_field_name("body")
             if body:
                 methods, fields, has_destructor, friends = _extract_members(
                     body, source, is_struct
                 )
-            has_pure_virtual = any(m.get("is_pure_virtual") for m in methods)
+            has_pure_virtual = any(m.is_pure_virtual for m in methods)
             classes.append(
-                {
-                    "name": name,
-                    "line": node.start_point[0] + 1,
-                    "has_destructor": has_destructor,
-                    "is_struct": is_struct,
-                    "base_classes": base_classes,
-                    "methods": methods,
-                    "fields": fields,
-                    "is_abstract": has_pure_virtual,
-                    "namespace": _enclosing_namespace(node, source),
-                    "friends": friends,
-                    "outer_class": _enclosing_class(node, source),
-                }
+                CppClassInfo(
+                    name=name,
+                    line=node.start_point[0] + 1,
+                    has_destructor=has_destructor,
+                    is_struct=is_struct,
+                    base_classes=base_classes,
+                    methods=methods,
+                    fields=fields,
+                    is_abstract=has_pure_virtual,
+                    namespace=_enclosing_namespace(node, source),
+                    friends=friends,
+                    outer_class=_enclosing_class(node, source),
+                )
             )
     return classes
 
@@ -398,8 +417,8 @@ def _extract_namespaces(root: Node, source: bytes) -> list[str]:
     return names
 
 
-def _extract_includes(root: Node, source: bytes) -> list[dict[str, Any]]:
-    includes: list[dict[str, Any]] = []
+def _extract_includes(root: Node, source: bytes) -> list[CppInclude]:
+    includes: list[CppInclude] = []
     for node in find_nodes(root, "preproc_include"):
         path_node = node.child_by_field_name("path")
         if path_node:
@@ -407,11 +426,11 @@ def _extract_includes(root: Node, source: bytes) -> list[dict[str, Any]]:
             is_system = path_text.startswith("<")
             path_clean = path_text.strip('<>"')
             includes.append(
-                {
-                    "path": path_clean,
-                    "is_system": is_system,
-                    "line": node.start_point[0] + 1,
-                }
+                CppInclude(
+                    path=path_clean,
+                    is_system=is_system,
+                    line=node.start_point[0] + 1,
+                )
             )
     return includes
 
@@ -515,51 +534,53 @@ def _same_line_comment(node: Node, source: bytes) -> str:
     return ""
 
 
-def _extract_new_expressions(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_new_expressions(
+    root: Node, source: bytes, rel_path: str
+) -> list[CppNewExpression]:
+    results: list[CppNewExpression] = []
     for node in find_nodes(root, "new_expression"):
         parent_call = _parent_call_name(node, source)
         if not parent_call:
             parent_call = _scope_transfer_call(node, source)
         results.append(
-            {
-                "line": node.start_point[0] + 1,
-                "file": rel_path,
-                "expression": text(node, source).strip(),
-                "parent_call": parent_call,
-                "line_comment": _same_line_comment(node, source),
-            }
+            CppNewExpression(
+                line=node.start_point[0] + 1,
+                file=rel_path,
+                expression=text(node, source).strip(),
+                parent_call=parent_call,
+                line_comment=_same_line_comment(node, source),
+            )
         )
     return results
 
 
 def _extract_delete_expressions(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+) -> list[CppDeleteExpression]:
+    results: list[CppDeleteExpression] = []
     for node in find_nodes(root, "delete_expression"):
         results.append(
-            {
-                "line": node.start_point[0] + 1,
-                "file": rel_path,
-                "expression": text(node, source).strip(),
-            }
+            CppDeleteExpression(
+                line=node.start_point[0] + 1,
+                file=rel_path,
+                expression=text(node, source).strip(),
+            )
         )
     return results
 
 
-def _extract_smart_pointers(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_smart_pointers(root: Node, source: bytes, rel_path: str) -> list[CppSmartPointer]:
+    results: list[CppSmartPointer] = []
     src_text = source.decode("utf-8", errors="replace")
     for i, line in enumerate(src_text.splitlines(), start=1):
         for ptr_type in _SMART_PTR_TYPES:
             if ptr_type in line:
-                results.append({"kind": ptr_type, "line": i, "file": rel_path})
+                results.append(CppSmartPointer(kind=ptr_type, line=i, file=rel_path))
     return results
 
 
-def _extract_raw_pointers(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_raw_pointers(root: Node, source: bytes, rel_path: str) -> list[CppRawPointer]:
+    results: list[CppRawPointer] = []
     for node in find_nodes(root, "pointer_declarator"):
         name = ""
         for child in node.children:
@@ -569,29 +590,29 @@ def _extract_raw_pointers(root: Node, source: bytes, rel_path: str) -> list[dict
             if child.type == "field_identifier":
                 name = text(child, source)
                 break
-        results.append({"name": name, "line": node.start_point[0] + 1, "file": rel_path})
+        results.append(CppRawPointer(name=name, line=node.start_point[0] + 1, file=rel_path))
     return results
 
 
-def _extract_malloc_calls(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _extract_malloc_calls(root: Node, source: bytes, rel_path: str) -> list[CppMallocCall]:
+    results: list[CppMallocCall] = []
     for node in find_nodes(root, "call_expression"):
         func = node.child_by_field_name("function")
         if func and func.type == "identifier":
             name = text(func, source)
             if name in _MALLOC_FUNCTIONS:
                 results.append(
-                    {
-                        "call": name,
-                        "line": node.start_point[0] + 1,
-                        "file": rel_path,
-                    }
+                    CppMallocCall(
+                        call=name,
+                        line=node.start_point[0] + 1,
+                        file=rel_path,
+                    )
                 )
     return results
 
 
-def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    blocks: list[dict[str, Any]] = []
+def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[CppCatchBlock]:
+    blocks: list[CppCatchBlock] = []
     for node in find_nodes(root, "catch_clause"):
         caught_type = ""
         params = node.child_by_field_name("parameters")
@@ -604,31 +625,31 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
                 rethrows = True
                 break
         blocks.append(
-            {
-                "caught_type": caught_type.strip(),
-                "rethrows": rethrows,
-                "line": node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            CppCatchBlock(
+                caught_type=caught_type.strip(),
+                rethrows=rethrows,
+                line=node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return blocks
 
 
-def _extract_type_aliases(root: Node, source: bytes) -> list[dict[str, Any]]:
+def _extract_type_aliases(root: Node, source: bytes) -> list[CppTypeAlias]:
     """Extract typedef and using-alias declarations."""
-    aliases: list[dict[str, Any]] = []
+    aliases: list[CppTypeAlias] = []
     # typedef OldType NewType;  →  type_definition node
     for node in find_nodes(root, "type_definition"):
         type_node = node.child_by_field_name("type")
         decl = node.child_by_field_name("declarator")
         if type_node and decl:
             aliases.append(
-                {
-                    "alias": text(decl, source),
-                    "target": text(type_node, source),
-                    "line": node.start_point[0] + 1,
-                    "kind": "typedef",
-                }
+                CppTypeAlias(
+                    alias=text(decl, source),
+                    target=text(type_node, source),
+                    line=node.start_point[0] + 1,
+                    kind="typedef",
+                )
             )
     # using NewType = OldType;  →  alias_declaration node
     for node in find_nodes(root, "alias_declaration"):
@@ -636,12 +657,12 @@ def _extract_type_aliases(root: Node, source: bytes) -> list[dict[str, Any]]:
         type_node = node.child_by_field_name("type")
         if name_node and type_node:
             aliases.append(
-                {
-                    "alias": text(name_node, source),
-                    "target": text(type_node, source),
-                    "line": node.start_point[0] + 1,
-                    "kind": "using",
-                }
+                CppTypeAlias(
+                    alias=text(name_node, source),
+                    target=text(type_node, source),
+                    line=node.start_point[0] + 1,
+                    kind="using",
+                )
             )
     return aliases
 
@@ -660,27 +681,28 @@ class CppAstCollector(BaseASTCollector):
     file_extensions = (".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx")
     evidence_kind = "cpp-ast-file"
 
-    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+    def _parse_file(self, source: bytes, rel_path: str) -> CppAstFilePayload:
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
         has_pragma, has_guard = _detect_include_guard(source)
-        return {
-            "functions": _extract_functions(root, source),
-            "classes": _extract_classes(root, source),
-            "namespaces": _extract_namespaces(root, source),
-            "type_aliases": _extract_type_aliases(root, source),
-            "includes": _extract_includes(root, source),
-            "new_expressions": _extract_new_expressions(root, source, rel_path),
-            "delete_expressions": _extract_delete_expressions(root, source, rel_path),
-            "smart_pointers": _extract_smart_pointers(root, source, rel_path),
-            "raw_pointers": _extract_raw_pointers(root, source, rel_path),
-            "malloc_calls": _extract_malloc_calls(root, source, rel_path),
-            "catch_blocks": _extract_catch_blocks(root, source, rel_path),
-            "has_pragma_once": has_pragma,
-            "has_include_guard": has_guard,
-            "log_statements": [],
-        }
+        return CppAstFilePayload(
+            file_path=rel_path,
+            functions=_extract_functions(root, source),
+            classes=_extract_classes(root, source),
+            namespaces=_extract_namespaces(root, source),
+            type_aliases=_extract_type_aliases(root, source),
+            includes=_extract_includes(root, source),
+            new_expressions=_extract_new_expressions(root, source, rel_path),
+            delete_expressions=_extract_delete_expressions(root, source, rel_path),
+            smart_pointers=_extract_smart_pointers(root, source, rel_path),
+            raw_pointers=_extract_raw_pointers(root, source, rel_path),
+            malloc_calls=_extract_malloc_calls(root, source, rel_path),
+            catch_blocks=_extract_catch_blocks(root, source, rel_path),
+            has_pragma_once=has_pragma,
+            has_include_guard=has_guard,
+            log_statements=[],
+        )
 
 
 def _register() -> None:

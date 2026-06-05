@@ -41,12 +41,21 @@ Evidence payload contract (kind="csharp-ast-file"):
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tree_sitter import Node
 
 from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
+from nfr_review.collectors.payloads.csharp_ast import (
+    CSharpAstFilePayload,
+    CSharpAwaitExpression,
+    CSharpBlockingCall,
+    CSharpCatchBlock,
+    CSharpLogStatement,
+    CSharpMethod,
+    CSharpObjectCreation,
+)
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.csharp_ast")
@@ -105,8 +114,8 @@ def _has_logging_call(block: Node, source: bytes) -> bool:
     return False
 
 
-def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    blocks: list[dict[str, Any]] = []
+def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[CSharpCatchBlock]:
+    blocks: list[CSharpCatchBlock] = []
     for catch in find_nodes(root, "catch_clause"):
         caught_type = ""
         for child in catch.children:
@@ -127,19 +136,21 @@ def _extract_catch_blocks(root: Node, source: bytes, rel_path: str) -> list[dict
         has_logging = _has_logging_call(block_node, source) if block_node else False
 
         blocks.append(
-            {
-                "caught_type": caught_type,
-                "rethrows": rethrows,
-                "has_logging": has_logging,
-                "line": catch.start_point[0] + 1,
-                "file": rel_path,
-            }
+            CSharpCatchBlock(
+                caught_type=caught_type,
+                rethrows=rethrows,
+                has_logging=has_logging,
+                line=catch.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return blocks
 
 
-def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
-    stmts: list[dict[str, Any]] = []
+def _extract_log_statements(
+    root: Node, source: bytes, rel_path: str
+) -> list[CSharpLogStatement]:
+    stmts: list[CSharpLogStatement] = []
     for inv in find_nodes(root, "invocation_expression"):
         name = _invocation_name(inv, source)
         parts = name.split(".")
@@ -151,12 +162,14 @@ def _extract_log_statements(root: Node, source: bytes, rel_path: str) -> list[di
         elif parts[0] == "Debug" and parts[1] in _DEBUG_METHODS:
             is_log = True
         if is_log:
-            stmts.append({"method": name, "line": inv.start_point[0] + 1, "file": rel_path})
+            stmts.append(
+                CSharpLogStatement(method=name, line=inv.start_point[0] + 1, file=rel_path)
+            )
     return stmts
 
 
-def _extract_methods(root: Node, source: bytes) -> list[dict[str, Any]]:
-    methods: list[dict[str, Any]] = []
+def _extract_methods(root: Node, source: bytes) -> list[CSharpMethod]:
+    methods: list[CSharpMethod] = []
     for method in find_nodes(root, "method_declaration"):
         name = ""
         return_type = ""
@@ -191,21 +204,21 @@ def _extract_methods(root: Node, source: bytes) -> list[dict[str, Any]]:
                 return_type = text(child, source)
 
         methods.append(
-            {
-                "name": name,
-                "line": method.start_point[0] + 1,
-                "is_async": is_async,
-                "return_type": return_type,
-                "modifiers": modifiers,
-            }
+            CSharpMethod(
+                name=name,
+                line=method.start_point[0] + 1,
+                is_async=is_async,
+                return_type=return_type,
+                modifiers=modifiers,
+            )
         )
     return methods
 
 
 def _extract_await_expressions(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    awaits: list[dict[str, Any]] = []
+) -> list[CSharpAwaitExpression]:
+    awaits: list[CSharpAwaitExpression] = []
     for await_node in find_nodes(root, "await_expression"):
         expr_text = ""
         has_configure_await = False
@@ -217,12 +230,12 @@ def _extract_await_expressions(
                 break
 
         awaits.append(
-            {
-                "expression": expr_text,
-                "has_configure_await": has_configure_await,
-                "line": await_node.start_point[0] + 1,
-                "file": rel_path,
-            }
+            CSharpAwaitExpression(
+                expression=expr_text,
+                has_configure_await=has_configure_await,
+                line=await_node.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return awaits
 
@@ -241,8 +254,8 @@ def _is_in_using(node: Node) -> bool:
 
 def _extract_object_creations(
     root: Node, source: bytes, rel_path: str
-) -> list[dict[str, Any]]:
-    creations: list[dict[str, Any]] = []
+) -> list[CSharpObjectCreation]:
+    creations: list[CSharpObjectCreation] = []
     for oce in find_nodes(root, "object_creation_expression"):
         type_name = ""
         for child in oce.children:
@@ -258,12 +271,12 @@ def _extract_object_creations(
 
         in_using = _is_in_using(oce)
         creations.append(
-            {
-                "type_name": type_name,
-                "in_using": in_using,
-                "line": oce.start_point[0] + 1,
-                "file": rel_path,
-            }
+            CSharpObjectCreation(
+                type_name=type_name,
+                in_using=in_using,
+                line=oce.start_point[0] + 1,
+                file=rel_path,
+            )
         )
     return creations
 
@@ -278,9 +291,11 @@ def _rightmost_member(node: Node, source: bytes) -> str:
     return ""
 
 
-def _extract_blocking_calls(root: Node, source: bytes, rel_path: str) -> list[dict[str, Any]]:
+def _extract_blocking_calls(
+    root: Node, source: bytes, rel_path: str
+) -> list[CSharpBlockingCall]:
     """Detect .Result, .Wait(), and .GetAwaiter().GetResult() patterns."""
-    results: list[dict[str, Any]] = []
+    results: list[CSharpBlockingCall] = []
 
     for mae in find_nodes(root, "member_access_expression"):
         member_name = _rightmost_member(mae, source)
@@ -290,12 +305,12 @@ def _extract_blocking_calls(root: Node, source: bytes, rel_path: str) -> list[di
             if parent is not None and parent.type == "invocation_expression":
                 continue
             results.append(
-                {
-                    "expression": text(mae, source),
-                    "call_type": ".Result",
-                    "line": mae.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                CSharpBlockingCall(
+                    expression=text(mae, source),
+                    call_type=".Result",
+                    line=mae.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
 
     for inv in find_nodes(root, "invocation_expression"):
@@ -305,21 +320,21 @@ def _extract_blocking_calls(root: Node, source: bytes, rel_path: str) -> list[di
         member_name = _rightmost_member(func, source)
         if member_name == "Wait":
             results.append(
-                {
-                    "expression": text(inv, source),
-                    "call_type": ".Wait",
-                    "line": inv.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                CSharpBlockingCall(
+                    expression=text(inv, source),
+                    call_type=".Wait",
+                    line=inv.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
         elif member_name == "GetResult":
             results.append(
-                {
-                    "expression": text(inv, source),
-                    "call_type": ".GetAwaiter",
-                    "line": inv.start_point[0] + 1,
-                    "file": rel_path,
-                }
+                CSharpBlockingCall(
+                    expression=text(inv, source),
+                    call_type=".GetAwaiter",
+                    line=inv.start_point[0] + 1,
+                    file=rel_path,
+                )
             )
 
     return results
@@ -332,18 +347,19 @@ class CSharpAstCollector(BaseASTCollector):
     file_extensions = (".cs",)
     evidence_kind = "csharp-ast-file"
 
-    def _parse_file(self, source: bytes, rel_path: str) -> dict[str, Any]:
+    def _parse_file(self, source: bytes, rel_path: str) -> CSharpAstFilePayload:
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
-        return {
-            "catch_blocks": _extract_catch_blocks(root, source, rel_path),
-            "log_statements": _extract_log_statements(root, source, rel_path),
-            "methods": _extract_methods(root, source),
-            "await_expressions": _extract_await_expressions(root, source, rel_path),
-            "object_creations": _extract_object_creations(root, source, rel_path),
-            "blocking_calls": _extract_blocking_calls(root, source, rel_path),
-        }
+        return CSharpAstFilePayload(
+            file_path=rel_path,
+            catch_blocks=_extract_catch_blocks(root, source, rel_path),
+            log_statements=_extract_log_statements(root, source, rel_path),
+            methods=_extract_methods(root, source),
+            await_expressions=_extract_await_expressions(root, source, rel_path),
+            object_creations=_extract_object_creations(root, source, rel_path),
+            blocking_calls=_extract_blocking_calls(root, source, rel_path),
+        )
 
 
 def _register() -> None:

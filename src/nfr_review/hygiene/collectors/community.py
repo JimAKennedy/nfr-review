@@ -11,6 +11,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.community import (
+    ChangelogStructure,
+    CommunityFileInfo,
+    CommunityPayload,
+    ReadmeSections,
+)
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 
@@ -68,16 +74,16 @@ _BADGE_PATTERN = re.compile(
 )
 
 
-def _find_file(repo_path: Path, candidates: tuple[str, ...] | list[str]) -> dict[str, Any]:
+def _find_file(repo_path: Path, candidates: tuple[str, ...] | list[str]) -> CommunityFileInfo:
     for name in candidates:
         p = repo_path / name
         if p.is_file():
             size = p.stat().st_size
-            return {"exists": True, "path": str(name), "size": size}
-    return {"exists": False, "path": None, "size": 0}
+            return CommunityFileInfo(exists=True, path=str(name), size=size)
+    return CommunityFileInfo(exists=False, path=None, size=0)
 
 
-def _extract_readme_sections(text: str) -> dict[str, Any]:
+def _extract_readme_sections(text: str) -> ReadmeSections:
     headings: list[str] = []
     for line in text.splitlines():
         m = re.match(r"^(#{1,6})\s+(.+)", line)
@@ -87,18 +93,16 @@ def _extract_readme_sections(text: str) -> dict[str, Any]:
     heading_lower = [h.lower() for h in headings]
     matched = sorted({s for s in _WELL_KNOWN_SECTIONS if s in heading_lower})
 
-    return {
-        "headings": headings,
-        "section_count": len(headings),
-        "well_known_sections": matched,
-    }
+    return ReadmeSections(
+        headings=headings, section_count=len(headings), well_known_sections=matched
+    )
 
 
 def _extract_readme_badges(text: str) -> list[str]:
     return _BADGE_PATTERN.findall(text)
 
 
-def _extract_changelog_structure(text: str) -> dict[str, Any]:
+def _extract_changelog_structure(text: str) -> ChangelogStructure:
     versions = _VERSION_HEADER_PATTERN.findall(text)
     has_versions = len(versions) > 0
 
@@ -124,13 +128,13 @@ def _extract_changelog_structure(text: str) -> dict[str, Any]:
             except ValueError:
                 continue
 
-    return {
-        "has_versions": has_versions,
-        "version_count": len(versions),
-        "follows_keep_a_changelog": follows_kac,
-        "kac_sections_found": kac_sections_found,
-        "has_recent_entries": has_recent_entries,
-    }
+    return ChangelogStructure(
+        has_versions=has_versions,
+        version_count=len(versions),
+        follows_keep_a_changelog=follows_kac,
+        kac_sections_found=kac_sections_found,
+        has_recent_entries=has_recent_entries,
+    )
 
 
 class CommunityCollector:
@@ -140,16 +144,14 @@ class CommunityCollector:
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         readme_info = _find_file(repo_path, _README_NAMES)
 
-        readme_sections: dict[str, Any] = {
-            "headings": [],
-            "section_count": 0,
-            "well_known_sections": [],
-        }
+        readme_sections: ReadmeSections = ReadmeSections(
+            headings=[], section_count=0, well_known_sections=[]
+        )
         readme_badges: list[str] = []
 
-        if readme_info["exists"] and readme_info["path"]:
+        if readme_info.exists and readme_info.path:
             try:
-                content = (repo_path / readme_info["path"]).read_text(
+                content = (repo_path / readme_info.path).read_text(
                     encoding="utf-8", errors="replace"
                 )
                 readme_sections = _extract_readme_sections(content)
@@ -158,33 +160,33 @@ class CommunityCollector:
                 pass
 
         changelog_info = _find_file(repo_path, _CHANGELOG_NAMES)
-        changelog_structure: dict[str, Any] = {
-            "has_versions": False,
-            "version_count": 0,
-            "follows_keep_a_changelog": False,
-            "kac_sections_found": [],
-            "has_recent_entries": False,
-        }
-        if changelog_info["exists"] and changelog_info["path"]:
+        changelog_structure: ChangelogStructure = ChangelogStructure(
+            has_versions=False,
+            version_count=0,
+            follows_keep_a_changelog=False,
+            kac_sections_found=[],
+            has_recent_entries=False,
+        )
+        if changelog_info.exists and changelog_info.path:
             try:
-                cl_content = (repo_path / changelog_info["path"]).read_text(
+                cl_content = (repo_path / changelog_info.path).read_text(
                     encoding="utf-8", errors="replace"
                 )
                 changelog_structure = _extract_changelog_structure(cl_content)
             except OSError:
                 pass
 
-        payload: dict[str, Any] = {
-            "readme": readme_info,
-            "readme_sections": readme_sections,
-            "readme_badges": readme_badges,
-            "contributing": _find_file(repo_path, ("CONTRIBUTING.md",)),
-            "code_of_conduct": _find_file(repo_path, ("CODE_OF_CONDUCT.md",)),
-            "security": _find_file(repo_path, _SECURITY_PATHS),
-            "changelog": changelog_info,
-            "changelog_structure": changelog_structure,
-            "codeowners": _find_file(repo_path, _CODEOWNERS_PATHS),
-        }
+        payload = CommunityPayload(
+            readme=readme_info,
+            readme_sections=readme_sections,
+            readme_badges=readme_badges,
+            contributing=_find_file(repo_path, ("CONTRIBUTING.md",)),
+            code_of_conduct=_find_file(repo_path, ("CODE_OF_CONDUCT.md",)),
+            security=_find_file(repo_path, _SECURITY_PATHS),
+            changelog=changelog_info,
+            changelog_structure=changelog_structure,
+            codeowners=_find_file(repo_path, _CODEOWNERS_PATHS),
+        )
 
         return [
             Evidence(

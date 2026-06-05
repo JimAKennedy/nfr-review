@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.documentation import DocumentationPayload, ManifestEntry
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 
@@ -50,7 +51,7 @@ _POM_FIELDS = (
 )
 
 
-def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
+def _parse_pyproject(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "pyproject.toml"
     if not path.is_file():
         return None
@@ -75,24 +76,24 @@ def _parse_pyproject(repo_path: Path) -> dict[str, Any] | None:
 
     project = data.get("project")
     if not isinstance(project, dict):
-        return {
-            "path": "pyproject.toml",
-            "type": "pyproject.toml",
-            "fields_present": [],
-            "fields_missing": list(_PYPROJECT_FIELDS),
-        }
+        return ManifestEntry(
+            path="pyproject.toml",
+            type="pyproject.toml",
+            fields_present=[],
+            fields_missing=list(_PYPROJECT_FIELDS),
+        )
 
     present = [f for f in _PYPROJECT_FIELDS if f in project]
     missing = [f for f in _PYPROJECT_FIELDS if f not in project]
-    return {
-        "path": "pyproject.toml",
-        "type": "pyproject.toml",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path="pyproject.toml",
+        type="pyproject.toml",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
-def _parse_package_json(repo_path: Path) -> dict[str, Any] | None:
+def _parse_package_json(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "package.json"
     if not path.is_file():
         return None
@@ -104,27 +105,27 @@ def _parse_package_json(repo_path: Path) -> dict[str, Any] | None:
         return None
 
     if not isinstance(data, dict):
-        return {
-            "path": "package.json",
-            "type": "package.json",
-            "fields_present": [],
-            "fields_missing": list(_PACKAGE_JSON_FIELDS),
-        }
+        return ManifestEntry(
+            path="package.json",
+            type="package.json",
+            fields_present=[],
+            fields_missing=list(_PACKAGE_JSON_FIELDS),
+        )
 
     present = [f for f in _PACKAGE_JSON_FIELDS if f in data]
     missing = [f for f in _PACKAGE_JSON_FIELDS if f not in data]
-    return {
-        "path": "package.json",
-        "type": "package.json",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path="package.json",
+        type="package.json",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
 _MAVEN_NS = "http://maven.apache.org/POM/4.0.0"
 
 
-def _parse_pom_xml(repo_path: Path) -> dict[str, Any] | None:
+def _parse_pom_xml(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "pom.xml"
     if not path.is_file():
         return None
@@ -156,12 +157,12 @@ def _parse_pom_xml(repo_path: Path) -> dict[str, Any] | None:
         else:
             missing.append(field)
 
-    return {
-        "path": "pom.xml",
-        "type": "pom.xml",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path="pom.xml",
+        type="pom.xml",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
 _CARGO_FIELDS = (
@@ -190,7 +191,7 @@ _CSPROJ_FIELDS = (
 )
 
 
-def _parse_cargo_toml(repo_path: Path) -> dict[str, Any] | None:
+def _parse_cargo_toml(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "Cargo.toml"
     if not path.is_file():
         return None
@@ -212,24 +213,24 @@ def _parse_cargo_toml(repo_path: Path) -> dict[str, Any] | None:
 
     package = data.get("package")
     if not isinstance(package, dict):
-        return {
-            "path": "Cargo.toml",
-            "type": "Cargo.toml",
-            "fields_present": [],
-            "fields_missing": list(_CARGO_FIELDS),
-        }
+        return ManifestEntry(
+            path="Cargo.toml",
+            type="Cargo.toml",
+            fields_present=[],
+            fields_missing=list(_CARGO_FIELDS),
+        )
 
     present = [f for f in _CARGO_FIELDS if f in package]
     missing = [f for f in _CARGO_FIELDS if f not in package]
-    return {
-        "path": "Cargo.toml",
-        "type": "Cargo.toml",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path="Cargo.toml",
+        type="Cargo.toml",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
-def _parse_go_mod(repo_path: Path) -> dict[str, Any] | None:
+def _parse_go_mod(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "go.mod"
     if not path.is_file():
         return None
@@ -253,15 +254,15 @@ def _parse_go_mod(repo_path: Path) -> dict[str, Any] | None:
     else:
         missing.append("go-version")
 
-    return {
-        "path": "go.mod",
-        "type": "go.mod",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path="go.mod",
+        type="go.mod",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
-def _parse_csproj(repo_path: Path) -> dict[str, Any] | None:
+def _parse_csproj(repo_path: Path) -> ManifestEntry | None:
     candidates = sorted(repo_path.glob("*.csproj"))
     if not candidates:
         return None
@@ -287,12 +288,12 @@ def _parse_csproj(repo_path: Path) -> dict[str, Any] | None:
 
     present = [f for f in _CSPROJ_FIELDS if f in props]
     missing = [f for f in _CSPROJ_FIELDS if f not in props]
-    return {
-        "path": rel_path,
-        "type": "csproj",
-        "fields_present": present,
-        "fields_missing": missing,
-    }
+    return ManifestEntry(
+        path=rel_path,
+        type="csproj",
+        fields_present=present,
+        fields_missing=missing,
+    )
 
 
 def _detect_py_typed(repo_path: Path) -> bool:
@@ -381,7 +382,7 @@ class DocumentationCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
-        manifests: list[dict[str, Any]] = []
+        manifests: list[ManifestEntry] = []
 
         pyproject = _parse_pyproject(repo_path)
         if pyproject is not None:
@@ -413,15 +414,15 @@ class DocumentationCollector:
         has_py_typed = _detect_py_typed(repo_path)
         classifiers = _extract_classifiers(repo_path)
 
-        payload: dict[str, Any] = {
-            "manifests": manifests,
-            "has_docs_dir": has_docs_dir,
-            "doc_tool": doc_tool,
-            "has_api_docs_hint": has_api_docs_hint,
-            "has_py_typed": has_py_typed,
-            "classifier_count": len(classifiers),
-            "has_classifiers": len(classifiers) > 0,
-        }
+        payload = DocumentationPayload(
+            manifests=manifests,
+            has_docs_dir=has_docs_dir,
+            doc_tool=doc_tool,
+            has_api_docs_hint=has_api_docs_hint,
+            has_py_typed=has_py_typed,
+            classifier_count=len(classifiers),
+            has_classifiers=len(classifiers) > 0,
+        )
 
         return [
             Evidence(

@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.privacy import PrivacyMatch, PrivacyPayload
 from nfr_review.hygiene import hygiene_collector_registry
 from nfr_review.models import Evidence
 from nfr_review.path_filter import iter_repo_files
@@ -142,79 +143,79 @@ def _read_safe(path: Path) -> str | None:
         return None
 
 
-def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[dict[str, Any]]:
-    matches: list[dict[str, Any]] = []
+def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[PrivacyMatch]:
+    matches: list[PrivacyMatch] = []
 
     for i, line in enumerate(text.splitlines(), 1):
         for _m in _SSN_RE.finditer(line):
             if not _is_reserved_ssn(_m.group()):
                 matches.append(
-                    {
-                        "file": rel_path,
-                        "line": i,
-                        "pattern_type": "ssn",
-                        "snippet": _truncate(line.strip()),
-                    }
+                    PrivacyMatch(
+                        file=rel_path,
+                        line=i,
+                        pattern_type="ssn",
+                        snippet=_truncate(line.strip()),
+                    )
                 )
         for _m in _CC_RE.finditer(line):
             if not _is_test_card(_m.group()):
                 matches.append(
-                    {
-                        "file": rel_path,
-                        "line": i,
-                        "pattern_type": "credit_card",
-                        "snippet": _truncate(line.strip()),
-                    }
+                    PrivacyMatch(
+                        file=rel_path,
+                        line=i,
+                        pattern_type="credit_card",
+                        snippet=_truncate(line.strip()),
+                    )
                 )
         if not is_config:
             for _m in _EMAIL_RE.finditer(line):
                 matches.append(
-                    {
-                        "file": rel_path,
-                        "line": i,
-                        "pattern_type": "email",
-                        "snippet": _truncate(line.strip()),
-                    }
+                    PrivacyMatch(
+                        file=rel_path,
+                        line=i,
+                        pattern_type="email",
+                        snippet=_truncate(line.strip()),
+                    )
                 )
             for _m in _PHONE_RE.finditer(line):
                 matches.append(
-                    {
-                        "file": rel_path,
-                        "line": i,
-                        "pattern_type": "phone",
-                        "snippet": _truncate(line.strip()),
-                    }
+                    PrivacyMatch(
+                        file=rel_path,
+                        line=i,
+                        pattern_type="phone",
+                        snippet=_truncate(line.strip()),
+                    )
                 )
 
     return matches
 
 
-def _scan_internal_refs(rel_path: str, text: str) -> list[dict[str, Any]]:
-    matches: list[dict[str, Any]] = []
+def _scan_internal_refs(rel_path: str, text: str) -> list[PrivacyMatch]:
+    matches: list[PrivacyMatch] = []
     for i, line in enumerate(text.splitlines(), 1):
         for _m in _INTERNAL_DOMAIN_RE.finditer(line):
             matches.append(
-                {
-                    "file": rel_path,
-                    "line": i,
-                    "pattern_type": "internal_domain",
-                    "snippet": _truncate(line.strip()),
-                }
+                PrivacyMatch(
+                    file=rel_path,
+                    line=i,
+                    pattern_type="internal_domain",
+                    snippet=_truncate(line.strip()),
+                )
             )
         for _m in _INTERNAL_IP_RE.finditer(line):
             matches.append(
-                {
-                    "file": rel_path,
-                    "line": i,
-                    "pattern_type": "internal_ip",
-                    "snippet": _truncate(line.strip()),
-                }
+                PrivacyMatch(
+                    file=rel_path,
+                    line=i,
+                    pattern_type="internal_ip",
+                    snippet=_truncate(line.strip()),
+                )
             )
     return matches
 
 
-def _scan_tracking_ids(rel_path: str, text: str) -> list[dict[str, Any]]:
-    matches: list[dict[str, Any]] = []
+def _scan_tracking_ids(rel_path: str, text: str) -> list[PrivacyMatch]:
+    matches: list[PrivacyMatch] = []
     for i, line in enumerate(text.splitlines(), 1):
         if "environ" in line or "getenv" in line or "os.env" in line:
             continue
@@ -226,12 +227,12 @@ def _scan_tracking_ids(rel_path: str, text: str) -> list[dict[str, Any]]:
         ):
             for _m in pat.finditer(line):
                 matches.append(
-                    {
-                        "file": rel_path,
-                        "line": i,
-                        "pattern_type": label,
-                        "snippet": _truncate(line.strip()),
-                    }
+                    PrivacyMatch(
+                        file=rel_path,
+                        line=i,
+                        pattern_type=label,
+                        snippet=_truncate(line.strip()),
+                    )
                 )
     return matches
 
@@ -241,9 +242,9 @@ class PrivacyCollector:
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
-        pii_matches: list[dict[str, Any]] = []
-        internal_refs: list[dict[str, Any]] = []
-        tracking_ids: list[dict[str, Any]] = []
+        pii_matches: list[PrivacyMatch] = []
+        internal_refs: list[PrivacyMatch] = []
+        tracking_ids: list[PrivacyMatch] = []
         files_scanned = 0
 
         for path in iter_repo_files(repo_path):
@@ -269,12 +270,12 @@ class PrivacyCollector:
                 collector_version=self.version,
                 locator=".",
                 kind="privacy-analysis",
-                payload={
-                    "pii_matches": pii_matches,
-                    "internal_references": internal_refs,
-                    "tracking_ids": tracking_ids,
-                    "files_scanned": files_scanned,
-                },
+                payload=PrivacyPayload(
+                    pii_matches=pii_matches,
+                    internal_references=internal_refs,
+                    tracking_ids=tracking_ids,
+                    files_scanned=files_scanned,
+                ),
             )
         ]
 
