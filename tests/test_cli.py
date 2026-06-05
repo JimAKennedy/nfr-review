@@ -7,6 +7,7 @@ and individual command behaviour against in-memory registries when needed.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,46 @@ def test_list_rules_prints_each_rule() -> None:
     assert result.exit_code == 0, result.output
     assert "sample-readme-exists" in result.stdout
     assert "band=1" in result.stdout
+
+
+def test_list_rules_text_format_is_default() -> None:
+    """list-rules without --format produces the same tab-separated text output."""
+    result = _runner().invoke(cli, ["list-rules"])
+    assert result.exit_code == 0, result.output
+    assert "sample-readme-exists" in result.stdout
+    assert "\tband=" in result.stdout
+
+
+def test_list_rules_json_format() -> None:
+    """list-rules --format json outputs a valid JSON array with metadata fields."""
+    result = _runner().invoke(cli, ["list-rules", "--format", "json"])
+    assert result.exit_code == 0, result.output
+
+    entries = json.loads(result.stdout)
+    assert isinstance(entries, list)
+    assert len(entries) > 0
+
+    ids = {e["id"] for e in entries}
+    assert "sample-readme-exists" in ids
+    assert "ci-security-scan-missing" in ids
+
+    sample = next(e for e in entries if e["id"] == "ci-security-scan-missing")
+    assert sample["band"] == 1
+    assert sample["severity"] == "high"
+    assert sample["category"] == "security"
+    assert isinstance(sample["tags"], list)
+    assert isinstance(sample["compliance_refs"], list)
+    assert sample["description"]
+    assert sample["required_collectors"] == ["ci-artifact"]
+
+
+def test_list_rules_json_all_have_metadata() -> None:
+    """Every rule in JSON output should have severity and category fields."""
+    result = _runner().invoke(cli, ["list-rules", "--format", "json"])
+    entries = json.loads(result.stdout)
+    for entry in entries:
+        assert "severity" in entry, f"Rule {entry['id']} missing severity in JSON output"
+        assert "category" in entry, f"Rule {entry['id']} missing category in JSON output"
 
 
 def test_list_rules_with_empty_registry(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,11 +5,16 @@ from pathlib import Path
 import pytest
 
 from nfr_review.config import (
+    CATEGORY_ALIASES,
+    DEFAULT_CATEGORY_WEIGHTS,
+    DEFAULT_SEVERITY_DEDUCTIONS,
+    ISO_25010_CATEGORIES,
     CollectorsConfig,
     Config,
     ConfigError,
     LlmConfig,
     RulesConfig,
+    ScoringConfig,
     load_config,
 )
 
@@ -229,3 +234,186 @@ def test_config_llm_unknown_key_rejected(tmp_path: Path) -> None:
     with pytest.raises(ConfigError) as excinfo:
         load_config(p)
     assert "unknown_field" in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# ScoringConfig
+# ---------------------------------------------------------------------------
+
+
+def test_config_default_scoring_config() -> None:
+    cfg = Config()
+    assert isinstance(cfg.scoring, ScoringConfig)
+    assert cfg.scoring.category_weights == DEFAULT_CATEGORY_WEIGHTS
+    assert cfg.scoring.severity_deductions == DEFAULT_SEVERITY_DEDUCTIONS
+    assert cfg.scoring.category_aliases == CATEGORY_ALIASES
+
+
+def test_scoring_config_iso_categories_match_default_weights() -> None:
+    for cat in ISO_25010_CATEGORIES:
+        assert cat in DEFAULT_CATEGORY_WEIGHTS
+
+
+def test_scoring_config_from_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text(
+        "scoring:\n"
+        "  category_weights:\n"
+        "    security: 2.0\n"
+        "    reliability: 1.5\n"
+        "    performance: 1.0\n"
+        "    maintainability: 0.5\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.scoring.category_weights["security"] == 2.0
+    assert cfg.scoring.category_weights["reliability"] == 1.5
+    assert cfg.scoring.category_weights["maintainability"] == 0.5
+
+
+def test_scoring_config_custom_severity_deductions(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text(
+        "scoring:\n"
+        "  severity_deductions:\n"
+        "    critical: 20\n"
+        "    high: 10\n"
+        "    medium: 5\n"
+        "    low: 2\n"
+        "    info: 0\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.scoring.severity_deductions["critical"] == 20
+    assert cfg.scoring.severity_deductions["high"] == 10
+
+
+def test_scoring_config_custom_aliases(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text(
+        "scoring:\n"
+        "  category_aliases:\n"
+        "    observability: reliability\n"
+        "    ops: maintainability\n"
+        "    infra: maintainability\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(p)
+    assert cfg.scoring.category_aliases["infra"] == "maintainability"
+
+
+def test_scoring_config_unknown_key_rejected(tmp_path: Path) -> None:
+    p = tmp_path / "nfr-review.yaml"
+    p.write_text("scoring:\n  bogus_field: 1\n", encoding="utf-8")
+    with pytest.raises(ConfigError) as excinfo:
+        load_config(p)
+    assert "bogus_field" in str(excinfo.value)
+
+
+def test_scoring_config_round_trip() -> None:
+    cfg = ScoringConfig()
+    assert ScoringConfig.model_validate(cfg.model_dump()) == cfg
+
+
+def test_scoring_config_independent_defaults() -> None:
+    a = ScoringConfig()
+    b = ScoringConfig()
+    a.category_weights["security"] = 99.0
+    assert b.category_weights["security"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# ScoringConfig.merge — repo-local overrides on central defaults
+# ---------------------------------------------------------------------------
+
+
+def test_scoring_merge_overrides_specific_weight() -> None:
+    central = ScoringConfig()
+    repo = ScoringConfig(category_weights={"security": 2.0})
+    merged = central.merge(repo)
+    assert merged.category_weights["security"] == 2.0
+    assert merged.category_weights["reliability"] == 1.0
+    assert merged.category_weights["performance"] == 1.0
+    assert merged.category_weights["maintainability"] == 1.0
+
+
+def test_scoring_merge_preserves_central_only_keys() -> None:
+    central = ScoringConfig(category_aliases={"observability": "reliability", "infra": "ops"})
+    repo = ScoringConfig(category_aliases={"infra": "maintainability"})
+    merged = central.merge(repo)
+    assert merged.category_aliases["observability"] == "reliability"
+    assert merged.category_aliases["infra"] == "maintainability"
+
+
+def test_scoring_merge_overrides_severity_deductions() -> None:
+    central = ScoringConfig()
+    repo = ScoringConfig(severity_deductions={"critical": 20, "high": 10})
+    merged = central.merge(repo)
+    assert merged.severity_deductions["critical"] == 20
+    assert merged.severity_deductions["high"] == 10
+    assert merged.severity_deductions["medium"] == DEFAULT_SEVERITY_DEDUCTIONS["medium"]
+
+
+def test_scoring_merge_does_not_mutate_originals() -> None:
+    central = ScoringConfig()
+    repo = ScoringConfig(category_weights={"security": 5.0})
+    merged = central.merge(repo)
+    assert central.category_weights["security"] == 1.0
+    assert merged.category_weights["security"] == 5.0
+
+
+def test_scoring_merge_both_defaults_is_identity() -> None:
+    a = ScoringConfig()
+    b = ScoringConfig()
+    merged = a.merge(b)
+    assert merged == a
+
+
+def test_scoring_merge_adds_new_alias() -> None:
+    central = ScoringConfig()
+    repo = ScoringConfig(category_aliases={"devops": "maintainability"})
+    merged = central.merge(repo)
+    assert merged.category_aliases["devops"] == "maintainability"
+    assert "observability" in merged.category_aliases
+
+
+# ---------------------------------------------------------------------------
+# Config.with_repo_scoring — full config merge
+# ---------------------------------------------------------------------------
+
+
+def test_config_with_repo_scoring_merges_weights(tmp_path: Path) -> None:
+    central_path = tmp_path / "central.yaml"
+    central_path.write_text(
+        "scoring:\n"
+        "  category_weights:\n"
+        "    security: 1.0\n"
+        "    reliability: 1.0\n"
+        "    performance: 1.0\n"
+        "    maintainability: 1.0\n",
+        encoding="utf-8",
+    )
+    repo_path = tmp_path / "repo.yaml"
+    repo_path.write_text(
+        "scoring:\n  category_weights:\n    security: 3.0\n",
+        encoding="utf-8",
+    )
+    central = load_config(central_path)
+    repo = load_config(repo_path)
+    merged = central.with_repo_scoring(repo)
+    assert merged.scoring.category_weights["security"] == 3.0
+    assert merged.scoring.category_weights["reliability"] == 1.0
+    assert merged.rules == central.rules
+
+
+def test_config_with_repo_scoring_preserves_non_scoring_fields() -> None:
+    central = Config(
+        tech={"kafka": True},
+        rules=RulesConfig(skip=["some-rule"]),
+        scoring=ScoringConfig(category_weights={"security": 1.0}),
+    )
+    repo = Config(scoring=ScoringConfig(category_weights={"security": 2.0}))
+    merged = central.with_repo_scoring(repo)
+    assert merged.tech == {"kafka": True}
+    assert merged.rules.skip == ["some-rule"]
+    assert merged.scoring.category_weights["security"] == 2.0

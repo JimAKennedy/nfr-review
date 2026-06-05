@@ -21,6 +21,7 @@ JSONL) can be piped from stdout-equivalent file paths without contamination.
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import sys
 import time
@@ -420,6 +421,7 @@ def run_cmd(
             result.findings,
             result.run_metadata.rules_run if result.run_metadata else [],
             result.run_metadata.rules_skipped if result.run_metadata else [],
+            config.scoring,
         )
         click.echo("", err=True)
         _ts_echo(f"Design Maturity Score: {score.overall}/100 (Grade: {score.grade})")
@@ -431,7 +433,9 @@ def run_cmd(
 
         if baseline_path is not None:
             bl_findings, bl_rules_run, bl_rules_skipped = load_baseline_score(baseline_path)
-            trend = compute_trend(score, bl_findings, bl_rules_run, bl_rules_skipped)
+            trend = compute_trend(
+                score, bl_findings, bl_rules_run, bl_rules_skipped, config.scoring
+            )
             arrow = (
                 "↑"
                 if trend.direction == "improved"
@@ -499,13 +503,42 @@ def run_cmd(
 
 
 @cli.command("list-rules", help="List every registered rule (id, band, summary).")
-def list_rules_cmd() -> None:
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format (default: text).",
+)
+def list_rules_cmd(fmt: str) -> None:
     """List all registered rules."""
+    from nfr_review.rule_metadata import get_metadata
+
     rules = rule_registry.all()
     if not rules:
         return
-    for rule in rules:
-        click.echo(f"{rule.id}\tband={rule.band}\t{_rule_summary(rule)}")
+
+    if fmt == "json":
+        entries = []
+        for rule in rules:
+            meta = get_metadata(rule.id)
+            entry: dict[str, Any] = {
+                "id": rule.id,
+                "band": rule.band,
+                "required_collectors": rule.required_collectors,
+                "required_tech": getattr(rule, "required_tech", []),
+            }
+            if meta is not None:
+                entry["severity"] = meta.severity
+                entry["category"] = meta.category
+                entry["tags"] = meta.tags
+                entry["description"] = meta.description
+                entry["compliance_refs"] = meta.compliance_refs
+            entries.append(entry)
+        click.echo(json.dumps(entries, indent=2))
+    else:
+        for rule in rules:
+            click.echo(f"{rule.id}\tband={rule.band}\t{_rule_summary(rule)}")
 
 
 @cli.command("explain", help="Print the full description of a single rule.")
@@ -811,6 +844,20 @@ def run_report_pipeline(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    # Merge repo-local scoring overrides when a central config is provided
+    # and the target repo has its own nfr-review.yaml with scoring settings.
+    repo_local_cfg_path = target / "nfr-review.yaml"
+    if (
+        effective_config_path is not None
+        and repo_local_cfg_path.exists()
+        and repo_local_cfg_path.resolve() != effective_config_path.resolve()
+    ):
+        try:
+            repo_config = load_config(repo_local_cfg_path)
+            config = config.with_repo_scoring(repo_config)
+        except ConfigError:
+            pass  # repo-local config is malformed — use central defaults
+
     _phase("Detecting technologies", quiet=quiet)
     try:
         detected = detect_technologies(target)
@@ -922,6 +969,7 @@ def run_report_pipeline(
             all_report_findings,
             nfr_meta.rules_run if nfr_meta else [],
             nfr_meta.rules_skipped if nfr_meta else [],
+            config.scoring,
         )
         score_section = render_score_section(score)
 

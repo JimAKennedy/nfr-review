@@ -15,7 +15,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from nfr_review.models import Finding, Severity
+from nfr_review.config import (
+    CATEGORY_ALIASES,
+    DEFAULT_CATEGORY_WEIGHTS,
+    DEFAULT_SEVERITY_DEDUCTIONS,
+    ScoringConfig,
+)
+from nfr_review.models import Finding
 
 
 class MaturityScore(BaseModel):
@@ -36,15 +42,6 @@ class ScoreTrend(BaseModel):
     delta: int  # positive = improved
     direction: str  # "improved" / "regressed" / "stable"
     category_deltas: dict[str, int]  # category -> delta
-
-
-_SEVERITY_WEIGHTS: dict[Severity, int] = {
-    "critical": -15,
-    "high": -8,
-    "medium": -3,
-    "low": -1,
-    "info": 0,
-}
 
 
 def _grade(score: int) -> str:
@@ -127,26 +124,37 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
 }
 
 
-def _extract_category(rule_id: str) -> str:
-    """Map a rule_id to one of the 5 NFR categories.
+def _extract_category(
+    rule_id: str,
+    aliases: dict[str, str] | None = None,
+) -> str:
+    """Map a rule_id to an ISO 25010 category.
 
     Handles two formats: prefix-based (``SEC-001``) preserves the prefix,
     descriptive (``dockerfile-secret-leakage``) uses keyword matching.
+    After keyword lookup, applies *aliases* to normalise legacy names
+    (e.g. ``observability`` → ``reliability``).
     """
     parts = rule_id.rsplit("-", 1)
     if len(parts) == 2 and parts[1].isdigit():
-        return parts[0]
-    lower = rule_id.lower()
-    for keyword, category in _CATEGORY_KEYWORDS.items():
-        if keyword in lower:
-            return category
-    return "ops"
+        raw = parts[0]
+    else:
+        lower = rule_id.lower()
+        raw = "ops"
+        for keyword, category in _CATEGORY_KEYWORDS.items():
+            if keyword in lower:
+                raw = category
+                break
+    if aliases:
+        raw = aliases.get(raw.lower(), raw)
+    return raw
 
 
 def compute_maturity_score(
     findings: list[Finding],
     rules_run: list[str],
     rules_skipped: Sequence[dict[str, Any] | str],
+    scoring: ScoringConfig | None = None,
 ) -> MaturityScore:
     """Compute a design maturity score from findings and rule coverage.
 
@@ -158,12 +166,19 @@ def compute_maturity_score(
         List of rule IDs that were executed.
     rules_skipped:
         List of skipped rule entries (dicts with ``rule_id`` key, or plain strings).
+    scoring:
+        Optional scoring configuration with weights, deductions, and aliases.
+        Falls back to module-level defaults when ``None``.
 
     Returns
     -------
     MaturityScore
         The computed score with category breakdown.
     """
+    weights = scoring.category_weights if scoring else DEFAULT_CATEGORY_WEIGHTS
+    deductions = scoring.severity_deductions if scoring else DEFAULT_SEVERITY_DEDUCTIONS
+    aliases = scoring.category_aliases if scoring else CATEGORY_ALIASES
+
     # Count severities
     severity_counts: dict[str, int] = {}
     for sev in ("critical", "high", "medium", "low", "info"):
@@ -174,21 +189,30 @@ def compute_maturity_score(
     # Category scores
     category_findings: dict[str, list[Finding]] = {}
     for f in findings:
-        cat = _extract_category(f.rule_id)
+        cat = _extract_category(f.rule_id, aliases)
         category_findings.setdefault(cat, []).append(f)
 
     category_scores: dict[str, int] = {}
     for cat, cat_findings in category_findings.items():
         cat_deduction = 0
         for f in cat_findings:
-            cat_deduction += abs(_SEVERITY_WEIGHTS.get(f.severity, 0))
+            cat_deduction += deductions.get(f.severity, 0)
         category_scores[cat] = max(0, 100 - cat_deduction)
 
-    # Overall score: weighted average of category scores (100 when no findings)
-    if category_scores:
-        overall = round(sum(category_scores.values()) / len(category_scores))
+    # Overall score: coverage-weighted average of category scores.
+    # Categories with higher weight contribute more to the final score.
+    # Categories with no findings default to 100 and are included if they
+    # have a configured weight.
+    all_categories = set(weights) | set(category_scores)
+    total_weight = sum(weights.get(c, 1.0) for c in all_categories)
+    if total_weight > 0:
+        weighted_sum = sum(
+            category_scores.get(c, 100) * weights.get(c, 1.0) for c in all_categories
+        )
+        overall = round(weighted_sum / total_weight)
     else:
         overall = 100
+    overall = max(0, min(100, overall))
 
     # Rules coverage
     total_rules = len(rules_run) + len(rules_skipped)
@@ -211,6 +235,7 @@ def compute_trend(
     baseline_findings: list[Finding],
     baseline_rules_run: list[str],
     baseline_rules_skipped: Sequence[dict[str, Any] | str],
+    scoring: ScoringConfig | None = None,
 ) -> ScoreTrend:
     """Compute trend between current score and baseline findings.
 
@@ -224,6 +249,8 @@ def compute_trend(
         Rule IDs that ran in the baseline scan.
     baseline_rules_skipped:
         Skipped rule entries from the baseline scan.
+    scoring:
+        Optional scoring configuration (same weights used for baseline).
 
     Returns
     -------
@@ -231,7 +258,7 @@ def compute_trend(
         The trend comparison.
     """
     baseline_score = compute_maturity_score(
-        baseline_findings, baseline_rules_run, baseline_rules_skipped
+        baseline_findings, baseline_rules_run, baseline_rules_skipped, scoring
     )
 
     delta = current_score.overall - baseline_score.overall

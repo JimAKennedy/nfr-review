@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from nfr_review.config import ScoringConfig
 from nfr_review.models import Finding
 from nfr_review.output.markdown import render_score_section
 from nfr_review.scoring import (
@@ -17,6 +18,8 @@ from nfr_review.scoring import (
     compute_maturity_score,
     compute_trend,
 )
+
+_UNWEIGHTED = ScoringConfig(category_weights={}, category_aliases={})
 
 
 def _finding(
@@ -44,7 +47,7 @@ def _finding(
 
 
 def test_no_findings_perfect_score() -> None:
-    score = compute_maturity_score([], ["R001", "R002"], [])
+    score = compute_maturity_score([], ["R001", "R002"], [], _UNWEIGHTED)
     assert score.overall == 100
     assert score.grade == "A"
     assert score.category_scores == {}
@@ -53,7 +56,7 @@ def test_no_findings_perfect_score() -> None:
 
 def test_critical_finding_heavy_deduction() -> None:
     findings = [_finding(severity="critical")]
-    score = compute_maturity_score(findings, ["R001"], [])
+    score = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
     assert score.overall == 85
     assert score.grade == "B"
 
@@ -66,7 +69,7 @@ def test_multiple_severities() -> None:
         _finding(severity="low"),  # -1
         _finding(severity="info"),  # -0
     ]
-    score = compute_maturity_score(findings, ["R001"], [])
+    score = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
     # 100 - 15 - 8 - 3 - 1 - 0 = 73
     assert score.overall == 73
     assert score.grade == "C"
@@ -75,19 +78,21 @@ def test_multiple_severities() -> None:
 def test_score_floor_at_zero() -> None:
     # 10 critical findings: 10 * 15 = 150 deduction -> floor at 0
     findings = [_finding(severity="critical") for _ in range(10)]
-    score = compute_maturity_score(findings, ["R001"], [])
+    score = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
     assert score.overall == 0
     assert score.grade == "F"
 
 
 def test_grade_thresholds() -> None:
     # A >= 90
-    score_a = compute_maturity_score([], ["R001"], [])
+    score_a = compute_maturity_score([], ["R001"], [], _UNWEIGHTED)
     assert score_a.grade == "A"
     assert score_a.overall >= 90
 
     # B: score 75-89 -> one critical = 85
-    score_b = compute_maturity_score([_finding(severity="critical")], ["R001"], [])
+    score_b = compute_maturity_score(
+        [_finding(severity="critical")], ["R001"], [], _UNWEIGHTED
+    )
     assert score_b.overall == 85
     assert score_b.grade == "B"
 
@@ -101,6 +106,7 @@ def test_grade_thresholds() -> None:
         ],
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     assert score_c.overall == 74
     assert score_c.grade == "C"
@@ -116,6 +122,7 @@ def test_grade_thresholds() -> None:
         ],
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     assert score_d.overall == 47
     assert score_d.grade == "D"
@@ -125,6 +132,7 @@ def test_grade_thresholds() -> None:
         [_finding(severity="critical") for _ in range(5)],
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     # 100 - 75 = 25
     assert score_f.overall == 25
@@ -137,7 +145,7 @@ def test_category_breakdown() -> None:
         _finding(rule_id="SEC-002", severity="medium"),  # SEC: 92 - 3 = 89
         _finding(rule_id="PATCH-002", severity="low"),  # PATCH: 100 - 1 = 99
     ]
-    score = compute_maturity_score(findings, ["R001"], [])
+    score = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
     assert "SEC" in score.category_scores
     assert "PATCH" in score.category_scores
     assert score.category_scores["SEC"] == 89
@@ -153,7 +161,7 @@ def test_overall_is_category_average_across_many_categories() -> None:
         _finding(rule_id="PERF-001", severity="medium"),  # PERF: 97
         _finding(rule_id="OPS-001", severity="low"),  # OPS: 99
     ]
-    score = compute_maturity_score(findings, ["R001"], [])
+    score = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
     assert score.category_scores == {"SEC": 85, "OBS": 92, "PERF": 97, "OPS": 99}
     # (85 + 92 + 97 + 99) / 4 = 93.25 → 93
     assert score.overall == 93
@@ -165,8 +173,79 @@ def test_rules_coverage() -> None:
         [],
         ["R001", "R002", "R003", "R004", "R005", "R006", "R007", "R008"],
         [{"rule_id": "R009", "reason": "n/a"}, {"rule_id": "R010", "reason": "n/a"}],
+        _UNWEIGHTED,
     )
     assert score.rules_coverage == pytest.approx(0.8)
+
+
+# ---------------------------------------------------------------------------
+# Weighted / ISO 25010 scoring tests
+# ---------------------------------------------------------------------------
+
+
+def test_default_scoring_includes_all_iso_categories() -> None:
+    """With default ScoringConfig, all 4 ISO categories contribute even without findings."""
+    score = compute_maturity_score([], ["R001"], [])
+    assert score.overall == 100
+    assert score.grade == "A"
+
+
+def test_weighted_score_dilutes_single_category_findings() -> None:
+    """A critical finding in one category is diluted by clean categories."""
+    findings = [_finding(rule_id="security-check", severity="critical")]
+    score = compute_maturity_score(findings, ["R001"], [])
+    # security: 85, reliability: 100, performance: 100, maintainability: 100
+    # (85 + 100 + 100 + 100) / 4 = 96.25 → 96
+    assert score.category_scores["security"] == 85
+    assert score.overall == 96
+    assert score.grade == "A"
+
+
+def test_custom_weights_shift_overall() -> None:
+    """Higher weight on a bad category pulls overall score down more."""
+    findings = [_finding(rule_id="security-check", severity="critical")]
+    heavy_security = ScoringConfig(
+        category_weights={
+            "security": 3.0,
+            "reliability": 1.0,
+            "performance": 1.0,
+            "maintainability": 1.0,
+        },
+    )
+    score = compute_maturity_score(findings, ["R001"], [], heavy_security)
+    # security: 85×3 + reliability/performance/maintainability: 100×1 each
+    # (255 + 300) / 6 = 92.5 → 92
+    assert score.overall == 92
+
+
+def test_category_aliases_normalize_legacy_names() -> None:
+    """Observability and ops findings are aliased to ISO 25010 categories."""
+    findings = [
+        _finding(
+            rule_id="otel-missing", severity="high"
+        ),  # keyword: otel → observability → reliability
+        _finding(
+            rule_id="resource-limits-missing", severity="medium"
+        ),  # keyword: resource-limits → ops → maintainability
+    ]
+    score = compute_maturity_score(findings, ["R001"], [])
+    assert "reliability" in score.category_scores
+    assert "maintainability" in score.category_scores
+    assert "observability" not in score.category_scores
+    assert "ops" not in score.category_scores
+
+
+def test_custom_severity_deductions() -> None:
+    """Custom deductions override defaults."""
+    findings = [_finding(severity="critical")]
+    lenient = ScoringConfig(
+        category_weights={},
+        category_aliases={},
+        severity_deductions={"critical": 5, "high": 3, "medium": 1, "low": 0, "info": 0},
+    )
+    score = compute_maturity_score(findings, ["R001"], [], lenient)
+    # TEST: 100 - 5 = 95
+    assert score.overall == 95
 
 
 # ---------------------------------------------------------------------------
@@ -179,11 +258,12 @@ def test_trend_improved() -> None:
         [_finding(severity="low")],  # 100 - 1 = 99
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     baseline_findings = [
         _finding(severity="critical"),  # baseline: 100 - 15 = 85
     ]
-    trend = compute_trend(current, baseline_findings, ["R001"], [])
+    trend = compute_trend(current, baseline_findings, ["R001"], [], _UNWEIGHTED)
     assert trend.direction == "improved"
     assert trend.delta > 0
     assert trend.current_score == 99
@@ -196,11 +276,12 @@ def test_trend_regressed() -> None:
         [_finding(severity="critical"), _finding(severity="critical")],  # 100 - 30 = 70
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     baseline_findings = [
         _finding(severity="low"),  # baseline: 100 - 1 = 99
     ]
-    trend = compute_trend(current, baseline_findings, ["R001"], [])
+    trend = compute_trend(current, baseline_findings, ["R001"], [], _UNWEIGHTED)
     assert trend.direction == "regressed"
     assert trend.delta < 0
     assert trend.delta == -29
@@ -208,8 +289,8 @@ def test_trend_regressed() -> None:
 
 def test_trend_stable() -> None:
     findings = [_finding(severity="medium")]  # 100 - 3 = 97
-    current = compute_maturity_score(findings, ["R001"], [])
-    trend = compute_trend(current, findings, ["R001"], [])
+    current = compute_maturity_score(findings, ["R001"], [], _UNWEIGHTED)
+    trend = compute_trend(current, findings, ["R001"], [], _UNWEIGHTED)
     assert trend.direction == "stable"
     assert trend.delta == 0
 
@@ -219,13 +300,29 @@ def test_category_deltas_in_trend() -> None:
         [_finding(rule_id="SEC-001", severity="low")],  # SEC: 99
         ["R001"],
         [],
+        _UNWEIGHTED,
     )
     baseline_findings = [
         _finding(rule_id="SEC-001", severity="high"),  # SEC: 92
     ]
-    trend = compute_trend(current, baseline_findings, ["R001"], [])
+    trend = compute_trend(current, baseline_findings, ["R001"], [], _UNWEIGHTED)
     assert "SEC" in trend.category_deltas
     assert trend.category_deltas["SEC"] == 7  # 99 - 92
+
+
+def test_trend_with_weighted_scoring() -> None:
+    """Trend uses the same scoring config for both current and baseline."""
+    current = compute_maturity_score(
+        [_finding(rule_id="security-check", severity="low")],
+        ["R001"],
+        [],
+    )
+    baseline_findings = [
+        _finding(rule_id="security-check", severity="critical"),
+    ]
+    trend = compute_trend(current, baseline_findings, ["R001"], [])
+    assert trend.direction == "improved"
+    assert trend.delta > 0
 
 
 # ---------------------------------------------------------------------------
@@ -314,3 +411,80 @@ def test_cli_score_flag(tmp_path: Path) -> None:
     assert "Design Maturity Score:" in combined or "Design Maturity Score:" in (
         result.stderr if hasattr(result, "stderr") else ""
     ), f"Score not found in output:\n{combined}"
+
+
+def test_cli_score_with_custom_yaml_config(tmp_path: Path) -> None:
+    """Custom scoring config from YAML flows through to compute_maturity_score."""
+    from nfr_review.cli import cli
+
+    fixture = Path(__file__).parent / "fixtures" / "ci-sample-repo"
+    if not fixture.exists():
+        pytest.skip("ci-sample-repo fixture not found")
+
+    config_path = tmp_path / "nfr-review.yaml"
+    config_path.write_text(
+        "scoring:\n"
+        "  category_weights:\n"
+        "    security: 3.0\n"
+        "    reliability: 1.0\n"
+        "    performance: 1.0\n"
+        "    maintainability: 1.0\n"
+        "  severity_deductions:\n"
+        "    critical: 20\n"
+        "    high: 10\n"
+        "    medium: 5\n"
+        "    low: 2\n"
+        "    info: 0\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            str(fixture),
+            "--config",
+            str(config_path),
+            "--score",
+            "-q",
+            "--csv",
+            str(tmp_path / "out.csv"),
+            "--jsonl",
+            str(tmp_path / "out.jsonl"),
+        ],
+    )
+    assert result.exit_code in (0, 2), (
+        f"Unexpected exit code: {result.exit_code}\n{result.output}"
+    )
+    combined = (result.output or "") + (getattr(result, "stderr", "") or "")
+    assert "Design Maturity Score:" in combined
+
+
+def test_config_to_score_integration() -> None:
+    """End-to-end: ScoringConfig from YAML dict → compute_maturity_score honours weights."""
+    import tempfile
+
+    from nfr_review.config import load_config
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+    ) as f:
+        f.write(
+            "scoring:\n"
+            "  category_weights:\n"
+            "    security: 4.0\n"
+            "    reliability: 1.0\n"
+            "    performance: 1.0\n"
+            "    maintainability: 1.0\n"
+        )
+        f.flush()
+        cfg = load_config(Path(f.name))
+
+    findings = [_finding(rule_id="security-check", severity="critical")]
+    score = compute_maturity_score(findings, ["R001"], [], cfg.scoring)
+
+    # security: 100 - 15 = 85, others: 100
+    # weighted: (85×4 + 100×3) / 7 = 640/7 ≈ 91
+    assert score.category_scores["security"] == 85
+    assert score.overall == 91

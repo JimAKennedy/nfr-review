@@ -98,7 +98,8 @@ all command (nfr-review all <target1> <target2> ...):
 | Module | Owns | Does NOT own |
 |--------|------|-------------|
 | `cli.py` | Argument parsing, config loading, orchestration (`run`, `report`, `hygiene`, `arch`, `deps`, `issues`, `init`, `all`, `list-rules`, `explain`, `version`), `run_report_pipeline()` reusable pipeline, exit codes, summary output | Evidence gathering, rule evaluation, output formatting |
-| `config.py` | YAML loading, Pydantic validation, `Config`/`RulesConfig`/`CollectorsConfig` models | Tech detection, defaults beyond schema defaults |
+| `config.py` | YAML loading, Pydantic validation, `Config`/`RulesConfig`/`CollectorsConfig`/`ScoringConfig` models | Tech detection, defaults beyond schema defaults |
+| `scoring.py` | Maturity score computation, grade assignment, category mapping, trend tracking, baseline loading | Evidence gathering, rule evaluation, output writing |
 | `detect.py` | File-system probing for 18 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
 | `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `Band` | Serialization format details (CSV column order lives in output/) |
@@ -309,6 +310,97 @@ The `license` category contains four hygiene rules:
 
 HYG-LIC-004 is the only rule that does not require the `license-scan` collector —
 it reads project metadata files directly and works without scancode installed.
+
+## Design Maturity Scoring
+
+The `--score` flag (on `run`) and the report pipeline compute a 0–100 maturity
+score from findings and rule coverage. The algorithm lives in `scoring.py`.
+
+### Score Computation
+
+```
+For each finding:
+  category = _extract_category(rule_id, aliases)
+  deduction = severity_deductions[finding.severity]
+
+Per-category score = max(0, 100 − sum of deductions in that category)
+
+Overall = weighted average of all category scores:
+  Σ(category_score × weight) / Σ(weight)
+  Capped to [0, 100].
+```
+
+Categories with no findings default to 100 and still contribute to the
+overall score when they have a configured weight.
+
+### ISO 25010 Categories
+
+Four categories aligned to ISO/IEC 25010: `security`, `reliability`,
+`performance`, `maintainability`. Rule IDs are mapped via keyword matching
+(`_CATEGORY_KEYWORDS`) and then normalised through `category_aliases`
+(e.g. `observability` → `reliability`, `ops` → `maintainability`).
+
+### Severity Deductions (defaults)
+
+| Severity | Points |
+|----------|--------|
+| critical | 15 |
+| high | 8 |
+| medium | 3 |
+| low | 1 |
+| info | 0 |
+
+### Grade Scale
+
+| Grade | Score Range |
+|-------|------------|
+| A | ≥ 90 |
+| B | 75–89 |
+| C | 60–74 |
+| D | 45–59 |
+| F | < 45 |
+
+### Configuration
+
+Scoring is configured via `scoring:` in `nfr-review.yaml`:
+
+```yaml
+scoring:
+  category_weights:
+    security: 2.0        # double weight for security-critical project
+    reliability: 1.0
+    performance: 1.0
+    maintainability: 1.0
+  severity_deductions:
+    critical: 20
+    high: 10
+    medium: 5
+    low: 2
+    info: 0
+  category_aliases:
+    observability: reliability
+    ops: maintainability
+```
+
+Two-level merge: a central config provides defaults; each target repo's own
+`nfr-review.yaml` can override specific keys via `Config.with_repo_scoring()`.
+Dict fields are shallow-merged (repo keys win, central-only keys preserved).
+
+### Trend Tracking
+
+When `--baseline <path>` is provided alongside `--score`, the engine recomputes
+the baseline score using the same `ScoringConfig` and reports the delta:
+
+```
+overall_delta = current.overall − baseline.overall
+direction = "improved" | "regressed" | "stable"
+category_deltas = per-category current − baseline
+```
+
+### Rules Coverage
+
+`rules_coverage = rules_run / (rules_run + rules_skipped)`, shown as a
+percentage. Reflects how much of the rule set was applicable to the target.
 
 ## Fault Tolerance (R012)
 
