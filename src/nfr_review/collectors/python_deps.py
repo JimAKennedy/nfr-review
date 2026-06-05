@@ -13,6 +13,7 @@ from typing import Any
 
 from packaging.requirements import InvalidRequirement, Requirement
 
+from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
 from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
@@ -56,19 +57,19 @@ class PythonDepsCollector:
         client = DepsDevClient()
         client.prefetch_package_versions("pypi", [req.name for _, req in raw_deps])
         enrichment_errors: list[str] = []
-        dependencies: list[dict[str, Any]] = []
+        dependencies: list[DependencyItem] = []
 
         for source_file, req in raw_deps:
             dep = _enrich(client, req, source_file)
-            if dep["deps_dev_status"] != "ok":
-                enrichment_errors.append(f"{req.name}: {dep['deps_dev_status']}")
+            if dep.deps_dev_status != "ok":
+                enrichment_errors.append(f"{req.name}: {dep.deps_dev_status}")
             dependencies.append(dep)
 
-        payload: dict[str, Any] = {
-            "dependencies": dependencies,
-            "manifest_files_found": manifest_files,
-            "enrichment_errors": enrichment_errors,
-        }
+        payload = DepsPayload(
+            dependencies=dependencies,
+            manifest_files_found=manifest_files,
+            enrichment_errors=enrichment_errors,
+        )
 
         return [
             Evidence(
@@ -119,32 +120,38 @@ def _parse_pyproject_toml(path: Path) -> list[Requirement]:
     return reqs
 
 
-def _enrich(client: DepsDevClient, req: Requirement, source_file: str) -> dict[str, Any]:
+def _enrich(client: DepsDevClient, req: Requirement, source_file: str) -> DependencyItem:
     specifier_str = str(req.specifier) if req.specifier else ""
-    result: dict[str, Any] = {
-        "name": req.name,
-        "declared_version": specifier_str,
-        "version_constraint": specifier_str,
-        "source_file": source_file,
-        "latest_version": None,
-        "latest_release_date": None,
-        "deps_dev_status": "error",
-    }
 
     data = client.get_package_versions("pypi", req.name)
     if data is None:
-        return result
+        return DependencyItem(
+            name=req.name,
+            declared_version=specifier_str,
+            version_constraint=specifier_str,
+            source_file=source_file,
+        )
 
     versions = data.get("versions", [])
     if not versions:
-        result["deps_dev_status"] = "not_found"
-        return result
+        return DependencyItem(
+            name=req.name,
+            declared_version=specifier_str,
+            version_constraint=specifier_str,
+            source_file=source_file,
+            deps_dev_status="not_found",
+        )
 
     latest = pick_latest_version(versions)
-    result["latest_version"] = latest.get("versionKey", {}).get("version") if latest else None
-    result["latest_release_date"] = latest.get("publishedAt") if latest else None
-    result["deps_dev_status"] = "ok"
-    return result
+    return DependencyItem(
+        name=req.name,
+        declared_version=specifier_str,
+        version_constraint=specifier_str,
+        source_file=source_file,
+        latest_version=latest.get("versionKey", {}).get("version") if latest else None,
+        latest_release_date=latest.get("publishedAt") if latest else None,
+        deps_dev_status="ok",
+    )
 
 
 def _register() -> None:

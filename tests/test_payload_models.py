@@ -8,6 +8,24 @@ import pytest
 from pydantic import ValidationError
 
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload, AdrSummaryPayload
+from nfr_review.collectors.payloads.ci import (
+    CiPipelinePayload,
+    CiSummaryPayload,
+    CmakeTestSignalFile,
+    CmakeTestSignalsPayload,
+)
+from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+from nfr_review.collectors.payloads.dockerfile import (
+    DockerfileAnalysisPayload,
+    DockerStage,
+)
+from nfr_review.collectors.payloads.k8s import (
+    K8sContainer,
+    K8sManifestSummaryPayload,
+    K8sPdbPayload,
+    K8sResourcePayload,
+)
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.models import BasePayload, Evidence
 
 
@@ -157,3 +175,189 @@ class TestAdrSummaryPayload:
     def test_requires_all_fields(self) -> None:
         with pytest.raises(ValidationError):
             AdrSummaryPayload(total_adrs=1)  # type: ignore[call-arg]
+
+
+class TestDepsPayload:
+    def test_minimal_dependency_item(self) -> None:
+        d = DependencyItem(
+            name="requests",
+            declared_version=">=2.28",
+            version_constraint=">=2.28",
+            source_file="requirements.txt",
+        )
+        assert d.name == "requests"
+        assert d.deps_dev_status == "error"
+        assert d.scope is None
+        assert d.indirect is None
+
+    def test_full_dependency_item(self) -> None:
+        d = DependencyItem(
+            name="junit:junit",
+            declared_version="4.13.2",
+            version_constraint=">=4.13.2",
+            source_file="pom.xml",
+            latest_version="4.13.2",
+            latest_release_date="2021-02-13",
+            deps_dev_status="ok",
+            scope="test",
+        )
+        assert d.scope == "test"
+        assert d.latest_version == "4.13.2"
+
+    def test_deps_payload(self) -> None:
+        dep = DependencyItem(
+            name="click",
+            declared_version=">=8.1",
+            version_constraint=">=8.1",
+            source_file="pyproject.toml",
+            deps_dev_status="ok",
+        )
+        p = DepsPayload(
+            dependencies=[dep],
+            manifest_files_found=["pyproject.toml"],
+            enrichment_errors=[],
+        )
+        assert len(p.dependencies) == 1
+        assert p.dependencies[0].name == "click"
+
+    def test_rejects_extra_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            DependencyItem(  # type: ignore[call-arg]
+                name="x",
+                declared_version="1",
+                version_constraint="1",
+                source_file="f",
+                bogus="nope",
+            )
+
+    def test_dict_compat(self) -> None:
+        d = DependencyItem(
+            name="x",
+            declared_version="1",
+            version_constraint="1",
+            source_file="f",
+        )
+        assert "name" in d
+        assert d["name"] == "x"
+        assert d.get("name") == "x"
+        assert d.get("missing", "default") == "default"
+        assert "name" in d.keys()
+
+
+class TestCiPayloads:
+    def test_ci_pipeline(self) -> None:
+        p = CiPipelinePayload(
+            file_path=".github/workflows/ci.yml",
+            ci_system="github-actions",
+            has_test_step=True,
+            has_security_scan=False,
+            job_names=["build", "test"],
+            step_names=["checkout", "pytest"],
+        )
+        assert p.ci_system == "github-actions"
+        assert p.has_test_step is True
+
+    def test_cmake_test_signals(self) -> None:
+        sig = CmakeTestSignalFile(
+            file_path="CMakeLists.txt",
+            signals=["enable_testing", "add_test"],
+        )
+        p = CmakeTestSignalsPayload(files=[sig], has_test_framework=True)
+        assert len(p.files) == 1
+        assert p.files[0].file_path == "CMakeLists.txt"
+
+    def test_ci_summary(self) -> None:
+        p = CiSummaryPayload(
+            total_pipelines=2,
+            ci_systems=["github-actions", "gitlab-ci"],
+            any_test_step=True,
+            any_security_scan=True,
+        )
+        assert p.total_pipelines == 2
+
+
+class TestDockerfilePayloads:
+    def test_dockerfile_analysis(self) -> None:
+        stage = DockerStage(
+            name="build",
+            base_image="python",
+            base_tag="3.11-slim",
+            line=1,
+        )
+        p = DockerfileAnalysisPayload(
+            file_path="Dockerfile",
+            stages=[stage],
+            user_directives=[],
+            has_user_directive=False,
+            run_commands=[],
+            copy_add_commands=[],
+            env_args=[],
+            stage_count=1,
+            is_multistage=False,
+        )
+        assert p.stages[0].base_image == "python"
+        assert p.is_multistage is False
+
+    def test_rejects_extra_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            DockerStage(  # type: ignore[call-arg]
+                name="x",
+                base_image="y",
+                line=1,
+                bogus="nope",
+            )
+
+
+class TestK8sPayloads:
+    def test_k8s_resource(self) -> None:
+        container = K8sContainer(name="app", image="nginx:1.25")
+        p = K8sResourcePayload(
+            file_path="deploy.yaml",
+            kind="Deployment",
+            name="web",
+            containers=[container],
+        )
+        assert p.kind == "Deployment"
+        assert len(p.containers) == 1
+        assert p.containers[0].image == "nginx:1.25"
+
+    def test_k8s_pdb(self) -> None:
+        p = K8sPdbPayload(
+            file_path="pdb.yaml",
+            name="web-pdb",
+            min_available=1,
+        )
+        assert p.min_available == 1
+        assert p.max_unavailable is None
+
+    def test_k8s_summary(self) -> None:
+        p = K8sManifestSummaryPayload(
+            resource_counts={"Deployment": 2, "Service": 1},
+            has_network_policy=False,
+            files_parsed=3,
+            files_failed=0,
+        )
+        assert p.resource_counts["Deployment"] == 2
+
+    def test_container_coercion_from_dict(self) -> None:
+        p = K8sResourcePayload(
+            file_path="x.yaml",
+            kind="Deployment",
+            name="app",
+            containers=[{"name": "web", "image": "nginx"}],
+        )
+        assert isinstance(p.containers[0], K8sContainer)
+
+
+class TestRepoStructurePayload:
+    def test_construction(self) -> None:
+        p = RepoStructureSummaryPayload(
+            top_level_files=["README.md", "pyproject.toml"],
+            top_level_dirs=["src", "tests"],
+            has_readme=True,
+            readme_name="README.md",
+            has_git_dir=True,
+            has_pyproject=True,
+        )
+        assert p.has_readme is True
+        assert "README.md" in p.top_level_files

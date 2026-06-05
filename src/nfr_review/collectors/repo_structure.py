@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -33,14 +34,14 @@ class RepoStructureCollector:
             elif entry.is_dir():
                 top_dirs.append(entry.name)
 
-        payload: dict[str, Any] = {
-            "top_level_files": top_files,
-            "top_level_dirs": top_dirs,
-            "has_readme": readme_name is not None,
-            "readme_name": readme_name,
-            "has_git_dir": (repo_path / ".git").exists(),
-            "has_pyproject": (repo_path / "pyproject.toml").is_file(),
-        }
+        payload = RepoStructureSummaryPayload(
+            top_level_files=top_files,
+            top_level_dirs=top_dirs,
+            has_readme=readme_name is not None,
+            readme_name=readme_name,
+            has_git_dir=(repo_path / ".git").exists(),
+            has_pyproject=(repo_path / "pyproject.toml").is_file(),
+        )
 
         return [
             Evidence(

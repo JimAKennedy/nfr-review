@@ -27,6 +27,12 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from nfr_review.collectors.payloads.ci import (
+    CiPipelinePayload,
+    CiSummaryPayload,
+    CmakeTestSignalFile,
+    CmakeTestSignalsPayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -91,9 +97,9 @@ def _has_security_in_text(text: str) -> bool:
     return any(kw in text_lower for kw in _SECURITY_KEYWORDS)
 
 
-def _scan_cmake_test_signals(repo_path: Path) -> list[dict[str, Any]]:
+def _scan_cmake_test_signals(repo_path: Path) -> list[CmakeTestSignalFile]:
     """Scan CMakeLists.txt for test framework signals."""
-    results: list[dict[str, Any]] = []
+    results: list[CmakeTestSignalFile] = []
     for cmake_file in sorted(repo_path.rglob("CMakeLists.txt")):
         rel = cmake_file.relative_to(repo_path)
         if _is_hidden(rel):
@@ -106,10 +112,10 @@ def _scan_cmake_test_signals(repo_path: Path) -> list[dict[str, Any]]:
         if matches:
             signals = [m.split("(")[0].strip().lower() for m in matches]
             results.append(
-                {
-                    "file_path": str(rel),
-                    "signals": sorted(set(signals)),
-                }
+                CmakeTestSignalFile(
+                    file_path=str(rel),
+                    signals=sorted(set(signals)),
+                )
             )
     return results
 
@@ -283,10 +289,10 @@ class CiArtifactCollector:
                     collector_version=self.version,
                     locator="cmake-test-signals",
                     kind="cmake-test-signals",
-                    payload={
-                        "files": cmake_signals,
-                        "has_test_framework": True,
-                    },
+                    payload=CmakeTestSignalsPayload(
+                        files=cmake_signals,
+                        has_test_framework=True,
+                    ),
                 )
             )
 
@@ -304,12 +310,12 @@ class CiArtifactCollector:
                     collector_version=self.version,
                     locator="ci-summary",
                     kind="ci-summary",
-                    payload={
-                        "total_pipelines": len(pipelines),
-                        "ci_systems": ci_systems,
-                        "any_test_step": any_test,
-                        "any_security_scan": any_security,
-                    },
+                    payload=CiSummaryPayload(
+                        total_pipelines=len(pipelines),
+                        ci_systems=ci_systems,
+                        any_test_step=any_test,
+                        any_security_scan=any_security,
+                    ),
                 )
             )
 
@@ -336,19 +342,19 @@ class CiArtifactCollector:
 
     def _parse_ci_file(
         self, ci_file: Path, ci_system: str, repo_path: Path
-    ) -> dict[str, Any] | None:
+    ) -> CiPipelinePayload | None:
         """Parse a CI config file and return payload."""
         rel = ci_file.relative_to(repo_path)
 
         if ci_system == "jenkins":
-            return {
-                "file_path": str(rel),
-                "ci_system": ci_system,
-                "has_test_step": False,
-                "has_security_scan": False,
-                "job_names": [],
-                "step_names": [],
-            }
+            return CiPipelinePayload(
+                file_path=str(rel),
+                ci_system=ci_system,
+                has_test_step=False,
+                has_security_scan=False,
+                job_names=[],
+                step_names=[],
+            )
 
         yaml_data = self._yaml.load(ci_file)
         if not isinstance(yaml_data, dict):
@@ -365,9 +371,11 @@ class CiArtifactCollector:
         else:
             return None
 
-        parsed["file_path"] = str(rel)
-        parsed["ci_system"] = ci_system
-        return parsed
+        return CiPipelinePayload(
+            file_path=str(rel),
+            ci_system=ci_system,
+            **parsed,
+        )
 
 
 def _register() -> None:

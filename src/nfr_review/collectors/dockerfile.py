@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from tree_sitter import Node, Parser
 
 from nfr_review.collectors.ast_common import make_parser
+from nfr_review.collectors.payloads.dockerfile import DockerfileAnalysisPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -251,7 +252,7 @@ class DockerfileCollector:
                     collector_version=self.version,
                     locator=str(rel),
                     kind="dockerfile-analysis",
-                    payload=payload,
+                    payload=DockerfileAnalysisPayload(**payload),
                 )
             )
         return evidence

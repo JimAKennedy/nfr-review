@@ -36,6 +36,16 @@ class BasePayload(BaseModel):
         except AttributeError:
             raise KeyError(key) from None
 
+    def __contains__(self, key: object) -> bool:
+        """Dict-compatible membership test for gradual migration."""
+        if not isinstance(key, str):
+            return False
+        return key in type(self).model_fields
+
+    def keys(self) -> list[str]:
+        """Dict-compatible keys() for gradual migration."""
+        return list(type(self).model_fields.keys())
+
 
 class Evidence(BaseModel):
     """A single piece of evidence produced by a collector."""
