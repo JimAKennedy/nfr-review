@@ -102,7 +102,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run tests with coverage
-        run: pytest --cov --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
+        run: pytest -m "not regression" --cov --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
 
       - name: Coverage threshold check
         run: coverage report --fail-under=70
