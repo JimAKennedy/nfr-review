@@ -53,6 +53,13 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.telemetry import (
+    TelemetryConfigSummaryPayload,
+    TelemetryExporterTarget,
+    TelemetryPipelinePayload,
+    TelemetrySdkInitPayload,
+    TelemetrySyntheticConfigPayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -183,8 +190,10 @@ def _is_otel_collector_config(path: Path, doc: dict[str, Any]) -> bool:
     return False
 
 
-def _extract_exporter_targets(exporters: dict[str, Any]) -> list[dict[str, Any]]:
-    targets: list[dict[str, Any]] = []
+def _extract_exporter_targets(
+    exporters: dict[str, Any],
+) -> list[TelemetryExporterTarget]:
+    targets: list[TelemetryExporterTarget] = []
     for name, cfg in exporters.items():
         if not isinstance(cfg, dict):
             cfg = {}
@@ -195,13 +204,7 @@ def _extract_exporter_targets(exporters: dict[str, Any]) -> list[dict[str, Any]]
             if val:
                 endpoint = str(val)
                 break
-        targets.append(
-            {
-                "name": name,
-                "type": base_type,
-                "endpoint": endpoint,
-            }
-        )
+        targets.append(TelemetryExporterTarget(name=name, type=base_type, endpoint=endpoint))
     return targets
 
 
@@ -455,17 +458,17 @@ class TelemetryConfigCollector:
                         collector_version=self.version,
                         locator=str(rel),
                         kind="telemetry-pipeline",
-                        payload={
-                            "file_path": str(rel),
-                            "receivers": receivers,
-                            "processors": processors,
-                            "exporters": exporters,
-                            "pipelines": pipelines,
-                            "signal_types": signal_types,
-                            "exporter_targets": exporter_targets,
-                            "resource_attributes": resource_attributes,
-                            "extensions": extensions,
-                        },
+                        payload=TelemetryPipelinePayload(
+                            file_path=str(rel),
+                            receivers=receivers,
+                            processors=processors,
+                            exporters=exporters,
+                            pipelines=pipelines,
+                            signal_types=signal_types,
+                            exporter_targets=exporter_targets,
+                            resource_attributes=resource_attributes,
+                            extensions=extensions,
+                        ),
                     )
                 )
                 continue
@@ -480,10 +483,7 @@ class TelemetryConfigCollector:
                         collector_version=self.version,
                         locator=str(rel),
                         kind="telemetry-synthetic-config",
-                        payload={
-                            "file_path": str(rel),
-                            **synth,
-                        },
+                        payload=TelemetrySyntheticConfigPayload(file_path=str(rel), **synth),
                     )
                 )
 
@@ -517,7 +517,7 @@ class TelemetryConfigCollector:
                         collector_version=self.version,
                         locator=str(rel),
                         kind="telemetry-sdk-init",
-                        payload=sdk_info,
+                        payload=TelemetrySdkInitPayload(**sdk_info),
                     )
                 )
 
@@ -527,14 +527,14 @@ class TelemetryConfigCollector:
                 collector_version=self.version,
                 locator=".",
                 kind="telemetry-config-summary",
-                payload={
-                    "collector_configs_found": collector_configs_found,
-                    "sdk_instrumentations_found": sdk_instrumentations_found,
-                    "synthetic_configs_found": synthetic_configs_found,
-                    "signal_coverage": signal_coverage,
-                    "files_parsed": files_parsed,
-                    "files_failed": files_failed,
-                },
+                payload=TelemetryConfigSummaryPayload(
+                    collector_configs_found=collector_configs_found,
+                    sdk_instrumentations_found=sdk_instrumentations_found,
+                    synthetic_configs_found=synthetic_configs_found,
+                    signal_coverage=signal_coverage,
+                    files_parsed=files_parsed,
+                    files_failed=files_failed,
+                ),
             )
         )
 

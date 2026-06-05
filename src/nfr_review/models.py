@@ -46,6 +46,14 @@ class BasePayload(BaseModel):
         """Dict-compatible keys() for gradual migration."""
         return list(type(self).model_fields.keys())
 
+    def values(self) -> list[Any]:
+        """Dict-compatible values() for gradual migration."""
+        return [getattr(self, k) for k in type(self).model_fields]
+
+    def items(self) -> list[tuple[str, Any]]:
+        """Dict-compatible items() for gradual migration."""
+        return [(k, getattr(self, k)) for k in type(self).model_fields]
+
 
 class Evidence(BaseModel):
     """A single piece of evidence produced by a collector."""

@@ -19,6 +19,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -110,13 +111,13 @@ class OTelCollector:
                     collector_version=self.version,
                     locator=str(rel),
                     kind="otel-analysis",
-                    payload={
-                        "file_path": str(rel),
-                        "receivers": receivers,
-                        "processors": processors,
-                        "exporters": exporters,
-                        "pipelines": pipelines,
-                    },
+                    payload=OtelAnalysisPayload(
+                        file_path=str(rel),
+                        receivers=receivers,
+                        processors=processors,
+                        exporters=exporters,
+                        pipelines=pipelines,
+                    ),
                 )
             )
 

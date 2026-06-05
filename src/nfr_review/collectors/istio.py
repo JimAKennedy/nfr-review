@@ -23,6 +23,7 @@ from typing import Any
 
 from ruamel.yaml import YAML, YAMLError
 
+from nfr_review.collectors.payloads.istio import IstioAnalysisPayload, IstioResource
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -67,7 +68,7 @@ class IstioCollector:
                 logger.debug("YAML parse error in %s: %s", rel, exc)
                 continue
 
-            resources: list[dict[str, Any]] = []
+            resources: list[IstioResource] = []
             for doc_index, doc in enumerate(docs):
                 if not isinstance(doc, dict):
                     continue
@@ -81,14 +82,14 @@ class IstioCollector:
                     continue
                 metadata = doc.get("metadata", {}) or {}
                 resources.append(
-                    {
-                        "kind": kind,
-                        "api_version": api_version,
-                        "name": metadata.get("name", ""),
-                        "namespace": metadata.get("namespace") or None,
-                        "spec": doc.get("spec", {}),
-                        "line": doc_index + 1,
-                    }
+                    IstioResource(
+                        kind=kind,
+                        api_version=api_version,
+                        name=metadata.get("name", ""),
+                        namespace=metadata.get("namespace") or None,
+                        spec=doc.get("spec", {}),
+                        line=doc_index + 1,
+                    )
                 )
 
             if resources:
@@ -98,10 +99,10 @@ class IstioCollector:
                         collector_version=self.version,
                         locator=str(rel),
                         kind="istio-analysis",
-                        payload={
-                            "file_path": str(rel),
-                            "resources": resources,
-                        },
+                        payload=IstioAnalysisPayload(
+                            file_path=str(rel),
+                            resources=resources,
+                        ),
                     )
                 )
 

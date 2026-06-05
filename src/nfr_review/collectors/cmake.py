@@ -31,6 +31,11 @@ import re
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.cmake import (
+    CmakeConfigPayload,
+    CmakeFetchContentDeclare,
+    CmakeOption,
+)
 from nfr_review.models import Evidence
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
@@ -52,8 +57,8 @@ _OPTION_RE = re.compile(r'option\s*\(\s*(\w+)\s+"([^"]*)"', re.IGNORECASE)
 _PINNED_TAG_RE = re.compile(r"^(v?\d+[\d.]*|[0-9a-f]{7,40})$")
 
 
-def _parse_fetchcontent_blocks(content: str) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _parse_fetchcontent_blocks(content: str) -> list[CmakeFetchContentDeclare]:
+    results: list[CmakeFetchContentDeclare] = []
     for m in _FETCHCONTENT_DECLARE_RE.finditer(content):
         name = m.group(1)
         line_num = content[: m.start()].count("\n") + 1
@@ -75,13 +80,13 @@ def _parse_fetchcontent_blocks(content: str) -> list[dict[str, Any]]:
         tag = tag_m.group(1) if tag_m else ""
         is_pinned = bool(_PINNED_TAG_RE.match(tag)) if tag else False
         results.append(
-            {
-                "name": name,
-                "url": url,
-                "tag": tag,
-                "line": line_num,
-                "is_pinned": is_pinned,
-            }
+            CmakeFetchContentDeclare(
+                name=name,
+                url=url,
+                tag=tag,
+                line=line_num,
+                is_pinned=is_pinned,
+            )
         )
     return results
 
@@ -130,15 +135,15 @@ class CmakeCollector:
                 re.search(r"set\s*\(\s*CMAKE_CXX_FLAGS", content, re.IGNORECASE)
             )
             has_install = bool(re.search(r"install\s*\(", content, re.IGNORECASE))
-            options: list[dict[str, Any]] = []
+            options: list[CmakeOption] = []
             for om in _OPTION_RE.finditer(content):
                 line_num = content[: om.start()].count("\n") + 1
                 options.append(
-                    {
-                        "name": om.group(1),
-                        "description": om.group(2),
-                        "line": line_num,
-                    }
+                    CmakeOption(
+                        name=om.group(1),
+                        description=om.group(2),
+                        line=line_num,
+                    )
                 )
             evidence.append(
                 Evidence(
@@ -146,18 +151,18 @@ class CmakeCollector:
                     collector_version=self.version,
                     locator=str(rel),
                     kind="cmake-config",
-                    payload={
-                        "file_path": str(rel),
-                        "cmake_minimum_required": cmake_min,
-                        "project_name": project_name,
-                        "project_version": project_version,
-                        "fetchcontent_declares": fetchcontent,
-                        "has_target_compile_features": has_target_features,
-                        "has_target_compile_options": has_target_options,
-                        "has_global_cmake_flags": has_global_flags,
-                        "has_install_targets": has_install,
-                        "options": options,
-                    },
+                    payload=CmakeConfigPayload(
+                        file_path=str(rel),
+                        cmake_minimum_required=cmake_min,
+                        project_name=project_name,
+                        project_version=project_version,
+                        fetchcontent_declares=fetchcontent,
+                        has_target_compile_features=has_target_features,
+                        has_target_compile_options=has_target_options,
+                        has_global_cmake_flags=has_global_flags,
+                        has_install_targets=has_install,
+                        options=options,
+                    ),
                 )
             )
         return evidence

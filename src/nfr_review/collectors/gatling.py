@@ -30,6 +30,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.gatling import (
+    GatlingResultPayload,
+    GatlingSummaryPayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -134,7 +138,7 @@ class GatlingCollector:
                 sim_dir = str(rel.parent)
                 simulation_dirs.append(sim_dir)
 
-                payload = {"simulation_dir": sim_dir, **metrics}
+                payload = GatlingResultPayload(simulation_dir=sim_dir, **metrics)
 
                 evidence.append(
                     Evidence(
@@ -154,10 +158,10 @@ class GatlingCollector:
                     collector_version=self.version,
                     locator="gatling-summary",
                     kind="gatling-summary",
-                    payload={
-                        "simulation_count": len(simulation_dirs),
-                        "simulations": simulation_dirs,
-                    },
+                    payload=GatlingSummaryPayload(
+                        simulation_count=len(simulation_dirs),
+                        simulations=simulation_dirs,
+                    ),
                 )
             )
 

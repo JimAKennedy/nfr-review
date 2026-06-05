@@ -30,6 +30,11 @@ import xml.etree.ElementTree as ET  # nosec B405
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.jacoco import (
+    JacocoCoverageMetrics,
+    JacocoPackageCoverage,
+    JacocoReportPayload,
+)
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -70,23 +75,23 @@ def _extract_counters(element: ET.Element) -> dict[str, dict[str, int]]:
     return counters
 
 
-def _coverage_from_counters(counters: dict[str, dict[str, int]]) -> dict[str, Any]:
-    """Build coverage metrics dict from counter data."""
+def _coverage_from_counters(counters: dict[str, dict[str, int]]) -> JacocoCoverageMetrics:
+    """Build coverage metrics from counter data."""
     line = counters.get("LINE", {"covered": 0, "missed": 0})
     branch = counters.get("BRANCH", {"covered": 0, "missed": 0})
     instruction = counters.get("INSTRUCTION", {"covered": 0, "missed": 0})
 
-    return {
-        "line_covered": line["covered"],
-        "line_missed": line["missed"],
-        "line_pct": _pct(line["covered"], line["missed"]),
-        "branch_covered": branch["covered"],
-        "branch_missed": branch["missed"],
-        "branch_pct": _pct(branch["covered"], branch["missed"]),
-        "instruction_covered": instruction["covered"],
-        "instruction_missed": instruction["missed"],
-        "instruction_pct": _pct(instruction["covered"], instruction["missed"]),
-    }
+    return JacocoCoverageMetrics(
+        line_covered=line["covered"],
+        line_missed=line["missed"],
+        line_pct=_pct(line["covered"], line["missed"]),
+        branch_covered=branch["covered"],
+        branch_missed=branch["missed"],
+        branch_pct=_pct(branch["covered"], branch["missed"]),
+        instruction_covered=instruction["covered"],
+        instruction_missed=instruction["missed"],
+        instruction_pct=_pct(instruction["covered"], instruction["missed"]),
+    )
 
 
 class JaCoCoReportCollector:
@@ -134,26 +139,26 @@ class JaCoCoReportCollector:
                 overall = _coverage_from_counters(overall_counters)
 
                 # Extract per-package coverage
-                packages: list[dict[str, Any]] = []
+                packages: list[JacocoPackageCoverage] = []
                 for pkg in root.findall("package"):
                     pkg_name = pkg.get("name", "unknown")
                     pkg_counters = _extract_counters(pkg)
                     pkg_cov = _coverage_from_counters(pkg_counters)
                     packages.append(
-                        {
-                            "name": pkg_name,
-                            "line_pct": pkg_cov["line_pct"],
-                            "branch_pct": pkg_cov["branch_pct"],
-                            "instruction_pct": pkg_cov["instruction_pct"],
-                        }
+                        JacocoPackageCoverage(
+                            name=pkg_name,
+                            line_pct=pkg_cov.line_pct,
+                            branch_pct=pkg_cov.branch_pct,
+                            instruction_pct=pkg_cov.instruction_pct,
+                        )
                     )
 
-                payload = {
-                    "report_path": str(rel),
-                    "report_name": report_name,
-                    "overall": overall,
-                    "packages": packages,
-                }
+                payload = JacocoReportPayload(
+                    report_path=str(rel),
+                    report_name=report_name,
+                    overall=overall,
+                    packages=packages,
+                )
 
                 evidence.append(
                     Evidence(

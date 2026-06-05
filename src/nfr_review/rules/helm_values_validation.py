@@ -43,7 +43,7 @@ class HelmValuesValidationRule:
         findings: list[Finding] = []
         for ev in helm_evidence:
             chart_path = ev.payload.get("chart_path", ev.locator)
-            values = ev.payload.get("values", {})
+            values = ev.payload.get("chart_values", {})
 
             resources = values.get("resources")
             if not resources or (

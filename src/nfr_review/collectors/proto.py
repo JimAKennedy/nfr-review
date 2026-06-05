@@ -47,6 +47,16 @@ import re
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.proto import (
+    ProtoAnalysisPayload,
+    ProtoEnum,
+    ProtoEnumValue,
+    ProtoField,
+    ProtoMessage,
+    ProtoReservedRange,
+    ProtoRpcMethod,
+    ProtoService,
+)
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -98,24 +108,24 @@ def _line_number(source: str, pos: int) -> int:
     return source[:pos].count("\n") + 1
 
 
-def _parse_reserved(block: str) -> tuple[list[int], list[dict[str, int]]]:
+def _parse_reserved(block: str) -> tuple[list[int], list[ProtoReservedRange]]:
     numbers: list[int] = []
-    ranges: list[dict[str, int]] = []
+    ranges: list[ProtoReservedRange] = []
     for m in _RE_RESERVED_NUMS.finditer(block):
         for part in m.group(1).split(","):
             part = part.strip()
             if "to" in part:
                 lo, hi = part.split("to")
                 lo_i, hi_i = int(lo.strip()), int(hi.strip())
-                ranges.append({"start": lo_i, "end": hi_i})
+                ranges.append(ProtoReservedRange(start=lo_i, end=hi_i))
                 numbers.extend(range(lo_i, hi_i + 1))
             elif part:
                 numbers.append(int(part))
     return numbers, ranges
 
 
-def _parse_fields(block: str, block_offset: int, source: str) -> list[dict[str, Any]]:
-    fields: list[dict[str, Any]] = []
+def _parse_fields(block: str, block_offset: int, source: str) -> list[ProtoField]:
+    fields: list[ProtoField] = []
     for m in _RE_FIELD.finditer(block):
         label_raw = (m.group(1) or "").strip()
         if label_raw.startswith("map"):
@@ -123,19 +133,19 @@ def _parse_fields(block: str, block_offset: int, source: str) -> list[dict[str, 
         else:
             label = label_raw
         fields.append(
-            {
-                "name": m.group(3),
-                "number": int(m.group(4)),
-                "type": m.group(2),
-                "label": label,
-                "line": _line_number(source, block_offset + m.start()),
-            }
+            ProtoField(
+                name=m.group(3),
+                number=int(m.group(4)),
+                type=m.group(2),
+                label=label,
+                line=_line_number(source, block_offset + m.start()),
+            )
         )
     return fields
 
 
-def _parse_messages(source: str) -> list[dict[str, Any]]:
-    messages: list[dict[str, Any]] = []
+def _parse_messages(source: str) -> list[ProtoMessage]:
+    messages: list[ProtoMessage] = []
     for m in _RE_MESSAGE.finditer(source):
         comment_block = m.group(1)
         name = m.group(2)
@@ -144,62 +154,62 @@ def _parse_messages(source: str) -> list[dict[str, Any]]:
         fields = _parse_fields(block, block_offset, source)
         reserved_numbers, reserved_ranges = _parse_reserved(block)
         messages.append(
-            {
-                "name": name,
-                "line": _line_number(source, m.start() + len(comment_block)),
-                "has_comment": bool(comment_block.strip()),
-                "fields": fields,
-                "reserved_numbers": reserved_numbers,
-                "reserved_ranges": reserved_ranges,
-            }
+            ProtoMessage(
+                name=name,
+                line=_line_number(source, m.start() + len(comment_block)),
+                has_comment=bool(comment_block.strip()),
+                fields=fields,
+                reserved_numbers=reserved_numbers,
+                reserved_ranges=reserved_ranges,
+            )
         )
     return messages
 
 
-def _parse_services(source: str) -> list[dict[str, Any]]:
-    services: list[dict[str, Any]] = []
+def _parse_services(source: str) -> list[ProtoService]:
+    services: list[ProtoService] = []
     for m in _RE_SERVICE.finditer(source):
         comment_block = m.group(1)
         name = m.group(2)
         block = _extract_block(source, m.start())
         block_offset = source.find("{", m.start()) + 1
-        methods: list[dict[str, Any]] = []
+        methods: list[ProtoRpcMethod] = []
         for rpc_m in _RE_RPC.finditer(block):
             rpc_comment = rpc_m.group(1)
             methods.append(
-                {
-                    "name": rpc_m.group(2),
-                    "request_type": rpc_m.group(3),
-                    "response_type": rpc_m.group(4),
-                    "line": _line_number(source, block_offset + rpc_m.start()),
-                    "has_comment": bool(rpc_comment.strip()),
-                }
+                ProtoRpcMethod(
+                    name=rpc_m.group(2),
+                    request_type=rpc_m.group(3),
+                    response_type=rpc_m.group(4),
+                    line=_line_number(source, block_offset + rpc_m.start()),
+                    has_comment=bool(rpc_comment.strip()),
+                )
             )
         services.append(
-            {
-                "name": name,
-                "line": _line_number(source, m.start() + len(comment_block)),
-                "has_comment": bool(comment_block.strip()),
-                "methods": methods,
-            }
+            ProtoService(
+                name=name,
+                line=_line_number(source, m.start() + len(comment_block)),
+                has_comment=bool(comment_block.strip()),
+                methods=methods,
+            )
         )
     return services
 
 
-def _parse_enums(source: str) -> list[dict[str, Any]]:
-    enums: list[dict[str, Any]] = []
+def _parse_enums(source: str) -> list[ProtoEnum]:
+    enums: list[ProtoEnum] = []
     for m in _RE_ENUM.finditer(source):
         name = m.group(1)
         block = _extract_block(source, m.start())
-        values: list[dict[str, Any]] = []
+        enum_vals: list[ProtoEnumValue] = []
         for vm in _RE_ENUM_VALUE.finditer(block):
-            values.append({"name": vm.group(1), "number": int(vm.group(2))})
+            enum_vals.append(ProtoEnumValue(name=vm.group(1), number=int(vm.group(2))))
         enums.append(
-            {
-                "name": name,
-                "line": _line_number(source, m.start()),
-                "values": values,
-            }
+            ProtoEnum(
+                name=name,
+                line=_line_number(source, m.start()),
+                enum_values=enum_vals,
+            )
         )
     return enums
 
@@ -244,11 +254,11 @@ class ProtoCollector:
                 logger.debug("Cannot read %s: %s", rel, exc)
                 continue
             try:
-                payload = _parse_proto(source)
+                parsed = _parse_proto(source)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
-            payload["file_path"] = str(rel)
+            payload = ProtoAnalysisPayload(file_path=str(rel), **parsed)
             evidence.append(
                 Evidence(
                     collector_name=self.name,

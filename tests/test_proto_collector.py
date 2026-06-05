@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from nfr_review.collectors.payloads.proto import ProtoReservedRange
 from nfr_review.collectors.proto import ProtoCollector
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
@@ -186,7 +187,7 @@ class TestWithReserved:
         results = collector.collect(FIXTURES, config=None)
         payload = _payload_by_path(results, "with_reserved.proto")
         product = next(m for m in payload["messages"] if m["name"] == "Product")
-        assert product["reserved_ranges"] == [{"start": 2, "end": 4}]
+        assert product["reserved_ranges"] == [ProtoReservedRange(start=2, end=4)]
         assert 2 in product["reserved_numbers"]
         assert 3 in product["reserved_numbers"]
         assert 4 in product["reserved_numbers"]
