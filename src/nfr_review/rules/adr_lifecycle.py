@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
@@ -29,8 +30,16 @@ class AdrLifecycleGapRule:
                 skip_reason="no ADR evidence available",
             )
 
-        with_status = [e for e in adr_docs if e.payload.get("status")]
-        without_status = [e for e in adr_docs if not e.payload.get("status")]
+        with_status = [
+            e
+            for e in adr_docs
+            if isinstance(e.payload, AdrDocumentPayload) and e.payload.status
+        ]
+        without_status = [
+            e
+            for e in adr_docs
+            if isinstance(e.payload, AdrDocumentPayload) and not e.payload.status
+        ]
 
         if not with_status:
             return RuleResult(
@@ -58,7 +67,12 @@ class AdrLifecycleGapRule:
 
         if without_status:
             missing_files = ", ".join(
-                e.payload.get("file_path", e.locator) for e in without_status[:3]
+                (
+                    e.payload.file_path
+                    if isinstance(e.payload, AdrDocumentPayload)
+                    else e.locator
+                )
+                for e in without_status[:3]
             )
             return RuleResult(
                 rule_id=self.id,

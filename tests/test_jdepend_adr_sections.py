@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from nfr_review.models import Evidence
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload, AdrSummaryPayload
+from nfr_review.models import BasePayload, Evidence
 from nfr_review.output.jdepend_section import (
     build_adr_section,
     build_derived_adrs_section,
@@ -10,7 +11,7 @@ from nfr_review.output.jdepend_section import (
 )
 
 
-def _ev(kind: str, payload: dict, locator: str = ".") -> Evidence:
+def _ev(kind: str, payload: dict | BasePayload, locator: str = ".") -> Evidence:
     return Evidence(
         collector_name="test",
         collector_version="0.1.0",
@@ -32,31 +33,31 @@ class TestBuildAdrSection:
         evidence = [
             _ev(
                 "adr-document",
-                {
-                    "file_path": "docs/adr/0001-use-spring.md",
-                    "title": "Use Spring Boot",
-                    "status": "accepted",
-                    "superseded_by": None,
-                },
+                AdrDocumentPayload(
+                    file_path="docs/adr/0001-use-spring.md",
+                    title="Use Spring Boot",
+                    status="accepted",
+                    superseded_by=None,
+                ),
                 locator="docs/adr/0001-use-spring.md",
             ),
             _ev(
                 "adr-document",
-                {
-                    "file_path": "docs/adr/0002-use-postgres.md",
-                    "title": "Use PostgreSQL",
-                    "status": "proposed",
-                    "superseded_by": "3",
-                },
+                AdrDocumentPayload(
+                    file_path="docs/adr/0002-use-postgres.md",
+                    title="Use PostgreSQL",
+                    status="proposed",
+                    superseded_by="3",
+                ),
                 locator="docs/adr/0002-use-postgres.md",
             ),
             _ev(
                 "adr-summary",
-                {
-                    "total_adrs": 2,
-                    "statuses": {"accepted": 1, "proposed": 1},
-                    "has_lifecycle_tracking": True,
-                },
+                AdrSummaryPayload(
+                    total_adrs=2,
+                    statuses={"accepted": 1, "proposed": 1},
+                    has_lifecycle_tracking=True,
+                ),
                 locator="adr-summary",
             ),
         ]
@@ -73,7 +74,7 @@ class TestBuildAdrSection:
         evidence = [
             _ev(
                 "adr-document",
-                {"file_path": "adr/0001.md", "title": "First ADR", "status": None},
+                AdrDocumentPayload(file_path="adr/0001.md", title="First ADR", status=None),
                 locator="adr/0001.md",
             ),
         ]

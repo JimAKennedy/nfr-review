@@ -1,7 +1,8 @@
-# Dogfood workflow: run nfr-review against itself nightly.
-# Uses `./` (local action) instead of the released tag.
+# Nightly CI: dogfood nfr-review against itself + run regression test suite.
+# Regression tests clone public repos and diff output against snapshot baselines.
+# They are excluded from PR CI to keep feedback fast (<1 min vs ~6 min).
 
-name: NFR Review (nightly)
+name: Nightly
 
 on:
   schedule:
@@ -17,8 +18,9 @@ permissions:
   security-events: write
 
 jobs:
+  # ── Dogfood: run nfr-review on itself ────────────────────────────────────
   nfr-review:
-    name: NFR Review (nightly)
+    name: NFR Review (dogfood)
     runs-on: ubuntu-latest
 
     steps:
@@ -56,7 +58,7 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## NFR Review (nightly)" >> $GITHUB_STEP_SUMMARY
+          echo "## NFR Review (dogfood)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
@@ -64,3 +66,65 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ── Regression: snapshot tests against public corpus repos ───────────────
+  regression:
+    name: Regression (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ matrix.python-version }}-
+
+      - name: Cache regression repos
+        uses: actions/cache@v5
+        with:
+          path: .regression-repos
+          key: regression-repos-${{ hashFiles('tests/regression/manifest.yaml') }}
+          restore-keys: |
+            regression-repos-
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: 'latest'
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run regression tests
+        run: pytest -m regression --timeout=600 -v --junitxml=regression-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: regression-results
+          path: regression-results.xml
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Regression Tests (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f regression-results.xml ]; then
+            echo "Results uploaded as artifact." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No results file generated." >> $GITHUB_STEP_SUMMARY
+          fi

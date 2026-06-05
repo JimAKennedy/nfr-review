@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
@@ -36,10 +37,14 @@ class AdrGapRule:
         existing_titles = set()
         superseded_titles = set()
         for ev in existing:
-            title = (ev.payload.get("title") or "").lower().strip()
+            if isinstance(ev.payload, AdrDocumentPayload):
+                title = (ev.payload.title or "").lower().strip()
+                status = ev.payload.status or ""
+            else:
+                title = (ev.payload.get("title") or "").lower().strip()
+                status = ev.payload.get("status", "")
             if title:
                 existing_titles.add(title)
-            status = ev.payload.get("status", "")
             if status and "superseded" in status.lower():
                 superseded_titles.add(title)
 

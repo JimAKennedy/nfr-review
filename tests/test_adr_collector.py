@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from nfr_review.collectors.adr import AdrCollector
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload, AdrSummaryPayload
 
 FIXTURES = Path(__file__).parent / "fixtures" / "adr-sample-repo"
 
@@ -46,27 +47,31 @@ class TestFrontmatterParsing:
     def test_extracts_status_from_frontmatter(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0001 = next(e for e in results if e.kind == "adr-document" and "0001" in e.locator)
-        assert adr_0001.payload["status"] == "accepted"
-        assert adr_0001.payload["has_frontmatter"] is True
+        assert isinstance(adr_0001.payload, AdrDocumentPayload)
+        assert adr_0001.payload.status == "accepted"
+        assert adr_0001.payload.has_frontmatter is True
 
     def test_extracts_date_from_frontmatter(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0001 = next(e for e in results if e.kind == "adr-document" and "0001" in e.locator)
-        assert adr_0001.payload["date"] == "2024-01-15"
+        assert isinstance(adr_0001.payload, AdrDocumentPayload)
+        assert adr_0001.payload.date == "2024-01-15"
 
     def test_extracts_superseded_by_from_frontmatter(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0003 = next(e for e in results if e.kind == "adr-document" and "0003" in e.locator)
-        assert adr_0003.payload["superseded_by"] == "0002"
-        assert adr_0003.payload["status"] == "superseded"
+        assert isinstance(adr_0003.payload, AdrDocumentPayload)
+        assert adr_0003.payload.superseded_by == "0002"
+        assert adr_0003.payload.status == "superseded"
 
 
 class TestHeadingStatusExtraction:
     def test_extracts_status_from_heading_section(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0002 = next(e for e in results if e.kind == "adr-document" and "0002" in e.locator)
-        assert adr_0002.payload["status"] == "accepted"
-        assert adr_0002.payload["has_frontmatter"] is False
+        assert isinstance(adr_0002.payload, AdrDocumentPayload)
+        assert adr_0002.payload.status == "accepted"
+        assert adr_0002.payload.has_frontmatter is False
 
     def test_no_status_when_missing(self, collector: AdrCollector, tmp_path: Path) -> None:
         adr_dir = tmp_path / "docs" / "adr"
@@ -74,29 +79,33 @@ class TestHeadingStatusExtraction:
         (adr_dir / "0001-no-status.md").write_text("# No Status ADR\n\nJust a description.\n")
         results = collector.collect(tmp_path, config=None)
         doc = next(e for e in results if e.kind == "adr-document")
-        assert doc.payload["status"] is None
+        assert isinstance(doc.payload, AdrDocumentPayload)
+        assert doc.payload.status is None
 
 
 class TestTitleExtraction:
     def test_extracts_title_from_heading(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0001 = next(e for e in results if e.kind == "adr-document" and "0001" in e.locator)
-        assert adr_0001.payload["title"] == "Use Spring Boot"
+        assert isinstance(adr_0001.payload, AdrDocumentPayload)
+        assert adr_0001.payload.title == "Use Spring Boot"
 
     def test_title_from_non_frontmatter_file(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         adr_0002 = next(e for e in results if e.kind == "adr-document" and "0002" in e.locator)
-        assert adr_0002.payload["title"] == "Use PostgreSQL for persistence"
+        assert isinstance(adr_0002.payload, AdrDocumentPayload)
+        assert adr_0002.payload.title == "Use PostgreSQL for persistence"
 
 
 class TestSummaryEvidence:
     def test_emits_summary_with_counts(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         summary = next(e for e in results if e.kind == "adr-summary")
-        assert summary.payload["total_adrs"] == 3
-        assert summary.payload["has_lifecycle_tracking"] is True
-        assert "accepted" in summary.payload["statuses"]
-        assert "superseded" in summary.payload["statuses"]
+        assert isinstance(summary.payload, AdrSummaryPayload)
+        assert summary.payload.total_adrs == 3
+        assert summary.payload.has_lifecycle_tracking is True
+        assert "accepted" in summary.payload.statuses
+        assert "superseded" in summary.payload.statuses
 
     def test_no_summary_for_empty_repo(self, collector: AdrCollector, tmp_path: Path) -> None:
         results = collector.collect(tmp_path, config=None)

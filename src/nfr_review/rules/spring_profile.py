@@ -113,7 +113,7 @@ class SpringProfileMisconfigurationRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
-def _check_prod_issues(payload: dict[str, Any]) -> list[dict[str, str]]:
+def _check_prod_issues(payload: dict[str, Any] | Any) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     logging_section = payload.get("logging", {}) or {}
 
@@ -190,8 +190,8 @@ def _check_show_sql(payload: dict[str, Any], issues: list[dict[str, str]]) -> No
 
 
 def _check_inherited_issues(
-    base_payload: dict[str, Any],
-    prod_payload: dict[str, Any],
+    base_payload: dict[str, Any] | Any,
+    prod_payload: dict[str, Any] | Any,
 ) -> list[dict[str, str]]:
     """Check if base config has debug settings not overridden by prod."""
     issues: list[dict[str, str]] = []

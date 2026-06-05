@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence
 from nfr_review.rules.adr_lifecycle import AdrLifecycleGapRule
 from nfr_review.rules.ci_security_scan import CiSecurityScanMissingRule
@@ -14,14 +15,14 @@ def _adr_evidence(status: str | None, file_path: str = "docs/adr/0001.md") -> Ev
         collector_version="0.1.0",
         locator=file_path,
         kind="adr-document",
-        payload={
-            "file_path": file_path,
-            "title": "Test ADR",
-            "status": status,
-            "date": "2024-01-01",
-            "superseded_by": None,
-            "has_frontmatter": True,
-        },
+        payload=AdrDocumentPayload(
+            file_path=file_path,
+            title="Test ADR",
+            status=status,
+            date="2024-01-01",
+            superseded_by=None,
+            has_frontmatter=True,
+        ),
     )
 
 

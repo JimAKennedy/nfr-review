@@ -24,6 +24,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from nfr_review.collectors.payloads.adr import AdrDocumentPayload, AdrSummaryPayload
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -69,8 +70,8 @@ def _extract_status_from_section(text: str) -> str | None:
     return None
 
 
-def _parse_adr(file_path: Path, repo_path: Path) -> dict[str, Any]:
-    """Parse a single ADR markdown file and return the payload dict."""
+def _parse_adr(file_path: Path, repo_path: Path) -> AdrDocumentPayload:
+    """Parse a single ADR markdown file and return a typed payload."""
     rel = file_path.relative_to(repo_path)
     text = file_path.read_text(encoding="utf-8", errors="replace")
 
@@ -102,14 +103,14 @@ def _parse_adr(file_path: Path, repo_path: Path) -> dict[str, Any]:
         if body_match:
             superseded_by = body_match.group(1)
 
-    return {
-        "file_path": str(rel),
-        "title": title,
-        "status": status,
-        "date": date,
-        "superseded_by": superseded_by,
-        "has_frontmatter": has_frontmatter,
-    }
+    return AdrDocumentPayload(
+        file_path=str(rel),
+        title=title,
+        status=status,
+        date=date,
+        superseded_by=superseded_by,
+        has_frontmatter=has_frontmatter,
+    )
 
 
 class AdrCollector:
@@ -145,7 +146,8 @@ class AdrCollector:
             statuses: dict[str, int] = {}
             has_lifecycle = False
             for ev in evidence:
-                st = ev.payload.get("status")
+                assert isinstance(ev.payload, AdrDocumentPayload)
+                st = ev.payload.status
                 if st:
                     has_lifecycle = True
                     statuses[st] = statuses.get(st, 0) + 1
@@ -158,11 +160,11 @@ class AdrCollector:
                     collector_version=self.version,
                     locator="adr-summary",
                     kind="adr-summary",
-                    payload={
-                        "total_adrs": len(evidence),
-                        "statuses": statuses,
-                        "has_lifecycle_tracking": has_lifecycle,
-                    },
+                    payload=AdrSummaryPayload(
+                        total_adrs=len(evidence),
+                        statuses=statuses,
+                        has_lifecycle_tracking=has_lifecycle,
+                    ),
                 )
             )
 
