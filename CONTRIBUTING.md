@@ -61,11 +61,11 @@ Find your noreply address at
 ## Running Tests
 
 ```bash
-# Full suite
-pytest
+# Full suite (parallel via pytest-xdist)
+pytest -n auto
 
 # With coverage report
-pytest --cov --cov-report=term-missing
+pytest -n auto --cov --cov-report=term-missing
 ```
 
 ## Linting

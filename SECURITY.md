@@ -35,11 +35,18 @@ nfr-review is a static analysis tool that scans repository files locally. It
 does **not** store or transmit user repository contents beyond the local
 filesystem.
 
-When LLM-assisted rules are enabled (PII detection, ADR drift analysis),
-nfr-review sends code snippets to the **Anthropic API** for analysis using your
-configured `ANTHROPIC_API_KEY`. These API calls are subject to
-[Anthropic's usage policy](https://www.anthropic.com/policies). No repository
-data is sent to any other external service.
+When LLM-assisted rules are enabled (PII detection, ADR drift analysis,
+executive summary), nfr-review sends code snippets and structural metadata to
+the configured LLM backend for analysis. Three backends are supported:
+
+- **Anthropic API** — calls are subject to
+  [Anthropic's usage policy](https://www.anthropic.com/policies).
+- **OpenAI-compatible APIs** (Ollama, Azure OpenAI, OpenRouter) — data is sent
+  to the configured `base_url`. With Ollama, data stays on your local machine.
+- **Claude CLI** — calls are routed through your local Claude Code installation.
+
+No repository data is sent to any external service beyond the configured LLM
+backend.
 
 ## Security Practices
 

@@ -7,7 +7,7 @@
 
 Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++ source, gRPC proto files, APIM policies, and more) and evaluates 130+ rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++ source, gRPC proto files, APIM policies, and more) and evaluates 134 rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
 
 ## Quick start
 
@@ -180,6 +180,7 @@ This will:
 | `--exclude-tests` / `--include-tests` | exclude | Exclude test and fixture directories from analysis |
 | `--baseline PATH` | — | Path to a prior JSONL file; suppress known findings, exit on regressions |
 | `--score` | off | Compute and display design maturity score |
+| `--workers N` | `1` | Number of parallel collector threads (`1` = sequential) |
 | `-v` / `--verbose` | off | Increase verbosity (`-v` for INFO, `-vv` for DEBUG) |
 | `-q` / `--quiet` | off | Suppress warnings (ERROR level only) |
 | `--log-file PATH` | stderr | Write diagnostics to FILE instead of stderr |
@@ -196,6 +197,9 @@ This will:
 
 ```bash
 nfr-review list-rules
+
+# JSON output (includes compliance refs, tags, severity, category)
+nfr-review list-rules --format json
 ```
 
 ### Get details on a specific rule
@@ -218,6 +222,19 @@ nfr-review hygiene --list-checks
 ```
 
 Without the `[scancode]` extra installed, license rules are skipped with an informative warning — all other hygiene categories still run normally.
+
+**Options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--list-checks` | off | List registered hygiene checks and exit |
+| `--output-dir PATH` | `.` | Directory where CSV and JSONL files are written |
+| `--format FORMAT` | `both` | Output format: `csv`, `jsonl`, or `both` |
+| `--severity-threshold LEVEL` | — | Exit 2 if any finding meets or exceeds this severity |
+| `--category NAMES` | — | Comma-separated category names to filter rules |
+| `--config PATH` | `./nfr-review.yaml` (if present) | Path to configuration file |
+| `--exclude-tests` / `--include-tests` | exclude | Exclude test and fixture directories from analysis |
+| `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
 ### Generate a full report
 
@@ -255,8 +272,9 @@ This produces timestamped files under `reports/`:
 | `--no-diagrams` | off | Suppress Mermaid diagram sections in the report |
 | `--exclude-tests` / `--include-tests` | exclude | Exclude test and fixture directories from analysis |
 | `--sarif PATH` | — | Output path for SARIF 2.1.0 findings file |
-| `--test-timeout SECS` | `420` | Maximum seconds to wait for pytest to complete |
+| `--test-timeout SECS` | `900` | Maximum seconds to wait for pytest to complete |
 | `--max-resolve-rounds N` | `2000` | Maximum resolver iterations for dependency analysis |
+| `--workers N` | `1` | Number of parallel collector threads (`1` = sequential) |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
 ### Analyze dependencies
@@ -339,6 +357,28 @@ nfr-review issues sync findings.jsonl --repo owner/repo
 nfr-review issues sync findings.jsonl --dry-run
 ```
 
+**`issues scan` options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dry-run` | off | Preview issues without filing to GitHub |
+| `--repo OWNER/REPO` | auto-detect | GitHub owner/repo (auto-detected from git remote) |
+| `--severity-threshold` | `high` | Minimum severity for filing issues |
+| `--config PATH` | `./nfr-review.yaml` | Path to configuration file |
+| `-v` / `-q` / `--log-file` | — | Same as `run` command |
+
+**`issues sync` options:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--repo OWNER/REPO` | — | GitHub owner/repo (required unless `--dry-run`) |
+| `--extra-labels LABELS` | — | Comma-separated extra labels to apply |
+| `--rag-min LEVEL` | `amber` | Minimum RAG level for filing: `red`, `amber`, `green` |
+| `--severity-threshold` | `high` | Minimum severity for filing issues |
+| `--first-run-cap N` | `25` | Max issues to create on first sync |
+| `--close-resolved` / `--no-close-resolved` | close | Close issues whose findings are no longer present |
+| `--dry-run` | off | Preview decisions without calling GitHub |
+
 ### Run everything at once
 
 `nfr-review all` runs an architecture review across all targets and an NFR report per target in a single invocation.
@@ -366,7 +406,8 @@ nfr-review all /path/to/repo1 --output-dir my-reports --no-pdf --no-tests
 | `--no-score` | off | Skip maturity score |
 | `--no-llm` | off | Skip LLM analysis in architecture report |
 | `--diagram-mode` | `hierarchical` | Architecture diagram layout |
-| `--test-timeout` | `420` | Pytest timeout per repo (seconds) |
+| `--test-timeout` | `900` | Pytest timeout per repo (seconds) |
+| `--workers` | `1` | Parallel collector threads per repo |
 | `--exclude-tests` | exclude | Exclude test directories from NFR analysis |
 
 ### Check version
@@ -388,7 +429,7 @@ version: 1
 tech:
   spring_boot: true
   apim: false
-  kafka: false
+  terraform: false
   cmake: true   # enables C++ rules
 
 # Control which rules run.
@@ -419,7 +460,7 @@ exclude_test_paths: true
 
 ## Rules
 
-nfr-review ships with 130+ rules (102 NFR + 28 hygiene) across several domains. A selection:
+nfr-review ships with 134 rules (106 NFR + 28 hygiene) across several domains. A selection:
 
 | Rule ID | Domain | Description |
 |---------|--------|-------------|
@@ -488,6 +529,7 @@ The `report` command produces timestamped files under `reports/`:
 | `collector_version` | Collector version |
 | `confidence` | 0.0 to 1.0 |
 | `pattern_tag` | Classification tag for the pattern detected |
+| `content_hash` | Line-number-independent hash for stable baseline diffing |
 
 ## Example: scanning the test fixtures
 
@@ -508,11 +550,11 @@ cat java-sample-repo-nfr-review.csv
 ## Development
 
 ```bash
-# Run tests
-pytest
+# Run tests (parallel via pytest-xdist)
+pytest -n auto
 
 # Run tests with coverage
-pytest --cov
+pytest -n auto --cov
 
 # Lint
 ruff check src/ tests/
