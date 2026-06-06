@@ -105,13 +105,16 @@ all command (nfr-review all <target1> <target2> ...):
 | `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `Band` | Serialization format details (CSV column order lives in output/) |
 | `protocols.py` | `Collector` and `Rule` runtime-checkable protocols | Registration, instantiation |
 | `registry.py` | Generic `Registry[T]` container, global singletons `rule_registry` / `collector_registry` | What gets registered (that's the plugin modules' job) |
-| `llm_client.py` | Anthropic SDK wrapper, availability gating, `ClaudeClient` | Prompt design (rules own their prompts), evidence selection |
+| `llm_client.py` | LLM abstraction (Anthropic, OpenAI-compatible, Claude CLI); availability gating, `ClaudeClient` | Prompt design (rules own their prompts), evidence selection |
+| `rule_metadata.py` | `RuleMetadata` model: severity, category, tags, compliance references; loaded alongside rules for `list-rules --format json` | Rule evaluation, evidence gathering |
 | `auditability.py` | Git probe (SHA, branch, dirty), `RunMetadata` assembly | Output writing, config |
 | `collectors/*` | Evidence gathering from target repo files | Evaluating findings, accessing config.rules |
 | `rules/*` | Evaluating evidence into findings with RAG/severity/recommendation | Gathering evidence, file I/O on target repo |
 | `hygiene/collectors/license_scan.py` | scancode-based license/copyright scanning (`license-scan` + `license-scan-summary` evidence), optional dependency with graceful skip | Rule evaluation, SPDX validation |
 | `hygiene/rules/lic_*.py` | License compliance rules: copyleft detection (HYG-LIC-001), NOTICE completeness (HYG-LIC-002), header presence (HYG-LIC-003), SPDX validation (HYG-LIC-004) | Evidence gathering, scancode API calls |
-| `output/*` | CSV and JSONL serialization, `OutputError` | Finding logic, metadata assembly |
+| `collectors/payloads/*` | Typed `BasePayload` subclasses for all collector evidence (IDE completion, schema validation) | Evidence gathering logic, rule evaluation |
+| `output/*` | CSV, JSONL, and SARIF serialization, `OutputError` | Finding logic, metadata assembly |
+| `output/sarif.py` | SARIF 2.1.0 JSON output from `RunResult`; severity-mapped levels, parsed evidence locators | Finding evaluation, engine orchestration |
 | `path_filter.py` | Pre-aggregation test-path detection (`is_test_path`), configurable path exclusion (`should_exclude_path`, `compile_exclude_patterns`); used by collectors to drop evidence before it reaches rules | Rule evaluation, output classification |
 | `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
 | `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results, and dependency section | Data collection, engine orchestration |
@@ -148,12 +151,12 @@ Evidence
   collector_version: str
   locator: str               # file path or identifier
   kind: str                  # e.g. "java-ast-file", "repo-structure-summary"
-  payload: dict[str, Any]    # raw data — schema is per-collector
+  payload: BasePayload | dict[str, Any]  # typed payload or raw dict
 
 Finding
   rule_id, rag, severity, summary, recommendation,
   evidence_locator, collector_name, collector_version,
-  confidence, pattern_tag
+  confidence, pattern_tag, content_hash
 
 RuleResult
   rule_id: str
@@ -223,7 +226,9 @@ triggering registration. The CLI imports these packages at startup.
 | Add a new dependency ecosystem | `deps_analysis.py` (new resolver branch) | `dep_solver.py` if resolvelib model changes, `output/deps_report.py` for display |
 | Change pre-collector path exclusion | `path_filter.py` (edit `_TEST_PATH_PATTERNS` or `should_exclude_path`) | Tests in `test_path_filter.py` |
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
+| Add a typed evidence payload | `collectors/payloads/<name>.py` with `BasePayload` subclass | Collector's `collect()` method, existing rules consuming the payload |
 | Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
+| Add rule metadata (tags, compliance refs) | `rule_metadata.py` via `RuleMetadata(...)` | `list-rules --format json` output, `docs/continuous-compliance.md` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |
 | Add a new hygiene collector | `hygiene/collectors/<name>.py` with `_register()` | `hygiene/collectors/__init__.py` (import), test fixtures |
 | Add a new hygiene rule | `hygiene/rules/<prefix>_<name>.py` with `_register()` | `hygiene/rules/__init__.py` (import), category prefix convention: `lic_`, `com_`, `ci_`, `doc_`, `bld_`, `prv_` |

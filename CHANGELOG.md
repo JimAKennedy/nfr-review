@@ -45,6 +45,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Markdown and PDF rendering.
 - **C#/Node.js AST collectors** — `csharp_ast` and `nodejs_ast` collectors
   registered; initial implementation for structural evidence gathering.
+- **NIST 800-53 Rev 5 compliance mapping** — 28 controls mapped across 12
+  control families in `docs/continuous-compliance.md`, alongside existing
+  SOC 2, ISO 27001, and PCI DSS v4.0 mappings.
+- **Typed evidence payloads** — all collectors now emit `BasePayload`
+  subclasses instead of plain dicts, enabling IDE completion and schema
+  validation on evidence payloads (`collectors/payloads/`).
+- **Rule metadata catalogue** — rules carry `RuleMetadata` with severity,
+  category, tags, and compliance references; `list-rules --format json`
+  exports the full catalogue.
+- **Design maturity scoring** — configurable 0–100 maturity score with
+  ISO 25010 categories, severity deductions, grade scale (A–F), and trend
+  tracking via `--baseline`. Configured under `scoring:` in
+  `nfr-review.yaml`.
+- **Parallel collector execution** — `--workers N` flag on `run`, `report`,
+  and `all` commands for concurrent evidence gathering.
+- **Multi-backend LLM support** — three backends: Anthropic API
+  (`[llm-anthropic]`), OpenAI-compatible APIs (`[llm-openai]`), and
+  Claude CLI. Configured via `llm:` in `nfr-review.yaml` or env vars.
+- **`all` command** — runs architecture review (cross-repo) + NFR report
+  (per-repo) in a single invocation.
+- **`issues` command** — `issues scan` and `issues sync` for filing and
+  syncing GitHub issues from findings.
+- **SARIF output** — `--sarif` flag on `run` and `report` commands for
+  SARIF 2.1.0 findings files and GitHub Security tab integration.
+- **Baseline diffing** — `--baseline` flag suppresses known findings using
+  content-hash-based stable identity keys.
+- **GitHub Action** — `action.yml` with pip and container execution modes,
+  PR comments, SARIF upload, issue sync, and baseline diffing.
+- **Rule catalogue site** — browsable HTML catalogue published to GitHub
+  Pages via `scripts/generate_catalogue.py`.
+
+### Fixed
+
+- Reduced CPP-001 (`cpp-raw-memory`) false positives for VSTGUI
+  ref-counted patterns, placement new, and operator overloads.
+- Mermaid diagram sanitization for brackets, commas, and annotation
+  spacing.
+- Replaced broad `except Exception` catches with specific exception types.
 
 ## [0.1.0] - 2026-05-08
 
