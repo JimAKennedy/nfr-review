@@ -182,3 +182,36 @@ class TestRenderMarkdownReport:
         red_pos = source_section.find("### RED")
         amber_pos = source_section.find("### AMBER")
         assert red_pos < amber_pos
+
+    def test_llm_disclosure_without_llm(self) -> None:
+        result = FakeRunResult(run_metadata=_metadata())
+        md = render_markdown_report(
+            nfr_result=result,  # type: ignore[arg-type]
+            llm_info=None,
+            score_section="## Score\n100",
+        )
+        assert "### LLM Usage in This Report" in md
+        assert "without LLM integration" in md
+
+    def test_llm_disclosure_with_claude_cli(self) -> None:
+        result = FakeRunResult(run_metadata=_metadata())
+        md = render_markdown_report(
+            nfr_result=result,  # type: ignore[arg-type]
+            llm_info=("claude-cli", "claude-sonnet-4-6"),
+            score_section="## Score\n100",
+        )
+        assert "### LLM Usage in This Report" in md
+        assert "without LLM" not in md
+        assert "**claude-cli**" in md
+        assert "`claude-sonnet-4-6`" in md
+
+    def test_llm_disclosure_with_openai(self) -> None:
+        result = FakeRunResult(run_metadata=_metadata())
+        md = render_markdown_report(
+            nfr_result=result,  # type: ignore[arg-type]
+            llm_info=("openai", "gpt-4o"),
+            score_section="## Score\n100",
+        )
+        assert "**openai**" in md
+        assert "`gpt-4o`" in md
+        assert "without LLM" not in md

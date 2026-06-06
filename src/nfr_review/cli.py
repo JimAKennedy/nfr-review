@@ -990,15 +990,26 @@ def run_report_pipeline(
         )
         score_section = render_score_section(score)
 
-    # Build LLM provenance for methodology appendix
+    # Build LLM provenance for methodology appendix.
+    # Always check — collectors like adr-derive use the LLM independently
+    # of the executive summary, so the disclosure must not be gated on
+    # no_summary.  Use the no-args factory (same path collectors use) so
+    # legacy env-var fallbacks (NFR_LLM_BACKEND) are also detected.
+    from nfr_review.llm_client import (
+        ClaudeCliClient,
+        create_llm_client,
+    )
+
     resolved_llm = config.llm.resolve()
     llm_info: tuple[str, str] | None = None
-    if not no_summary:
-        from nfr_review.llm_client import create_llm_client
-
-        _llm_client = create_llm_client(resolved_llm)
-        if _llm_client.available:
-            llm_info = (resolved_llm.provider, resolved_llm.model)
+    _llm_client = create_llm_client(resolved_llm)
+    if _llm_client.available:
+        llm_info = (resolved_llm.provider, resolved_llm.model)
+    else:
+        _default_client = create_llm_client()
+        if _default_client.available:
+            _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
+            llm_info = (_prov, resolved_llm.model)
 
     # Generate report
     _phase("Rendering Markdown report", quiet=quiet)
