@@ -34,11 +34,15 @@ class _FakeRule:
 
 @pytest.fixture(autouse=True)
 def _reset_singletons() -> None:
+    saved_rules = dict(rule_registry._items)
+    saved_collectors = dict(collector_registry._items)
     rule_registry.clear()
     collector_registry.clear()
     yield
     rule_registry.clear()
     collector_registry.clear()
+    rule_registry._items.update(saved_rules)
+    collector_registry._items.update(saved_collectors)
 
 
 def test_register_and_get() -> None:
