@@ -309,3 +309,75 @@ class TestCountByRag:
     def test_counts_all_rag_types(self) -> None:
         counts = action_comment._count_by_rag([_RED_FINDING, _AMBER_FINDING, _GREEN_FINDING])
         assert counts == {"red": 1, "amber": 1, "green": 1, "skipped": 0}
+
+    def test_excludes_suppressed(self) -> None:
+        suppressed_red = {**_RED_FINDING, "suppressed": True}
+        counts = action_comment._count_by_rag([suppressed_red, _AMBER_FINDING])
+        assert counts["red"] == 0
+        assert counts["amber"] == 1
+
+
+class TestSuppressedConsistency:
+    """Suppressed findings must be excluded from RAG counts, top findings, and details."""
+
+    def test_suppressed_excluded_from_top_findings(self, tmp_path: Path) -> None:
+        suppressed_red = {**_RED_FINDING, "suppressed": True}
+        p = _write_jsonl(tmp_path, [_METADATA, suppressed_red, _AMBER_FINDING])
+        md = action_comment.generate_comment(p)
+        # RAG should show 0 red (suppressed) and 1 amber.
+        assert "\U0001f534 Red | 0" in md
+        assert "\U0001f7e0 Amber | 1" in md
+        # Top findings should NOT show the suppressed red.
+        top_section = md.split("### Top Findings")
+        if len(top_section) > 1:
+            assert "R001" not in top_section[1].split("###")[0]
+
+    def test_suppressed_excluded_from_full_details(self, tmp_path: Path) -> None:
+        suppressed_red = {**_RED_FINDING, "suppressed": True}
+        p = _write_jsonl(tmp_path, [_METADATA, suppressed_red, _AMBER_FINDING])
+        md = action_comment.generate_comment(p)
+        assert "Full finding details (1 findings)" in md
+
+    def test_rag_and_top_findings_agree(self, tmp_path: Path) -> None:
+        """When all reds are suppressed, RAG=0 red and no reds in top findings."""
+        suppressed_reds = [
+            {**_RED_FINDING, "rule_id": f"R{i:03d}", "suppressed": True} for i in range(5)
+        ]
+        p = _write_jsonl(tmp_path, [_METADATA, *suppressed_reds, _AMBER_FINDING])
+        md = action_comment.generate_comment(p)
+        assert "\U0001f534 Red | 0" in md
+        # Top findings should only contain amber, not red.
+        if "### Top Findings" in md:
+            top = md.split("### Top Findings")[1].split("###")[0]
+            assert "\U0001f534 red" not in top
+
+
+class TestBaselineExclusion:
+    """Baseline findings (pre-existing) must be excluded from actionable display."""
+
+    def test_baseline_excluded_from_rag_counts(self, tmp_path: Path) -> None:
+        baseline_red = {**_RED_FINDING, "classification": "baseline"}
+        new_amber = {**_AMBER_FINDING, "classification": "new"}
+        resolved = {**_GREEN_FINDING, "classification": "resolved"}
+        p = _write_jsonl(tmp_path, [_METADATA, baseline_red, new_amber, resolved])
+        md = action_comment.generate_comment(p)
+        assert "\U0001f534 Red | 0" in md
+        assert "\U0001f7e0 Amber | 1" in md
+
+    def test_baseline_excluded_from_top_findings(self, tmp_path: Path) -> None:
+        baseline_red = {**_RED_FINDING, "classification": "baseline"}
+        new_amber = {**_AMBER_FINDING, "classification": "new"}
+        resolved = {**_GREEN_FINDING, "classification": "resolved"}
+        p = _write_jsonl(tmp_path, [_METADATA, baseline_red, new_amber, resolved])
+        md = action_comment.generate_comment(p)
+        if "### Top Findings" in md:
+            top = md.split("### Top Findings")[1].split("###")[0]
+            assert "R001" not in top
+
+    def test_baseline_excluded_from_full_details(self, tmp_path: Path) -> None:
+        baseline_red = {**_RED_FINDING, "classification": "baseline"}
+        new_amber = {**_AMBER_FINDING, "classification": "new"}
+        resolved = {**_GREEN_FINDING, "classification": "resolved"}
+        p = _write_jsonl(tmp_path, [_METADATA, baseline_red, new_amber, resolved])
+        md = action_comment.generate_comment(p)
+        assert "Full finding details (1 findings)" in md

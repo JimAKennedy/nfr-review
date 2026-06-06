@@ -415,19 +415,24 @@ def _methodology_appendix(
         _a(
             f"This report was generated with LLM integration"
             f" enabled (**{provider}**, model `{model}`)."
-            " The following sections used LLM analysis:"
+            " The following sections may use LLM analysis:"
         )
         _a("")
         _a(
-            "- **Executive Summary** — AI-generated holistic"
-            " assessment including verdict (Fit / Conditional /"
-            " Unfit), risk highlights, remediation priorities,"
-            " and an independent overall score (0–100). This"
-            " score **may differ from the deterministic Design"
-            " Maturity Score** as it considers factors beyond"
-            " individual rule findings, such as the overall"
-            " pattern of issues, test coverage, and dependency"
-            " health."
+            "- **Executive Summary** (PDF only) — AI-generated"
+            " holistic assessment including verdict"
+            " (Fit / Conditional / Unfit), risk highlights,"
+            " remediation priorities, and an independent overall"
+            " score (0–100). This score **may differ from the"
+            " deterministic Design Maturity Score** as it"
+            " considers factors beyond individual rule findings,"
+            " such as the overall pattern of issues, test"
+            " coverage, and dependency health."
+        )
+        _a(
+            "- **Derived Architecture Decision Records** —"
+            " candidate ADRs inferred from repository content"
+            " (config files, existing ADRs, README)."
         )
         _a("")
         _a(
