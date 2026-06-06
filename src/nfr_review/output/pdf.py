@@ -206,8 +206,8 @@ def _exec_summary_html(summary: ExecSummary) -> str:
         f"<p>{_h(summary.verdict_explanation)}</p>",
         '<p style="font-size:8pt;color:#666;margin-top:4px">'
         "This score is an AI-generated holistic assessment and may differ from"
-        " the deterministic Design Maturity Score. See the Scoring Methodology"
-        " appendix for details.</p>",
+        " the deterministic Design Maturity Score. See the LLM Usage and"
+        " Scoring Methodology sections in the appendix for details.</p>",
         "</div>",
     ]
 
@@ -441,6 +441,7 @@ def render_pdf(
     diagram_paths: dict[str, Path] | None = None,
     score_section_md: str = "",
     title: str = "NFR Review Report",
+    llm_info: tuple[str, str] | None = None,
 ) -> Path:
     """Render a complete PDF report from scan results.
 
@@ -531,7 +532,7 @@ def render_pdf(
         from nfr_review.output.markdown import _methodology_appendix
 
         sections.append('<div class="section-break"></div>')
-        methodology_md = _methodology_appendix()
+        methodology_md = _methodology_appendix(llm_info=llm_info)
         methodology_body = methodology_md
         if methodology_body.startswith("## "):
             methodology_body = (
