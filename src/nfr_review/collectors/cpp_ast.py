@@ -435,8 +435,19 @@ def _extract_includes(root: Node, source: bytes) -> list[CppInclude]:
     return includes
 
 
+_CPP_CAST_OPS = frozenset({"static_cast", "dynamic_cast", "reinterpret_cast", "const_cast"})
+
+
 def _call_func_name(func: Node, source: bytes) -> str:
-    """Extract the bare function name from a call_expression's function node."""
+    """Extract the bare function name from a call_expression's function node.
+
+    Returns ``""`` for C++ cast operators (static_cast, etc.) since they are
+    language constructs, not ownership-transfer calls.
+    """
+    if func.type == "template_function":
+        for child in func.children:
+            if child.type == "identifier" and text(child, source) in _CPP_CAST_OPS:
+                return ""
     if func.type == "field_expression":
         field = func.child_by_field_name("field")
         if field:
@@ -466,8 +477,8 @@ def _parent_call_name(node: Node, source: bytes) -> str:
 
 
 def _declared_var_name(node: Node, source: bytes) -> str:
-    """If *node* (a new_expression) is the initializer of a local variable,
-    return the variable name; otherwise ``""``."""
+    """If *node* (a new_expression) is the initializer of a local variable
+    or member-variable assignment, return the variable name; otherwise ``""``."""
     cursor = node.parent
     while cursor:
         if cursor.type == "init_declarator":
@@ -482,6 +493,16 @@ def _declared_var_name(node: Node, source: bytes) -> str:
                 if target.type in ("identifier", "field_identifier"):
                     return text(target, source)
             return ""
+        if cursor.type == "assignment_expression":
+            left = cursor.child_by_field_name("left")
+            if left:
+                if left.type in ("identifier", "field_identifier"):
+                    return text(left, source)
+                if left.type == "field_expression":
+                    field = left.child_by_field_name("field")
+                    if field:
+                        return text(field, source)
+            return ""
         if cursor.type in (
             "compound_statement",
             "expression_statement",
@@ -492,9 +513,22 @@ def _declared_var_name(node: Node, source: bytes) -> str:
     return ""
 
 
+def _enclosing_function_name(node: Node, source: bytes) -> str:
+    """Return the name of the enclosing function_definition, or ``""``."""
+    cursor = node.parent
+    while cursor:
+        if cursor.type == "function_definition":
+            decl = cursor.child_by_field_name("declarator")
+            if decl:
+                return _member_func_name(decl, source)
+        cursor = cursor.parent
+    return ""
+
+
 def _scope_transfer_call(node: Node, source: bytes) -> str:
     """If *node* is a new_expression assigned to a variable that is later
-    passed to a call within the same block, return that call's function name."""
+    passed to a call or returned within the same block, return that call's
+    function name (or the enclosing function name for returns)."""
     var_name = _declared_var_name(node, source)
     if not var_name:
         return ""
@@ -517,8 +551,30 @@ def _scope_transfer_call(node: Node, source: bytes) -> str:
                     func = call_node.child_by_field_name("function")
                     if func:
                         return _call_func_name(func, source)
+        for ret_node in find_nodes(sibling, "return_statement"):
+            for child in ret_node.children:
+                if child.type == "identifier" and text(child, source) == var_name:
+                    return _enclosing_function_name(node, source)
         sibling = sibling.next_named_sibling
         checked += 1
+    return ""
+
+
+def _return_factory_name(node: Node, source: bytes) -> str:
+    """If *node* (a new_expression) is directly returned — possibly via a cast
+    — return the enclosing function's name so the rule can check it against
+    ownership-transfer patterns."""
+    cursor = node.parent
+    while cursor:
+        if cursor.type == "return_statement":
+            return _enclosing_function_name(cursor, source)
+        if cursor.type in (
+            "compound_statement",
+            "declaration",
+            "expression_statement",
+        ):
+            break
+        cursor = cursor.parent
     return ""
 
 
@@ -542,6 +598,8 @@ def _extract_new_expressions(
         parent_call = _parent_call_name(node, source)
         if not parent_call:
             parent_call = _scope_transfer_call(node, source)
+        if not parent_call:
+            parent_call = _return_factory_name(node, source)
         results.append(
             CppNewExpression(
                 line=node.start_point[0] + 1,

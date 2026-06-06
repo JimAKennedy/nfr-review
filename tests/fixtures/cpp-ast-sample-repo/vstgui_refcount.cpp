@@ -48,6 +48,43 @@ void two_line_patterns(CViewContainer* container) {
     container->replaceView(nullptr, view);
 }
 
+// --- Safe: member-variable assignment then addView (sub-pattern 1) ---
+class MyView : public CViewContainer {
+    CTextLabel* nameLabel_;
+    CView* scaleSlider_;
+
+    void initialize() {
+        nameLabel_ = new CTextLabel(CRect(), "Name");
+        addView(nameLabel_);
+
+        scaleSlider_ = new CView();
+        scaleSlider_->removeView(nullptr);  // some config calls in between
+        addView(scaleSlider_);
+    }
+};
+
+// --- Safe: return from factory method (sub-pattern 2) ---
+class IPlugView {};
+class VST3Editor : public IPlugView {
+public:
+    VST3Editor(void* ctrl, const char* a, const char* b) {}
+};
+
+IPlugView* createView(const char* name) {
+    auto* editor = new VST3Editor(nullptr, "view", "editor.uidesc");
+    return editor;
+}
+
+// --- Safe: static_cast in createInstance (sub-pattern 3) ---
+class FUnknown {};
+class IAudioProcessor : public FUnknown {};
+class PlugProcessor : public IAudioProcessor {
+public:
+    static FUnknown* createInstance(void*) {
+        return static_cast<IAudioProcessor*>(new PlugProcessor());
+    }
+};
+
 // --- Unsafe: plain raw new, no suppression ---
 void bad_patterns() {
     int* leaked = new int(42);

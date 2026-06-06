@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from nfr_review.collectors.ci_artifact import CiArtifactCollector
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence
 from nfr_review.rules.adr_lifecycle import AdrLifecycleGapRule
@@ -160,3 +163,12 @@ class TestCiTestStageMissingRule:
         result = self.rule.evaluate([], context=None)
         assert result.skipped
         assert "no CI pipeline evidence" in (result.skip_reason or "")
+
+    def test_live_ctest_fixture_detected(self) -> None:
+        """End-to-end: collector + rule on cmake-ctest-repo with ctest in CI YAML."""
+        fixture = Path(__file__).parent / "fixtures" / "cmake-ctest-repo"
+        collector = CiArtifactCollector()
+        evidence = collector.collect(fixture, config=None)
+        result = self.rule.evaluate(evidence, context=None)
+        assert not result.skipped
+        assert result.findings[0].rag == "green"

@@ -282,8 +282,56 @@ class TestCppRawMemoryRefcount:
         result = rule.evaluate(vstgui_ev, context=None)
         suppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new-suppressed"]
         unsuppressed = [f for f in result.findings if f.pattern_tag == "cpp-raw-new"]
-        assert len(suppressed) >= 7, f"expected >=7 suppressed, got {len(suppressed)}"
+        assert len(suppressed) >= 11, f"expected >=11 suppressed, got {len(suppressed)}"
         assert len(unsuppressed) >= 2, f"expected >=2 unsuppressed, got {len(unsuppressed)}"
+
+    def test_member_assignment_then_addview(self, collector: CppAstCollector) -> None:
+        """Sub-pattern 1: member_ = new T(...); addView(member_);"""
+        evidence = collector.collect(AST_FIXTURES, config=None)
+        vstgui_ev = [
+            e
+            for e in evidence
+            if e.payload.get("file_path", "").endswith("vstgui_refcount.cpp")
+        ]
+        new_exprs = vstgui_ev[0].payload["new_expressions"]
+        member_hits = [
+            n
+            for n in new_exprs
+            if n["expression"].startswith("new CTextLabel")
+            and n["parent_call"] == "addView"
+            and n["line"] >= 55
+        ]
+        assert len(member_hits) >= 1, (
+            "member assignment → addView should set parent_call='addView'"
+        )
+
+    def test_return_from_factory_method(self, collector: CppAstCollector) -> None:
+        """Sub-pattern 2: auto* e = new T(...); return e; in createView()."""
+        evidence = collector.collect(AST_FIXTURES, config=None)
+        vstgui_ev = [
+            e
+            for e in evidence
+            if e.payload.get("file_path", "").endswith("vstgui_refcount.cpp")
+        ]
+        new_exprs = vstgui_ev[0].payload["new_expressions"]
+        factory_hit = [n for n in new_exprs if n["parent_call"] == "createView"]
+        assert len(factory_hit) == 1, (
+            "new in return-from-factory should set parent_call='createView'"
+        )
+
+    def test_static_cast_in_create_instance(self, collector: CppAstCollector) -> None:
+        """Sub-pattern 3: return static_cast<T*>(new U()) in createInstance()."""
+        evidence = collector.collect(AST_FIXTURES, config=None)
+        vstgui_ev = [
+            e
+            for e in evidence
+            if e.payload.get("file_path", "").endswith("vstgui_refcount.cpp")
+        ]
+        new_exprs = vstgui_ev[0].payload["new_expressions"]
+        cast_hit = [n for n in new_exprs if n["parent_call"] == "createInstance"]
+        assert len(cast_hit) == 1, (
+            "new inside static_cast in createInstance should set parent_call='createInstance'"
+        )
 
 
 # ---------------------------------------------------------------------------
