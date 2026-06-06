@@ -79,7 +79,9 @@ def _top_findings(records: list[dict[str, Any]], limit: int = _TOP_FINDINGS_LIMI
     important = [
         r
         for r in records
-        if r.get("record_type") == "finding" and r.get("rag") in ("red", "amber")
+        if r.get("record_type") == "finding"
+        and r.get("rag") in ("red", "amber")
+        and r.get("suppressed") is not True
     ]
     if not important:
         return ""
@@ -120,7 +122,11 @@ def _top_findings(records: list[dict[str, Any]], limit: int = _TOP_FINDINGS_LIMI
 
 def _full_details(records: list[dict[str, Any]]) -> str:
     """Return a collapsible section with all finding details."""
-    findings = [r for r in records if r.get("record_type") == "finding"]
+    findings = [
+        r
+        for r in records
+        if r.get("record_type") == "finding" and r.get("suppressed") is not True
+    ]
     if not findings:
         return ""
 
@@ -282,12 +288,15 @@ def generate_comment(jsonl_path: Path) -> str:
         artifact.
     """
     records = _load_records(jsonl_path)
-    counts = _count_by_rag(records)
     version = _tool_version(records)
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     new_records, shifted_records, resolved_records = _classify_records(records)
     has_classification = bool(shifted_records or resolved_records)
+
+    # Actionable findings only (excludes baseline/resolved pre-existing issues).
+    actionable = new_records + shifted_records
+    counts = _count_by_rag(actionable)
 
     suppressed_count = _suppressed_count(records)
 
@@ -325,12 +334,12 @@ def generate_comment(jsonl_path: Path) -> str:
         ]
     )
 
-    top = _top_findings(records)
+    top = _top_findings(actionable)
     if top:
         parts.append(top)
         parts.append("")
 
-    details = _full_details(records)
+    details = _full_details(actionable)
     if details:
         parts.append(details)
         parts.append("")
