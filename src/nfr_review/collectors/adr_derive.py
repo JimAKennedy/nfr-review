@@ -25,9 +25,7 @@ Evidence payload contract (kind="adr-derive-skip"):
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +34,7 @@ from nfr_review.collectors.payloads.adr_derive import (
     AdrDeriveSkipPayload,
     AdrDeriveSummaryPayload,
 )
-from nfr_review.llm_client import create_llm_client, serialize_evidence_bundle
+from nfr_review.llm_client import create_llm_client, extract_json, serialize_evidence_bundle
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -90,40 +88,10 @@ Return between 5 and 15 ADRs. Output ONLY the JSON array, no other text.
 """
 
 
-def _extract_json(text: str) -> list[dict] | None:
-    """Try to extract a JSON array from *text*, tolerating markdown fences.
-
-    Returns ``None`` if no valid JSON array can be found.
-    """
-    # 1. Try direct parse
-    try:
-        result = json.loads(text)
-        if isinstance(result, list):
-            return result
-    except (json.JSONDecodeError, ValueError):
-        pass
-
-    # 2. Try ```json ... ``` code block
-    fence_match = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL)
-    if fence_match:
-        try:
-            result = json.loads(fence_match.group(1))
-            if isinstance(result, list):
-                return result
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    # 3. Try to find bare [ ... ]
-    bracket_match = re.search(r"\[.*\]", text, re.DOTALL)
-    if bracket_match:
-        try:
-            result = json.loads(bracket_match.group(0))
-            if isinstance(result, list):
-                return result
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    return None
+def _extract_json_array(text: str) -> list[dict] | None:
+    """Extract a JSON array from an LLM response. Delegates to shared utility."""
+    result = extract_json(text, expect="array")
+    return result if isinstance(result, list) else None
 
 
 def _gather_context(repo_path: Path) -> list[dict[str, Any]]:
@@ -193,7 +161,7 @@ class AdrDeriveCollector:
                     locator="adr-derive",
                     kind="adr-derive-skip",
                     payload=AdrDeriveSkipPayload(
-                        reason="ANTHROPIC_API_KEY is not set; LLM analysis unavailable"
+                        reason="LLM not configured; LLM analysis unavailable"
                     ),
                 )
             ]
@@ -219,7 +187,7 @@ class AdrDeriveCollector:
                 )
             ]
 
-        parsed = _extract_json(raw_response)
+        parsed = _extract_json_array(raw_response)
         if parsed is None:
             logger.warning("Failed to parse LLM response as JSON")
             return [

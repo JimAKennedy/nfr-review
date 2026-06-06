@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess  # nosec B404 — intentional: shells out to claude CLI
 from pathlib import Path
@@ -91,7 +92,7 @@ class ClaudeClient:
 
     def __init__(self) -> None:
         self._backend = _resolve_backend()
-        self._model = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6-20250514")
+        self._model = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
 
         if self._backend == _BACKEND_CLI:
             self._cli_path: str | None = shutil.which("claude")
@@ -344,6 +345,70 @@ class ClaudeCliClient:
 
 
 # ---------------------------------------------------------------------------
+# JSON extraction from LLM responses
+# ---------------------------------------------------------------------------
+
+
+def extract_json(text: str, *, expect: str = "object") -> dict | list | None:
+    """Extract a JSON object or array from an LLM response.
+
+    Uses a 3-stage strategy: direct parse, markdown fence extraction,
+    then bare bracket/brace extraction. Returns ``None`` if no valid JSON
+    of the expected type can be found.
+
+    *expect* controls the accepted type: ``"object"`` for ``dict``,
+    ``"array"`` for ``list``, or ``"any"`` for either.
+    """
+    _ok_types: tuple[type, ...] = (
+        (dict,) if expect == "object" else (list,) if expect == "array" else (dict, list)
+    )
+
+    def _check(val: object) -> dict | list | None:
+        return val if isinstance(val, _ok_types) else None  # type: ignore[return-value]
+
+    stripped = text.strip()
+
+    # Stage 1: direct parse
+    try:
+        if (result := _check(json.loads(stripped))) is not None:
+            return result
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Stage 2: markdown code fence
+    fence_match = re.search(r"```(?:json)?\s*\n(.*?)```", stripped, re.DOTALL)
+    if fence_match:
+        try:
+            if (result := _check(json.loads(fence_match.group(1)))) is not None:
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Stage 3: bare delimiters — find outermost { } or [ ]
+    open_char = "{" if expect == "object" else "[" if expect == "array" else None
+    if open_char:
+        close_char = "}" if open_char == "{" else "]"
+        try:
+            start = stripped.index(open_char)
+            end = stripped.rindex(close_char) + 1
+            if (result := _check(json.loads(stripped[start:end]))) is not None:
+                return result
+        except (ValueError, json.JSONDecodeError):
+            pass
+    else:
+        for oc, cc in ("{}", "[]"):
+            try:
+                start = stripped.index(oc)
+                end = stripped.rindex(cc) + 1
+                if (result := _check(json.loads(stripped[start:end]))) is not None:
+                    return result
+            except (ValueError, json.JSONDecodeError):
+                pass
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -424,5 +489,6 @@ __all__ = [
     "LlmUnavailableError",
     "OpenAICompatibleClient",
     "create_llm_client",
+    "extract_json",
     "serialize_evidence_bundle",
 ]

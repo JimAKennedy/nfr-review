@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, cast
 
@@ -12,6 +11,7 @@ from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.llm_client import (
     LlmUnavailableError,
     create_llm_client,
+    extract_json,
     serialize_evidence_bundle,
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
@@ -71,13 +71,11 @@ class ArchitecturalDriftFromAdrRule:
         bundle = self._build_evidence_bundle(adr_evidence, java_evidence)
 
         if not self._llm.available:
-            logger.warning("ANTHROPIC_API_KEY missing; skipping architectural drift analysis")
+            logger.warning("LLM not configured; skipping architectural drift analysis")
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason=(
-                    "LLM unavailable — architectural drift analysis requires Claude API"
-                ),
+                skip_reason="LLM unavailable — drift analysis requires an LLM backend",
             )
 
         return self._analyze_with_llm(bundle, adr_evidence)
@@ -154,9 +152,7 @@ class ArchitecturalDriftFromAdrRule:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason=(
-                    "LLM unavailable — architectural drift analysis requires Claude API"
-                ),
+                skip_reason="LLM unavailable — drift analysis requires an LLM backend",
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM architectural drift analysis failed: %s", exc)
@@ -173,11 +169,8 @@ class ArchitecturalDriftFromAdrRule:
     ) -> RuleResult:
         first_ev = adr_evidence[0]
 
-        try:
-            start = text.index("{")
-            end = text.rindex("}") + 1
-            parsed = json.loads(text[start:end])
-        except (ValueError, json.JSONDecodeError):
+        raw = extract_json(text, expect="object")
+        if raw is None or not isinstance(raw, dict):
             logger.warning("Could not parse LLM drift response; returning skipped")
             return RuleResult(
                 rule_id=self.id,
@@ -185,7 +178,7 @@ class ArchitecturalDriftFromAdrRule:
                 skip_reason="LLM response could not be parsed",
             )
 
-        drifts = parsed.get("drifts", [])
+        drifts = raw.get("drifts", [])
         if not isinstance(drifts, list):
             drifts = []
 

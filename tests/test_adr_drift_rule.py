@@ -107,7 +107,7 @@ class TestLlmUnavailable:
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert result.skipped is True
         assert "LLM unavailable" in (result.skip_reason or "")
-        assert "requires Claude API" in (result.skip_reason or "")
+        assert "requires an LLM" in (result.skip_reason or "")
 
 
 class TestDriftDetected:

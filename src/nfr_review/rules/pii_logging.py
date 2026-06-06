@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any, cast
@@ -12,6 +11,7 @@ from typing import Any, cast
 from nfr_review.llm_client import (
     LlmUnavailableError,
     create_llm_client,
+    extract_json,
     serialize_evidence_bundle,
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult
@@ -114,7 +114,7 @@ class PiiInLogStatementsRule:
 
     def _try_llm_confirmation(self, hits: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
         if not self._llm.available:
-            logger.warning("ANTHROPIC_API_KEY missing; skipping LLM confirmation for PII rule")
+            logger.warning("LLM not configured; skipping LLM confirmation for PII rule")
             return None
 
         bundle_items = [
@@ -144,16 +144,11 @@ class PiiInLogStatementsRule:
     def _parse_llm_response(
         self, text: str, expected_count: int
     ) -> list[dict[str, Any]] | None:
-        try:
-            start = text.index("[")
-            end = text.rindex("]") + 1
-            verdicts = json.loads(text[start:end])
-            if not isinstance(verdicts, list):
-                return None
-            return verdicts
-        except (ValueError, json.JSONDecodeError):
+        result = extract_json(text, expect="array")
+        if result is None:
             logger.warning("Could not parse LLM PII response; falling back to regex-only")
             return None
+        return result if isinstance(result, list) else None
 
     def _build_result(
         self,

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pydantic
 
-from nfr_review.llm_client import LlmUnavailableError, create_llm_client
+from nfr_review.llm_client import LlmUnavailableError, create_llm_client, extract_json
 from nfr_review.output.summary_models import ExecSummary
 
 if TYPE_CHECKING:
@@ -167,14 +167,8 @@ def generate_executive_summary(
         logger.exception("LLM call failed during executive summary generation")
         return None
 
-    text = raw.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        text = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
+    parsed = extract_json(raw, expect="object")
+    if parsed is None:
         logger.warning("LLM returned non-JSON response for executive summary")
         return None
 

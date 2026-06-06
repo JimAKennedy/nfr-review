@@ -267,7 +267,7 @@ variables override the config file.
 # nfr-review.yaml
 llm:
   provider: anthropic           # anthropic | openai | claude-cli
-  model: claude-sonnet-4-6-20250514
+  model: claude-sonnet-4-6
   base_url: null                # override for custom endpoints
   api_key_env_var: ANTHROPIC_API_KEY  # which env var holds the API key
 ```
