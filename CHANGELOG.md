@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-06
+
 ### Added
 
 - **C++ scanning** — `cmake` and `cpp_ast` collectors plus 9 new rules:
@@ -76,18 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rule catalogue site** — browsable HTML catalogue published to GitHub
   Pages via `scripts/generate_catalogue.py`.
 
-### Fixed
-
-- Reduced CPP-001 (`cpp-raw-memory`) false positives for VSTGUI
-  ref-counted patterns, placement new, and operator overloads.
-- Mermaid diagram sanitization for brackets, commas, and annotation
-  spacing.
-- Replaced broad `except Exception` catches with specific exception types.
-
-## [0.1.0] - 2026-05-08
-
-### Added
-
 - Multi-language AST analysis for Java, Python, Go, C#, and Node.js
 - Infrastructure scanning: Kubernetes manifests, Helm charts, Terraform,
   Dockerfiles, Istio service mesh, OpenTelemetry, Skaffold, and Protobuf
@@ -99,3 +89,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - YAML-based project configuration with tech auto-detection
 - Pluggable collector/rule architecture with registry-based discovery
 - Evidence-based findings with RAG severity rating (Red/Amber/Green)
+
+### Fixed
+
+- Reduced CPP-001 (`cpp-raw-memory`) false positives for VSTGUI
+  ref-counted patterns, placement new, and operator overloads.
+- Mermaid diagram sanitization for brackets, commas, and annotation
+  spacing.
+- Replaced broad `except Exception` catches with specific exception types.
