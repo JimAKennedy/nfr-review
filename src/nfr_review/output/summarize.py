@@ -144,11 +144,13 @@ def generate_executive_summary(
 ) -> ExecSummary | None:
     """Generate an LLM-powered executive summary of scan results.
 
-    Returns ``None`` when the Anthropic API key is not configured.
+    Returns ``None`` when no LLM backend is configured or available.
     """
     client = create_llm_client()
     if not client.available:
-        logger.info("ANTHROPIC_API_KEY not set — skipping executive summary generation")
+        logger.info(
+            "LLM not configured or unavailable — skipping executive summary generation"
+        )
         return None
 
     prompt_data = _build_prompt_data(nfr_result, hygiene_result, pytest_result, deps_summary)

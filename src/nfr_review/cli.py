@@ -990,6 +990,16 @@ def run_report_pipeline(
         )
         score_section = render_score_section(score)
 
+    # Build LLM provenance for methodology appendix
+    resolved_llm = config.llm.resolve()
+    llm_info: tuple[str, str] | None = None
+    if not no_summary:
+        from nfr_review.llm_client import create_llm_client
+
+        _llm_client = create_llm_client(resolved_llm)
+        if _llm_client.available:
+            llm_info = (resolved_llm.provider, resolved_llm.model)
+
     # Generate report
     _phase("Rendering Markdown report", quiet=quiet)
     md_content = render_markdown_report(
@@ -1003,6 +1013,7 @@ def run_report_pipeline(
         diagrams=diagrams,
         score_section=score_section,
         suppressed_findings=suppressed_report_pairs or None,
+        llm_info=llm_info,
     )
 
     # Write output files
@@ -1092,7 +1103,7 @@ def run_report_pipeline(
                 nfr_result, hygiene_result, pytest_result, deps_section
             )
             if exec_summary is None:
-                _ts_echo("skipped (ANTHROPIC_API_KEY not set or LLM error)")
+                _ts_echo("skipped (LLM not configured or unavailable)")
             else:
                 _phase_done("Executive summary", t0, quiet=quiet)
 
@@ -1111,6 +1122,7 @@ def run_report_pipeline(
                 derived_adrs_section_md=derived_adrs_section,
                 diagram_paths=diagram_image_paths,
                 score_section_md=score_section,
+                llm_info=llm_info,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
         # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)

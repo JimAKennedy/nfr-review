@@ -173,8 +173,17 @@ def _suppression_audit_section(
     return "\n".join(lines)
 
 
-def _methodology_appendix() -> str:
-    """Render the scoring methodology appendix as Markdown."""
+def _methodology_appendix(
+    llm_info: tuple[str, str] | None = None,
+) -> str:
+    """Render the scoring methodology appendix as Markdown.
+
+    Parameters
+    ----------
+    llm_info:
+        Optional ``(provider, model)`` tuple describing the LLM used for
+        this run, or ``None`` when no LLM was configured.
+    """
     lines: list[str] = []
     _a = lines.append
 
@@ -213,11 +222,14 @@ def _methodology_appendix() -> str:
     _a("**Per-category scoring**")
     _a("")
     _a(
-        "Every finding's rule ID is mapped to a category"
-        " (e.g. *security*, *observability*, *performance*,"
-        " *ops*, or a hygiene/patching prefix). Each finding"
-        " deducts points from the category's starting score"
-        " of 100, weighted by severity:"
+        "Every finding's rule ID is mapped to an ISO/IEC 25010"
+        " quality category (*security*, *reliability*,"
+        " *performance*, *maintainability*) or a hygiene/patching"
+        " prefix. Legacy category names are aliased automatically"
+        " (*observability* → *reliability*, *ops* →"
+        " *maintainability*). Each finding deducts points from"
+        " the category's starting score of 100, weighted by"
+        " severity:"
     )
     _a("")
     _a("| Severity | Deduction |")
@@ -233,10 +245,14 @@ def _methodology_appendix() -> str:
     _a("**Overall score**")
     _a("")
     _a(
-        "The overall Design Maturity Score is the arithmetic"
-        " mean of all category scores. Categories with many"
-        " findings will pull the average down; categories"
-        " with few or no findings score 100."
+        "The overall Design Maturity Score is the"
+        " coverage-weighted average of all category scores."
+        " Each category carries a configurable weight"
+        " (default 1.0); categories with higher weights"
+        " contribute proportionally more to the final score."
+        " Categories with many findings pull the average"
+        " down; categories with no findings score 100 and"
+        " are still included if they have a configured weight."
     )
     _a("")
     _a("**Grade scale**")
@@ -284,7 +300,7 @@ def _methodology_appendix() -> str:
             _a(f"| {cat} | {scope} | {maturity} |")
 
     _cat_table(
-        "Core NFR Categories",
+        "Core NFR Categories (ISO/IEC 25010)",
         [
             (
                 "**security**",
@@ -292,8 +308,9 @@ def _methodology_appendix() -> str:
                 "No leaked secrets, pinned images/providers, no PII in logs, least-privilege",
             ),
             (
-                "**observability**",
-                "Tracing (OTel), structured logging, correlation IDs, health probes",
+                "**reliability**",
+                "Tracing (OTel), structured logging, correlation IDs, health probes"
+                " *(alias: observability)*",
                 "Full trace pipeline, structured logs with "
                 "correlation IDs, separate health/readiness",
             ),
@@ -303,9 +320,10 @@ def _methodology_appendix() -> str:
                 "Explicit timeouts, bounded pools, no fire-and-forget async, stable dep graph",
             ),
             (
-                "**ops**",
+                "**maintainability**",
                 "Containers, K8s, Helm, CI, service-mesh, "
-                "Terraform, build tooling, ADR governance",
+                "Terraform, build tooling, ADR governance"
+                " *(alias: ops)*",
                 "Multi-stage Dockerfiles, resource limits, "
                 "network policies, CI gates, current ADRs",
             ),
@@ -390,20 +408,45 @@ def _methodology_appendix() -> str:
     )
 
     _a("")
-    _a("### Executive Summary (PDF only)")
+    _a("### LLM Usage in This Report")
     _a("")
-    _a(
-        "When an Anthropic API key is configured, the PDF"
-        " report includes an AI-generated Executive Summary"
-        " with its own overall score (0–100). This score is"
-        " a holistic LLM assessment of project fitness and"
-        " **may differ from the deterministic Design Maturity"
-        " Score**. It considers factors beyond individual rule"
-        " findings, such as the overall pattern of issues,"
-        " test coverage, and dependency health. The verdict"
-        " (Fit / Conditional / Unfit) reflects a go/no-go"
-        " recommendation."
-    )
+    if llm_info is not None:
+        provider, model = llm_info
+        _a(
+            f"This report was generated with LLM integration"
+            f" enabled (**{provider}**, model `{model}`)."
+            " The following sections used LLM analysis:"
+        )
+        _a("")
+        _a(
+            "- **Executive Summary** — AI-generated holistic"
+            " assessment including verdict (Fit / Conditional /"
+            " Unfit), risk highlights, remediation priorities,"
+            " and an independent overall score (0–100). This"
+            " score **may differ from the deterministic Design"
+            " Maturity Score** as it considers factors beyond"
+            " individual rule findings, such as the overall"
+            " pattern of issues, test coverage, and dependency"
+            " health."
+        )
+        _a("")
+        _a(
+            "All other sections — findings, Design Maturity Score,"
+            " category breakdowns, diagrams, and dependency"
+            " analysis — are produced by deterministic static"
+            " analysis and are not influenced by the LLM."
+        )
+    else:
+        _a(
+            "This report was generated **without LLM"
+            " integration**. All sections are produced by"
+            " deterministic static analysis. To enable"
+            " AI-generated executive summaries, configure an"
+            " LLM provider in `nfr-review.yaml` under the"
+            " `llm:` key or set the appropriate environment"
+            " variables (`NFR_LLM_PROVIDER`,"
+            " `NFR_LLM_MODEL`)."
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -429,7 +472,8 @@ def render_score_section(score: MaturityScore, trend: ScoreTrend | None = None) 
         f"**Overall: {score.overall}/100 (Grade: {score.grade})**",
         "",
         (
-            "The overall score is the arithmetic mean of the category scores below."
+            "The overall score is the coverage-weighted average of the"
+            " ISO/IEC 25010 category scores below."
             " Each category starts at 100 and is reduced by severity-weighted"
             " deductions (critical −15, high −8, medium −3, low −1, info 0),"
             " clamped to a floor of 0."
@@ -483,6 +527,7 @@ def render_markdown_report(
     diagrams: dict[str, str] | None = None,
     score_section: str = "",
     suppressed_findings: list[tuple[Finding, SuppressionInfo]] | None = None,
+    llm_info: tuple[str, str] | None = None,
 ) -> str:
     """Render a complete Markdown report from scan results.
 
@@ -583,6 +628,6 @@ def render_markdown_report(
 
     # Scoring methodology appendix (always included when scores are present)
     if score_section:
-        sections.append(_methodology_appendix())
+        sections.append(_methodology_appendix(llm_info=llm_info))
 
     return "\n".join(sections)
