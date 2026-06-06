@@ -63,7 +63,7 @@ class LlmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     provider: LlmProvider = "anthropic"
-    model: str = "claude-sonnet-4-6-20250514"
+    model: str = "claude-sonnet-4-6"
     base_url: str | None = None
     api_key_env_var: str = "ANTHROPIC_API_KEY"
 
@@ -78,7 +78,16 @@ class LlmConfig(BaseModel):
             overrides["base_url"] = v
         if not overrides:
             return self
-        return self.model_copy(update=overrides)
+        resolved = self.model_copy(update=overrides)
+        if "provider" in overrides and "api_key_env_var" not in overrides:
+            _provider_key_map = {
+                "anthropic": "ANTHROPIC_API_KEY",
+                "openai": "OPENAI_API_KEY",
+            }
+            if new_key := _provider_key_map.get(resolved.provider):
+                if new_key != resolved.api_key_env_var:
+                    resolved = resolved.model_copy(update={"api_key_env_var": new_key})
+        return resolved
 
 
 ISO_25010_CATEGORIES: tuple[str, ...] = (

@@ -119,6 +119,23 @@ class TestGenerateExecSummary:
         assert result is not None
         assert result.verdict == "conditional"
 
+    def test_handles_prose_wrapped_response(self) -> None:
+        wrapped = (
+            "Here is my analysis of the project:\n\n"
+            f"{_VALID_LLM_RESPONSE}\n\n"
+            "Let me know if you need further details."
+        )
+        mock_client = MagicMock()
+        mock_client.available = True
+        mock_client.analyze.return_value = wrapped
+
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
+            result = generate_executive_summary(_make_run_result())
+
+        assert result is not None
+        assert result.verdict == "conditional"
+        assert result.overall_score == 62
+
     def test_returns_none_on_invalid_json(self) -> None:
         mock_client = MagicMock()
         mock_client.available = True

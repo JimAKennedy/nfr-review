@@ -8,7 +8,12 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from nfr_review.collectors.adr_derive import AdrDeriveCollector, _extract_json
+from nfr_review.collectors.adr_derive import (
+    AdrDeriveCollector,
+)
+from nfr_review.collectors.adr_derive import (
+    _extract_json_array as _extract_json,
+)
 
 _VALID_LLM_RESPONSE = json.dumps(
     [
@@ -77,7 +82,7 @@ class TestLlmUnavailable:
 
         assert len(results) == 1
         assert results[0].kind == "adr-derive-skip"
-        assert "ANTHROPIC_API_KEY" in results[0].payload["reason"]
+        assert "LLM not configured" in results[0].payload["reason"]
 
     @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_skip_evidence_has_correct_collector_info(

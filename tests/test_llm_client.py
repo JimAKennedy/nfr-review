@@ -19,6 +19,7 @@ from nfr_review.llm_client import (
     LlmUnavailableError,
     OpenAICompatibleClient,
     create_llm_client,
+    extract_json,
     serialize_evidence_bundle,
 )
 from nfr_review.protocols import LlmClient
@@ -191,7 +192,7 @@ class TestClaudeClientAnalyze:
 
         assert result == "LLM says no PII found"
         mock_client_instance.messages.create.assert_called_once_with(
-            model="claude-sonnet-4-6-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=1024,
             messages=[
                 {
@@ -330,7 +331,7 @@ class TestLlmConfig:
     def test_defaults(self) -> None:
         cfg = LlmConfig()
         assert cfg.provider == "anthropic"
-        assert cfg.model == "claude-sonnet-4-6-20250514"
+        assert cfg.model == "claude-sonnet-4-6"
         assert cfg.base_url is None
         assert cfg.api_key_env_var == "ANTHROPIC_API_KEY"
 
@@ -342,7 +343,7 @@ class TestLlmConfig:
         cfg = LlmConfig()
         resolved = cfg.resolve()
         assert resolved.provider == "anthropic"
-        assert resolved.model == "claude-sonnet-4-6-20250514"
+        assert resolved.model == "claude-sonnet-4-6"
 
     def test_resolve_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")
@@ -353,6 +354,25 @@ class TestLlmConfig:
         assert resolved.provider == "openai"
         assert resolved.model == "gpt-4o"
         assert resolved.base_url == "http://localhost:11434/v1"
+        assert resolved.api_key_env_var == "OPENAI_API_KEY"
+
+    def test_resolve_api_key_env_var_follows_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "openai")
+        monkeypatch.delenv("NFR_LLM_MODEL", raising=False)
+        monkeypatch.delenv("NFR_LLM_BASE_URL", raising=False)
+        cfg = LlmConfig()
+        resolved = cfg.resolve()
+        assert resolved.api_key_env_var == "OPENAI_API_KEY"
+
+    def test_resolve_api_key_env_var_unchanged_for_anthropic(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("NFR_LLM_PROVIDER", "anthropic")
+        cfg = LlmConfig()
+        resolved = cfg.resolve()
+        assert resolved.api_key_env_var == "ANTHROPIC_API_KEY"
 
     def test_resolve_returns_self_when_no_changes(
         self, monkeypatch: pytest.MonkeyPatch
@@ -736,3 +756,70 @@ class TestCrossBackendConfigIntegration:
         with patch("nfr_review.llm_client.shutil.which", return_value="/usr/bin/claude"):
             client = create_llm_client(config.llm)
         assert isinstance(client, ClaudeCliClient)
+
+
+# ---------------------------------------------------------------------------
+# extract_json
+# ---------------------------------------------------------------------------
+
+
+class TestExtractJson:
+    def test_direct_object(self) -> None:
+        assert extract_json('{"key": "value"}') == {"key": "value"}
+
+    def test_direct_array(self) -> None:
+        assert extract_json("[1, 2]", expect="array") == [1, 2]
+
+    def test_code_fenced_object(self) -> None:
+        text = '```json\n{"verdict": "pass"}\n```'
+        assert extract_json(text) == {"verdict": "pass"}
+
+    def test_code_fence_without_json_tag(self) -> None:
+        text = '```\n{"verdict": "pass"}\n```'
+        assert extract_json(text) == {"verdict": "pass"}
+
+    def test_prose_wrapped_object(self) -> None:
+        text = 'Here is the analysis:\n\n{"verdict": "pass", "score": 42}\n\nHope that helps!'
+        result = extract_json(text)
+        assert result == {"verdict": "pass", "score": 42}
+
+    def test_prose_wrapped_array(self) -> None:
+        text = 'The results are:\n[{"index": 0, "is_pii": true}]\nEnd of response.'
+        result = extract_json(text, expect="array")
+        assert result == [{"index": 0, "is_pii": True}]
+
+    def test_returns_none_on_no_json(self) -> None:
+        assert extract_json("This is not JSON at all") is None
+
+    def test_returns_none_on_wrong_type(self) -> None:
+        assert extract_json("[1, 2]", expect="object") is None
+
+    def test_object_not_returned_for_array_expect(self) -> None:
+        assert extract_json('{"key": "val"}', expect="array") is None
+
+    def test_any_accepts_object(self) -> None:
+        result = extract_json('{"k": 1}', expect="any")
+        assert result == {"k": 1}
+
+    def test_any_accepts_array(self) -> None:
+        result = extract_json("[1]", expect="any")
+        assert result == [1]
+
+    def test_leading_trailing_whitespace(self) -> None:
+        assert extract_json('  \n{"a": 1}\n  ') == {"a": 1}
+
+    def test_nested_braces(self) -> None:
+        text = 'prefix {"outer": {"inner": 1}} suffix'
+        result = extract_json(text)
+        assert result == {"outer": {"inner": 1}}
+
+    def test_code_fence_with_surrounding_prose(self) -> None:
+        text = (
+            "I've analyzed the codebase. Here are the results:\n\n"
+            "```json\n"
+            '{"verdict": "conditional", "score": 65}\n'
+            "```\n\n"
+            "Let me know if you need more detail."
+        )
+        result = extract_json(text)
+        assert result == {"verdict": "conditional", "score": 65}

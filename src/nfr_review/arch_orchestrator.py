@@ -326,7 +326,7 @@ def run_arch_review(
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         repos_analyzed=repos_info,
         llm_available=llm is not None,
-        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6-20250514")
+        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
         if llm is not None
         else None,
     )
