@@ -4,7 +4,7 @@
 
 Tagged pushes (`v*.*.*`) trigger the release workflow (`.github/workflows/release.yml`):
 
-1. **build-push** — builds and pushes the container image to `ghcr.io`
+1. **build-push** — builds the container image, runs smoke tests, CVE scan (Trivy), pushes to `ghcr.io`, signs with cosign (keyless OIDC), and attaches an SPDX SBOM attestation
 2. **pypi-publish** — builds sdist + wheel and uploads to PyPI via OIDC Trusted Publishing
 3. **github-release** — creates a GitHub Release with changelog notes
 
@@ -29,6 +29,8 @@ The release workflow handles everything else automatically.
 - [ ] Verify the [GitHub Release](https://github.com/JimAKennedy/nfr-review/releases) was created
 - [ ] Verify the package is on [PyPI](https://pypi.org/project/nfr-review/)
 - [ ] Run `pip install nfr-review==<version>` in a clean venv to confirm
+- [ ] Verify the container image signature: `cosign verify ghcr.io/jimakennedy/nfr-review:<version>`
+- [ ] Verify the SBOM attestation: `cosign verify-attestation --type spdxjson ghcr.io/jimakennedy/nfr-review:<version>`
 - [ ] Announce the release in relevant channels
 
 ## PyPI Trusted Publishing Setup
