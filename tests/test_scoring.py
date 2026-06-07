@@ -194,10 +194,10 @@ def test_weighted_score_dilutes_single_category_findings() -> None:
     """A critical finding in one category is diluted by clean categories."""
     findings = [_finding(rule_id="security-check", severity="critical")]
     score = compute_maturity_score(findings, ["R001"], [])
-    # security: 85, reliability: 100, performance: 100, maintainability: 100
-    # (85 + 100 + 100 + 100) / 4 = 96.25 → 96
+    # security: 85, reliability: 100, performance: 100, maintainability: 100, OTEL: 100
+    # (85 + 100 + 100 + 100 + 100) / 5 = 97
     assert score.category_scores["security"] == 85
-    assert score.overall == 96
+    assert score.overall == 97
     assert score.grade == "A"
 
 
@@ -219,17 +219,17 @@ def test_custom_weights_shift_overall() -> None:
 
 
 def test_category_aliases_normalize_legacy_names() -> None:
-    """Observability and ops findings are aliased to ISO 25010 categories."""
+    """OTel rules get their own category; ops findings are aliased to maintainability."""
     findings = [
         _finding(
             rule_id="otel-missing", severity="high"
-        ),  # keyword: otel → observability → reliability
+        ),  # keyword: otel → OTEL (own category)
         _finding(
             rule_id="resource-limits-missing", severity="medium"
         ),  # keyword: resource-limits → ops → maintainability
     ]
     score = compute_maturity_score(findings, ["R001"], [])
-    assert "reliability" in score.category_scores
+    assert "OTEL" in score.category_scores
     assert "maintainability" in score.category_scores
     assert "observability" not in score.category_scores
     assert "ops" not in score.category_scores

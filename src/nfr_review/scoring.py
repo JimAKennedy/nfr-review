@@ -66,7 +66,7 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
     "provider-pinning": "security",
     "fetchcontent-pinning": "security",
     "user-directive": "security",
-    "otel": "observability",
+    "otel": "OTEL",
     "logging": "observability",
     "log-statement": "observability",
     "correlation-id": "observability",

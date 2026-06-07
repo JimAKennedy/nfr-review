@@ -309,10 +309,8 @@ def _methodology_appendix(
             ),
             (
                 "**reliability**",
-                "Tracing (OTel), structured logging, correlation IDs, health probes"
-                " *(alias: observability)*",
-                "Full trace pipeline, structured logs with "
-                "correlation IDs, separate health/readiness",
+                "Structured logging, correlation IDs, health probes *(alias: observability)*",
+                "Structured logs with correlation IDs, separate health/readiness",
             ),
             (
                 "**performance**",
@@ -403,6 +401,23 @@ def _methodology_appendix(
                 "**PATCH-TRAFFIC**",
                 "Traffic shifting, circuit breakers, rate limiting",
                 "Progressive traffic shifting, circuit breakers, rate limiting configured",
+            ),
+        ],
+    )
+
+    _cat_table(
+        "OTel Readiness Category (OTEL)",
+        [
+            (
+                "**OTEL**",
+                "OpenTelemetry instrumentation readiness: exporter config, pipeline"
+                " completeness, sampling strategy, W3C propagation, resource attributes,"
+                " test agent setup, integration test coverage, fault injection,"
+                " test observability",
+                "OTel SDK configured with OTLP exporter, complete trace/metrics/logs"
+                " pipelines, W3C trace-context propagation, service.name and"
+                " service.version resource attributes, test coverage for"
+                " instrumented paths, fault-injection tests for resilience signals",
             ),
         ],
     )
