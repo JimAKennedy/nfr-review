@@ -276,3 +276,4 @@ jobs:
           echo "| Tests | ${{ needs.test.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| License Compliance | ${{ needs.license-check.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secrets Scan | ${{ needs.secrets-scan.result == 'success' && '✓' || '⚠' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker CVE Scan | ${{ needs.cve-scan.result == 'success' && '✓' || (needs.cve-scan.result == 'skipped' && '—' || '⚠') }} |" >> $GITHUB_STEP_SUMMARY
