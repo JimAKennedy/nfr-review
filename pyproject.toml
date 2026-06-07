@@ -27,7 +27,7 @@ dependencies = [
     "tree-sitter-python>=0.23",
     "tree-sitter-go>=0.23",
     "tree-sitter-hcl>=1.1",
-    "tree-sitter-dockerfile>=0.2",
+    "tree-sitter-dockerfile>=0.2; platform_machine != 'aarch64'",
     "tree-sitter-c-sharp>=0.23",
     "tree-sitter-typescript>=0.23",
     "tree-sitter-cpp>=0.23",
