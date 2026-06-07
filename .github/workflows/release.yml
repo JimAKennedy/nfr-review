@@ -87,6 +87,21 @@ jobs:
           cosign sign --yes \
             ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Attest SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+
   pypi-publish:
     runs-on: ubuntu-latest
     environment: pypi

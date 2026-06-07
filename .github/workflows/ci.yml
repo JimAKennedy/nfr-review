@@ -245,10 +245,63 @@ jobs:
         if: steps.filter.outputs.docker != 'true'
         run: echo "No Docker-related files changed — CVE scan skipped"
 
+  container-e2e:
+    name: Container E2E
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            docker:
+              - 'Dockerfile'
+              - 'pyproject.toml'
+              - 'requirements*.txt'
+              - 'requirements*.in'
+              - 'src/**'
+
+      - name: Set up Docker Buildx
+        if: steps.filter.outputs.docker == 'true'
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Build container
+        if: steps.filter.outputs.docker == 'true'
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: nfr-review:e2e-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: E2E — version check
+        if: steps.filter.outputs.docker == 'true'
+        run: |
+          docker run --rm --entrypoint sh nfr-review:e2e-test \
+            -c 'nfr-review --version'
+
+      - name: E2E — fixture scan
+        if: steps.filter.outputs.docker == 'true'
+        run: |
+          docker run --rm --entrypoint sh \
+            -v "${{ github.workspace }}/tests/fixtures/cpp-integration-repo:/repo:ro" \
+            -w /repo \
+            nfr-review:e2e-test \
+            -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+
+      - name: E2E skipped
+        if: steps.filter.outputs.docker != 'true'
+        run: echo "No container-relevant files changed — E2E test skipped"
+
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, security, test, license-check, secrets-scan, cve-scan]
+    needs: [lint, typecheck, security, test, license-check, secrets-scan, cve-scan, container-e2e]
     if: always()
 
     steps:
@@ -277,3 +330,4 @@ jobs:
           echo "| License Compliance | ${{ needs.license-check.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secrets Scan | ${{ needs.secrets-scan.result == 'success' && '✓' || '⚠' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker CVE Scan | ${{ needs.cve-scan.result == 'success' && '✓' || (needs.cve-scan.result == 'skipped' && '—' || '⚠') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container E2E | ${{ needs.container-e2e.result == 'success' && '✓' || (needs.container-e2e.result == 'skipped' && '—' || '⚠') }} |" >> $GITHUB_STEP_SUMMARY
