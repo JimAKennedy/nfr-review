@@ -68,22 +68,22 @@ A pre-built Docker image is published to GHCR (`linux/amd64`). The image include
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
-docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
+docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:latest
 
 # Scan a local project
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
+  ghcr.io/jimakennedy/nfr-review:latest run /repo
 
 # Full report with scoring
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo --score -v
+  ghcr.io/jimakennedy/nfr-review:latest report /repo --score -v
 
 # Run everything (architecture + NFR + hygiene)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 all /repo -v
+  ghcr.io/jimakennedy/nfr-review:latest all /repo -v
 ```
 
 **Using LLM features in Docker:** Pass your API key as an environment variable with `-e`. LLM features (executive summary, ADR drift analysis, PII detection) are optional — without an API key, all static-analysis rules still run normally.
@@ -93,7 +93,7 @@ docker run --rm --platform linux/amd64 \
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+  ghcr.io/jimakennedy/nfr-review:latest report /repo
 
 # OpenAI-compatible (Ollama running on the host)
 docker run --rm --platform linux/amd64 \
@@ -102,7 +102,7 @@ docker run --rm --platform linux/amd64 \
   -e NFR_LLM_MODEL=llama3 \
   -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
   -e OPENAI_API_KEY=ollama \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+  ghcr.io/jimakennedy/nfr-review:latest report /repo
 ```
 
 **macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64` flag is required. For faster emulation, enable **Settings > General > "Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** in Docker Desktop.
