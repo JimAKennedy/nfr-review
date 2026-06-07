@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-06
+
+### Fixed
+
+- Hardened Docker image — bumped base from `python:3.11-slim` to
+  `python:3.14-slim`, replaced Debian chromium with Puppeteer's bundled
+  Chrome (reduces CVE surface), added required system libraries for
+  headless Chrome rendering.
+- Added smoke test gate to release workflow — image must pass
+  `nfr-review --version` and a fixture scan before pushing to GHCR.
+
+## [0.1.1] - 2026-06-06
+
+### Added
+
+- Mermaid rendering support and LLM SDKs added to Docker image.
+- Docker usage instructions for amd64 image on Apple Silicon.
+
+### Fixed
+
+- amd64-only Docker build with decoupled release jobs.
+
 ## [0.1.0] - 2026-06-06
 
 ### Added
