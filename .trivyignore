@@ -1,0 +1,8 @@
+# .trivyignore — CVEs accepted as upstream-only or false positives.
+#
+# Each line is a CVE ID. Add a comment above explaining why.
+# Review this file when upgrading the base image (python:3.14-slim).
+#
+# Format:
+#   # reason for ignoring
+#   CVE-YYYY-NNNNN
