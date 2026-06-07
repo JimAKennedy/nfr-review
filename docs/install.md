@@ -515,22 +515,22 @@ Anthropic and OpenAI) and the `gh` CLI. The container runs as non-root user
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
-docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
+docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:latest
 
 # Scan a local project (mount it at /repo)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
+  ghcr.io/jimakennedy/nfr-review:latest run /repo
 
 # With a config file
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --config /repo/nfr-review.yaml
+  ghcr.io/jimakennedy/nfr-review:latest run /repo --config /repo/nfr-review.yaml
 
 # Full report (writes to /repo/reports/ inside the container)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+  ghcr.io/jimakennedy/nfr-review:latest report /repo
 ```
 
 The entrypoint is `nfr-review`, so all CLI subcommands and flags
@@ -547,7 +547,7 @@ skipped gracefully — all static-analysis rules still run.
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+  ghcr.io/jimakennedy/nfr-review:latest report /repo
 
 # OpenAI-compatible (e.g. Ollama running on the host)
 docker run --rm --platform linux/amd64 \
@@ -556,7 +556,7 @@ docker run --rm --platform linux/amd64 \
   -e NFR_LLM_MODEL=llama3 \
   -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
   -e OPENAI_API_KEY=ollama \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+  ghcr.io/jimakennedy/nfr-review:latest report /repo
 
 # Override provider and model via env vars
 docker run --rm --platform linux/amd64 \
@@ -564,7 +564,7 @@ docker run --rm --platform linux/amd64 \
   -e NFR_LLM_PROVIDER=anthropic \
   -e NFR_LLM_MODEL=claude-sonnet-4-6 \
   -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 all /repo -v
+  ghcr.io/jimakennedy/nfr-review:latest all /repo -v
 ```
 
 Note: `-e ANTHROPIC_API_KEY` (no `=`) forwards the variable from your
