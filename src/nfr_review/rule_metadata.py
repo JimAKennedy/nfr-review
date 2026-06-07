@@ -541,6 +541,57 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["otel", "observability", "performance"],
         ["ISO 25010:Performance"],
     ),
+    # --- OTel readiness rules (S01) ---
+    "otel-test-agent": _m(
+        "medium",
+        "reliability",
+        "Flags repos where test profiles don't attach the OTel agent.",
+        ["otel", "observability", "testing"],
+        ["ISO 25010:Reliability"],
+    ),
+    "otel-file-exporter": _m(
+        "medium",
+        "reliability",
+        "Flags repos without an OTel file exporter configured for CI trace capture.",
+        ["otel", "observability", "ci"],
+        ["ISO 25010:Reliability"],
+    ),
+    "otel-w3c-propagation": _m(
+        "medium",
+        "reliability",
+        "Flags repos without W3C trace-context propagation configured.",
+        ["otel", "observability", "tracing"],
+        ["ISO 25010:Reliability"],
+    ),
+    "otel-resource-attrs": _m(
+        "medium",
+        "reliability",
+        "Flags repos without required OTel resource attributes.",
+        ["otel", "observability", "tracing"],
+        ["ISO 25010:Reliability"],
+    ),
+    # --- OTel test-coverage rules (S02) ---
+    "otel-integration-test-coverage": _m(
+        "medium",
+        "reliability",
+        "Flags repos where API endpoints lack corresponding integration tests.",
+        ["testing", "coverage", "observability"],
+        ["ISO 25010:Reliability"],
+    ),
+    "otel-fault-injection-tests": _m(
+        "medium",
+        "reliability",
+        "Flags repos with resilience patterns but no fault-injection tests.",
+        ["testing", "resilience", "chaos"],
+        ["ISO 25010:Reliability"],
+    ),
+    "otel-test-observability": _m(
+        "medium",
+        "reliability",
+        "Flags test configs that don't produce OTel traces for dynamic analysis.",
+        ["otel", "testing", "observability"],
+        ["ISO 25010:Reliability"],
+    ),
     # --- PATCH rules (patching safety) ---
     "PATCH-ARCH-001": _m(
         "high",

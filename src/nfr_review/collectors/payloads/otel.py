@@ -19,4 +19,18 @@ class OtelAnalysisPayload(BasePayload):
     pipelines: dict[str, Any]
 
 
-__all__ = ["OtelAnalysisPayload"]
+class OtelSdkConfigPayload(BasePayload):
+    """Payload for kind='otel-sdk-config' evidence.
+
+    Captures OTel SDK-level configuration found across docker-compose,
+    CI workflows, Maven POMs, Spring Boot configs, and Dockerfiles.
+    """
+
+    agent_attached: bool
+    exporter_type: str | None
+    propagators: list[str]
+    resource_attributes: dict[str, str]
+    source_file: str
+
+
+__all__ = ["OtelAnalysisPayload", "OtelSdkConfigPayload"]

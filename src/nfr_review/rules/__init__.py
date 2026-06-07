@@ -136,8 +136,23 @@ from nfr_review.rules import (
     nodejs_sync_fs_api as nodejs_sync_fs_api,  # noqa: F401
 )
 from nfr_review.rules import otel_exporter as otel_exporter  # noqa: F401
+from nfr_review.rules import (
+    otel_fault_injection_tests as otel_fault_injection_tests,  # noqa: F401
+)
+from nfr_review.rules import otel_file_exporter as otel_file_exporter  # noqa: F401
+from nfr_review.rules import (
+    otel_integration_test_coverage as otel_integration_test_coverage,  # noqa: F401
+)
 from nfr_review.rules import otel_pipeline as otel_pipeline  # noqa: F401
+from nfr_review.rules import otel_resource_attrs as otel_resource_attrs  # noqa: F401
 from nfr_review.rules import otel_sampling as otel_sampling  # noqa: F401
+from nfr_review.rules import otel_test_agent as otel_test_agent  # noqa: F401
+from nfr_review.rules import (
+    otel_test_observability as otel_test_observability,  # noqa: F401
+)
+from nfr_review.rules import (
+    otel_w3c_propagation as otel_w3c_propagation,  # noqa: F401
+)
 from nfr_review.rules import (
     patch_arch_graceful as patch_arch_graceful,  # noqa: F401
 )
@@ -287,8 +302,15 @@ __all__ = [
     "k8s_resources",
     "k8s_security",
     "otel_exporter",
+    "otel_fault_injection_tests",
+    "otel_file_exporter",
+    "otel_integration_test_coverage",
     "otel_pipeline",
+    "otel_resource_attrs",
     "otel_sampling",
+    "otel_test_agent",
+    "otel_test_observability",
+    "otel_w3c_propagation",
     "patch_arch_graceful",
     "patch_arch_pdb",
     "patch_arch_singleton",
