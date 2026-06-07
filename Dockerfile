@@ -14,7 +14,7 @@ COPY src/ src/
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir .[pdf,diagrams]
+RUN pip install --no-cache-dir .[pdf,diagrams,llm-anthropic,llm-openai]
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────
 FROM python:3.12-slim
@@ -33,6 +33,8 @@ RUN apt-get update \
        graphviz \
        git \
        curl ca-certificates gpg \
+       nodejs npm \
+       chromium \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
@@ -41,10 +43,15 @@ RUN apt-get update \
        > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends gh \
-    && rm -rf /var/lib/apt/lists/*
+    && PUPPETEER_SKIP_DOWNLOAD=true npm install -g @mermaid-js/mermaid-cli puppeteer \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# Point mermaid-cli / puppeteer at system Chromium (no bundled download)
+RUN printf '{"executablePath":"/usr/bin/chromium","args":["--no-sandbox","--disable-gpu"]}\n' \
+    > /etc/mmdc-puppeteer.json
 
 RUN useradd --create-home --uid 1000 nfr
 USER nfr

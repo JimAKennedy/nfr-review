@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import struct
 import subprocess  # nosec B404 — args are hardcoded tool names, not user input
@@ -21,6 +22,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _MERMAID_CONFIG = {"maxTextSize": 200_000}
+
+
+def _puppeteer_config_path() -> str | None:
+    env = os.environ.get("PUPPETEER_CONFIG")
+    if env and Path(env).is_file():
+        return env
+    default = Path("/etc/mmdc-puppeteer.json")
+    if default.is_file():
+        return str(default)
+    return None
 
 
 def render_mermaid_to_png(
@@ -73,6 +84,9 @@ def render_mermaid_to_png(
             "-c",
             str(cfg_path),
         ]
+        pup_cfg = _puppeteer_config_path()
+        if pup_cfg:
+            cmd.extend(["-p", pup_cfg])
         if scale > 1:
             cmd.extend(["-s", str(scale)])
         if width is not None:
@@ -150,18 +164,23 @@ def render_mermaid_to_svg(
             json.dump(_MERMAID_CONFIG, cfg_tmp)
             cfg_path = Path(cfg_tmp.name)
 
+        cmd = [
+            mmdc,
+            "-i",
+            str(tmp_path),
+            "-o",
+            str(output_path),
+            "-b",
+            "transparent",
+            "-c",
+            str(cfg_path),
+        ]
+        pup_cfg = _puppeteer_config_path()
+        if pup_cfg:
+            cmd.extend(["-p", pup_cfg])
+
         subprocess.run(  # nosec B603
-            [
-                mmdc,
-                "-i",
-                str(tmp_path),
-                "-o",
-                str(output_path),
-                "-b",
-                "transparent",
-                "-c",
-                str(cfg_path),
-            ],
+            cmd,
             capture_output=True,
             timeout=timeout,
             check=True,

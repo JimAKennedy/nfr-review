@@ -509,11 +509,12 @@ nfr-review all /path/to/repo1 /path/to/repo2
 ### Docker
 
 A pre-built `linux/amd64` image is published to GHCR. It includes all extras
-(PDF generation, diagrams, Graphviz) and the `gh` CLI. The container runs as
-non-root user `nfr` (UID 1000).
+(PDF generation, Mermaid diagram rendering, Graphviz, LLM SDKs for both
+Anthropic and OpenAI) and the `gh` CLI. The container runs as non-root user
+`nfr` (UID 1000).
 
 ```bash
-# Pull the image
+# Pull the image (--platform required on Apple Silicon Macs)
 docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
 
 # Scan a local project (mount it at /repo)
@@ -530,17 +531,45 @@ docker run --rm --platform linux/amd64 \
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
-
-# Pass LLM API key for LLM-powered features
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
 ```
 
 The entrypoint is `nfr-review`, so all CLI subcommands and flags
-(`run`, `report`, `hygiene`, `deps`, `arch`, etc.) work directly as
+(`run`, `report`, `hygiene`, `deps`, `arch`, `all`, etc.) work directly as
 arguments.
+
+**Using LLM features in Docker:** Pass your API key via `-e`. The image
+ships with both Anthropic and OpenAI SDKs pre-installed. Without an API key,
+LLM-powered features (executive summary, ADR drift, PII detection) are
+skipped gracefully — all static-analysis rules still run.
+
+```bash
+# Anthropic API (default provider)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e ANTHROPIC_API_KEY \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+
+# OpenAI-compatible (e.g. Ollama running on the host)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e NFR_LLM_PROVIDER=openai \
+  -e NFR_LLM_MODEL=llama3 \
+  -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e OPENAI_API_KEY=ollama \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+
+# Override provider and model via env vars
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e NFR_LLM_PROVIDER=anthropic \
+  -e NFR_LLM_MODEL=claude-sonnet-4-6 \
+  -e ANTHROPIC_API_KEY \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 all /repo -v
+```
+
+Note: `-e ANTHROPIC_API_KEY` (no `=`) forwards the variable from your
+host shell. You can also use `-e ANTHROPIC_API_KEY=sk-ant-...` to set
+it explicitly.
 
 **macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop
 on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64`
