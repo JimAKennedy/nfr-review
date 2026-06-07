@@ -57,6 +57,15 @@ jobs:
             nfr-review:smoke-test \
             -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
 
+      - name: CVE scan — block on critical/high
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nfr-review:smoke-test
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+
       - uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
