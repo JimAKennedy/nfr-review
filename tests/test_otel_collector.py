@@ -16,6 +16,8 @@ from nfr_review.registry import collector_registry
 
 FIXTURES = Path(__file__).parent / "fixtures" / "otel-sample-repo"
 GOOD_FIXTURES = Path(__file__).parent / "fixtures" / "otel-good-repo"
+READINESS_GOOD = Path(__file__).parent / "fixtures" / "otel-readiness-good"
+READINESS_BAD = Path(__file__).parent / "fixtures" / "otel-readiness-bad"
 
 
 @pytest.fixture
@@ -287,3 +289,108 @@ class TestDetectionEnhancement:
         nested.mkdir(parents=True)
         (nested / "otel-collector-config.yml").write_text("receivers:\n  otlp: {}\n")
         assert detect_technologies(tmp_path)["otel"] is True
+
+
+class TestSdkConfigDetection:
+    """Tests for the new otel-sdk-config evidence kind."""
+
+    def test_readiness_good_produces_sdk_config(self, collector: OTelCollector) -> None:
+        results = collector.collect(READINESS_GOOD, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) >= 1
+
+    def test_readiness_bad_no_sdk_config(self, collector: OTelCollector) -> None:
+        results = collector.collect(READINESS_BAD, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 0
+
+    def test_sdk_config_payload_structure(self, collector: OTelCollector) -> None:
+        results = collector.collect(READINESS_GOOD, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) >= 1
+        payload = sdk_results[0].payload
+        assert "agent_attached" in payload
+        assert "exporter_type" in payload
+        assert "propagators" in payload
+        assert "resource_attributes" in payload
+        assert "source_file" in payload
+
+    def test_docker_compose_otel_env_detected(
+        self, collector: OTelCollector, tmp_path: Path
+    ) -> None:
+        (tmp_path / "docker-compose.yml").write_text(
+            "version: '3'\n"
+            "services:\n"
+            "  app:\n"
+            "    environment:\n"
+            "      OTEL_SERVICE_NAME: my-svc\n"
+            "      OTEL_TRACES_EXPORTER: otlp\n"
+            "      OTEL_PROPAGATORS: tracecontext,baggage\n"
+            "      OTEL_RESOURCE_ATTRIBUTES: service.name=demo,service.version=1.0\n"
+        )
+        results = collector.collect(tmp_path, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 1
+        p = sdk_results[0].payload
+        assert p["resource_attributes"]["service.name"] == "demo"
+        assert "tracecontext" in p["propagators"]
+
+    def test_spring_application_yml_otel_detected(
+        self, collector: OTelCollector, tmp_path: Path
+    ) -> None:
+        (tmp_path / "application.yml").write_text(
+            "spring:\n"
+            "  application:\n"
+            "    name: my-api\n"
+            "management:\n"
+            "  tracing:\n"
+            "    enabled: true\n"
+        )
+        results = collector.collect(tmp_path, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 1
+        p = sdk_results[0].payload
+        assert p["resource_attributes"]["service.name"] == "my-api"
+
+    def test_dockerfile_otel_detected(self, collector: OTelCollector, tmp_path: Path) -> None:
+        (tmp_path / "Dockerfile").write_text(
+            "FROM openjdk:17\n"
+            "ENV OTEL_SERVICE_NAME=my-app\n"
+            'ENV JAVA_OPTS="-javaagent:opentelemetry-javaagent.jar"\n'
+        )
+        results = collector.collect(tmp_path, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 1
+        p = sdk_results[0].payload
+        assert p["agent_attached"] is True
+        assert p["resource_attributes"]["service.name"] == "my-app"
+
+    def test_pom_xml_agent_detected(self, collector: OTelCollector, tmp_path: Path) -> None:
+        (tmp_path / "pom.xml").write_text(
+            "<project>\n"
+            "  <build>\n"
+            "    <plugins>\n"
+            "      <plugin>\n"
+            "        <artifactId>maven-surefire-plugin</artifactId>\n"
+            "        <configuration>\n"
+            "          <argLine>-javaagent:opentelemetry-javaagent.jar</argLine>\n"
+            "        </configuration>\n"
+            "      </plugin>\n"
+            "    </plugins>\n"
+            "  </build>\n"
+            "</project>\n"
+        )
+        results = collector.collect(tmp_path, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 1
+        assert sdk_results[0].payload["agent_attached"] is True
+
+    def test_no_otel_config_no_sdk_evidence(
+        self, collector: OTelCollector, tmp_path: Path
+    ) -> None:
+        (tmp_path / "docker-compose.yml").write_text(
+            "version: '3'\nservices:\n  app:\n    image: nginx\n"
+        )
+        results = collector.collect(tmp_path, config=None)
+        sdk_results = [r for r in results if r.kind == "otel-sdk-config"]
+        assert len(sdk_results) == 0
