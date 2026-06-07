@@ -414,7 +414,7 @@ runner.
 ```
 
 - Pulls a pre-built Docker image and runs the scan inside a container.
-- Multi-arch images available for `linux/amd64` and `linux/arm64`.
+- Image available for `linux/amd64` (runs on Apple Silicon via Rosetta).
 - Useful when you want a fully isolated, reproducible environment.
 - The `python-version` input is ignored in container mode.
 - Mount points: the workspace is mounted at `/repo` and the runner temp
@@ -508,14 +508,46 @@ nfr-review all /path/to/repo1 /path/to/repo2
 
 ### Docker
 
-Multi-arch images are published for `linux/amd64` and `linux/arm64`:
+A pre-built `linux/amd64` image is published to GHCR. It includes all extras
+(PDF generation, diagrams, Graphviz) and the `gh` CLI. The container runs as
+non-root user `nfr` (UID 1000).
 
 ```bash
-docker run --rm \
-  -v "$(pwd):/repo" \
-  ghcr.io/jimakennedy/nfr-review:latest \
-  run /repo
+# Pull the image
+docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
+
+# Scan a local project (mount it at /repo)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
+
+# With a config file
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --config /repo/nfr-review.yaml
+
+# Full report (writes to /repo/reports/ inside the container)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+
+# Pass LLM API key for LLM-powered features
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e ANTHROPIC_API_KEY \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
 ```
+
+The entrypoint is `nfr-review`, so all CLI subcommands and flags
+(`run`, `report`, `hygiene`, `deps`, `arch`, etc.) work directly as
+arguments.
+
+**macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop
+on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64`
+flag is required on both `pull` and `run`. Without it, Docker will report
+`no matching manifest for linux/arm64/v8`. For faster emulation, enable
+**Settings > General > "Use Rosetta for x86_64/amd64 emulation on Apple
+Silicon"** in Docker Desktop.
 
 ---
 

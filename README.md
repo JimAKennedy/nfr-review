@@ -62,6 +62,40 @@ pip install "nfr-review[scancode]"       # license compliance scanning
 pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
 ```
 
+### Docker
+
+A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes all extras (PDF, diagrams, Graphviz) and the `gh` CLI.
+
+```bash
+# Pull the image
+docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
+
+# Scan a local project
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
+```
+
+The entrypoint is `nfr-review`, so any CLI subcommand and flags work directly:
+
+```bash
+# With scoring and verbose output
+docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --score -v
+
+# With a config file (must be inside the mounted volume)
+docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --config /repo/nfr-review.yaml
+
+# Full report
+docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
+```
+
+**macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64` flag is required. For faster emulation, enable **Settings > General > "Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** in Docker Desktop.
+
+See [docs/install.md](docs/install.md) for the full Docker reference including container mode in GitHub Actions.
+
 ## Requirements
 
 - **Python 3.11+** (`python3.11`, `python3.12`, etc. — macOS ships 3.9 as `python3` which is too old)
