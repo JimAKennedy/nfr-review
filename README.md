@@ -64,31 +64,44 @@ pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
 
 ### Docker
 
-A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes all extras (PDF, diagrams, Graphviz) and the `gh` CLI.
+A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes all extras (PDF, Mermaid diagram rendering, Graphviz, LLM SDKs) and the `gh` CLI.
 
 ```bash
-# Pull the image
+# Pull the image (--platform required on Apple Silicon Macs)
 docker pull --platform linux/amd64 ghcr.io/jimakennedy/nfr-review:0.1.0
 
 # Scan a local project
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo
+
+# Full report with scoring
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo --score -v
+
+# Run everything (architecture + NFR + hygiene)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 all /repo -v
 ```
 
-The entrypoint is `nfr-review`, so any CLI subcommand and flags work directly:
+**Using LLM features in Docker:** Pass your API key as an environment variable with `-e`. LLM features (executive summary, ADR drift analysis, PII detection) are optional — without an API key, all static-analysis rules still run normally.
 
 ```bash
-# With scoring and verbose output
-docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --score -v
+# Anthropic API (default provider)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e ANTHROPIC_API_KEY \
+  ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
 
-# With a config file (must be inside the mounted volume)
-docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:0.1.0 run /repo --config /repo/nfr-review.yaml
-
-# Full report
-docker run --rm --platform linux/amd64 -v "$(pwd)":/repo \
+# OpenAI-compatible (Ollama running on the host)
+docker run --rm --platform linux/amd64 \
+  -v "$(pwd)":/repo \
+  -e NFR_LLM_PROVIDER=openai \
+  -e NFR_LLM_MODEL=llama3 \
+  -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
+  -e OPENAI_API_KEY=ollama \
   ghcr.io/jimakennedy/nfr-review:0.1.0 report /repo
 ```
 
