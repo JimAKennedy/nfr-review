@@ -12,6 +12,6 @@ warnings.filterwarnings(
     "ignore", message=r".*Libmagic magic database.*", module=r"typecode\.magic2"
 )
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = ["__version__"]

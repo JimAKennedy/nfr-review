@@ -1,8 +1,15 @@
 # .trivyignore — CVEs accepted as upstream-only or false positives.
 #
-# Each line is a CVE ID. Add a comment above explaining why.
+# The CI Trivy step also uses ignore-unfixed: true, so only CVEs with
+# available Debian patches will fail the build. This file catches fixed
+# CVEs that are still acceptable (e.g. not exploitable in our context).
+#
 # Review this file when upgrading the base image (python:3.14-slim).
 #
 # Format:
 #   # reason for ignoring
 #   CVE-YYYY-NNNNN
+
+# gh (Go stdlib) — bundled for CI convenience, not used at runtime.
+# Fixed in gh 1.26.4; will clear on next base-image rebuild.
+CVE-2026-42504

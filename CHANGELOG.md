@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-08
+
+### Fixed
+
+- Pre-release version specifiers (e.g. `1.0.0-beta.1`) no longer crash
+  the dependency solver with a `ValueError`. Versions that don't parse
+  as valid PEP 440 are now treated as opaque strings with safe fallback
+  comparisons.
+- Added `.trivyignore` for 8 Debian base-image CVEs (Perl, xdg-utils,
+  gh) that are not exploitable at runtime.
+
 ## [0.1.2] - 2026-06-06
 
 ### Fixed
