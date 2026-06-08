@@ -321,10 +321,14 @@ def _main() -> None:
     if "--stdout" in sys.argv:
         schema = generate_arch_schema()
         json.dump(schema, sys.stdout, indent=2)
-        sys.stdout.write("\n")
+        sys.stdout.write(
+            "\n"
+        )  # nfr-review:skip(logging-to-stdout) reason: CLI output, not logging
     else:
         generate_arch_schema(default_path)
-        print(f"Schema written to {default_path}")
+        print(
+            f"Schema written to {default_path}"
+        )  # nfr-review:skip(logging-to-stdout) reason: CLI output, not logging
 
 
 if __name__ == "__main__":

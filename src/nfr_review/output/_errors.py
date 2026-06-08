@@ -9,6 +9,7 @@ circular dependency through ``nfr_review.output.__init__``.
 from __future__ import annotations
 
 
+# nfr-review:skip(python-dormant-classes) reason: raised by csv/jsonl/sarif emitters
 class OutputError(Exception):
     """Raised when an output file cannot be written.
 

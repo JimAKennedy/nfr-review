@@ -24,6 +24,7 @@ from nfr_review.config import (
 from nfr_review.models import Finding
 
 
+# nfr-review:skip(python-dormant-classes) reason: returned by compute_maturity_score
 class MaturityScore(BaseModel):
     """Design maturity score with category breakdown."""
 
@@ -34,6 +35,7 @@ class MaturityScore(BaseModel):
     rules_coverage: float  # fraction of rules that ran vs total
 
 
+# nfr-review:skip(python-dormant-classes) reason: returned by compute_trend
 class ScoreTrend(BaseModel):
     """Trend comparison between current and baseline scores."""
 

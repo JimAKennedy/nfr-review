@@ -86,7 +86,7 @@ def _detect_expensive_markers(target: Path) -> list[str]:
     try:
         with open(pyproject, "rb") as fh:
             data = tomllib.load(fh)
-    except Exception:  # noqa: BLE001
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError):
         return []
     markers: list[str] = (
         data.get("tool", {}).get("pytest", {}).get("ini_options", {}).get("markers", [])
