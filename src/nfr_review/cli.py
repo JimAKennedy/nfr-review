@@ -971,6 +971,7 @@ def run_report_pipeline(
     diagrams: dict[str, str] | None = None
     if not no_diagrams:
         from nfr_review.output.diagrams import (
+            collect_dynamic_diagrams,
             render_mermaid_dep_graph,
             render_mermaid_severity_pie,
             render_mermaid_tech_overview,
@@ -989,6 +990,14 @@ def run_report_pipeline(
             )
         if not no_deps and deps_reports:
             diagrams["Dependency Graph"] = render_mermaid_dep_graph(deps_reports)
+        dynamic = collect_dynamic_diagrams(all_findings, nfr_result.evidence)
+        if dynamic:
+            diagrams.update(dynamic)
+            logger.info(
+                "Added %d dynamic diagram(s): %s",
+                len(dynamic),
+                ", ".join(dynamic.keys()),
+            )
 
     # Build evidence-aware report sections
     jdepend_section = build_jdepend_section(nfr_result.evidence)

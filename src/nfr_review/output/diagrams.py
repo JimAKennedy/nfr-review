@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nfr_review.dep_solver import TreeNode
     from nfr_review.deps_analysis import EcosystemDepsReport
-    from nfr_review.models import Finding
+    from nfr_review.models import Evidence, Finding
 
 _SEVERITY_ORDER: tuple[str, ...] = ("critical", "high", "medium", "low", "info")
 
@@ -272,7 +272,50 @@ def render_jdepend_mermaid(packages: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+_SEQUENCE_RE = re.compile(
+    r"```mermaid\s*\n(sequenceDiagram\b.*?)```",
+    re.DOTALL,
+)
+
+
+def extract_sequence_diagrams(findings: list[Finding]) -> dict[str, str]:
+    """Extract Mermaid sequenceDiagram blocks embedded in finding summaries."""
+    diagrams: dict[str, str] = {}
+    idx = 0
+    for f in findings:
+        for m in _SEQUENCE_RE.finditer(f.summary):
+            idx += 1
+            mermaid = m.group(1).strip()
+            title = f"Call Sequence {idx}"
+            diagrams[title] = mermaid
+    return diagrams
+
+
+def build_topology_diagram(evidence: list[Evidence]) -> dict[str, str]:
+    """Build a topology Mermaid diagram from OTel trace evidence."""
+    from nfr_review.output.topology import build_topology_graph, render_topology_mermaid
+
+    graph = build_topology_graph(evidence)
+    if not graph.edges:
+        return {}
+    return {"Runtime Service Topology": render_topology_mermaid(graph)}
+
+
+def collect_dynamic_diagrams(
+    findings: list[Finding],
+    evidence: list[Evidence],
+) -> dict[str, str]:
+    """Collect all dynamic diagrams (topology + sequence) into a single dict."""
+    result: dict[str, str] = {}
+    result.update(build_topology_diagram(evidence))
+    result.update(extract_sequence_diagrams(findings))
+    return result
+
+
 __all__ = [
+    "build_topology_diagram",
+    "collect_dynamic_diagrams",
+    "extract_sequence_diagrams",
     "render_jdepend_dot",
     "render_jdepend_mermaid",
     "render_jdepend_metrics_table",
