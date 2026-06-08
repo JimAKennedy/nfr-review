@@ -154,6 +154,16 @@ class ScoringConfig(BaseModel):
         )
 
 
+class NfrTargetsConfig(BaseModel):
+    """Declarative performance targets for Band 3 quantitative rules."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latency_p95_ms: dict[str, int] = Field(default_factory=dict)
+    throughput_rps_min: int | None = None
+    custom_thresholds: dict[str, Any] = Field(default_factory=dict)
+
+
 class Config(BaseModel):
     """Validated nfr-review.yaml configuration.
 
@@ -173,6 +183,7 @@ class Config(BaseModel):
     max_resolve_rounds: int = 2000
     llm: LlmConfig = Field(default_factory=LlmConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
+    nfr_targets: NfrTargetsConfig = Field(default_factory=NfrTargetsConfig)
     otel_traces: Path | None = None
     target: Path | None = Field(default=None, exclude=True)
 
@@ -262,6 +273,7 @@ __all__ = [
     "ISO_25010_CATEGORIES",
     "LlmConfig",
     "LlmProvider",
+    "NfrTargetsConfig",
     "RulesConfig",
     "ScoringConfig",
     "load_config",

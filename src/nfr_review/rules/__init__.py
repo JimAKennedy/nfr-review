@@ -74,7 +74,16 @@ from nfr_review.rules import (
     dyn_call_sequence as dyn_call_sequence,  # noqa: F401
 )
 from nfr_review.rules import (
+    dyn_correlation_propagation as dyn_correlation_propagation,  # noqa: F401
+)
+from nfr_review.rules import (
+    dyn_latency_p95 as dyn_latency_p95,  # noqa: F401
+)
+from nfr_review.rules import (
     dyn_method_coverage as dyn_method_coverage,  # noqa: F401
+)
+from nfr_review.rules import (
+    dyn_n_plus_1 as dyn_n_plus_1,  # noqa: F401
 )
 from nfr_review.rules import (
     gatling_performance as gatling_performance,  # noqa: F401
@@ -276,7 +285,10 @@ __all__ = [
     "go_goroutine_leak",
     "go_http_no_timeout",
     "dyn_call_sequence",
+    "dyn_correlation_propagation",
+    "dyn_latency_p95",
     "dyn_method_coverage",
+    "dyn_n_plus_1",
     "dep_freshness",
     "dep_upgrade_path",
     "dockerfile_base_pinning",

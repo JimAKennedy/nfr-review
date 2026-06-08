@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from nfr_review.config import (
     CATEGORY_ALIASES,
@@ -13,6 +14,7 @@ from nfr_review.config import (
     Config,
     ConfigError,
     LlmConfig,
+    NfrTargetsConfig,
     RulesConfig,
     ScoringConfig,
     load_config,
@@ -417,3 +419,59 @@ def test_config_with_repo_scoring_preserves_non_scoring_fields() -> None:
     assert merged.tech == {"kafka": True}
     assert merged.rules.skip == ["some-rule"]
     assert merged.scoring.category_weights["security"] == 2.0
+
+
+# ---------------------------------------------------------------------------
+# nfr_targets config block
+# ---------------------------------------------------------------------------
+
+
+class TestNfrTargetsConfig:
+    def test_defaults_empty(self) -> None:
+        cfg = Config()
+        assert cfg.nfr_targets.latency_p95_ms == {}
+        assert cfg.nfr_targets.throughput_rps_min is None
+        assert cfg.nfr_targets.custom_thresholds == {}
+
+    def test_explicit_targets(self) -> None:
+        cfg = Config(
+            nfr_targets=NfrTargetsConfig(
+                latency_p95_ms={"/api/orders": 200, "/api/health": 50},
+                throughput_rps_min=100,
+            ),
+        )
+        assert cfg.nfr_targets.latency_p95_ms["/api/orders"] == 200
+        assert cfg.nfr_targets.throughput_rps_min == 100
+
+    def test_custom_thresholds(self) -> None:
+        cfg = Config(
+            nfr_targets=NfrTargetsConfig(
+                custom_thresholds={"error_rate_pct": 0.1},
+            ),
+        )
+        assert cfg.nfr_targets.custom_thresholds["error_rate_pct"] == 0.1
+
+    def test_nfr_targets_from_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "nfr-review.yaml"
+        p.write_text(
+            "version: 1\n"
+            "nfr_targets:\n"
+            "  latency_p95_ms:\n"
+            "    /api/orders: 200\n"
+            "    /api/health: 50\n"
+            "  throughput_rps_min: 100\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.nfr_targets.latency_p95_ms["/api/orders"] == 200
+        assert cfg.nfr_targets.throughput_rps_min == 100
+
+    def test_nfr_targets_absent_in_yaml(self, tmp_path: Path) -> None:
+        p = tmp_path / "nfr-review.yaml"
+        p.write_text("version: 1\n", encoding="utf-8")
+        cfg = load_config(p)
+        assert cfg.nfr_targets.latency_p95_ms == {}
+
+    def test_nfr_targets_rejects_extra_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            NfrTargetsConfig(bogus="bad")
