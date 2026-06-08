@@ -1,26 +1,14 @@
 # .trivyignore — CVEs accepted as upstream-only or false positives.
 #
-# Each line is a CVE ID. Add a comment above explaining why.
+# The CI Trivy step also uses ignore-unfixed: true, so only CVEs with
+# available Debian patches will fail the build. This file catches fixed
+# CVEs that are still acceptable (e.g. not exploitable in our context).
+#
 # Review this file when upgrading the base image (python:3.14-slim).
 #
 # Format:
 #   # reason for ignoring
 #   CVE-YYYY-NNNNN
-
-# Perl CVEs — nfr-review never invokes Perl; these are transitive
-# dependencies of the Debian base image with no available fixes.
-CVE-2026-42496
-CVE-2026-8376
-CVE-2026-48962
-CVE-2026-42497
-CVE-2026-9538
-
-# Python 3.13 / expat — only exploitable when parsing untrusted XML.
-# nfr-review does not parse XML from untrusted sources. Fix deferred by Debian.
-CVE-2026-7210
-
-# xdg-utils — CLI tool used for mailto: URIs. Not used at runtime.
-CVE-2022-4055
 
 # gh (Go stdlib) — bundled for CI convenience, not used at runtime.
 # Fixed in gh 1.26.4; will clear on next base-image rebuild.
