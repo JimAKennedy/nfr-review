@@ -149,6 +149,59 @@ class TestProviderFindMatches:
         )
         assert matches == []
 
+    def test_find_matches_excludes_prereleases_by_default(self) -> None:
+        provider = self._make_provider(
+            {"mypkg": _mock_versions_response(["1.0.0", "1.1.0", "2.0.0rc1"])}
+        )
+        req = DepsDevRequirement("mypkg", ">=1.0")
+        matches = provider.find_matches(
+            identifier="mypkg",
+            requirements={"mypkg": [req]},
+            incompatibilities={"mypkg": []},
+        )
+        versions = [m.version for m in matches]
+        assert "2.0.0rc1" not in versions
+        assert "1.1.0" in versions
+
+    def test_find_matches_excludes_prereleases_when_unconstrained(self) -> None:
+        provider = self._make_provider(
+            {"mypkg": _mock_versions_response(["1.0.0", "2.0.0rc1", "2.0.0a1"])}
+        )
+        req = DepsDevRequirement("mypkg", "")
+        matches = provider.find_matches(
+            identifier="mypkg",
+            requirements={"mypkg": [req]},
+            incompatibilities={"mypkg": []},
+        )
+        versions = [m.version for m in matches]
+        assert versions == ["1.0.0"]
+
+    def test_find_matches_allows_prereleases_when_constraint_is_prerelease(self) -> None:
+        provider = self._make_provider(
+            {"mypkg": _mock_versions_response(["1.0.0", "2.0.0rc1", "2.0.0rc2"])}
+        )
+        req = DepsDevRequirement("mypkg", ">=2.0.0rc1")
+        matches = provider.find_matches(
+            identifier="mypkg",
+            requirements={"mypkg": [req]},
+            incompatibilities={"mypkg": []},
+        )
+        versions = [m.version for m in matches]
+        assert "2.0.0rc2" in versions
+        assert "2.0.0rc1" in versions
+
+    def test_find_matches_falls_back_to_prereleases_when_no_stable(self) -> None:
+        provider = self._make_provider(
+            {"mypkg": _mock_versions_response(["1.0.0a1", "1.0.0rc1"])}
+        )
+        req = DepsDevRequirement("mypkg", "")
+        matches = provider.find_matches(
+            identifier="mypkg",
+            requirements={"mypkg": [req]},
+            incompatibilities={"mypkg": []},
+        )
+        assert len(matches) == 2
+
 
 # ── DepsDevProvider.is_satisfied_by ──────────────────────────────────────
 

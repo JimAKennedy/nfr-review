@@ -301,6 +301,13 @@ class DepsDevProvider(resolvelib.AbstractProvider):
             if ver_str in combined or not str(combined)
         ]
 
+        # Exclude pre-release versions unless the declared constraints
+        # explicitly reference a pre-release (e.g. >=2.5.0rc1).
+        if not combined.prereleases:
+            stable = [(ver, ver_str) for ver, ver_str in filtered if not ver.is_prerelease]
+            if stable:
+                filtered = stable
+
         incompat_versions = {c.version for c in incompatibilities.get(identifier, [])}
         filtered = [
             (ver, ver_str) for ver, ver_str in filtered if ver_str not in incompat_versions
