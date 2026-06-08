@@ -121,6 +121,11 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
     "minimum-version": "ops",
     "coverage-actual": "ops",
     "profile-config": "ops",
+    "dyn-latency": "performance",
+    "dyn-n-plus-1": "performance",
+    "dyn-correlation": "OTEL",
+    "dyn-method-coverage": "OTEL",
+    "dyn-call-sequence": "OTEL",
 }
 
 
@@ -135,16 +140,18 @@ def _extract_category(
     After keyword lookup, applies *aliases* to normalise legacy names
     (e.g. ``observability`` → ``reliability``).
     """
-    parts = rule_id.rsplit("-", 1)
-    if len(parts) == 2 and parts[1].isdigit():
-        raw = parts[0]
-    else:
-        lower = rule_id.lower()
-        raw = "ops"
-        for keyword, category in _CATEGORY_KEYWORDS.items():
-            if keyword in lower:
-                raw = category
-                break
+    lower = rule_id.lower()
+    raw = None
+    for keyword, category in _CATEGORY_KEYWORDS.items():
+        if keyword in lower:
+            raw = category
+            break
+    if raw is None:
+        parts = rule_id.rsplit("-", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            raw = parts[0]
+        else:
+            raw = "ops"
     if aliases:
         raw = aliases.get(raw.lower(), raw)
     return raw

@@ -1,0 +1,516 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "catalog-service" } },
+          { "key": "service.version", "value": { "stringValue": "3.0.1" } },
+          { "key": "telemetry.sdk.language", "value": { "stringValue": "java" } },
+          { "key": "telemetry.sdk.name", "value": { "stringValue": "opentelemetry" } },
+          { "key": "telemetry.sdk.version", "value": { "stringValue": "1.32.0" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "io.opentelemetry.spring-webmvc-6.0", "version": "1.32.0-alpha" },
+          "spans": [
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000001",
+              "parentSpanId": "",
+              "name": "GET /api/products",
+              "kind": 2,
+              "startTimeUnixNano": "1717840100000000000",
+              "endTimeUnixNano": "1717840100135000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "http.route", "value": { "stringValue": "/api/products" } },
+                { "key": "http.status_code", "value": { "intValue": "200" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000101",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100005000000",
+              "endTimeUnixNano": "1717840100008000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000102",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100010000000",
+              "endTimeUnixNano": "1717840100012000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000103",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100014000000",
+              "endTimeUnixNano": "1717840100017000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000104",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100019000000",
+              "endTimeUnixNano": "1717840100021000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000105",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100023000000",
+              "endTimeUnixNano": "1717840100026000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000106",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100028000000",
+              "endTimeUnixNano": "1717840100030000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000107",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100032000000",
+              "endTimeUnixNano": "1717840100035000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000108",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100037000000",
+              "endTimeUnixNano": "1717840100039000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000109",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100041000000",
+              "endTimeUnixNano": "1717840100044000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010a",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100046000000",
+              "endTimeUnixNano": "1717840100048000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010b",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100050000000",
+              "endTimeUnixNano": "1717840100053000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010c",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100055000000",
+              "endTimeUnixNano": "1717840100058000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010d",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100060000000",
+              "endTimeUnixNano": "1717840100062000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010e",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100064000000",
+              "endTimeUnixNano": "1717840100067000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb0100000000010f",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100069000000",
+              "endTimeUnixNano": "1717840100071000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000110",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100073000000",
+              "endTimeUnixNano": "1717840100076000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000111",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100078000000",
+              "endTimeUnixNano": "1717840100080000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000112",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100082000000",
+              "endTimeUnixNano": "1717840100085000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000113",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100087000000",
+              "endTimeUnixNano": "1717840100090000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000114",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100092000000",
+              "endTimeUnixNano": "1717840100095000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000115",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100097000000",
+              "endTimeUnixNano": "1717840100099000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000116",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100101000000",
+              "endTimeUnixNano": "1717840100104000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000117",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100106000000",
+              "endTimeUnixNano": "1717840100109000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000118",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100111000000",
+              "endTimeUnixNano": "1717840100114000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000001",
+              "spanId": "bb01000000000119",
+              "parentSpanId": "bb01000000000001",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840100116000000",
+              "endTimeUnixNano": "1717840100118000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            }
+          ]
+        },
+        {
+          "scope": { "name": "io.opentelemetry.spring-webmvc-6.0", "version": "1.32.0-alpha" },
+          "spans": [
+            {
+              "traceId": "bb01000000000000000000000000000002",
+              "spanId": "bb01000000000002",
+              "parentSpanId": "",
+              "name": "GET /api/products/42",
+              "kind": 2,
+              "startTimeUnixNano": "1717840200000000000",
+              "endTimeUnixNano": "1717840200025000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "http.route", "value": { "stringValue": "/api/products/{id}" } },
+                { "key": "http.status_code", "value": { "intValue": "200" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000002",
+              "spanId": "bb01000000000201",
+              "parentSpanId": "bb01000000000002",
+              "name": "SELECT product",
+              "kind": 3,
+              "startTimeUnixNano": "1717840200003000000",
+              "endTimeUnixNano": "1717840200006000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT p.id, p.name, p.price FROM product p WHERE p.id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product" } }
+              ]
+            },
+            {
+              "traceId": "bb01000000000000000000000000000002",
+              "spanId": "bb01000000000202",
+              "parentSpanId": "bb01000000000002",
+              "name": "SELECT product_detail",
+              "kind": 3,
+              "startTimeUnixNano": "1717840200008000000",
+              "endTimeUnixNano": "1717840200012000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT d.id, d.description FROM product_detail d WHERE d.product_id = ?" } },
+                { "key": "db.name", "value": { "stringValue": "catalog_db" } },
+                { "key": "db.operation", "value": { "stringValue": "SELECT" } },
+                { "key": "db.sql.table", "value": { "stringValue": "product_detail" } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

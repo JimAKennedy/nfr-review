@@ -609,6 +609,31 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["otel", "observability", "dynamic-analysis", "tracing"],
         ["ISO 25010:Reliability"],
     ),
+    # --- OTel quantitative runtime rules (S04) ---
+    "dyn-latency-p95": _m(
+        "high",
+        "performance",
+        "Computes p95 latency per HTTP route from server spans and compares "
+        "against declared targets in nfr_targets.latency_p95_ms.",
+        ["otel", "observability", "dynamic-analysis", "latency", "performance"],
+        ["ISO 25010:Performance"],
+    ),
+    "dyn-correlation-propagation": _m(
+        "medium",
+        "reliability",
+        "Verifies correlation-ID attribute consistency across all spans in "
+        "a trace, flagging broken propagation from root to leaf spans.",
+        ["otel", "observability", "dynamic-analysis", "correlation", "tracing"],
+        ["ISO 25010:Reliability"],
+    ),
+    "dyn-n-plus-1": _m(
+        "high",
+        "performance",
+        "Detects N+1 query patterns by counting child database spans per "
+        "request span, flagging when identical DB calls exceed the threshold.",
+        ["otel", "observability", "dynamic-analysis", "n-plus-1", "database"],
+        ["ISO 25010:Performance"],
+    ),
     # --- PATCH rules (patching safety) ---
     "PATCH-ARCH-001": _m(
         "high",
