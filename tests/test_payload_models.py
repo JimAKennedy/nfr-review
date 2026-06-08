@@ -109,6 +109,7 @@ class TestEvidencePayloadUnion:
             "date": None,
             "superseded_by": None,
             "has_frontmatter": True,
+            "body_text": "",
         }
 
 

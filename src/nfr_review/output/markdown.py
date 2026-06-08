@@ -414,13 +414,15 @@ def _methodology_appendix(
                 " completeness, sampling strategy, W3C propagation, resource attributes,"
                 " test agent setup, integration test coverage, fault injection,"
                 " test observability, dynamic method coverage, call-sequence diagrams,"
-                " correlation-ID propagation verification",
+                " correlation-ID propagation verification,"
+                " runtime topology vs ADR drift detection",
                 "OTel SDK configured with OTLP exporter, complete trace/metrics/logs"
                 " pipelines, W3C trace-context propagation, service.name and"
                 " service.version resource attributes, test coverage for"
                 " instrumented paths, fault-injection tests for resilience signals,"
                 " runtime method coverage reported, correlation IDs propagated"
-                " end-to-end, no N+1 query patterns, p95 latency within targets",
+                " end-to-end, no N+1 query patterns, p95 latency within targets,"
+                " runtime service topology matches ADR-declared architecture",
             ),
         ],
     )

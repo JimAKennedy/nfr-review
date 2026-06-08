@@ -71,6 +71,9 @@ from nfr_review.rules import (
     dormant_classes as dormant_classes,  # noqa: F401
 )
 from nfr_review.rules import (
+    dyn_adr_drift as dyn_adr_drift,  # noqa: F401
+)
+from nfr_review.rules import (
     dyn_call_sequence as dyn_call_sequence,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -284,6 +287,7 @@ __all__ = [
     "go_error_ignored",
     "go_goroutine_leak",
     "go_http_no_timeout",
+    "dyn_adr_drift",
     "dyn_call_sequence",
     "dyn_correlation_propagation",
     "dyn_latency_p95",

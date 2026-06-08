@@ -103,6 +103,8 @@ def _parse_adr(file_path: Path, repo_path: Path) -> AdrDocumentPayload:
         if body_match:
             superseded_by = body_match.group(1)
 
+    body = _FRONTMATTER_RE.sub("", text).strip() if has_frontmatter else text.strip()
+
     return AdrDocumentPayload(
         file_path=str(rel),
         title=title,
@@ -110,6 +112,7 @@ def _parse_adr(file_path: Path, repo_path: Path) -> AdrDocumentPayload:
         date=date,
         superseded_by=superseded_by,
         has_frontmatter=has_frontmatter,
+        body_text=body,
     )
 
 

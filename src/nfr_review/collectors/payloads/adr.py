@@ -16,6 +16,7 @@ class AdrDocumentPayload(BasePayload):
     date: str | None = None
     superseded_by: str | None = None
     has_frontmatter: bool = False
+    body_text: str = ""
 
 
 class AdrSummaryPayload(BasePayload):
