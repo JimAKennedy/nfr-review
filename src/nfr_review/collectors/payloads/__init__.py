@@ -150,6 +150,7 @@ from nfr_review.collectors.payloads.nodejs_ast import (
     NodejsSyncCall,
 )
 from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
+from nfr_review.collectors.payloads.otel_trace import OtelTracePayload, OtelTraceSpan
 from nfr_review.collectors.payloads.privacy import PrivacyMatch, PrivacyPayload
 from nfr_review.collectors.payloads.proto import (
     ProtoAnalysisPayload,
@@ -317,6 +318,8 @@ __all__ = [
     "NodejsPromiseChain",
     "NodejsSyncCall",
     "OtelAnalysisPayload",
+    "OtelTracePayload",
+    "OtelTraceSpan",
     "PreCommit",
     "PrivacyMatch",
     "PrivacyPayload",

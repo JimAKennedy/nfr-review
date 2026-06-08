@@ -1,0 +1,1 @@
+{invalid json, "resourceSpans": [{"this won't parse": true, missing-quotes: bad]}}

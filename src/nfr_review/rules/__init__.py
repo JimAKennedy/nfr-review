@@ -71,6 +71,12 @@ from nfr_review.rules import (
     dormant_classes as dormant_classes,  # noqa: F401
 )
 from nfr_review.rules import (
+    dyn_call_sequence as dyn_call_sequence,  # noqa: F401
+)
+from nfr_review.rules import (
+    dyn_method_coverage as dyn_method_coverage,  # noqa: F401
+)
+from nfr_review.rules import (
     gatling_performance as gatling_performance,  # noqa: F401
 )
 from nfr_review.rules import (
@@ -269,6 +275,8 @@ __all__ = [
     "go_error_ignored",
     "go_goroutine_leak",
     "go_http_no_timeout",
+    "dyn_call_sequence",
+    "dyn_method_coverage",
     "dep_freshness",
     "dep_upgrade_path",
     "dockerfile_base_pinning",

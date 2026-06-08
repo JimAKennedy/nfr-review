@@ -284,6 +284,13 @@ def cli() -> None:
     show_default=True,
     help="Number of parallel collector threads (1 = sequential).",
 )
+@click.option(
+    "--otel-traces",
+    "otel_traces_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to an OTLP JSON/NDJSON trace file for Band 3 dynamic analysis.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -297,6 +304,7 @@ def run_cmd(
     sarif_path: Path | None = None,
     show_score: bool = False,
     workers: int = 1,
+    otel_traces_path: Path | None = None,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -354,8 +362,10 @@ def run_cmd(
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
-    config = config.model_copy(update={"tech": merged_tech})
-    config = config.model_copy(update={"exclude_test_paths": not include_tests})
+    updates: dict[str, Any] = {"tech": merged_tech, "exclude_test_paths": not include_tests}
+    if otel_traces_path is not None:
+        updates["otel_traces"] = otel_traces_path
+    config = config.model_copy(update=updates)
     tech_detected = sum(1 for v in detected.values() if v)
     active_tech = [k for k, v in merged_tech.items() if v]
     if active_tech:
@@ -796,6 +806,7 @@ def run_report_pipeline(
     quiet: bool = False,
     stem: str | None = None,
     workers: int = 1,
+    otel_traces: Path | None = None,
 ) -> ReportResult:
     """Run the full NFR + hygiene report pipeline and return structured results.
 
@@ -867,8 +878,13 @@ def run_report_pipeline(
         logger.debug("Technology detection failed for %s: %s", target, e)
         detected = {}
     merged_tech = {**detected, **config.tech}
-    config = config.model_copy(update={"tech": merged_tech})
-    config = config.model_copy(update={"exclude_test_paths": not include_tests})
+    report_updates: dict[str, Any] = {
+        "tech": merged_tech,
+        "exclude_test_paths": not include_tests,
+    }
+    if otel_traces is not None:
+        report_updates["otel_traces"] = otel_traces
+    config = config.model_copy(update=report_updates)
     active_tech = [k for k, v in merged_tech.items() if v]
     if active_tech:
         _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
@@ -1276,6 +1292,13 @@ def run_report_pipeline(
     show_default=True,
     help="Number of parallel collector threads (1 = sequential).",
 )
+@click.option(
+    "--otel-traces",
+    "otel_traces_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to an OTLP JSON/NDJSON trace file for Band 3 dynamic analysis.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -1294,6 +1317,7 @@ def report_cmd(
     no_score: bool = False,
     max_resolve_rounds: int | None = None,
     workers: int = 1,
+    otel_traces_path: Path | None = None,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     if verbose and quiet:
@@ -1323,6 +1347,7 @@ def report_cmd(
         include_tests=not exclude_tests,
         quiet=quiet,
         workers=workers,
+        otel_traces=otel_traces_path,
     )
 
 

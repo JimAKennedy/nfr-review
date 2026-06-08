@@ -592,6 +592,23 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["otel", "testing", "observability"],
         ["ISO 25010:Reliability"],
     ),
+    # --- OTel dynamic analysis rules (S03) ---
+    "dyn-method-coverage": _m(
+        "info",
+        "reliability",
+        "Reports which instrumented methods were exercised during a test "
+        "run by aggregating code.namespace and code.function span attributes.",
+        ["otel", "observability", "dynamic-analysis", "coverage"],
+        ["ISO 25010:Reliability"],
+    ),
+    "dyn-call-sequence": _m(
+        "info",
+        "reliability",
+        "Generates Mermaid sequence diagrams from OTel trace span trees "
+        "to visualise runtime call flows.",
+        ["otel", "observability", "dynamic-analysis", "tracing"],
+        ["ISO 25010:Reliability"],
+    ),
     # --- PATCH rules (patching safety) ---
     "PATCH-ARCH-001": _m(
         "high",

@@ -26,6 +26,7 @@ from nfr_review.collectors import k8s_manifest as k8s_manifest  # noqa: F401
 from nfr_review.collectors import nodejs_ast as nodejs_ast  # noqa: F401
 from nfr_review.collectors import nodejs_deps as nodejs_deps  # noqa: F401
 from nfr_review.collectors import otel as otel  # noqa: F401
+from nfr_review.collectors import otel_trace as otel_trace  # noqa: F401
 from nfr_review.collectors import proto as proto  # noqa: F401
 from nfr_review.collectors import python_ast as python_ast  # noqa: F401
 from nfr_review.collectors import python_deps as python_deps  # noqa: F401
@@ -59,6 +60,7 @@ __all__ = [
     "nodejs_ast",
     "nodejs_deps",
     "otel",
+    "otel_trace",
     "proto",
     "python_ast",
     "python_deps",

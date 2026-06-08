@@ -173,6 +173,7 @@ class Config(BaseModel):
     max_resolve_rounds: int = 2000
     llm: LlmConfig = Field(default_factory=LlmConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
+    otel_traces: Path | None = None
     target: Path | None = Field(default=None, exclude=True)
 
     def with_repo_scoring(self, repo_config: Config) -> Config:
