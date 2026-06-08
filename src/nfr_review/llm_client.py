@@ -69,6 +69,7 @@ def _load_dotenv_once() -> None:
             os.environ[key] = value
 
 
+# nfr-review:skip(python-dormant-classes) reason: raised by create_llm_client
 class LlmUnavailableError(Exception):
     """Raised when an LLM call is attempted but no backend is usable."""
 
@@ -83,6 +84,7 @@ def _resolve_backend() -> str:
     return _BACKEND_API
 
 
+# nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
 class ClaudeClient:
     """Legacy LLM client supporting the Anthropic API or the Claude CLI.
 
@@ -201,6 +203,7 @@ class ClaudeClient:
 # ---------------------------------------------------------------------------
 
 
+# nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
 class AnthropicClient:
     """LLM backend using the Anthropic Python SDK."""
 
@@ -247,6 +250,7 @@ class AnthropicClient:
         return block.text
 
 
+# nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
 class OpenAICompatibleClient:
     """LLM backend using any OpenAI-compatible API."""
 
@@ -293,6 +297,7 @@ class OpenAICompatibleClient:
         return choice.message.content
 
 
+# nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
 class ClaudeCliClient:
     """LLM backend that shells out to the Claude Code CLI."""
 

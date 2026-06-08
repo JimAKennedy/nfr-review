@@ -25,10 +25,12 @@ from nfr_review.protocols import Collector, Rule
 from nfr_review.registry import Registry
 from nfr_review.registry import collector_registry as _default_collector_registry
 from nfr_review.registry import rule_registry as _default_rule_registry
+from nfr_review.tracing import trace_phase
 
 logger = logging.getLogger(__name__)
 
 
+# nfr-review:skip(python-dormant-classes) reason: caught by cli.py run/report commands
 class EngineError(Exception):
     """Raised when the engine cannot proceed at all (e.g., target missing)."""
 
@@ -202,26 +204,38 @@ class Engine:
         )
         collection_t0 = time.monotonic()
 
-        if self._workers <= 1:
-            self._collect_sequential(
-                active_collectors,
-                target,
-                config,
-                exclude_pats,
-                evidence,
-                warnings,
-                succeeded_collectors,
-            )
-        else:
-            self._collect_parallel(
-                active_collectors,
-                target,
-                config,
-                exclude_pats,
-                evidence,
-                warnings,
-                succeeded_collectors,
-            )
+        with trace_phase(
+            "nfr.collect",
+            **{
+                "nfr.collector_count": n_collectors,
+                "nfr.workers": self._workers,
+                "code.namespace": "nfr_review.engine",
+                "code.function": "Engine.run.collect",
+            },
+        ) as collect_span:
+            if self._workers <= 1:
+                self._collect_sequential(
+                    active_collectors,
+                    target,
+                    config,
+                    exclude_pats,
+                    evidence,
+                    warnings,
+                    succeeded_collectors,
+                )
+            else:
+                self._collect_parallel(
+                    active_collectors,
+                    target,
+                    config,
+                    exclude_pats,
+                    evidence,
+                    warnings,
+                    succeeded_collectors,
+                )
+
+            collect_span.set_attribute("nfr.evidence_count", len(evidence))
+            collect_span.set_attribute("nfr.collectors_succeeded", len(succeeded_collectors))
 
         collection_elapsed = time.monotonic() - collection_t0
         logger.info(
@@ -274,17 +288,25 @@ class Engine:
 
             logger.info("  Evaluating rule: %s", rule.id)
             t0 = time.monotonic()
-            try:
-                result = rule.evaluate(evidence, config)
-            # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
-            except Exception as exc:  # noqa: BLE001  # R012: never abort the run
-                reason = str(exc) or type(exc).__name__
-                logger.warning("rule %s failed: %s", rule.id, exc, exc_info=False)
-                rule_results.append(
-                    RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
-                )
-                rules_skipped.append({"rule_id": rule.id, "reason": reason})
-                continue
+            with trace_phase(
+                f"nfr.rule.{rule.id}",
+                **{
+                    "nfr.rule_id": rule.id,
+                    "code.namespace": "nfr_review.engine",
+                    "code.function": f"rule.{rule.id}.evaluate",
+                },
+            ):
+                try:
+                    result = rule.evaluate(evidence, config)
+                # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
+                except Exception as exc:  # noqa: BLE001  # R012: never abort
+                    reason = str(exc) or type(exc).__name__
+                    logger.warning("rule %s failed: %s", rule.id, exc, exc_info=False)
+                    rule_results.append(
+                        RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
+                    )
+                    rules_skipped.append({"rule_id": rule.id, "reason": reason})
+                    continue
             elapsed = time.monotonic() - t0
 
             rule_results.append(result)

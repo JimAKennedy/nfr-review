@@ -137,6 +137,7 @@ def _banner(
     click.echo("", err=True)
 
 
+# nfr-review:skip(python-dormant-classes) reason: added to handlers in _setup_logging
 class _DedupFilter(logging.Filter):
     """Suppress duplicate log messages within a single run."""
 
@@ -311,6 +312,10 @@ def run_cmd(
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
+
+    from nfr_review.tracing import init_tracing
+
+    init_tracing()
 
     repo = _repo_name(target)
     if csv_path is None:
@@ -1541,6 +1546,7 @@ def deps_cmd(
     _ts_echo(f"nfr-review deps: ecosystems={ecosystems} dependencies={total_deps}")
 
 
+# nfr-review:skip(python-dormant-classes) reason: used by @cli.group(cls=_IssuesGroup)
 class _IssuesGroup(click.Group):
     """Issues group that falls back to 'scan' subcommand for backward compat.
 

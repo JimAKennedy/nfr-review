@@ -24,6 +24,7 @@ from ruamel.yaml import YAML, YAMLError
 from nfr_review.models import Severity
 
 
+# nfr-review:skip(python-dormant-classes) reason: caught by cli.py run/report commands
 class ConfigError(Exception):
     """Raised when nfr-review.yaml cannot be loaded or fails validation.
 

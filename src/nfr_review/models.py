@@ -119,6 +119,7 @@ class RuleResult(BaseModel):
     skip_reason: str | None = None
 
 
+# nfr-review:skip(python-dormant-classes) reason: emitted in every JSONL run record
 class RunMetadata(BaseModel):
     """Run-level provenance recorded for every scan (R021)."""
 

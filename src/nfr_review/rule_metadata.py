@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from nfr_review.models import Severity
 
 
+# nfr-review:skip(python-dormant-classes) reason: used by RULE_METADATA dict and list-rules CLI
 class RuleMetadata(BaseModel):
     """Structured metadata for one rule, suitable for catalogue and JSON export."""
 

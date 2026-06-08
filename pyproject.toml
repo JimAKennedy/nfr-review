@@ -64,6 +64,11 @@ llm-anthropic = [
 llm-openai = [
     "openai>=1.0",
 ]
+otel = [
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp-proto-common>=1.20",
+]
 scancode = [
     "scancode-toolkit>=32.0,<34",
     "typecode-libmagic>=5.39",
@@ -113,6 +118,7 @@ module = [
     "tree_sitter_cpp.*",
     "scancode.*",
     "openai.*",
+    "opentelemetry.*",
 ]
 ignore_missing_imports = true
 

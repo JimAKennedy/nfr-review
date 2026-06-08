@@ -1,0 +1,13 @@
+version: 1
+
+tech:
+  python: true
+  ci: true
+  dockerfile: true
+
+exclude_paths:
+  - "scripts/**"
+  - "build/**"
+  - "docs/research/**"
+
+exclude_test_paths: true
