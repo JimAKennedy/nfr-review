@@ -634,6 +634,16 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["otel", "observability", "dynamic-analysis", "n-plus-1", "database"],
         ["ISO 25010:Performance"],
     ),
+    # --- OTel topology and drift rules (S05) ---
+    "dyn-adr-drift": _m(
+        "high",
+        "reliability",
+        "Cross-references observed runtime service topology from traces "
+        "against ADR-declared architecture, flagging undocumented coupling "
+        "and dead architecture.",
+        ["otel", "observability", "dynamic-analysis", "adr", "topology", "drift"],
+        ["ISO 25010:Maintainability"],
+    ),
     # --- PATCH rules (patching safety) ---
     "PATCH-ARCH-001": _m(
         "high",

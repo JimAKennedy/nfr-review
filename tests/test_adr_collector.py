@@ -22,7 +22,7 @@ class TestFileDiscovery:
     def test_finds_adrs_in_docs_adr_dir(self, collector: AdrCollector) -> None:
         results = collector.collect(FIXTURES, config=None)
         doc_evidence = [e for e in results if e.kind == "adr-document"]
-        assert len(doc_evidence) == 3
+        assert len(doc_evidence) == 4
 
     def test_empty_dir_returns_no_evidence(
         self, collector: AdrCollector, tmp_path: Path
@@ -102,7 +102,7 @@ class TestSummaryEvidence:
         results = collector.collect(FIXTURES, config=None)
         summary = next(e for e in results if e.kind == "adr-summary")
         assert isinstance(summary.payload, AdrSummaryPayload)
-        assert summary.payload.total_adrs == 3
+        assert summary.payload.total_adrs == 4
         assert summary.payload.has_lifecycle_tracking is True
         assert "accepted" in summary.payload.statuses
         assert "superseded" in summary.payload.statuses

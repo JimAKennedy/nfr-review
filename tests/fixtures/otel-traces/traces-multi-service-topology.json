@@ -1,0 +1,192 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "api-gateway" } },
+          { "key": "telemetry.sdk.language", "value": { "stringValue": "java" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "io.opentelemetry.spring-webmvc-6.0" },
+          "spans": [
+            {
+              "traceId": "cc01000000000000000000000000000001",
+              "spanId": "cc01000000000001",
+              "parentSpanId": "",
+              "name": "GET /api/orders",
+              "kind": 2,
+              "startTimeUnixNano": "1717840000000000000",
+              "endTimeUnixNano": "1717840000200000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "http.route", "value": { "stringValue": "/api/orders" } }
+              ]
+            },
+            {
+              "traceId": "cc01000000000000000000000000000001",
+              "spanId": "cc01000000000002",
+              "parentSpanId": "cc01000000000001",
+              "name": "GET order-service/orders",
+              "kind": 3,
+              "startTimeUnixNano": "1717840000010000000",
+              "endTimeUnixNano": "1717840000180000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "peer.service", "value": { "stringValue": "order-service" } }
+              ]
+            },
+            {
+              "traceId": "cc01000000000000000000000000000002",
+              "spanId": "cc01000000000010",
+              "parentSpanId": "",
+              "name": "POST /api/payments",
+              "kind": 2,
+              "startTimeUnixNano": "1717840001000000000",
+              "endTimeUnixNano": "1717840001300000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "http.route", "value": { "stringValue": "/api/payments" } }
+              ]
+            },
+            {
+              "traceId": "cc01000000000000000000000000000002",
+              "spanId": "cc01000000000011",
+              "parentSpanId": "cc01000000000010",
+              "name": "POST payment-service/charge",
+              "kind": 3,
+              "startTimeUnixNano": "1717840001010000000",
+              "endTimeUnixNano": "1717840001280000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "peer.service", "value": { "stringValue": "payment-service" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "order-service" } },
+          { "key": "telemetry.sdk.language", "value": { "stringValue": "java" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "io.opentelemetry.spring-webmvc-6.0" },
+          "spans": [
+            {
+              "traceId": "cc01000000000000000000000000000001",
+              "spanId": "cc01000000000003",
+              "parentSpanId": "cc01000000000002",
+              "name": "GET /orders",
+              "kind": 2,
+              "startTimeUnixNano": "1717840000020000000",
+              "endTimeUnixNano": "1717840000170000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "GET" } },
+                { "key": "http.route", "value": { "stringValue": "/orders" } }
+              ]
+            },
+            {
+              "traceId": "cc01000000000000000000000000000001",
+              "spanId": "cc01000000000004",
+              "parentSpanId": "cc01000000000003",
+              "name": "SELECT orders",
+              "kind": 3,
+              "startTimeUnixNano": "1717840000030000000",
+              "endTimeUnixNano": "1717840000150000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "SELECT * FROM orders" } },
+                { "key": "peer.service", "value": { "stringValue": "orders-db" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "payment-service" } },
+          { "key": "telemetry.sdk.language", "value": { "stringValue": "java" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "io.opentelemetry.spring-webmvc-6.0" },
+          "spans": [
+            {
+              "traceId": "cc01000000000000000000000000000002",
+              "spanId": "cc01000000000012",
+              "parentSpanId": "cc01000000000011",
+              "name": "POST /charge",
+              "kind": 2,
+              "startTimeUnixNano": "1717840001020000000",
+              "endTimeUnixNano": "1717840001270000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "http.route", "value": { "stringValue": "/charge" } }
+              ]
+            },
+            {
+              "traceId": "cc01000000000000000000000000000002",
+              "spanId": "cc01000000000013",
+              "parentSpanId": "cc01000000000012",
+              "name": "INSERT payment",
+              "kind": 3,
+              "startTimeUnixNano": "1717840001030000000",
+              "endTimeUnixNano": "1717840001250000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "db.system", "value": { "stringValue": "postgresql" } },
+                { "key": "db.statement", "value": { "stringValue": "INSERT INTO payments ..." } },
+                { "key": "peer.service", "value": { "stringValue": "payments-db" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          { "key": "service.name", "value": { "stringValue": "notification-service" } },
+          { "key": "telemetry.sdk.language", "value": { "stringValue": "python" } }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": { "name": "opentelemetry.instrumentation.flask" },
+          "spans": [
+            {
+              "traceId": "cc01000000000000000000000000000003",
+              "spanId": "cc01000000000020",
+              "parentSpanId": "",
+              "name": "POST /notify",
+              "kind": 2,
+              "startTimeUnixNano": "1717840002000000000",
+              "endTimeUnixNano": "1717840002100000000",
+              "status": { "code": 1 },
+              "attributes": [
+                { "key": "http.method", "value": { "stringValue": "POST" } },
+                { "key": "http.route", "value": { "stringValue": "/notify" } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
