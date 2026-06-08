@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from nfr_review.models import Evidence, RuleResult
 
-Band = Literal[1, 2]
+Band = Literal[1, 2, 3]
 
 
 @runtime_checkable
