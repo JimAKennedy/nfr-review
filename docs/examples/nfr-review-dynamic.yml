@@ -1,0 +1,45 @@
+# Example: NFR Review with dynamic analysis (pre-collected traces)
+#
+# This workflow runs nfr-review with --otel-traces against a pre-collected
+# trace file. Use this when your test suite or staging environment exports
+# OTLP traces to a file that is checked into the repo or generated during CI.
+#
+# For managed collector mode (--collector), see docs/dynamic-analysis.md.
+
+name: NFR Review (dynamic)
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  dynamic-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install nfr-review
+        run: pip install "nfr-review[pdf]"
+
+      - name: Run NFR Review with dynamic analysis
+        run: |
+          nfr-review report . \
+            --otel-traces tests/fixtures/traces/sample-traces.ndjson
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfr-dynamic-report
+          path: |
+            *-nfr-review-report.md
+            *-nfr-review-report.pdf
+          retention-days: 30

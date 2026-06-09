@@ -20,9 +20,10 @@ all the reference tables you need along the way.
 8. [Configuration](#8-configuration)
 9. [Execution modes](#9-execution-modes)
 10. [Running locally](#10-running-locally)
-11. [Troubleshooting](#11-troubleshooting)
-12. [Rule catalogue](#12-rule-catalogue)
-13. [Uninstalling](#13-uninstalling)
+11. [Dynamic analysis](#11-dynamic-analysis)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Rule catalogue](#13-rule-catalogue)
+14. [Uninstalling](#14-uninstalling)
 
 ---
 
@@ -139,6 +140,7 @@ All inputs are optional. The action reference is `JimAKennedy/nfr-review@v1`.
 | `execution` | `"pip"` | Execution mode: `"pip"` or `"container"`. |
 | `image` | `"ghcr.io/jimakennedy/nfr-review:latest"` | Docker image for container mode. |
 | `workers` | `"4"` | Number of parallel collector threads (`1` = sequential). |
+| `otel-traces` | `""` | Path to an OTLP JSON/NDJSON trace file for Band 3 dynamic analysis. |
 | `anthropic-api-key` | `""` | Anthropic API key for LLM features. Omit to skip LLM features gracefully. |
 
 ---
@@ -483,6 +485,12 @@ nfr-review run /path/to/repo --baseline baseline.jsonl
 # Full report with PDF, score, test results, and dependency analysis
 nfr-review report /path/to/repo
 
+# Dynamic analysis with pre-collected OTel traces
+nfr-review run /path/to/repo --otel-traces traces.ndjson
+
+# Dynamic analysis with managed OTel Collector
+nfr-review run /path/to/repo --collector
+
 # Architecture documentation (multi-repo supported)
 nfr-review arch /path/to/repo1 /path/to/repo2
 
@@ -505,6 +513,10 @@ nfr-review issues sync findings.jsonl --repo owner/repo
 # Run architecture + NFR reports across multiple repos
 nfr-review all /path/to/repo1 /path/to/repo2
 ```
+
+> **Dynamic analysis:** The `--otel-traces` and `--collector` flags enable
+> Band 3 rules that analyse runtime behaviour from OpenTelemetry traces.
+> See the [Dynamic Analysis guide](dynamic-analysis.md) for full details.
 
 ### Docker
 
@@ -580,7 +592,37 @@ Silicon"** in Docker Desktop.
 
 ---
 
-## 11. Troubleshooting
+## 11. Dynamic analysis
+
+nfr-review can analyse runtime behaviour captured in OpenTelemetry traces,
+producing topology graphs, sequence diagrams, and findings about latency
+hotspots, N+1 queries, and trace correlation gaps.
+
+**Two modes are available:**
+
+| Mode | Flag | When to use |
+|------|------|-------------|
+| Pre-collected traces | `--otel-traces FILE` | You already have an OTLP trace file from a test run or production export |
+| Managed collector | `--collector` | You want nfr-review to start/stop an OTel Collector during the scan |
+
+```bash
+# Pre-collected traces
+nfr-review report /path/to/repo --otel-traces traces.ndjson
+
+# Managed collector (requires otelcol-contrib on PATH)
+nfr-review run /path/to/repo --collector
+```
+
+The managed collector requires `otelcol-contrib` or `otelcol` on your
+`$PATH`. Install via Homebrew (`brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib`)
+or your system package manager.
+
+For the full guide — including trace file format, custom collector configs,
+and CI integration — see [Dynamic Analysis](dynamic-analysis.md).
+
+---
+
+## 12. Troubleshooting
 
 ### "Resource not accessible by integration" error
 
@@ -663,7 +705,7 @@ a genuinely new alert that was not present on main.
 
 ---
 
-## 12. Rule catalogue
+## 13. Rule catalogue
 
 A browsable HTML catalogue of all rules is published to GitHub Pages on each
 release. Visit
@@ -681,7 +723,7 @@ directly in a browser.
 
 ---
 
-## 13. Uninstalling
+## 14. Uninstalling
 
 ### Remove the GitHub Action
 

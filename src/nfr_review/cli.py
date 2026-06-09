@@ -377,7 +377,7 @@ def run_cmd(
     merged_tech = {**detected, **config.tech}
     updates: dict[str, Any] = {"tech": merged_tech, "exclude_test_paths": not include_tests}
     if otel_traces_path is not None:
-        updates["otel_traces"] = otel_traces_path
+        updates["otel_traces"] = otel_traces_path.resolve()
 
     collector_mgr: CollectorManager | None = None
     if collector:
@@ -922,7 +922,7 @@ def run_report_pipeline(
         "exclude_test_paths": not include_tests,
     }
     if otel_traces is not None:
-        report_updates["otel_traces"] = otel_traces
+        report_updates["otel_traces"] = otel_traces.resolve()
 
     collector_mgr: CollectorManager | None = None
     if collector:
