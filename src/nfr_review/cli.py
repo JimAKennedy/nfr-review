@@ -292,6 +292,11 @@ def cli() -> None:
     default=None,
     help="Path to an OTLP JSON/NDJSON trace file for Band 3 dynamic analysis.",
 )
+@click.option(
+    "--collector/--no-collector",
+    default=False,
+    help="Start/stop an OTel Collector subprocess to capture traces during the scan.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -306,11 +311,14 @@ def run_cmd(
     show_score: bool = False,
     workers: int = 1,
     otel_traces_path: Path | None = None,
+    collector: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    if collector and otel_traces_path is not None:
+        raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
 
     from nfr_review.tracing import init_tracing
@@ -370,20 +378,45 @@ def run_cmd(
     updates: dict[str, Any] = {"tech": merged_tech, "exclude_test_paths": not include_tests}
     if otel_traces_path is not None:
         updates["otel_traces"] = otel_traces_path
+
+    collector_mgr: CollectorManager | None = None
+    if collector:
+        from nfr_review.collector_manager import CollectorManager, find_binary, resolve_config
+
+        binary = find_binary()
+        if binary is None:
+            _ts_echo(
+                "warning: OTel Collector binary not found on PATH, "
+                "continuing without dynamic trace collection",
+            )
+        else:
+            coll_config = resolve_config(target)
+            collector_mgr = CollectorManager(binary, coll_config)
+
     config = config.model_copy(update=updates)
     tech_detected = sum(1 for v in detected.values() if v)
     active_tech = [k for k, v in merged_tech.items() if v]
     if active_tech:
         _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
 
-    t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
-    run_logger.info("Starting NFR engine scan")
     try:
-        result = Engine(workers=workers).run(target, config)
-    except EngineError as exc:
-        click.echo(f"error: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-    _phase_done("NFR scan", t0, quiet=quiet)
+        if collector_mgr is not None:
+            trace_path = collector_mgr.start()
+            config = config.model_copy(update={"otel_traces": trace_path})
+            _ts_echo(f"OTel Collector started: pid={collector_mgr.pid}", quiet=quiet)
+
+        t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
+        run_logger.info("Starting NFR engine scan")
+        try:
+            result = Engine(workers=workers).run(target, config)
+        except EngineError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+        _phase_done("NFR scan", t0, quiet=quiet)
+    finally:
+        if collector_mgr is not None:
+            collector_mgr.stop()
+            collector_mgr.cleanup()
 
     from nfr_review.suppression import apply_suppressions
 
@@ -812,6 +845,7 @@ def run_report_pipeline(
     stem: str | None = None,
     workers: int = 1,
     otel_traces: Path | None = None,
+    collector: bool = False,
 ) -> ReportResult:
     """Run the full NFR + hygiene report pipeline and return structured results.
 
@@ -889,32 +923,61 @@ def run_report_pipeline(
     }
     if otel_traces is not None:
         report_updates["otel_traces"] = otel_traces
+
+    collector_mgr: CollectorManager | None = None
+    if collector:
+        from nfr_review.collector_manager import CollectorManager, find_binary, resolve_config
+
+        binary = find_binary()
+        if binary is None:
+            _ts_echo(
+                "warning: OTel Collector binary not found on PATH, "
+                "continuing without dynamic trace collection",
+                quiet=quiet,
+            )
+        else:
+            coll_config = resolve_config(target)
+            collector_mgr = CollectorManager(binary, coll_config)
+
     config = config.model_copy(update=report_updates)
     active_tech = [k for k, v in merged_tech.items() if v]
     if active_tech:
         _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
 
-    # NFR scan
-    t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
     try:
-        nfr_result: RunResult = Engine(workers=workers).run(target, config)
-    except EngineError as exc:
-        click.echo(f"error: NFR scan failed: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-    _phase_done("NFR scan", t0, quiet=quiet)
+        if collector_mgr is not None:
+            trace_path = collector_mgr.start()
+            config = config.model_copy(update={"otel_traces": trace_path})
+            _ts_echo(
+                f"OTel Collector started: pid={collector_mgr.pid}",
+                quiet=quiet,
+            )
 
-    # Hygiene scan
-    t0 = _phase("Running hygiene scan (collect + evaluate)", quiet=quiet)
-    try:
-        hygiene_result: RunResult = Engine(
-            collectors=hygiene_collector_registry,
-            rules=hygiene_rule_registry,
-            workers=workers,
-        ).run(target, config)
-    except EngineError as exc:
-        click.echo(f"error: hygiene scan failed: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-    _phase_done("Hygiene scan", t0, quiet=quiet)
+        # NFR scan
+        t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
+        try:
+            nfr_result: RunResult = Engine(workers=workers).run(target, config)
+        except EngineError as exc:
+            click.echo(f"error: NFR scan failed: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+        _phase_done("NFR scan", t0, quiet=quiet)
+
+        # Hygiene scan
+        t0 = _phase("Running hygiene scan (collect + evaluate)", quiet=quiet)
+        try:
+            hygiene_result: RunResult = Engine(
+                collectors=hygiene_collector_registry,
+                rules=hygiene_rule_registry,
+                workers=workers,
+            ).run(target, config)
+        except EngineError as exc:
+            click.echo(f"error: hygiene scan failed: {exc}", err=True)
+            raise click.exceptions.Exit(1) from exc
+        _phase_done("Hygiene scan", t0, quiet=quiet)
+    finally:
+        if collector_mgr is not None:
+            collector_mgr.stop()
+            collector_mgr.cleanup()
 
     # Suppressions
     from nfr_review.suppression import apply_suppressions
@@ -1313,6 +1376,11 @@ def run_report_pipeline(
     default=None,
     help="Path to an OTLP JSON/NDJSON trace file for Band 3 dynamic analysis.",
 )
+@click.option(
+    "--collector/--no-collector",
+    default=False,
+    help="Start/stop an OTel Collector subprocess to capture traces during the scan.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -1332,10 +1400,13 @@ def report_cmd(
     max_resolve_rounds: int | None = None,
     workers: int = 1,
     otel_traces_path: Path | None = None,
+    collector: bool = False,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     if verbose and quiet:
         raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    if collector and otel_traces_path is not None:
+        raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
 
     if not target.exists():
@@ -1362,6 +1433,7 @@ def report_cmd(
         quiet=quiet,
         workers=workers,
         otel_traces=otel_traces_path,
+        collector=collector,
     )
 
 
