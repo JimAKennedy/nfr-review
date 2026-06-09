@@ -1,4 +1,5 @@
-# Nightly CI: dogfood nfr-review against itself + run regression test suite.
+# Nightly CI: dogfood nfr-review against itself, run regression test suite,
+# and validate the dynamic analysis pipeline against synthetic OTel traces.
 # Regression tests clone public repos and diff output against snapshot baselines.
 # They are excluded from PR CI to keep feedback fast (<1 min vs ~6 min).
 
@@ -127,4 +128,72 @@ jobs:
             echo "Results uploaded as artifact." >> $GITHUB_STEP_SUMMARY
           else
             echo "No results file generated." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ── Dynamic analysis: validate OTel trace pipeline against fixtures ─────
+  dynamic-analysis:
+    name: Dynamic Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.12-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.12-
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,pdf]"
+
+      - name: Run nfr-review with OTel traces
+        run: |
+          nfr-review report . \
+            --otel-traces tests/fixtures/otel-traces/traces-multi-service-topology.json \
+            --output-dir dynamic-output
+
+      - name: Verify dynamic diagram sections
+        run: |
+          report=$(ls dynamic-output/*-nfr-review-*.md 2>/dev/null | head -1)
+          if [ -z "$report" ]; then
+            echo "::error::No markdown report found in dynamic-output/"
+            exit 1
+          fi
+          echo "report=$report" >> "$GITHUB_ENV"
+          if ! grep -q '```mermaid' "$report"; then
+            echo "::error::No Mermaid diagram blocks found in report"
+            exit 1
+          fi
+          diagrams=$(grep -c '```mermaid' "$report")
+          echo "Found $diagrams Mermaid diagram block(s) in $report"
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dynamic-analysis-report
+          path: dynamic-output/
+          retention-days: 30
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Dynamic Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          report=$(ls dynamic-output/*-nfr-review-*.md 2>/dev/null | head -1)
+          if [ -n "$report" ]; then
+            diagrams=$(grep -c '```mermaid' "$report" || echo "0")
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Mermaid diagrams | $diagrams |" >> $GITHUB_STEP_SUMMARY
+            echo "| Report | Uploaded as artifact |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No report generated." >> $GITHUB_STEP_SUMMARY
           fi
