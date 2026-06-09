@@ -179,22 +179,19 @@ class OtelTraceCollector:
         trace_ids = sorted(set(s.trace_id for s in spans if s.trace_id))
         service_names = sorted(set(s.service_name for s in spans if s.service_name))
 
-        try:
-            rel = str(traces_path.relative_to(repo_path))
-        except ValueError:
-            rel = str(traces_path)
+        locator = f"otel-traces:{traces_path.name}"
 
         return [
             Evidence(
                 collector_name=self.name,
                 collector_version=self.version,
-                locator=rel,
+                locator=locator,
                 kind="otel-trace",
                 payload=OtelTracePayload(
                     spans=spans,
                     trace_ids=trace_ids,
                     service_names=service_names,
-                    source_file=rel,
+                    source_file=str(traces_path),
                 ),
             )
         ]
