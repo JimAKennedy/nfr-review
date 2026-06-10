@@ -74,6 +74,9 @@ scancode = [
     "typecode-libmagic>=5.39",
     "extractcode-libarchive>=3.5",
 ]
+full = [
+    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai]",
+]
 
 [project.scripts]
 nfr-review = "nfr_review.cli:cli"
@@ -83,7 +86,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 nfr_review = ["py.typed"]
-"nfr_review.data" = ["*.yaml"]
+"nfr_review.data" = ["*.yaml", "*.js"]
 
 [tool.setuptools.package-dir]
 "" = "src"

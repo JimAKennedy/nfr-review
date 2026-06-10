@@ -56,6 +56,7 @@ class ReportResult:
     jsonl_path: Path
     sarif_path: Path | None
     pdf_path: Path | None
+    html_path: Path | None
     total_findings: int
     nfr_count: int
     hygiene_count: int
@@ -320,6 +321,10 @@ def run_cmd(
     if collector and otel_traces_path is not None:
         raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
+
+    from nfr_review.capabilities import detect_capabilities, log_capabilities
+
+    log_capabilities(detect_capabilities())
 
     from nfr_review.tracing import init_tracing
 
@@ -835,6 +840,7 @@ def run_report_pipeline(
     no_deps: bool = False,
     no_diagrams: bool = False,
     pdf: bool = True,
+    html: bool = False,
     no_summary: bool = False,
     test_timeout: int = 900,
     sarif_path: Path | None = None,
@@ -1160,6 +1166,20 @@ def run_report_pipeline(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
+    # HTML generation
+    html_path: Path | None = None
+    if html:
+        from nfr_review.output.html import render_html_report
+
+        _phase("Rendering HTML report", quiet=quiet)
+        html_content = render_html_report(md_content)
+        html_path = output_dir / f"{stem}.html"
+        try:
+            html_path.write_text(html_content, encoding="utf-8")
+        except OSError as exc:
+            click.echo(f"error: HTML generation failed: {exc}", err=True)
+            html_path = None
+
     # PDF generation
     pdf_path: Path | None = None
     if pdf:
@@ -1172,30 +1192,6 @@ def run_report_pipeline(
                 err=True,
             )
             raise click.exceptions.Exit(1) from exc
-
-        # Render diagram images
-        diagram_image_paths: dict[str, Path] | None = None
-        if diagrams:
-            from nfr_review.output.render import render_dot_to_png, render_mermaid_to_png
-
-            _phase("Rendering diagram images", quiet=quiet)
-            img_dir = output_dir / f"{stem}-images"
-            diagram_image_paths = {}
-            for dtitle, mermaid_text in diagrams.items():
-                slug = dtitle.lower().replace(" ", "-")
-                img = render_mermaid_to_png(mermaid_text, img_dir / f"{slug}.png", scale=3)
-                if img is None and dtitle == "Dependency Graph" and deps_reports:
-                    from nfr_review.output.dot import render_dot_dependency_graph
-
-                    dot_text = render_dot_dependency_graph(deps_reports)
-                    img = render_dot_to_png(dot_text, img_dir / f"{slug}.png", dpi=288)
-                if img is not None:
-                    diagram_image_paths[dtitle] = img
-                elif not quiet:
-                    _ts_echo(
-                        f"warning: diagram '{dtitle}' could not be rendered"
-                        " (mmdc/dot failed or not installed)"
-                    )
 
         # Generate executive summary
         exec_summary = None
@@ -1224,7 +1220,7 @@ def run_report_pipeline(
                 jdepend_section_md=jdepend_section,
                 adr_section_md=adr_section,
                 derived_adrs_section_md=derived_adrs_section,
-                diagram_paths=diagram_image_paths,
+                diagrams=diagrams,
                 score_section_md=score_section,
                 llm_info=llm_info,
             )
@@ -1244,6 +1240,8 @@ def run_report_pipeline(
         f"nfr-review report: findings={total}",
         f"output={md_path} csv={csv_path} jsonl={jsonl_path}",
     ]
+    if html_path:
+        summary_parts.append(f"html={html_path}")
     if pdf_path:
         summary_parts.append(f"pdf={pdf_path}")
     if actual_sarif is not None:
@@ -1256,6 +1254,7 @@ def run_report_pipeline(
         jsonl_path=jsonl_path,
         sarif_path=actual_sarif,
         pdf_path=pdf_path,
+        html_path=html_path,
         total_findings=total,
         nfr_count=nfr_count,
         hygiene_count=hygiene_count,
@@ -1331,6 +1330,12 @@ def run_report_pipeline(
     help="Skip PDF report generation.",
 )
 @click.option(
+    "--html",
+    is_flag=True,
+    default=False,
+    help="Also produce a self-contained HTML report with interactive diagrams.",
+)
+@click.option(
     "--no-summary",
     is_flag=True,
     default=False,
@@ -1393,6 +1398,7 @@ def report_cmd(
     no_diagrams: bool,
     exclude_tests: bool,
     no_pdf: bool,
+    html: bool,
     no_summary: bool,
     test_timeout: int,
     sarif_path: Path | None = None,
@@ -1409,6 +1415,10 @@ def report_cmd(
         raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
 
+    from nfr_review.capabilities import detect_capabilities, log_capabilities
+
+    log_capabilities(detect_capabilities())
+
     if not target.exists():
         click.echo(f"error: target does not exist: {target}", err=True)
         raise click.exceptions.Exit(1)
@@ -1424,6 +1434,7 @@ def report_cmd(
         no_deps=no_deps,
         no_diagrams=no_diagrams,
         pdf=not no_pdf,
+        html=html,
         no_summary=no_summary,
         test_timeout=test_timeout,
         sarif_path=sarif_path,

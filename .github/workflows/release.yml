@@ -47,16 +47,21 @@ jobs:
 
       - name: Smoke test — version
         run: |
-          docker run --rm --entrypoint sh nfr-review:smoke-test \
-            -c 'nfr-review --version'
+          docker run --rm nfr-review:smoke-test --version
 
       - name: Smoke test — fixture scan
         run: |
-          docker run --rm --entrypoint sh \
+          docker run --rm \
             -v "${{ github.workspace }}/tests/fixtures/cpp-integration-repo:/repo:ro" \
-            -w /repo \
             nfr-review:smoke-test \
-            -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+            run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl /repo
+
+      - name: Smoke test — HTML report
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/tests/fixtures/cpp-integration-repo:/repo:ro" \
+            nfr-review:smoke-test \
+            report /repo --html --no-pdf --output-dir /tmp/reports
 
       - name: CVE scan — block on critical/high
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

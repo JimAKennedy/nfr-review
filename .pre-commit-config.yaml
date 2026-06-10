@@ -9,6 +9,7 @@ repos:
         exclude: 'tests/fixtures/configs/invalid\.yaml|tests/fixtures/helm-.*/templates/.*\.yaml|tests/fixtures/patching-comprehensive-.*/.*\.yaml'
       - id: check-added-large-files
         args: ["--maxkb=500"]
+        exclude: 'src/nfr_review/data/mermaid\.min\.js'
       - id: check-merge-conflict
       - id: detect-private-key
       - id: check-case-conflict

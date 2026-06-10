@@ -448,12 +448,16 @@ pip install nfr-review
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
+| `[full]` | All of the above: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai`. |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
 pip install "nfr-review[llm-anthropic,pdf,scancode]"
+
+# Or install everything at once:
+pip install "nfr-review[full]"
 ```
 
 ### Install from source (development)
@@ -520,10 +524,14 @@ nfr-review all /path/to/repo1 /path/to/repo2
 
 ### Docker
 
-A pre-built `linux/amd64` image is published to GHCR. It includes all extras
-(PDF generation, Mermaid diagram rendering, Graphviz, LLM SDKs for both
-Anthropic and OpenAI) and the `gh` CLI. The container runs as non-root user
-`nfr` (UID 1000).
+A pre-built `linux/amd64` image is published to GHCR. It includes PDF
+generation (via WeasyPrint), LLM SDKs (Anthropic and OpenAI), and `git`.
+The container runs as non-root user `nfr` (UID 1000).
+
+> **Note (v2.0+):** The container no longer includes Node.js, Chromium, or
+> mermaid-cli (`mmdc`). Diagrams in HTML reports use bundled client-side
+> Mermaid.js instead. PDF diagrams use pure-Python SVG fallbacks. This
+> reduces the image size from ~800MB to under 200MB.
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
@@ -534,12 +542,12 @@ docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:latest run /repo
 
-# With a config file
+# HTML report (recommended for container usage)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
-  ghcr.io/jimakennedy/nfr-review:latest run /repo --config /repo/nfr-review.yaml
+  ghcr.io/jimakennedy/nfr-review:latest report /repo --html
 
-# Full report (writes to /repo/reports/ inside the container)
+# Full report with PDF (WeasyPrint included in image)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:latest report /repo

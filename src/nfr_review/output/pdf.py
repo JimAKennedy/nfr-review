@@ -361,6 +361,81 @@ def _render_mermaid_inline(mermaid_text: str) -> str | None:
         tmp_path.unlink(missing_ok=True)
 
 
+def _parse_pie_data(mermaid_text: str) -> dict[str, int]:
+    """Extract label→count from Mermaid pie chart text."""
+    data: dict[str, int] = {}
+    for line in mermaid_text.splitlines():
+        line = line.strip()
+        if '"' in line and ":" in line:
+            label = line.split('"')[1]
+            try:
+                val = int(line.split(":")[-1].strip())
+            except ValueError:
+                continue
+            data[label] = val
+    return data
+
+
+def _parse_flowchart_items(mermaid_text: str) -> list[str]:
+    """Extract node labels from Mermaid flowchart text."""
+    items: list[str] = []
+    for line in mermaid_text.splitlines():
+        if "-->" in line:
+            for part in line.split("-->"):
+                part = part.strip()
+                if "[" in part:
+                    label = part.split("[")[1].rstrip("]").strip('"')
+                    if label and label not in items:
+                        items.append(label)
+    return items
+
+
+def _render_diagram_cascade(
+    title: str,
+    mermaid_text: str,
+) -> str:
+    """3-tier rendering cascade for PDF diagram embedding.
+
+    Tier 1: mmdc PNG (best quality, requires Node.js + Chromium).
+    Tier 2: Pure-Python SVG (no external tools, decent quality).
+    Tier 3: Styled HTML table (always works).
+    """
+    from nfr_review.output.render import (
+        render_diagram_as_html_table,
+        render_flowchart_as_svg_fallback,
+        render_pie_as_svg_fallback,
+    )
+
+    img_html = _render_mermaid_inline(mermaid_text)
+    if img_html is not None:
+        logger.info("diagram '%s': rendered via mmdc (tier 1)", title)
+        return f'<div class="diagram-container"><h3>{_h(title)}</h3>{img_html}</div>'
+
+    stripped = mermaid_text.strip()
+    svg: str | None = None
+    if stripped.startswith("pie"):
+        data = _parse_pie_data(mermaid_text)
+        if data:
+            svg = render_pie_as_svg_fallback(data)
+    elif "flowchart" in stripped.split("\n")[0]:
+        items = _parse_flowchart_items(mermaid_text)
+        if items:
+            svg = render_flowchart_as_svg_fallback(items, title=title)
+
+    if svg:
+        logger.info("diagram '%s': rendered via SVG fallback (tier 2)", title)
+        encoded = base64.b64encode(svg.encode()).decode("ascii")
+        return (
+            f'<div class="diagram-container">'
+            f"<h3>{_h(title)}</h3>"
+            f'<img class="diagram-img" '
+            f'src="data:image/svg+xml;base64,{encoded}" /></div>'
+        )
+
+    logger.info("diagram '%s': rendered via HTML table (tier 3)", title)
+    return render_diagram_as_html_table(mermaid_text, title)
+
+
 def _md_deps_to_html(md: str) -> str:
     """Convert the markdown dependency section to proper HTML tables."""
     lines = md.split("\n")
@@ -439,6 +514,7 @@ def render_pdf(
     adr_section_md: str = "",
     derived_adrs_section_md: str = "",
     diagram_paths: dict[str, Path] | None = None,
+    diagrams: dict[str, str] | None = None,
     score_section_md: str = "",
     title: str = "NFR Review Report",
     llm_info: tuple[str, str] | None = None,
@@ -476,16 +552,22 @@ def render_pdf(
         sections.append('<div class="section-flow"></div>')
         sections.append(_md_deps_to_html(score_section_md))
 
-    if diagram_paths:
+    has_diagrams = diagram_paths or diagrams
+    if has_diagrams:
         sections.append('<div class="section-break"></div>')
         sections.append("<h2>Diagrams</h2>")
-        for diagram_title, path in diagram_paths.items():
-            if path.exists():
-                sections.append(
-                    f'<div class="diagram-container">'
-                    f"<h3>{_h(diagram_title)}</h3>"
-                    f"{_embed_image(path)}</div>"
-                )
+        if diagram_paths:
+            for diagram_title, path in diagram_paths.items():
+                if path.exists():
+                    sections.append(
+                        f'<div class="diagram-container">'
+                        f"<h3>{_h(diagram_title)}</h3>"
+                        f"{_embed_image(path)}</div>"
+                    )
+        elif diagrams:
+            for diagram_title, mermaid_text in diagrams.items():
+                if mermaid_text.strip():
+                    sections.append(_render_diagram_cascade(diagram_title, mermaid_text))
 
     sections.append('<div class="section-flow"></div>')
     sections.append(_test_results_html(pytest_result))
