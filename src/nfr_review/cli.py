@@ -322,6 +322,10 @@ def run_cmd(
         raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
 
+    from nfr_review.capabilities import detect_capabilities, log_capabilities
+
+    log_capabilities(detect_capabilities())
+
     from nfr_review.tracing import init_tracing
 
     init_tracing()
@@ -1410,6 +1414,10 @@ def report_cmd(
     if collector and otel_traces_path is not None:
         raise click.UsageError("--collector and --otel-traces are mutually exclusive")
     _configure_logging(verbose, quiet, log_file)
+
+    from nfr_review.capabilities import detect_capabilities, log_capabilities
+
+    log_capabilities(detect_capabilities())
 
     if not target.exists():
         click.echo(f"error: target does not exist: {target}", err=True)
