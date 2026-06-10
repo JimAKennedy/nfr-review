@@ -1189,30 +1189,6 @@ def run_report_pipeline(
             )
             raise click.exceptions.Exit(1) from exc
 
-        # Render diagram images
-        diagram_image_paths: dict[str, Path] | None = None
-        if diagrams:
-            from nfr_review.output.render import render_dot_to_png, render_mermaid_to_png
-
-            _phase("Rendering diagram images", quiet=quiet)
-            img_dir = output_dir / f"{stem}-images"
-            diagram_image_paths = {}
-            for dtitle, mermaid_text in diagrams.items():
-                slug = dtitle.lower().replace(" ", "-")
-                img = render_mermaid_to_png(mermaid_text, img_dir / f"{slug}.png", scale=3)
-                if img is None and dtitle == "Dependency Graph" and deps_reports:
-                    from nfr_review.output.dot import render_dot_dependency_graph
-
-                    dot_text = render_dot_dependency_graph(deps_reports)
-                    img = render_dot_to_png(dot_text, img_dir / f"{slug}.png", dpi=288)
-                if img is not None:
-                    diagram_image_paths[dtitle] = img
-                elif not quiet:
-                    _ts_echo(
-                        f"warning: diagram '{dtitle}' could not be rendered"
-                        " (mmdc/dot failed or not installed)"
-                    )
-
         # Generate executive summary
         exec_summary = None
         if not no_summary:
@@ -1240,7 +1216,7 @@ def run_report_pipeline(
                 jdepend_section_md=jdepend_section,
                 adr_section_md=adr_section,
                 derived_adrs_section_md=derived_adrs_section,
-                diagram_paths=diagram_image_paths,
+                diagrams=diagrams,
                 score_section_md=score_section,
                 llm_info=llm_info,
             )
