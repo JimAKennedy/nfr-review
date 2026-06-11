@@ -2437,6 +2437,62 @@ def all_cmd(
     click.echo("=" * 60, err=True)
 
 
+@cli.group("baseline", help="Manage interaction baselines for production monitoring.")
+def baseline_group() -> None:
+    """Interaction baseline management."""
+
+
+@baseline_group.command("create", help="Create an interaction baseline from OTel trace data.")
+@click.option(
+    "--otel-traces",
+    "otel_traces_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to an OTLP JSON/NDJSON trace file.",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Output path for the baseline JSON file.",
+)
+def baseline_create_cmd(otel_traces_path: Path, output_path: Path) -> None:
+    """Extract interaction fingerprints from OTel traces and write a baseline file."""
+    from nfr_review.collectors.otel_trace import _parse_otlp_file
+    from nfr_review.monitor.baseline import InteractionBaseline, save_baseline
+    from nfr_review.monitor.fingerprint import extract_fingerprints
+
+    try:
+        text = otel_traces_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise click.ClickException(f"cannot read trace file: {exc}") from exc
+
+    spans = _parse_otlp_file(text)
+    if not spans:
+        raise click.ClickException("no spans found in trace file")
+
+    fingerprints = extract_fingerprints(spans)
+    trace_ids = {s.trace_id for s in spans if s.trace_id}
+    services = {s.service_name for s in spans if s.service_name}
+
+    baseline = InteractionBaseline(
+        source=str(otel_traces_path),
+        trace_count=len(trace_ids),
+        span_count=len(spans),
+        fingerprints=sorted(fingerprints, key=lambda fp: fp.fingerprint_hash),
+    )
+    save_baseline(baseline, output_path)
+
+    click.echo(
+        f"Baseline created: {len(fingerprints)} fingerprints "
+        f"from {len(trace_ids)} traces across {len(services)} services",
+        err=True,
+    )
+    click.echo(str(output_path))
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""
