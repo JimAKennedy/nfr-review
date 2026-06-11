@@ -378,6 +378,46 @@ nfr-review arch --format json --format md /path/to/target/repo
 | `--diagram-mode MODE` | `hierarchical` | Component diagram layout: `hierarchical` (overview + detail) or `flat` |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
+### Dynamic analysis (runtime traces)
+
+nfr-review can analyse OpenTelemetry traces captured from a running application to detect latency hotspots, N+1 query patterns, missing trace correlation, and service coverage gaps.
+
+**Option A — Pre-collected traces:**
+
+```bash
+# Run your app's integration tests (or exercise it manually) while an OTel Collector
+# exports traces to an NDJSON file, then point nfr-review at the file:
+nfr-review report /path/to/repo --otel-traces /path/to/traces.ndjson
+```
+
+**Option B — Managed collector** (nfr-review starts/stops `otelcol-contrib` for you):
+
+```bash
+# 1. Start your instrumented application (it must export OTLP to localhost:4317 or :4318)
+#    e.g. ./gradlew bootRun, docker compose up, python manage.py runserver, etc.
+
+# 2. nfr-review starts the collector, captures traces during the scan, then stops it
+nfr-review report /path/to/repo --collector -v
+```
+
+The `--collector` flag requires `otelcol-contrib` on your `$PATH`:
+
+```bash
+# macOS
+brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib
+
+# Or run scripts/setup-all.sh which installs it along with other optional tools
+```
+
+| Flag | Description |
+|------|-------------|
+| `--otel-traces PATH` | Path to a pre-collected OTLP JSON / NDJSON trace file |
+| `--collector` | Start a managed OTel Collector during the scan (mutually exclusive with `--otel-traces`) |
+
+Dynamic analysis produces **Runtime Service Topology** graphs and **Call Sequence Diagrams** in reports. Without trace data, Band 3 rules are skipped and all static analysis still runs normally.
+
+See [docs/dynamic-analysis.md](docs/dynamic-analysis.md) for the full reference (trace format, CI integration, custom collector config, troubleshooting).
+
 ### Initialize a configuration file
 
 ```bash
