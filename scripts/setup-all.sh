@@ -74,6 +74,16 @@ if command -v brew &>/dev/null; then
     info "libmagic already installed"
   fi
 
+  if ! command -v otelcol-contrib &>/dev/null; then
+    info "Installing otelcol-contrib via Homebrew (required for --collector / dynamic analysis)"
+    brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib || {
+      warn "Failed to install otelcol-contrib — --collector flag will not work"
+      MISSING_BINS+=("otelcol-contrib (brew install failed)")
+    }
+  else
+    info "otelcol-contrib already installed: $(otelcol-contrib --version 2>&1 | head -1 || echo 'unknown')"
+  fi
+
   # macOS ships a /usr/bin/java stub that passes `command -v` but doesn't work.
   # Test with `java -version` to detect a real JRE.
   if ! java -version &>/dev/null 2>&1; then
@@ -98,6 +108,9 @@ else
   fi
   if ! java -version &>/dev/null 2>&1; then
     MISSING_BINS+=("java (OpenJDK 21+ — required by JDepend)")
+  fi
+  if ! command -v otelcol-contrib &>/dev/null; then
+    MISSING_BINS+=("otelcol-contrib (required for --collector / dynamic analysis)")
   fi
 fi
 
@@ -388,6 +401,7 @@ if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
   warn "  java:     brew install openjdk@21 (macOS) or apt-get install openjdk-21-jre (Debian/Ubuntu)"
   warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
+  warn "  otelcol:  brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib"
 fi
 
 if [[ ${#MISSING_PKGS[@]} -eq 0 ]] && [[ ${#MISSING_BINS[@]} -eq 0 ]]; then
