@@ -2589,6 +2589,72 @@ def baseline_diff_cmd(
         click.echo(content, nl=False)
 
 
+@cli.command(
+    "monitor", help="Run a live production monitor comparing traces against a UAT baseline."
+)
+@click.option(
+    "--baseline",
+    "baseline_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to a baseline JSON file (from `baseline create`).",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=4318,
+    show_default=True,
+    help="Port for the OTLP HTTP receiver.",
+)
+@click.option(
+    "--host",
+    type=str,
+    default="0.0.0.0",  # nosec B104
+    show_default=True,
+    help="Host to bind the OTLP HTTP receiver.",
+)
+@click.option(
+    "--window-seconds",
+    type=float,
+    default=60.0,
+    show_default=True,
+    help="Time window in seconds for grouping spans before comparison.",
+)
+def monitor_cmd(
+    baseline_path: Path,
+    port: int,
+    host: str,
+    window_seconds: float,
+) -> None:
+    """Start a long-lived OTLP HTTP receiver that compares production
+    traces against a UAT baseline and emits JSON alerts for novel
+    interactions to stdout.
+    """
+    try:
+        from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
+    except ImportError as err:
+        raise click.ClickException(
+            "monitor requires the [monitor] extra: pip install nfr-review[monitor]"
+        ) from err
+
+    import asyncio
+
+    config = MonitorConfig(
+        baseline_path=baseline_path,
+        host=host,
+        port=port,
+        window_seconds=window_seconds,
+    )
+    engine = MonitorEngine(config)
+
+    click.echo(
+        f"Starting monitor on {host}:{port} "
+        f"(window={window_seconds}s, baseline={baseline_path})",
+        err=True,
+    )
+    asyncio.run(engine.run())
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""

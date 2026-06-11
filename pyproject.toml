@@ -47,6 +47,8 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-timeout>=2.2",
     "pytest-xdist>=3.5",
+    "pytest-asyncio>=0.23",
+    "pytest-aiohttp>=1.0",
     "filelock>=3.12",
     "ruff>=0.6",
     "anthropic>=0.40",
@@ -74,8 +76,11 @@ scancode = [
     "typecode-libmagic>=5.39",
     "extractcode-libarchive>=3.5",
 ]
+monitor = [
+    "aiohttp>=3.9",
+]
 full = [
-    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai]",
+    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,monitor]",
 ]
 
 [project.scripts]
@@ -123,6 +128,7 @@ module = [
     "scancode.*",
     "openai.*",
     "opentelemetry.*",
+    "aiohttp.*",
 ]
 ignore_missing_imports = true
 

@@ -106,6 +106,9 @@ else
   if ! python -c "from typecode.magic2 import load_lib; load_lib()" 2>/dev/null; then
     MISSING_BINS+=("libmagic (required by scancode-toolkit)")
   fi
+  if ! command -v otelcol-contrib &>/dev/null; then
+    MISSING_BINS+=("otelcol-contrib (OpenTelemetry Collector Contrib — required for dynamic analysis)")
+  fi
   if ! java -version &>/dev/null 2>&1; then
     MISSING_BINS+=("java (OpenJDK 21+ — required by JDepend)")
   fi
