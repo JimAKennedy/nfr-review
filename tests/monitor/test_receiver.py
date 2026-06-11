@@ -65,8 +65,9 @@ def collected_spans() -> list[list[OtelTraceSpan]]:
 
 @pytest.fixture
 def receiver(collected_spans: list[list[OtelTraceSpan]]) -> OtlpReceiver:
-    def on_spans(spans: list[OtelTraceSpan]) -> None:
+    def on_spans(spans: list[OtelTraceSpan]) -> bool:
         collected_spans.append(spans)
+        return True
 
     return OtlpReceiver(on_spans=on_spans, host="127.0.0.1", port=0)
 

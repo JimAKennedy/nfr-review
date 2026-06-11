@@ -32,6 +32,8 @@ class MonitorConfig:
     port: int = 4318
     window_seconds: float = 60.0
     max_body_bytes: int = 16 * 1024 * 1024
+    max_queue_spans: int = 50_000
+    max_seen_hashes: int = 100_000
     deduplicate: bool = True
 
 
@@ -77,6 +79,7 @@ class MonitorEngine:
         self._receiver: OtlpReceiver | None = None
         self._shutdown_event: asyncio.Event | None = None
         self._runner: web.AppRunner | None = None
+        self._alerts_emitted: int = 0
 
     @property
     def receiver(self) -> OtlpReceiver | None:
@@ -90,6 +93,15 @@ class MonitorEngine:
         logger.info("loading baseline from %s", self._config.baseline_path)
         return load_baseline(self._config.baseline_path)
 
+    def _get_stats(self) -> dict[str, object]:
+        stats: dict[str, object] = {"alerts_emitted": self._alerts_emitted}
+        if self._window:
+            stats["queue_depth"] = self._window.pending_span_count
+            stats["total_flushes"] = self._window.total_flushes
+            stats["total_spans_ingested"] = self._window.total_spans_ingested
+            stats["total_rejected"] = self._window.total_rejected
+        return stats
+
     def _emit_alerts(self, result: WindowResult) -> int:
         count = 0
         for finding in result.novel_findings:
@@ -97,6 +109,7 @@ class MonitorEngine:
             self._alert_stream.write(line + "\n")
             self._alert_stream.flush()
             count += 1
+        self._alerts_emitted += count
         return count
 
     async def _window_loop(self) -> None:
@@ -136,12 +149,15 @@ class MonitorEngine:
         self._window = WindowManager(
             self._baseline,
             window_seconds=self._config.window_seconds,
+            max_queue_spans=self._config.max_queue_spans,
+            max_seen_hashes=self._config.max_seen_hashes,
         )
         self._receiver = OtlpReceiver(
             on_spans=self._window.ingest,
             host=self._config.host,
             port=self._config.port,
             max_body_bytes=self._config.max_body_bytes,
+            stats_callback=self._get_stats,
         )
         self._receiver.ready = True
         self._shutdown_event = asyncio.Event()
@@ -167,7 +183,19 @@ class MonitorEngine:
         try:
             await self._window_loop()
         finally:
+            self._receiver.ready = False
             logger.info("shutting down monitor")
+            if self._receiver:
+                logger.info(
+                    "final stats: spans_received=%d requests=%d backpressure=%d "
+                    "alerts=%d flushes=%d rejected=%d",
+                    self._receiver.spans_received,
+                    self._receiver.requests_total,
+                    self._receiver.backpressure_count,
+                    self._alerts_emitted,
+                    self._window.total_flushes if self._window else 0,
+                    self._window.total_rejected if self._window else 0,
+                )
             if self._runner:
                 await self._runner.cleanup()
 

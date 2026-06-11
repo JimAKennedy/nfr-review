@@ -43,14 +43,19 @@ class WindowManager:
         self,
         baseline: InteractionBaseline,
         window_seconds: float = 60.0,
+        max_queue_spans: int = 50_000,
+        max_seen_hashes: int = 100_000,
     ) -> None:
         self._baseline = baseline
         self._window_seconds = window_seconds
+        self._max_queue_spans = max_queue_spans
+        self._max_seen_hashes = max_seen_hashes
         self._lock = threading.Lock()
         self._spans: list[OtelTraceSpan] = []
         self._window_start: float = time.monotonic()
         self._total_spans_ingested: int = 0
         self._total_flushes: int = 0
+        self._total_rejected: int = 0
         self._seen_hashes: set[str] = set()
 
     @property
@@ -66,15 +71,28 @@ class WindowManager:
         return self._total_flushes
 
     @property
+    def total_rejected(self) -> int:
+        return self._total_rejected
+
+    @property
     def pending_span_count(self) -> int:
         with self._lock:
             return len(self._spans)
 
-    def ingest(self, spans: list[OtelTraceSpan]) -> None:
-        """Add spans to the current window. Thread-safe."""
+    @property
+    def is_saturated(self) -> bool:
         with self._lock:
+            return len(self._spans) >= self._max_queue_spans
+
+    def ingest(self, spans: list[OtelTraceSpan]) -> bool:
+        """Add spans to the current window. Returns False if queue is full."""
+        with self._lock:
+            if len(self._spans) >= self._max_queue_spans:
+                self._total_rejected += len(spans)
+                return False
             self._spans.extend(spans)
             self._total_spans_ingested += len(spans)
+            return True
 
     def should_flush(self) -> bool:
         """Return True if the current window has elapsed."""
@@ -103,6 +121,9 @@ class WindowManager:
         )
 
         if deduplicate:
+            if len(self._seen_hashes) >= self._max_seen_hashes:
+                self._seen_hashes.clear()
+                logger.info("seen-hashes evicted (hit cap %d)", self._max_seen_hashes)
             new_novel: list[Finding] = []
             for finding in novel_findings:
                 h = finding.evidence_locator.removeprefix("fingerprint:")

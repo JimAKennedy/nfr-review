@@ -16,7 +16,7 @@ from nfr_review.collectors.payloads.otel_trace import OtelTraceSpan
 
 logger = logging.getLogger(__name__)
 
-SpanCallback = Callable[[list[OtelTraceSpan]], None]
+SpanCallback = Callable[[list[OtelTraceSpan]], bool]
 
 
 class OtlpReceiver:
@@ -27,6 +27,8 @@ class OtlpReceiver:
     ``/readyz`` for container orchestration.
     """
 
+    StatsCallback = Callable[[], dict[str, Any]]
+
     def __init__(
         self,
         *,
@@ -34,14 +36,17 @@ class OtlpReceiver:
         host: str = "0.0.0.0",  # nosec B104
         port: int = 4318,
         max_body_bytes: int = 16 * 1024 * 1024,
+        stats_callback: StatsCallback | None = None,
     ) -> None:
         self._on_spans = on_spans
         self._host = host
         self._port = port
         self._max_body_bytes = max_body_bytes
+        self._stats_callback = stats_callback
         self._ready = False
         self._spans_received: int = 0
         self._requests_total: int = 0
+        self._backpressure_count: int = 0
         self._app: web.Application | None = None
 
     @property
@@ -60,11 +65,16 @@ class OtlpReceiver:
     def requests_total(self) -> int:
         return self._requests_total
 
+    @property
+    def backpressure_count(self) -> int:
+        return self._backpressure_count
+
     def create_app(self) -> web.Application:
         app = web.Application(client_max_size=self._max_body_bytes)
         app.router.add_post("/v1/traces", self._handle_traces)
         app.router.add_get("/healthz", self._handle_healthz)
         app.router.add_get("/readyz", self._handle_readyz)
+        app.router.add_get("/statsz", self._handle_statsz)
         self._app = app
         return app
 
@@ -84,12 +94,19 @@ class OtlpReceiver:
 
         spans = _parse_resource_spans(doc)
         if spans:
-            self._spans_received += len(spans)
             try:
-                self._on_spans(spans)
+                accepted = self._on_spans(spans)
             except Exception:
                 logger.exception("span callback failed")
                 return web.Response(status=500, text="internal error")
+            if not accepted:
+                self._backpressure_count += 1
+                return web.Response(
+                    status=429,
+                    text="queue full",
+                    headers={"Retry-After": "5"},
+                )
+            self._spans_received += len(spans)
 
         return web.json_response(
             {"partialSuccess": {}},
@@ -103,6 +120,16 @@ class OtlpReceiver:
         if self._ready:
             return web.Response(status=200, text="ready")
         return web.Response(status=503, text="not ready")
+
+    async def _handle_statsz(self, _request: web.Request) -> web.Response:
+        stats: dict[str, Any] = {
+            "spans_received": self._spans_received,
+            "requests_total": self._requests_total,
+            "backpressure_count": self._backpressure_count,
+        }
+        if self._stats_callback:
+            stats.update(self._stats_callback())
+        return web.json_response(stats)
 
 
 __all__ = ["OtlpReceiver", "SpanCallback"]
