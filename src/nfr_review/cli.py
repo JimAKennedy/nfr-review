@@ -2493,6 +2493,102 @@ def baseline_create_cmd(otel_traces_path: Path, output_path: Path) -> None:
     click.echo(str(output_path))
 
 
+@baseline_group.command("diff", help="Compare production traces against a UAT baseline.")
+@click.option(
+    "--baseline",
+    "baseline_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to a baseline JSON file (from `baseline create`).",
+)
+@click.option(
+    "--otel-traces",
+    "otel_traces_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to an OTLP JSON/NDJSON trace file to compare.",
+)
+@click.option(
+    "--format",
+    "fmt",
+    type=click.Choice(["md", "json"]),
+    default="md",
+    show_default=True,
+    help="Output format: md (Markdown summary) or json (JSONL findings).",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Output file (default: stdout).",
+)
+def baseline_diff_cmd(
+    baseline_path: Path,
+    otel_traces_path: Path,
+    fmt: str,
+    output_path: Path | None,
+) -> None:
+    """Diff production traces against a UAT baseline and emit findings."""
+    from nfr_review.collectors.otel_trace import _parse_otlp_file
+    from nfr_review.monitor.baseline import load_baseline as load_interaction_baseline
+    from nfr_review.monitor.diff import generate_diff_findings
+    from nfr_review.monitor.fingerprint import extract_fingerprints
+
+    baseline = load_interaction_baseline(baseline_path)
+
+    try:
+        text = otel_traces_path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise click.ClickException(f"cannot read trace file: {exc}") from exc
+
+    spans = _parse_otlp_file(text)
+    if not spans:
+        raise click.ClickException("no spans found in trace file")
+
+    observed = extract_fingerprints(spans)
+    findings = generate_diff_findings(baseline, observed)
+
+    novel_count = sum(1 for f in findings if f.rule_id == "mon-novel-interaction")
+    disappeared_count = sum(1 for f in findings if f.rule_id == "mon-disappeared-interaction")
+    click.echo(
+        f"Diff: {novel_count} novel, {disappeared_count} disappeared, "
+        f"{len(observed)} total observed fingerprints",
+        err=True,
+    )
+
+    if fmt == "json":
+        lines = [f.model_dump_json() for f in findings]
+        content = "\n".join(lines) + ("\n" if lines else "")
+    else:
+        parts = ["# Baseline Diff Report\n"]
+        parts.append(
+            f"Baseline: {baseline.source} ({len(baseline.fingerprints)} fingerprints)\n"
+        )
+        parts.append(f"Observed: {otel_traces_path} ({len(observed)} fingerprints)\n")
+        if novel_count:
+            parts.append(f"\n## Novel Interactions ({novel_count})\n")
+            for f in findings:
+                if f.rule_id == "mon-novel-interaction":
+                    parts.append(f"- **{f.severity}**: {f.summary}\n")
+        if disappeared_count:
+            parts.append(f"\n## Disappeared Interactions ({disappeared_count})\n")
+            for f in findings:
+                if f.rule_id == "mon-disappeared-interaction":
+                    parts.append(f"- {f.summary}\n")
+        if not findings:
+            parts.append("\nNo differences found — production matches UAT baseline.\n")
+        content = "\n".join(parts)
+
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content, encoding="utf-8")
+        click.echo(str(output_path))
+    else:
+        click.echo(content, nl=False)
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""
