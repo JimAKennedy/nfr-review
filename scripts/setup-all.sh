@@ -399,12 +399,14 @@ fi
 
 if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   warn "Missing external binaries (install manually): ${MISSING_BINS[*]}"
-  warn "  helm:     https://helm.sh/docs/intro/install/"
-  warn "  graphviz: https://graphviz.org/download/"
-  warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
-  warn "  java:     brew install openjdk@21 (macOS) or apt-get install openjdk-21-jre (Debian/Ubuntu)"
-  warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
-  warn "  otelcol:  brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib"
+  _missing_joined="${MISSING_BINS[*]}"
+  [[ "$_missing_joined" == *helm* ]]     && warn "  helm:     https://helm.sh/docs/intro/install/"
+  [[ "$_missing_joined" == *graphviz* ]] && warn "  graphviz: https://graphviz.org/download/"
+  [[ "$_missing_joined" == *libmagic* ]] && warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
+  [[ "$_missing_joined" == *java* ]]     && warn "  java:     brew install openjdk@21 (macOS) or apt-get install openjdk-21-jre (Debian/Ubuntu)"
+  [[ "$_missing_joined" == *jdepend* ]]  && warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
+  [[ "$_missing_joined" == *otelcol* ]]  && warn "  otelcol:  brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib"
+  unset _missing_joined
 fi
 
 if [[ ${#MISSING_PKGS[@]} -eq 0 ]] && [[ ${#MISSING_BINS[@]} -eq 0 ]]; then
