@@ -15,9 +15,14 @@ import aiohttp
 import pytest
 import pytest_asyncio
 
-from nfr_review.collectors.otel_trace import _parse_otlp_file, _parse_resource_spans
-from nfr_review.monitor.fingerprint import extract_fingerprints
-from tests.testapp.app import InstrumentedApp
+otel = pytest.importorskip("opentelemetry", reason="opentelemetry not installed")
+
+from nfr_review.collectors.otel_trace import (  # noqa: E402
+    _parse_otlp_file,
+    _parse_resource_spans,
+)
+from nfr_review.monitor.fingerprint import extract_fingerprints  # noqa: E402
+from tests.testapp.app import InstrumentedApp  # noqa: E402
 
 pytestmark = pytest.mark.asyncio
 
