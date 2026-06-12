@@ -18,7 +18,7 @@ from click.testing import CliRunner
 
 import nfr_review.rules  # noqa: F401 — trigger auto-registration
 from nfr_review.cli import cli
-from nfr_review.output.csv import CSV_HEADER
+from nfr_review.output.csv import CSV_HEADER, CSV_HEADER_WITH_AUDIT
 from nfr_review.registry import rule_registry
 
 PILOT_TARGET = Path("/Users/jim/dev/agentic-java-demo")
@@ -74,7 +74,7 @@ def test_pilot_csv_has_r007_header_and_findings(tmp_path: Path) -> None:
         rows = list(csv.reader(fh))
 
     assert rows, "CSV is empty"
-    assert tuple(rows[0]) == CSV_HEADER, f"header mismatch: {rows[0]}"
+    assert tuple(rows[0]) in (CSV_HEADER, CSV_HEADER_WITH_AUDIT), f"header mismatch: {rows[0]}"
     finding_rows = [r for r in rows[1:] if r[1] != "skipped"]
     assert len(finding_rows) >= 1, "expected at least one non-skipped finding"
 

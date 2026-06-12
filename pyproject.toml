@@ -132,6 +132,24 @@ module = [
 ]
 ignore_missing_imports = true
 
+[tool.coverage.run]
+source = ["nfr_review"]
+branch = true
+omit = [
+    "src/nfr_review/data/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.",
+    "@overload",
+    "raise NotImplementedError",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
