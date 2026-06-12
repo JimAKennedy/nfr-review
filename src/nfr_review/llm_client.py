@@ -325,7 +325,6 @@ class ClaudeCliClient:
         cmd = [
             self._cli_path,
             "-p",
-            combined,
             "--output-format",
             "text",
             "--max-turns",
@@ -336,6 +335,7 @@ class ClaudeCliClient:
         try:
             result = subprocess.run(  # nosec B603
                 cmd,
+                input=combined,
                 capture_output=True,
                 text=True,
                 timeout=120,
