@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -15,8 +17,10 @@ from nfr_review.output.markdown import render_score_section
 from nfr_review.scoring import (
     MaturityScore,
     ScoreTrend,
+    _extract_category,
     compute_maturity_score,
     compute_trend,
+    load_baseline_score,
 )
 
 _UNWEIGHTED = ScoringConfig(category_weights={}, category_aliases={})
@@ -488,3 +492,159 @@ def test_config_to_score_integration() -> None:
     # weighted: (85×4 + 100×3) / 7 = 640/7 ≈ 91
     assert score.category_scores["security"] == 85
     assert score.overall == 91
+
+
+# ---------------------------------------------------------------------------
+# _extract_category tests
+# ---------------------------------------------------------------------------
+
+
+def test_extract_category_keyword_match() -> None:
+    assert _extract_category("dockerfile-secret-leakage") == "security"
+    assert _extract_category("otel-missing-exporter") == "OTEL"
+    assert _extract_category("timeout-not-configured") == "performance"
+    assert _extract_category("resource-limits-missing") == "ops"
+
+
+def test_extract_category_prefix_based() -> None:
+    assert _extract_category("SEC-001") == "SEC"
+    assert _extract_category("PATCH-003") == "PATCH"
+    assert _extract_category("OBS-042") == "OBS"
+
+
+def test_extract_category_fallback_to_ops() -> None:
+    assert _extract_category("unknown-rule-name") == "ops"
+    assert _extract_category("something-entirely-novel") == "ops"
+
+
+def test_extract_category_with_aliases() -> None:
+    aliases = {"ops": "maintainability", "observability": "reliability"}
+    assert _extract_category("resource-limits-missing", aliases) == "maintainability"
+    assert _extract_category("logging-missing", aliases) == "reliability"
+
+
+def test_extract_category_alias_no_match_passes_through() -> None:
+    aliases = {"ops": "maintainability"}
+    assert _extract_category("otel-check", aliases) == "OTEL"
+
+
+# ---------------------------------------------------------------------------
+# load_baseline_score tests
+# ---------------------------------------------------------------------------
+
+
+def _valid_finding_record() -> dict[str, Any]:
+    return {
+        "record_type": "finding",
+        "rule_id": "SEC-001",
+        "rag": "amber",
+        "severity": "high",
+        "summary": "test finding",
+        "recommendation": "fix it",
+        "evidence_locator": "file://test.py:1",
+        "collector_name": "test",
+        "collector_version": "1.0",
+        "confidence": 0.9,
+        "pattern_tag": "test-tag",
+    }
+
+
+def test_load_baseline_score_valid(tmp_path: Path) -> None:
+    baseline = tmp_path / "baseline.jsonl"
+    metadata = {
+        "record_type": "run_metadata",
+        "rules_run": ["SEC-001", "OBS-001"],
+        "rules_skipped": [{"rule_id": "SKIP-001", "reason": "n/a"}],
+    }
+    finding = _valid_finding_record()
+    baseline.write_text(
+        json.dumps(metadata) + "\n" + json.dumps(finding) + "\n",
+        encoding="utf-8",
+    )
+    findings, rules_run, rules_skipped = load_baseline_score(baseline)
+    assert len(findings) == 1
+    assert findings[0].rule_id == "SEC-001"
+    assert rules_run == ["SEC-001", "OBS-001"]
+    assert len(rules_skipped) == 1
+
+
+def test_load_baseline_score_empty_file(tmp_path: Path) -> None:
+    baseline = tmp_path / "empty.jsonl"
+    baseline.write_text("", encoding="utf-8")
+    findings, rules_run, rules_skipped = load_baseline_score(baseline)
+    assert findings == []
+    assert rules_run == []
+    assert rules_skipped == []
+
+
+def test_load_baseline_score_blank_lines(tmp_path: Path) -> None:
+    baseline = tmp_path / "blanks.jsonl"
+    metadata = {
+        "record_type": "run_metadata",
+        "rules_run": ["R001"],
+        "rules_skipped": [],
+    }
+    baseline.write_text(
+        "\n" + json.dumps(metadata) + "\n\n\n",
+        encoding="utf-8",
+    )
+    findings, rules_run, rules_skipped = load_baseline_score(baseline)
+    assert rules_run == ["R001"]
+    assert findings == []
+
+
+def test_load_baseline_score_skips_skipped_findings(tmp_path: Path) -> None:
+    baseline = tmp_path / "skipped.jsonl"
+    skipped_finding = _valid_finding_record()
+    skipped_finding["rag"] = "skipped"
+    baseline.write_text(json.dumps(skipped_finding) + "\n", encoding="utf-8")
+    findings, _, _ = load_baseline_score(baseline)
+    assert findings == []
+
+
+def test_load_baseline_score_malformed_finding_skipped(tmp_path: Path) -> None:
+    baseline = tmp_path / "malformed.jsonl"
+    bad_finding = {"record_type": "finding", "rag": "amber"}
+    baseline.write_text(json.dumps(bad_finding) + "\n", encoding="utf-8")
+    findings, _, _ = load_baseline_score(baseline)
+    assert findings == []
+
+
+def test_load_baseline_score_ignores_null_fields(tmp_path: Path) -> None:
+    baseline = tmp_path / "nulls.jsonl"
+    finding = _valid_finding_record()
+    finding["content_hash"] = None
+    baseline.write_text(json.dumps(finding) + "\n", encoding="utf-8")
+    findings, _, _ = load_baseline_score(baseline)
+    assert len(findings) == 1
+    assert findings[0].content_hash == ""
+
+
+def test_load_baseline_score_metadata_without_optional_keys(tmp_path: Path) -> None:
+    baseline = tmp_path / "minimal_meta.jsonl"
+    metadata = {"record_type": "run_metadata"}
+    baseline.write_text(json.dumps(metadata) + "\n", encoding="utf-8")
+    _, rules_run, rules_skipped = load_baseline_score(baseline)
+    assert rules_run == []
+    assert rules_skipped == []
+
+
+# ---------------------------------------------------------------------------
+# Edge case: rules_skipped as plain strings
+# ---------------------------------------------------------------------------
+
+
+def test_rules_coverage_with_string_skipped() -> None:
+    score = compute_maturity_score(
+        [],
+        ["R001"],
+        ["R002", "R003"],
+        _UNWEIGHTED,
+    )
+    assert score.rules_coverage == pytest.approx(1 / 3)
+
+
+def test_no_rules_run_or_skipped() -> None:
+    score = compute_maturity_score([], [], [], _UNWEIGHTED)
+    assert score.rules_coverage == 1.0
+    assert score.overall == 100
