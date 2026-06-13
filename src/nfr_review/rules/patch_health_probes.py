@@ -20,6 +20,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 
@@ -32,11 +33,7 @@ class PatchingProbePresenceRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -117,21 +114,18 @@ class PatchingProbePresenceRule:
                         )
                 elif has_readiness and has_liveness:
                     findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-health-probes",
+                            ev,
                             summary=(
                                 f"Container '{container_name}' in"
                                 f" {resource_kind} '{resource_name}'"
                                 " has both liveness and readiness probes."
                             ),
                             recommendation="No action required — probes are configured.",
-                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
                             confidence=0.95,
-                            pattern_tag="patch-health-probes",
+                            evidence_locator=f"{file_path}:{resource_name}:{container_name}",
                         )
                     )
                 else:
@@ -140,10 +134,10 @@ class PatchingProbePresenceRule:
                     # perspective (generic probes-missing rule covers the
                     # liveness gap).
                     findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-health-probes",
+                            ev,
                             summary=(
                                 f"Container '{container_name}' in"
                                 f" {resource_kind} '{resource_name}'"
@@ -154,30 +148,23 @@ class PatchingProbePresenceRule:
                                 " Consider adding a livenessProbe for full"
                                 " health coverage."
                             ),
-                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
                             confidence=0.90,
-                            pattern_tag="patch-health-probes",
+                            evidence_locator=f"{file_path}:{resource_name}:{container_name}",
                         )
                     )
 
         if not findings:
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-health-probes",
+                    first,
                     summary=(
                         "No Deployment/StatefulSet workloads to check for patching probes."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.90,
-                    pattern_tag="patch-health-probes",
+                    evidence_locator="all-workloads",
                 )
             )
 

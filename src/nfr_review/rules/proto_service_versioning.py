@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _VERSION_IN_NAME = re.compile(r"V\d+", re.IGNORECASE)
 _VERSION_IN_PACKAGE = re.compile(r"\.v\d+")
@@ -24,9 +25,7 @@ class ProtoServiceVersioningRule:
     required_tech: list[str] = ["grpc"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        proto_evidence = [
-            e for e in evidence if e.collector_name == "proto" and e.kind == "proto-analysis"
-        ]
+        proto_evidence = filter_evidence(evidence, "proto", "proto-analysis")
         if not proto_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -68,19 +67,14 @@ class ProtoServiceVersioningRule:
                     )
 
         if not findings:
-            first = proto_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "proto-service-versioning",
+                    proto_evidence[0],
                     summary="All proto services have version indicators.",
-                    recommendation="No action required.",
-                    evidence_locator="all-protos",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.9,
-                    pattern_tag="proto-service-versioning",
+                    evidence_locator="all-protos",
                 )
             )
 

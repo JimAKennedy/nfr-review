@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class CiTestStageMissingRule:
@@ -19,11 +20,7 @@ class CiTestStageMissingRule:
     required_collectors: list[str] = ["ci-artifact"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_pipelines = [
-            e
-            for e in evidence
-            if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
-        ]
+        ci_pipelines = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
         if not ci_pipelines:
             return RuleResult(
                 rule_id=self.id,
@@ -33,11 +30,7 @@ class CiTestStageMissingRule:
 
         any_test = any(e.payload.get("has_test_step") for e in ci_pipelines)
 
-        cmake_signals = [
-            e
-            for e in evidence
-            if e.collector_name == "ci-artifact" and e.kind == "cmake-test-signals"
-        ]
+        cmake_signals = filter_evidence(evidence, "ci-artifact", "cmake-test-signals")
         has_cmake_tests = any(e.payload.get("has_test_framework") for e in cmake_signals)
 
         if any_test or has_cmake_tests:
@@ -52,17 +45,14 @@ class CiTestStageMissingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "ci-test-stage",
+                        ci_pipelines[0],
                         summary="CI pipeline includes a test step.",
-                        recommendation=("No action required — test step is present."),
-                        evidence_locator=locator,
-                        collector_name="ci-artifact",
-                        collector_version="0.1.0",
                         confidence=0.9,
-                        pattern_tag="ci-test-stage",
+                        recommendation="No action required — test step is present.",
+                        evidence_locator=locator,
                     )
                 ],
             )

@@ -9,6 +9,7 @@ from typing import Any, cast
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _PROD_PROFILES = frozenset({"prod", "production", "prd"})
 _DEBUG_LEVELS = frozenset({"debug", "trace"})
@@ -24,11 +25,7 @@ class SpringProfileMisconfigurationRule:
     required_tech: list[str] = ["spring_boot"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        spring_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "spring-config" and e.kind == "spring-config-file"
-        ]
+        spring_evidence = filter_evidence(evidence, "spring-config", "spring-config-file")
         if not spring_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -47,19 +44,15 @@ class SpringProfileMisconfigurationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "profile-config",
+                        spring_evidence[0],
                         summary="No production profile config found to check.",
-                        recommendation="No action required.",
+                        confidence=0.7,
                         evidence_locator=spring_evidence[0].payload.get(
                             "file_path", spring_evidence[0].locator
                         ),
-                        collector_name=spring_evidence[0].collector_name,
-                        collector_version=spring_evidence[0].collector_version,
-                        confidence=0.7,
-                        pattern_tag="profile-config",
                     )
                 ],
             )
@@ -95,17 +88,13 @@ class SpringProfileMisconfigurationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "profile-config",
+                        prod_evidence[0],
                         summary="Production profile has appropriate settings.",
-                        recommendation="No action required.",
-                        evidence_locator=file_path,
-                        collector_name=prod_evidence[0].collector_name,
-                        collector_version=prod_evidence[0].collector_version,
                         confidence=0.8,
-                        pattern_tag="profile-config",
+                        evidence_locator=file_path,
                     )
                 ],
             )

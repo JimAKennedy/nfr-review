@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEFAULT_GRACE_PERIOD = 30
 
@@ -29,11 +30,7 @@ class TerminationGracePeriodRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -114,22 +111,18 @@ class TerminationGracePeriodRule:
             elif grace_period >= _DEFAULT_GRACE_PERIOD and has_pre_stop:
                 # (c) Good configuration — grace period sufficient and preStop present
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-health-termination",
+                        ev,
                         summary=(
                             f"Resource '{resource_name}' has"
                             f" terminationGracePeriodSeconds={grace_period} and a"
                             " preStop hook configured — adequate for graceful shutdown"
                             " during patching."
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-health-termination",
+                        evidence_locator=locator,
                     )
                 )
 
@@ -137,17 +130,12 @@ class TerminationGracePeriodRule:
             # Edge case: resources found but none matched any condition
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
-                    summary=("All workloads pass termination grace period checks."),
-                    recommendation="No action required.",
+                make_green_finding(
+                    self.id,
+                    "patch-health-termination",
+                    first,
+                    summary="All workloads pass termination grace period checks.",
                     evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="patch-health-termination",
                 )
             )
 

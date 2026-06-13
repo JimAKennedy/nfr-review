@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _BROAD_TYPES = frozenset({"Exception", "Throwable"})
 
@@ -21,9 +22,7 @@ class ExceptionHandlingAntipatternRule:
     required_collectors: list[str] = ["java-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_evidence = [
-            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
-        ]
+        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
         if not java_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -60,17 +59,11 @@ class ExceptionHandlingAntipatternRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "exception-handling",
+                    java_evidence[0],
                     summary="No broad exception swallowing detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=java_evidence[0].collector_name,
-                    collector_version=java_evidence[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="exception-handling",
                 )
             )
 

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _JACOCO_GROUP = "org.jacoco"
 
@@ -22,9 +23,7 @@ class JacocoThresholdRule:
     required_tech: list[str] = ["java"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_deps_evidence = [
-            e for e in evidence if e.collector_name == "java-deps" and e.kind == "java-deps"
-        ]
+        java_deps_evidence = filter_evidence(evidence, "java-deps", "java-deps")
         if not java_deps_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -43,19 +42,15 @@ class JacocoThresholdRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "jacoco-coverage",
+                        ev,
                         summary="JaCoCo plugin is present in Maven dependencies.",
                         recommendation=(
                             "No action required — JaCoCo coverage tooling is configured."
                         ),
                         evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="jacoco-coverage",
                     )
                 ],
             )

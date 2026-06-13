@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class IstioCircuitBreakerRule:
@@ -20,9 +21,7 @@ class IstioCircuitBreakerRule:
     required_tech: list[str] = ["istio"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        istio_evidence = [
-            e for e in evidence if e.collector_name == "istio" and e.kind == "istio-analysis"
-        ]
+        istio_evidence = filter_evidence(evidence, "istio", "istio-analysis")
         if not istio_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -81,17 +80,12 @@ class IstioCircuitBreakerRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "istio-circuit-breaker",
+                    first,
                     summary="Circuit breaker (outlierDetection) is configured.",
-                    recommendation="No action required.",
                     evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="istio-circuit-breaker",
                 )
             ],
         )

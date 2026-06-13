@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 def _p95(values: list[float]) -> float:
@@ -29,9 +30,7 @@ class DynLatencyP95Rule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = [
-            e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
-        ]
+        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
         if not trace_ev:
             return RuleResult(
                 rule_id=self.id,
@@ -75,10 +74,10 @@ class DynLatencyP95Rule:
 
             if target_ms is None:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        f"dyn-latency-p95-no-target:{route}",
+                        first,
                         summary=(
                             f"Route {route}: observed p95={p95_val:.0f}ms "
                             f"(sample={sample_size}). No target declared."
@@ -87,29 +86,21 @@ class DynLatencyP95Rule:
                             f"Consider adding a latency target for {route} in "
                             "nfr_targets.latency_p95_ms."
                         ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
                         confidence=0.8,
-                        pattern_tag=f"dyn-latency-p95-no-target:{route}",
+                        evidence_locator=first.locator,
                     )
                 )
             elif p95_val <= target_ms:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        f"dyn-latency-p95-pass:{route}",
+                        first,
                         summary=(
                             f"Route {route}: p95={p95_val:.0f}ms within target "
                             f"{target_ms}ms (sample={sample_size})."
                         ),
-                        recommendation="No action required.",
                         evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.85,
-                        pattern_tag=f"dyn-latency-p95-pass:{route}",
                     )
                 )
             elif p95_val <= 2 * target_ms:

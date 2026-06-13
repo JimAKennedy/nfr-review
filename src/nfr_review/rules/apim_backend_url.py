@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _NAMED_VALUE_RE = re.compile(r"\{\{.+?\}\}")
 
@@ -23,11 +24,7 @@ class ApimHardcodedBackendUrlRule:
     required_tech: list[str] = ["apim"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        apim_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "apim-policy" and e.kind == "apim-policy"
-        ]
+        apim_evidence = filter_evidence(evidence, "apim-policy", "apim-policy")
         if not apim_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -70,34 +67,27 @@ class ApimHardcodedBackendUrlRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "apim-backend-url",
+                        ev,
                         summary="All backend URLs use named values.",
+                        confidence=0.9,
                         recommendation="No action required -- named values are used.",
                         evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="apim-backend-url",
                     )
                 )
 
         if not findings:
             first = apim_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "apim-backend-url",
+                    first,
                     summary="No backend URLs found in any APIM policy.",
-                    recommendation="No action required.",
-                    evidence_locator="all-policies",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.9,
-                    pattern_tag="apim-backend-url",
+                    evidence_locator="all-policies",
                 )
             )
 

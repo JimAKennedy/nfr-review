@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class NodejsSyncFsApiRule:
@@ -19,11 +20,7 @@ class NodejsSyncFsApiRule:
     required_collectors: list[str] = ["nodejs-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        js_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "nodejs-ast" and e.kind == "nodejs-ast-file"
-        ]
+        js_evidence = filter_evidence(evidence, "nodejs-ast", "nodejs-ast-file")
         if not js_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -55,17 +52,12 @@ class NodejsSyncFsApiRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "nodejs-sync-fs-api",
+                    js_evidence[0],
                     summary="No synchronous blocking calls detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=js_evidence[0].collector_name,
-                    collector_version=js_evidence[0].collector_version,
                     confidence=0.9,
-                    pattern_tag="nodejs-sync-fs-api",
                 )
             )
 

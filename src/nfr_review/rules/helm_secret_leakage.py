@@ -11,6 +11,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _SECRET_KEY_RE = re.compile(
     r"(password|secret|token|api[_-]?key|apikey|private[_-]?key|credentials?)",
@@ -69,9 +70,7 @@ class HelmSecretLeakageRule:
     required_tech: list[str] = ["helm"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        helm_evidence = [
-            e for e in evidence if e.collector_name == "helm" and e.kind == "helm-analysis"
-        ]
+        helm_evidence = filter_evidence(evidence, "helm", "helm-analysis")
         if not helm_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -147,19 +146,14 @@ class HelmSecretLeakageRule:
                         )
 
         if not findings:
-            first = helm_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "helm-secret-leakage",
+                    helm_evidence[0],
                     summary="No plaintext secrets detected in Helm charts.",
-                    recommendation="No action required.",
-                    evidence_locator="all-helm-charts",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.8,
-                    pattern_tag="helm-secret-leakage",
+                    evidence_locator="all-helm-charts",
                 )
             )
 

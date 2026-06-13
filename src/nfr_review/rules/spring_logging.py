@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _JSON_INDICATORS = frozenset(
     {
@@ -29,11 +30,7 @@ class LoggingConfigMissingRule:
     required_tech: list[str] = ["spring_boot"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        spring_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "spring-config" and e.kind == "spring-config-file"
-        ]
+        spring_evidence = filter_evidence(evidence, "spring-config", "spring-config-file")
         if not spring_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -51,19 +48,15 @@ class LoggingConfigMissingRule:
                 return RuleResult(
                     rule_id=self.id,
                     findings=[
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "logging-config",
+                            ev,
                             summary=(
                                 f"Structured logging configuration detected in {file_path}."
                             ),
-                            recommendation="No action required.",
-                            evidence_locator=file_path,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
                             confidence=0.8,
-                            pattern_tag="logging-config",
+                            evidence_locator=file_path,
                         )
                     ],
                 )

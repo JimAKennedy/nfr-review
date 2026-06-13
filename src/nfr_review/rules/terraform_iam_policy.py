@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _IAM_RESOURCE_PREFIXES = ("aws_iam_", "azurerm_role_")
 _IAM_DATA_TYPES = frozenset({"aws_iam_policy_document"})
@@ -101,11 +102,7 @@ class TerraformIamPolicyRule:
     required_tech: list[str] = ["terraform"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        tf_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "terraform" and e.kind == "terraform-analysis"
-        ]
+        tf_evidence = filter_evidence(evidence, "terraform", "terraform-analysis")
         if not tf_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -152,23 +149,17 @@ class TerraformIamPolicyRule:
                 )
 
         if not findings:
-            first = tf_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "terraform-iam-policy",
+                    tf_evidence[0],
                     summary=(
                         "No wildcard IAM policies detected."
                         if found_iam
                         else "No IAM resources found in Terraform files."
                     ),
-                    recommendation="No action required.",
                     evidence_locator="all-tf-files",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="terraform-iam-policy",
                 )
             )
 

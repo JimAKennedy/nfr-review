@@ -29,6 +29,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOLDEN_SIGNAL_TYPES = frozenset({"metrics", "traces"})
 
@@ -43,7 +44,7 @@ _LABEL_ALIASES: dict[str, tuple[str, ...]] = {
 
 
 def _telemetry_evidence(evidence: list[Evidence]) -> list[Evidence]:
-    return [e for e in evidence if e.collector_name == "telemetry-config"]
+    return filter_evidence(evidence, "telemetry-config")
 
 
 def _pipeline_evidence(evidence: list[Evidence]) -> list[Evidence]:
@@ -86,10 +87,10 @@ class GoldenSignalEmissionRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-telem-golden-signals",
+                        ev,
                         summary=(
                             "No OTel collector config detected"
                             " — golden signal check not applicable"
@@ -100,11 +101,8 @@ class GoldenSignalEmissionRule:
                             " to emit the four golden signals (request_rate, error_rate,"
                             " latency, saturation)."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.70,
-                        pattern_tag="patch-telem-golden-signals",
+                        evidence_locator=ev.locator,
                     )
                 ],
             )
@@ -120,10 +118,10 @@ class GoldenSignalEmissionRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-telem-golden-signals",
+                        ref,
                         summary=(
                             f"OTel collector pipelines cover both metrics and traces"
                             f" signal types across {len(pipelines)} config(s)"
@@ -132,10 +130,6 @@ class GoldenSignalEmissionRule:
                             "No action required — golden signal pipeline coverage is present."
                         ),
                         evidence_locator=ref.locator,
-                        collector_name=ref.collector_name,
-                        collector_version=ref.collector_version,
-                        confidence=0.85,
-                        pattern_tag="patch-telem-golden-signals",
                     )
                 ],
             )
@@ -190,10 +184,10 @@ class MandatoryLabelPresenceRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-telem-labels",
+                        ev,
                         summary=(
                             "No OTel collector config detected"
                             " — mandatory label check not applicable"
@@ -203,11 +197,8 @@ class MandatoryLabelPresenceRule:
                             " configure resource attributes with mandatory labels:"
                             " service, version, ring, side."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.70,
-                        pattern_tag="patch-telem-labels",
+                        evidence_locator=ev.locator,
                     )
                 ],
             )
@@ -227,20 +218,17 @@ class MandatoryLabelPresenceRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-telem-labels",
+                        ref,
                         summary=(
                             "All mandatory telemetry labels present in resource attributes:"
                             f" {', '.join(_MANDATORY_LABELS)}"
                         ),
                         recommendation="No action required — mandatory labels are configured.",
-                        evidence_locator=ref.locator,
-                        collector_name=ref.collector_name,
-                        collector_version=ref.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-telem-labels",
+                        evidence_locator=ref.locator,
                     )
                 ],
             )
@@ -301,10 +289,10 @@ class SyntheticTransactionConfigRule:
                 return RuleResult(
                     rule_id=self.id,
                     findings=[
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-telem-synthetic",
+                            ref,
                             summary=(
                                 f"Synthetic transaction config found:"
                                 f" {len(synths)} definition(s) via {', '.join(tools)}"
@@ -314,11 +302,8 @@ class SyntheticTransactionConfigRule:
                                 "No action required — synthetic transaction"
                                 " configuration is present."
                             ),
-                            evidence_locator=ref.locator,
-                            collector_name=ref.collector_name,
-                            collector_version=ref.collector_version,
                             confidence=0.90,
-                            pattern_tag="patch-telem-synthetic",
+                            evidence_locator=ref.locator,
                         )
                     ],
                 )
@@ -379,10 +364,10 @@ class SyntheticTransactionConfigRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-telem-synthetic",
+                    ev,
                     summary=(
                         "No telemetry configuration detected"
                         " — synthetic transaction check not applicable"
@@ -391,11 +376,8 @@ class SyntheticTransactionConfigRule:
                         "If this service participates in a ringed patching programme,"
                         " add synthetic transaction tests exercising critical user journeys."
                     ),
-                    evidence_locator=ev.locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
                     confidence=0.70,
-                    pattern_tag="patch-telem-synthetic",
+                    evidence_locator=ev.locator,
                 )
             ],
         )

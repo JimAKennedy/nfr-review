@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROOT_NAMES = frozenset({"root", "0"})
 
@@ -36,16 +37,8 @@ class DockerfileK8sUserConflictRule:
     required_tech: list[str] = ["dockerfile", "kubernetes"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "dockerfile" and e.kind == "dockerfile-analysis"
-        ]
-        k8s_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
+        k8s_evidence = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
 
         if not df_evidence:
             return RuleResult(
@@ -80,19 +73,15 @@ class DockerfileK8sUserConflictRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "dockerfile-k8s-user-conflict",
+                        first_k8s,
                         summary=(
                             "No Dockerfile non-root USER / K8s runAsUser:0 conflict detected."
                         ),
-                        recommendation="No action required.",
-                        evidence_locator="all-artifacts",
-                        collector_name=first_k8s.collector_name,
-                        collector_version=first_k8s.collector_version,
                         confidence=0.8,
-                        pattern_tag="dockerfile-k8s-user-conflict",
+                        evidence_locator="all-artifacts",
                     )
                 ],
             )
@@ -158,20 +147,16 @@ class DockerfileK8sUserConflictRule:
         if not findings:
             first_k8s = k8s_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dockerfile-k8s-user-conflict",
+                    first_k8s,
                     summary=(
                         "Dockerfile non-root USER is not overridden by runAsUser: 0"
                         " in any K8s resource."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first_k8s.collector_name,
-                    collector_version=first_k8s.collector_version,
                     confidence=0.9,
-                    pattern_tag="dockerfile-k8s-user-conflict",
+                    evidence_locator="all-workloads",
                 )
             )
 

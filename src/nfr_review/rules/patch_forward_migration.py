@@ -19,6 +19,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _MIGRATION_DIRS = {
     "db",
@@ -54,11 +55,7 @@ class ForwardOnlyMigrationRule:
     required_collectors: list[str] = ["repo-structure"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        summaries = [
-            e
-            for e in evidence
-            if e.collector_name == "repo-structure" and e.kind == "repo-structure-summary"
-        ]
+        summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")
         if not summaries:
             return RuleResult(
                 rule_id=self.id,
@@ -76,20 +73,16 @@ class ForwardOnlyMigrationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-forward-migration",
+                        ev,
                         summary="No migration directories detected",
                         recommendation=(
                             "No action required — no database migration"
                             " tooling found at the repo root."
                         ),
                         evidence_locator="repo-root",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="patch-forward-migration",
                     )
                 ],
             )
@@ -110,10 +103,10 @@ class ForwardOnlyMigrationRule:
 
         if rollback_evidence:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-forward-migration",
+                    ev,
                     summary=(
                         "Migration rollback evidence found: " + ", ".join(rollback_evidence)
                     ),
@@ -122,10 +115,6 @@ class ForwardOnlyMigrationRule:
                         " alongside migration tooling."
                     ),
                     evidence_locator=", ".join(migration_dirs),
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="patch-forward-migration",
                 )
             )
         else:

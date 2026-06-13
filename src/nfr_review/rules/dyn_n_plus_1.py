@@ -10,6 +10,7 @@ from typing import Any, Literal
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 DEFAULT_THRESHOLD = 5
 
@@ -23,9 +24,7 @@ class DynNPlus1Rule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = [
-            e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
-        ]
+        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
         if not trace_ev:
             return RuleResult(
                 rule_id=self.id,
@@ -104,20 +103,15 @@ class DynNPlus1Rule:
         if not findings:
             total_server = len(server_spans)
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-n-plus-1-clean",
+                    first,
                     summary=(
                         f"No N+1 query patterns detected across {total_server} "
                         f"request span(s) (threshold={DEFAULT_THRESHOLD})."
                     ),
-                    recommendation="No action required.",
                     evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="dyn-n-plus-1-clean",
                 )
             )
 

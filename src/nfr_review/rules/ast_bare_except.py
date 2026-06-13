@@ -19,6 +19,7 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
 from nfr_review.rules._cross_language import ALL_LANGUAGES
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _BROAD_TYPES: dict[str, frozenset[str]] = {
     "java": frozenset({"Exception", "Throwable"}),
@@ -43,11 +44,7 @@ class BareExceptCatchAllRule:
         first_ev: Evidence | None = None
 
         for lang in ALL_LANGUAGES:
-            lang_ev = [
-                e
-                for e in evidence
-                if e.collector_name == lang.collector_name and e.kind == lang.evidence_kind
-            ]
+            lang_ev = filter_evidence(evidence, lang.collector_name, lang.evidence_kind)
             if not lang_ev:
                 continue
             any_evidence = True
@@ -110,17 +107,12 @@ class BareExceptCatchAllRule:
         if not findings:
             assert first_ev is not None
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "bare-except-catch-all",
+                    first_ev,
                     summary="No bare or broad exception catch-alls detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=first_ev.collector_name,
-                    collector_version=first_ev.collector_version,
                     confidence=0.9,
-                    pattern_tag="bare-except-catch-all",
                 )
             )
 

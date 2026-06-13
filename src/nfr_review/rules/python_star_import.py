@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class PythonStarImportRule:
@@ -19,11 +20,7 @@ class PythonStarImportRule:
     required_collectors: list[str] = ["python-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        py_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "python-ast" and e.kind == "python-ast-file"
-        ]
+        py_evidence = filter_evidence(evidence, "python-ast", "python-ast-file")
         if not py_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -56,17 +53,12 @@ class PythonStarImportRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "star-import",
+                    py_evidence[0],
                     summary="No wildcard imports detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=py_evidence[0].collector_name,
-                    collector_version=py_evidence[0].collector_version,
                     confidence=0.95,
-                    pattern_tag="star-import",
                 )
             )
 

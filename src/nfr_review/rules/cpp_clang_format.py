@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class CppClangFormatRule:
@@ -18,7 +19,7 @@ class CppClangFormatRule:
     required_tech: list[str] = ["cpp"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        repo_ev = [e for e in evidence if e.collector_name == "repo-structure"]
+        repo_ev = filter_evidence(evidence, "repo-structure")
         if not repo_ev:
             return RuleResult(
                 rule_id=self.id,
@@ -41,17 +42,12 @@ class CppClangFormatRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "cpp-clang-format-present",
+                        repo_ev[0],
                         summary=".clang-format config found — code formatting standardized.",
-                        recommendation="No action required.",
-                        evidence_locator="project-wide",
-                        collector_name=repo_ev[0].collector_name,
-                        collector_version=repo_ev[0].collector_version,
                         confidence=0.95,
-                        pattern_tag="cpp-clang-format-present",
                     )
                 ],
             )

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 # Exact artifact names and prefixes that satisfy the correlation-ID / tracing requirement.
 _TRACING_EXACT: frozenset[str] = frozenset(
@@ -41,9 +42,7 @@ class CorrelationIdMissingRule:
     required_tech: list[str] = ["java"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_deps_evidence = [
-            e for e in evidence if e.collector_name == "java-deps" and e.kind == "java-deps"
-        ]
+        java_deps_evidence = filter_evidence(evidence, "java-deps", "java-deps")
         if not java_deps_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -60,19 +59,15 @@ class CorrelationIdMissingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "correlation-id",
+                        ev,
                         summary="Distributed tracing / correlation-ID library is present.",
                         recommendation=(
                             "No action required — a tracing library is on the classpath."
                         ),
                         evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="correlation-id",
                     )
                 ],
             )

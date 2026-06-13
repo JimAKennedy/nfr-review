@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEFAULT_CLIENT_CALLS = frozenset({"http.Get", "http.Post", "http.Head", "http.PostForm"})
 
@@ -21,9 +22,7 @@ class GoHttpNoTimeoutRule:
     required_collectors: list[str] = ["go-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        go_evidence = [
-            e for e in evidence if e.collector_name == "go-ast" and e.kind == "go-ast-file"
-        ]
+        go_evidence = filter_evidence(evidence, "go-ast", "go-ast-file")
         if not go_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -81,17 +80,12 @@ class GoHttpNoTimeoutRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "go-http-no-timeout",
+                    go_evidence[0],
                     summary="No HTTP calls without timeouts detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=go_evidence[0].collector_name,
-                    collector_version=go_evidence[0].collector_version,
                     confidence=0.9,
-                    pattern_tag="go-http-no-timeout",
                 )
             )
 

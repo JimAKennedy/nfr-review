@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEFAULT_MAX_DIAGRAMS = 10
 
@@ -23,9 +24,7 @@ class DynCallSequenceRule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_evidence = [
-            e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
-        ]
+        trace_evidence = filter_evidence(evidence, "otel-trace", "otel-trace")
         if not trace_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -70,21 +69,17 @@ class DynCallSequenceRule:
                 root_span = _find_root_span(spans)
                 root_name = root_span.get("name", trace_id[:8]) if root_span else trace_id[:8]
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "dyn-call-sequence",
+                        first,
                         summary=(
                             f"Call sequence for trace {trace_id[:16]}... "
                             f"(entry: {root_name}, {len(spans)} spans):\n"
                             f"```mermaid\n{mermaid}\n```"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
                         confidence=0.9,
-                        pattern_tag="dyn-call-sequence",
+                        evidence_locator=first.locator,
                     )
                 )
 

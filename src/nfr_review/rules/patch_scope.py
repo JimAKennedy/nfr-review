@@ -24,6 +24,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _PATCH_CONFIG_FILE_PATTERNS = [
     re.compile(r"^patch[-_]?config", re.IGNORECASE),
@@ -51,11 +52,7 @@ _CRITICAL_SECURITY_NAMES = frozenset(
 
 
 def _repo_summary_evidence(evidence: list[Evidence]) -> list[Evidence]:
-    return [
-        e
-        for e in evidence
-        if e.collector_name == "repo-structure" and e.kind == "repo-structure-summary"
-    ]
+    return filter_evidence(evidence, "repo-structure", "repo-structure-summary")
 
 
 def _patch_config_evidence(evidence: list[Evidence]) -> list[Evidence]:
@@ -105,19 +102,16 @@ class PatchClassSoakConfigRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-scope-soak-config",
+                        sm,
                         summary=f"Patch class config file(s) detected: {', '.join(matched)}",
                         recommendation=(
                             "No action required — patch class configuration files are present."
                         ),
-                        evidence_locator="repo-root",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-scope-soak-config",
+                        evidence_locator="repo-root",
                     )
                 ],
             )
@@ -125,21 +119,18 @@ class PatchClassSoakConfigRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-scope-soak-config",
+                    sm,
                     summary="No patch-class soak configuration files detected",
                     recommendation=(
                         "If this service participates in a ringed patching programme,"
                         " add a patch-config or patching-policy file declaring"
                         " per-class soak durations."
                     ),
-                    evidence_locator="repo-root",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
                     confidence=0.75,
-                    pattern_tag="patch-scope-soak-config",
+                    evidence_locator="repo-root",
                 )
             ],
         )
@@ -151,10 +142,10 @@ class PatchClassSoakConfigRule:
             patch_classes = ev.payload.get("patch_classes", [])
             if patch_classes:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-scope-soak-config",
+                        ev,
                         summary=(
                             f"Patch class soak configuration found in {file_path}"
                             f" with {len(patch_classes)} patch class(es) defined"
@@ -162,11 +153,8 @@ class PatchClassSoakConfigRule:
                         recommendation=(
                             "No action required — patch class soak configuration is present."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="patch-scope-soak-config",
+                        evidence_locator=ev.locator,
                     )
                 )
             else:
@@ -222,10 +210,10 @@ class AcceleratedCadenceRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-scope-accelerated",
+                        sm,
                         summary=(
                             "Patch config files detected but content not parsed"
                             " — cannot verify accelerated cadence declaration"
@@ -234,11 +222,8 @@ class AcceleratedCadenceRule:
                             "Ensure the patch config includes a critical-security"
                             " class with compressed but non-zero soak times."
                         ),
-                        evidence_locator="repo-root",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.60,
-                        pattern_tag="patch-scope-accelerated",
+                        evidence_locator="repo-root",
                     )
                 ],
             )
@@ -246,10 +231,10 @@ class AcceleratedCadenceRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-scope-accelerated",
+                    sm,
                     summary=(
                         "No patch-class configuration detected"
                         " — accelerated cadence check not applicable"
@@ -259,11 +244,8 @@ class AcceleratedCadenceRule:
                         " add a patching-policy or patch-config file with explicit"
                         " handling for critical-security patches."
                     ),
-                    evidence_locator="repo-root",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
                     confidence=0.75,
-                    pattern_tag="patch-scope-accelerated",
+                    evidence_locator="repo-root",
                 )
             ],
         )
@@ -298,10 +280,10 @@ class AcceleratedCadenceRule:
                 if values and all(v > 0 for v in values):
                     found_critical = True
                     findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-scope-accelerated",
+                            ev,
                             summary=(
                                 f"Critical-security patch class in {file_path}"
                                 f" declares accelerated cadence with non-zero"
@@ -311,11 +293,8 @@ class AcceleratedCadenceRule:
                                 "No action required — accelerated cadence"
                                 " for critical-security patches is declared."
                             ),
-                            evidence_locator=ev.locator,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
                             confidence=0.95,
-                            pattern_tag="patch-scope-accelerated",
+                            evidence_locator=ev.locator,
                         )
                     )
 

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 _SKIP_KINDS = {"DaemonSet"}
@@ -22,11 +23,7 @@ class SingletonDeploymentRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -76,19 +73,16 @@ class SingletonDeploymentRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "singleton-deployment",
+                        ev,
                         summary=(
                             f"{resource_kind} '{resource_name}' has {replicas} replicas."
                         ),
                         recommendation="No action required — replicas > 1.",
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="singleton-deployment",
+                        evidence_locator=f"{file_path}:{resource_name}",
                     )
                 )
 
@@ -96,17 +90,13 @@ class SingletonDeploymentRule:
             # All resources were DaemonSets or non-workload kinds.
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "singleton-deployment",
+                    first,
                     summary="No Deployment/StatefulSet resources to check.",
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.90,
-                    pattern_tag="singleton-deployment",
+                    evidence_locator="all-workloads",
                 )
             )
 

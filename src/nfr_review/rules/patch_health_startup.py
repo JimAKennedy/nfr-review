@@ -21,6 +21,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 
@@ -33,11 +34,7 @@ class StartupProbeMissingRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -55,10 +52,10 @@ class StartupProbeMissingRule:
             # DaemonSets are explicitly GREEN — startup probes less critical
             if resource_kind == "DaemonSet":
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-health-startup",
+                        ev,
                         summary=(
                             f"DaemonSet '{resource_name}' — startup probe check"
                             " not applicable for DaemonSets."
@@ -67,11 +64,8 @@ class StartupProbeMissingRule:
                             "No action required — DaemonSets do not participate"
                             " in replica-based rolling updates."
                         ),
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="patch-health-startup",
+                        evidence_locator=f"{file_path}:{resource_name}",
                     )
                 )
                 continue
@@ -89,21 +83,18 @@ class StartupProbeMissingRule:
 
                 if has_startup_probe:
                     findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-health-startup",
+                            ev,
                             summary=(
                                 f"Container '{container_name}' in"
                                 f" {resource_kind} '{resource_name}'"
                                 " has a startupProbe configured."
                             ),
-                            recommendation=("No action required — startup probe is present."),
-                            evidence_locator=locator,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
+                            recommendation="No action required — startup probe is present.",
                             confidence=0.95,
-                            pattern_tag="patch-health-startup",
+                            evidence_locator=locator,
                         )
                     )
                 elif is_multi_replica:
@@ -138,10 +129,10 @@ class StartupProbeMissingRule:
                 else:
                     # Singleton workload — lower risk, informational green
                     findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="green",
-                            severity="info",
+                        make_green_finding(
+                            self.id,
+                            "patch-health-startup",
+                            ev,
                             summary=(
                                 f"Container '{container_name}' in"
                                 f" {resource_kind} '{resource_name}'"
@@ -153,31 +144,24 @@ class StartupProbeMissingRule:
                                 " has a slow initialisation phase, to prevent"
                                 " premature liveness-probe termination."
                             ),
-                            evidence_locator=locator,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
                             confidence=0.80,
-                            pattern_tag="patch-health-startup",
+                            evidence_locator=locator,
                         )
                     )
 
         if not findings:
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-health-startup",
+                    first,
                     summary=(
                         "No Deployment/StatefulSet/DaemonSet workloads to check"
                         " for startup probes."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.90,
-                    pattern_tag="patch-health-startup",
+                    evidence_locator="all-workloads",
                 )
             )
 

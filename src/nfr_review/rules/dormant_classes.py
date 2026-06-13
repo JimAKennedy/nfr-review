@@ -15,6 +15,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
 
@@ -242,17 +243,12 @@ def _detect_orphans(
 
     if not findings:
         findings.append(
-            Finding(
-                rule_id=rule_id,
-                rag="green",
-                severity="info",
+            make_green_finding(
+                rule_id,
+                f"{pattern_tag_prefix}-no-dormant-classes",
+                lang_ev[0],
                 summary="All classes are connected — no dormant classes detected.",
-                recommendation="No action required.",
-                evidence_locator="project-wide",
-                collector_name=lang_ev[0].collector_name,
-                collector_version=lang_ev[0].collector_version,
                 confidence=0.8,
-                pattern_tag=f"{pattern_tag_prefix}-no-dormant-classes",
             ),
         )
 

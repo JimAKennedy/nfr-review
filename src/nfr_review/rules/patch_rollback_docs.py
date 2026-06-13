@@ -20,6 +20,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROLLBACK_FILES = {"rollback.md", "disaster-recovery.md"}
 _ROLLBACK_DIRS = {"runbooks", "rollback", "disaster-recovery"}
@@ -41,11 +42,7 @@ class RollbackDocsMissingRule:
     required_collectors: list[str] = ["repo-structure"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        summaries = [
-            e
-            for e in evidence
-            if e.collector_name == "repo-structure" and e.kind == "repo-structure-summary"
-        ]
+        summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")
         if not summaries:
             return RuleResult(
                 rule_id=self.id,
@@ -58,20 +55,16 @@ class RollbackDocsMissingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-rollback-docs",
+                        ev,
                         summary=(
                             "No K8s workloads or patching config detected"
                             " — rollback docs check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator="repo-root",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-rollback-docs",
+                        evidence_locator="repo-root",
                     )
                 ],
             )
@@ -113,19 +106,16 @@ class RollbackDocsMissingRule:
         else:
             for name in matched:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-rollback-docs",
+                        ev,
                         summary=f"Rollback documentation found: {name}",
                         recommendation=(
                             "No action required — rollback documentation is present."
                         ),
-                        evidence_locator=name,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-rollback-docs",
+                        evidence_locator=name,
                     )
                 )
 

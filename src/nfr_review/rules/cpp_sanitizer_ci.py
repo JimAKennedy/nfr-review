@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _SANITIZER_KEYWORDS = frozenset(
     {
@@ -31,11 +32,7 @@ class CppSanitizerCiRule:
     required_tech: list[str] = ["cpp"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_ev = [
-            e
-            for e in evidence
-            if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
-        ]
+        ci_ev = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
         if not ci_ev:
             return RuleResult(
                 rule_id=self.id,
@@ -59,17 +56,12 @@ class CppSanitizerCiRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "cpp-sanitizer-ci-present",
+                        ci_ev[0],
                         summary="CI includes sanitizer jobs for runtime error detection.",
-                        recommendation="No action required.",
-                        evidence_locator="project-wide",
-                        collector_name=ci_ev[0].collector_name,
-                        collector_version=ci_ev[0].collector_version,
                         confidence=0.9,
-                        pattern_tag="cpp-sanitizer-ci-present",
                     )
                 ],
             )

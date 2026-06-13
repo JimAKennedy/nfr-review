@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _HEALTH_PATHS = frozenset({"/health", "/actuator/health"})
 
@@ -21,9 +22,7 @@ class HealthEndpointMissingRule:
     required_collectors: list[str] = ["java-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_evidence = [
-            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
-        ]
+        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
         if not java_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -43,21 +42,18 @@ class HealthEndpointMissingRule:
                             return RuleResult(
                                 rule_id=self.id,
                                 findings=[
-                                    Finding(
-                                        rule_id=self.id,
-                                        rag="green",
-                                        severity="info",
+                                    make_green_finding(
+                                        self.id,
+                                        "health-endpoint",
+                                        ev,
                                         summary=(
                                             f"Health endpoint found: {path} in {cls['name']}"
                                         ),
                                         recommendation=(
                                             "No action required — health endpoint is present."
                                         ),
-                                        evidence_locator=locator,
-                                        collector_name=ev.collector_name,
-                                        collector_version=ev.collector_version,
                                         confidence=0.9,
-                                        pattern_tag="health-endpoint",
+                                        evidence_locator=locator,
                                     )
                                 ],
                             )

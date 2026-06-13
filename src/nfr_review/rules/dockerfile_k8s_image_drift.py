@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 def _parse_image(image: str) -> tuple[str, str | None]:
@@ -54,16 +55,8 @@ class DockerfileK8sImageDriftRule:
     required_tech: list[str] = ["dockerfile", "kubernetes"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "dockerfile" and e.kind == "dockerfile-analysis"
-        ]
-        k8s_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
+        k8s_evidence = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
 
         if not df_evidence:
             return RuleResult(
@@ -143,17 +136,14 @@ class DockerfileK8sImageDriftRule:
         if not findings:
             first_k8s = k8s_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dockerfile-k8s-image-drift",
+                    first_k8s,
                     summary="No Dockerfile / K8s image tag drift detected.",
                     recommendation="No action required — image tags are consistent.",
-                    evidence_locator="all-artifacts",
-                    collector_name=first_k8s.collector_name,
-                    collector_version=first_k8s.collector_version,
                     confidence=0.8,
-                    pattern_tag="dockerfile-k8s-image-drift",
+                    evidence_locator="all-artifacts",
                 )
             )
 

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _RESILIENCE_CONFIG_KEYS = frozenset(
     {
@@ -56,14 +57,8 @@ class OTelFaultInjectionTestsRule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_ast_evidence = [
-            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
-        ]
-        spring_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "spring-config" and e.kind == "spring-config-file"
-        ]
+        java_ast_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
+        spring_evidence = filter_evidence(evidence, "spring-config", "spring-config-file")
 
         has_resilience_config = self._check_spring_resilience(spring_evidence)
         has_resilience_annotations = self._check_ast_resilience(java_ast_evidence)
@@ -83,20 +78,16 @@ class OTelFaultInjectionTestsRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "otel-fault-injection-tests",
+                        first,
                         summary=(
                             "Resilience patterns detected with corresponding "
                             "fault-injection tests."
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
                         confidence=0.75,
-                        pattern_tag="otel-fault-injection-tests",
+                        evidence_locator=first.locator,
                     )
                 ],
             )

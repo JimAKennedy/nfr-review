@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class DockerfileUserDirectiveRule:
@@ -20,11 +21,7 @@ class DockerfileUserDirectiveRule:
     required_tech: list[str] = ["dockerfile"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "dockerfile" and e.kind == "dockerfile-analysis"
-        ]
+        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
         if not df_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -63,17 +60,14 @@ class DockerfileUserDirectiveRule:
         if not findings:
             first = df_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dockerfile-user-directive",
+                    first,
                     summary="All Dockerfiles specify a USER directive.",
                     recommendation="No action required — non-root user configured.",
-                    evidence_locator="all-dockerfiles",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.95,
-                    pattern_tag="dockerfile-user-directive",
+                    evidence_locator="all-dockerfiles",
                 )
             )
 

@@ -10,6 +10,7 @@ from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class AdrLifecycleGapRule:
@@ -20,9 +21,7 @@ class AdrLifecycleGapRule:
     required_collectors: list[str] = ["adr"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        adr_docs = [
-            e for e in evidence if e.collector_name == "adr" and e.kind == "adr-document"
-        ]
+        adr_docs = filter_evidence(evidence, "adr", "adr-document")
         if not adr_docs:
             return RuleResult(
                 rule_id=self.id,
@@ -101,17 +100,14 @@ class AdrLifecycleGapRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
-                    summary=(f"All {len(adr_docs)} ADR(s) have status tracking."),
+                make_green_finding(
+                    self.id,
+                    "adr-lifecycle",
+                    adr_docs[0],
+                    summary=f"All {len(adr_docs)} ADR(s) have status tracking.",
+                    confidence=0.9,
                     recommendation="No action required — ADR lifecycle is well-managed.",
                     evidence_locator="adr-summary",
-                    collector_name="adr",
-                    collector_version="0.1.0",
-                    confidence=0.9,
-                    pattern_tag="adr-lifecycle",
                 )
             ],
         )

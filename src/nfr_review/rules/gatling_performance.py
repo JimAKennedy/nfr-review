@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence
 
 
 class GatlingPerformanceThresholdsRule:
@@ -28,9 +29,7 @@ class GatlingPerformanceThresholdsRule:
     required_collectors: list[str] = ["gatling"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        gatling_evidence = [
-            e for e in evidence if e.collector_name == "gatling" and e.kind == "gatling-result"
-        ]
+        gatling_evidence = filter_evidence(evidence, "gatling", "gatling-result")
         if not gatling_evidence:
             return RuleResult(
                 rule_id=self.id,

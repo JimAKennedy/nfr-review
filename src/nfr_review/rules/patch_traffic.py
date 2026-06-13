@@ -25,6 +25,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class ProgressiveTrafficShiftingRule:
@@ -35,21 +36,9 @@ class ProgressiveTrafficShiftingRule:
     required_collectors: list[str] = ["service-mesh"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        vs_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "service-mesh" and e.kind == "service-mesh-virtual-service"
-        ]
-        rollout_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "service-mesh" and e.kind == "service-mesh-rollout"
-        ]
-        summary = [
-            e
-            for e in evidence
-            if e.collector_name == "service-mesh" and e.kind == "service-mesh-summary"
-        ]
+        vs_evidence = filter_evidence(evidence, "service-mesh", "service-mesh-virtual-service")
+        rollout_evidence = filter_evidence(evidence, "service-mesh", "service-mesh-rollout")
+        summary = filter_evidence(evidence, "service-mesh", "service-mesh-summary")
 
         if not summary:
             return RuleResult(
@@ -64,19 +53,16 @@ class ProgressiveTrafficShiftingRule:
             name = ev.payload.get("name", "")
             if ev.payload.get("has_weighted_routing"):
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
-                        summary=(f"VirtualService '{name}' has weighted traffic routing"),
+                    make_green_finding(
+                        self.id,
+                        "patch-traffic-shifting",
+                        ev,
+                        summary=f"VirtualService '{name}' has weighted traffic routing",
                         recommendation=(
                             "No action required — progressive traffic shifting is configured."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="patch-traffic-shifting",
+                        evidence_locator=ev.locator,
                     )
                 )
             else:
@@ -107,10 +93,10 @@ class ProgressiveTrafficShiftingRule:
             strategy = ev.payload.get("strategy_type", "unknown")
             if strategy == "canary" and len(steps) > 0:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-traffic-shifting",
+                        ev,
                         summary=(
                             f"Rollout '{name}' has canary steps for progressive"
                             f" traffic shifting ({len(steps)} steps)"
@@ -118,11 +104,8 @@ class ProgressiveTrafficShiftingRule:
                         recommendation=(
                             "No action required — canary rollout steps are configured."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="patch-traffic-shifting",
+                        evidence_locator=ev.locator,
                     )
                 )
             elif strategy == "canary":
@@ -150,20 +133,16 @@ class ProgressiveTrafficShiftingRule:
         if not findings:
             sm = summary[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-traffic-shifting",
+                    sm,
                     summary=(
                         "No VirtualService or Rollout resources found"
                         " — progressive traffic shifting not applicable"
                     ),
-                    recommendation="No action required.",
-                    evidence_locator=".",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
                     confidence=0.80,
-                    pattern_tag="patch-traffic-shifting",
+                    evidence_locator=".",
                 )
             )
 
@@ -195,11 +174,7 @@ class FailoverDocumentationRule:
     required_collectors: list[str] = ["repo-structure"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        summaries = [
-            e
-            for e in evidence
-            if e.collector_name == "repo-structure" and e.kind == "repo-structure-summary"
-        ]
+        summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")
         if not summaries:
             return RuleResult(
                 rule_id=self.id,
@@ -212,20 +187,16 @@ class FailoverDocumentationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-traffic-failover-docs",
+                        ev,
                         summary=(
                             "No K8s workloads or patching config detected"
                             " — failover docs check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator="repo-root",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-traffic-failover-docs",
+                        evidence_locator="repo-root",
                     )
                 ],
             )
@@ -268,19 +239,16 @@ class FailoverDocumentationRule:
         else:
             for name in matched:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-traffic-failover-docs",
+                        ev,
                         summary=f"Failover documentation found: {name}",
                         recommendation=(
                             "No action required — failover documentation is present."
                         ),
-                        evidence_locator=name,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-traffic-failover-docs",
+                        evidence_locator=name,
                     )
                 )
 
@@ -295,16 +263,10 @@ class ConnectionDrainingRule:
     required_collectors: list[str] = ["service-mesh"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        dr_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "service-mesh" and e.kind == "service-mesh-destination-rule"
-        ]
-        summary = [
-            e
-            for e in evidence
-            if e.collector_name == "service-mesh" and e.kind == "service-mesh-summary"
-        ]
+        dr_evidence = filter_evidence(
+            evidence, "service-mesh", "service-mesh-destination-rule"
+        )
+        summary = filter_evidence(evidence, "service-mesh", "service-mesh-summary")
 
         if not summary:
             return RuleResult(
@@ -319,10 +281,10 @@ class ConnectionDrainingRule:
             name = ev.payload.get("name", "")
             if ev.payload.get("has_connection_pool"):
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-traffic-drain",
+                        ev,
                         summary=(
                             f"DestinationRule '{name}' has connectionPool"
                             " configured for connection draining"
@@ -330,11 +292,8 @@ class ConnectionDrainingRule:
                         recommendation=(
                             "No action required — connection pool limits are configured."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-traffic-drain",
+                        evidence_locator=ev.locator,
                     )
                 )
             else:
@@ -363,20 +322,16 @@ class ConnectionDrainingRule:
         if not findings:
             sm = summary[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-traffic-drain",
+                    sm,
                     summary=(
                         "No DestinationRule resources found"
                         " — connection draining check not applicable"
                     ),
-                    recommendation="No action required.",
-                    evidence_locator=".",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
                     confidence=0.80,
-                    pattern_tag="patch-traffic-drain",
+                    evidence_locator=".",
                 )
             )
 

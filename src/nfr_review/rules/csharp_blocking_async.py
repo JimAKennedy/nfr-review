@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class CSharpBlockingAsyncRule:
@@ -19,11 +20,7 @@ class CSharpBlockingAsyncRule:
     required_collectors: list[str] = ["csharp-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cs_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "csharp-ast" and e.kind == "csharp-ast-file"
-        ]
+        cs_evidence = filter_evidence(evidence, "csharp-ast", "csharp-ast-file")
         if not cs_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -56,17 +53,12 @@ class CSharpBlockingAsyncRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "csharp-blocking-async",
+                    cs_evidence[0],
                     summary="No blocking calls on async operations detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cs_evidence[0].collector_name,
-                    collector_version=cs_evidence[0].collector_version,
                     confidence=0.9,
-                    pattern_tag="csharp-blocking-async",
                 )
             )
 

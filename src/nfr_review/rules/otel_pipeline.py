@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ALL_SIGNAL_TYPES = frozenset({"traces", "metrics", "logs"})
 
@@ -22,9 +23,7 @@ class OTelPipelineCompletenessRule:
     required_tech: list[str] = ["otel"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        otel_evidence = [
-            e for e in evidence if e.collector_name == "otel" and e.kind == "otel-analysis"
-        ]
+        otel_evidence = filter_evidence(evidence, "otel", "otel-analysis")
         if not otel_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -132,20 +131,16 @@ class OTelPipelineCompletenessRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "otel-pipeline-completeness",
+                    first,
                     summary=(
                         "All three signal types (traces, metrics, logs)"
                         " have pipelines configured."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.9,
-                    pattern_tag="otel-pipeline-completeness",
+                    evidence_locator=first.locator,
                 )
             ],
         )

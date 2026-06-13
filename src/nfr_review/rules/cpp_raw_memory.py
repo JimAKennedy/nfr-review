@@ -16,6 +16,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _OWNERSHIP_TRANSFER_RE = re.compile(
     r"(?i)^(add(View|Parameter|Component|Unit|SubController|Entry|Animation)"
@@ -142,20 +143,15 @@ class CppRawMemoryRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "cpp-raii-only",
+                    cpp_ev[0],
                     summary=(
                         "No raw memory management patterns "
                         "detected — RAII and smart pointers used."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cpp_ev[0].collector_name,
-                    collector_version=cpp_ev[0].collector_version,
                     confidence=0.9,
-                    pattern_tag="cpp-raii-only",
                 )
             )
 

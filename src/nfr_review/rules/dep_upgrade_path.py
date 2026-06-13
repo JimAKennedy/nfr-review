@@ -14,6 +14,7 @@ from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 logger = logging.getLogger(__name__)
 
@@ -195,10 +196,10 @@ class DepUpgradePathRule:
             f"{pkg}=={ver}" for pkg, ver in sorted(result.optimal_set.items())
         )
         return [
-            Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            make_green_finding(
+                self.id,
+                "upgrade-path-ok",
+                ev,
                 summary=(
                     f"All dependencies in {ev.collector_name} can reach N-1 major version. "
                     f"Recommended set: {optimal_summary}"
@@ -207,10 +208,6 @@ class DepUpgradePathRule:
                     "Consider upgrading to the recommended version set to stay current."
                 ),
                 evidence_locator=f"upgrade-path:{ev.collector_name}",
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
-                confidence=0.85,
-                pattern_tag="upgrade-path-ok",
             )
         ]
 

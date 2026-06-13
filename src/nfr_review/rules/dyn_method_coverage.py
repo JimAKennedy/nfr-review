@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class DynMethodCoverageRule:
@@ -21,9 +22,7 @@ class DynMethodCoverageRule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_evidence = [
-            e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
-        ]
+        trace_evidence = filter_evidence(evidence, "otel-trace", "otel-trace")
         if not trace_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -88,10 +87,10 @@ class DynMethodCoverageRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-method-coverage",
+                    first,
                     summary=(
                         f"Observed {len(method_hits)} distinct instrumented methods "
                         f"across {total_spans} spans from service(s): {services_str}.\n"
@@ -99,12 +98,7 @@ class DynMethodCoverageRule:
                         f"{len(first.payload.get('trace_ids', []))} trace(s).\n"
                         f"Top methods:\n{method_list}"
                     ),
-                    recommendation="No action required.",
                     evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="dyn-method-coverage",
                 )
             ],
         )

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class ApimRateLimitMissingRule:
@@ -20,11 +21,7 @@ class ApimRateLimitMissingRule:
     required_tech: list[str] = ["apim"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        apim_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "apim-policy" and e.kind == "apim-policy"
-        ]
+        apim_evidence = filter_evidence(evidence, "apim-policy", "apim-policy")
         if not apim_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -37,17 +34,14 @@ class ApimRateLimitMissingRule:
             file_path = ev.payload.get("file_path", ev.locator)
             if ev.payload.get("has_rate_limit"):
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "apim-rate-limit",
+                        ev,
                         summary="Rate limiting is configured.",
+                        confidence=0.95,
                         recommendation="No action required -- rate limiting is present.",
                         evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.95,
-                        pattern_tag="apim-rate-limit",
                     )
                 )
             else:
