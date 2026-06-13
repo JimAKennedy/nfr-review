@@ -175,18 +175,32 @@ def _emit_mermaid_tree_nodes(
 
 
 def render_jdepend_metrics_table(packages: list[dict]) -> str:
-    """Render a markdown table of JDepend package metrics sorted by distance."""
+    """Render an HTML table of JDepend package metrics sorted by distance.
+
+    Filters out noise rows where Ca, Ce, and total_classes are all zero
+    (external dependencies that jdepend cannot introspect).  Numeric columns
+    use ``white-space: nowrap`` so values like ``0.86`` never wrap in PDF.
+    """
     if not packages:
         return ""
 
-    sorted_pkgs = sorted(packages, key=lambda p: p.get("d", p.get("D", 0.0)), reverse=True)
+    # Filter out all-zero noise rows (external deps jdepend can't introspect)
+    filtered: list[dict] = []
+    for pkg in packages:
+        ca = pkg.get("ca", pkg.get("Ca", 0))
+        ce = pkg.get("ce", pkg.get("Ce", 0))
+        total = pkg.get("total_classes", pkg.get("TotalClasses", 0))
+        # Keep if at least one metric is non-zero
+        if ca or ce or (isinstance(total, int) and total):
+            filtered.append(pkg)
 
-    lines = [
-        "### JDepend Package Metrics",
-        "",
-        "| Package | Ca | Ce | A | I | D | Classes |",
-        "|---------|----|----|-----|-----|-----|---------|",
-    ]
+    if not filtered:
+        return ""
+
+    sorted_pkgs = sorted(filtered, key=lambda p: p.get("d", p.get("D", 0.0)), reverse=True)
+
+    nw = ' class="nowrap"'
+    rows: list[str] = []
     for pkg in sorted_pkgs:
         name = pkg.get("name", "unknown")
         ca = pkg.get("ca", pkg.get("Ca", 0))
@@ -195,15 +209,22 @@ def render_jdepend_metrics_table(packages: list[dict]) -> str:
         i = pkg.get("i", pkg.get("I", 0.0))
         d = pkg.get("d", pkg.get("D", 0.0))
         total = pkg.get("total_classes", pkg.get("TotalClasses", "-"))
-        lines.append(f"| `{name}` | {ca} | {ce} | {a:.2f} | {i:.2f} | {d:.2f} | {total} |")
+        rows.append(
+            f"<tr><td><code>{name}</code></td>"
+            f"<td{nw}>{ca}</td><td{nw}>{ce}</td>"
+            f"<td{nw}>{a:.2f}</td><td{nw}>{i:.2f}</td>"
+            f"<td{nw}>{d:.2f}</td><td{nw}>{total}</td></tr>"
+        )
 
-    lines.append("")
-    lines.append(
-        "*Ca=Afferent Coupling, Ce=Efferent Coupling,"
-        " A=Abstractness, I=Instability, D=Distance from Main Sequence*"
+    return (
+        "<h3>JDepend Package Metrics</h3>\n"
+        '<table class="jdepend-metrics"><thead><tr>'
+        "<th>Package</th><th>Ca</th><th>Ce</th>"
+        "<th>A</th><th>I</th><th>D</th><th>Classes</th>"
+        "</tr></thead><tbody>\n" + "\n".join(rows) + "\n</tbody></table>\n"
+        "<p><em>Ca=Afferent Coupling, Ce=Efferent Coupling,"
+        " A=Abstractness, I=Instability, D=Distance from Main Sequence</em></p>\n"
     )
-    lines.append("")
-    return "\n".join(lines)
 
 
 def render_jdepend_dot(packages: list[dict]) -> str:

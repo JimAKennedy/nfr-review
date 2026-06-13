@@ -106,7 +106,7 @@ class ClaudeClient:
             key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
             if key:
                 if anthropic is None:
-                    logger.warning(
+                    logger.debug(
                         "anthropic SDK not installed; "
                         "install nfr-review[llm-anthropic] for API access"
                     )
@@ -449,8 +449,9 @@ def create_llm_client(config: LlmConfig | None = None) -> LlmClientImpl:
 
     api_key = os.environ.get(resolved.api_key_env_var, "").strip()
     if not api_key:
-        logger.warning(
-            "%s is not set; LLM calls will be unavailable", resolved.api_key_env_var
+        logger.debug(
+            "No LLM API key found (%s not set); LLM-augmented rules will be skipped",
+            resolved.api_key_env_var,
         )
 
     if resolved.provider == "openai":

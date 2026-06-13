@@ -15,17 +15,25 @@ Dynamic analysis produces two additional report sections:
 - **Call Sequence Diagrams** — Mermaid sequence diagrams embedded in findings
   that illustrate specific interaction patterns (e.g. N+1 loops).
 
+> **Related:** nfr-review also provides a [Production Interaction Monitor](monitor-deployment.md)
+> (EXPERIMENTAL) that continuously compares live production traces against a
+> UAT baseline. The monitor builds on the same OTel trace parsing but runs as
+> a long-lived HTTP server rather than a one-shot scan.
+
 ---
 
 ## Table of contents
 
 1. [Quick start](#1-quick-start)
-2. [Using pre-collected traces](#2-using-pre-collected-traces)
-3. [Using the managed collector](#3-using-the-managed-collector)
-4. [Trace file format](#4-trace-file-format)
-5. [Band 3 rules](#5-band-3-rules)
-6. [CI integration](#6-ci-integration)
-7. [Troubleshooting](#7-troubleshooting)
+2. [Installation](#2-installation)
+3. [Using pre-collected traces](#3-using-pre-collected-traces)
+4. [Using the managed collector](#4-using-the-managed-collector)
+5. [Collector configuration](#5-collector-configuration)
+6. [Trace file format](#6-trace-file-format)
+7. [Band 3 rules](#7-band-3-rules)
+8. [End-to-end workflow](#8-end-to-end-workflow)
+9. [CI integration](#9-ci-integration)
+10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
@@ -51,7 +59,43 @@ nfr-review run /path/to/repo --collector
 
 ---
 
-## 2. Using pre-collected traces
+## 2. Installation
+
+Dynamic analysis is included in the base `nfr-review` package. No extra
+dependencies are needed for trace parsing or Band 3 rule evaluation.
+
+```bash
+pip install nfr-review
+```
+
+Two optional extras are available for OTel-related workflows:
+
+| Extra | What it adds | When to install |
+|-------|-------------|-----------------|
+| `[otel]` | OpenTelemetry API, SDK, and OTLP exporter bindings | You want to instrument your own tests to emit traces that nfr-review can consume |
+| `[monitor]` | aiohttp for the production interaction monitor | You want to run `nfr-review monitor` (see [Production Monitor](monitor-deployment.md)) |
+
+```bash
+# Install with the OTel SDK (for trace generation in tests)
+pip install "nfr-review[otel]"
+
+# Install with the monitor extra (for production topology monitoring)
+pip install "nfr-review[monitor]"
+
+# Install everything
+pip install "nfr-review[full]"
+```
+
+For managed collector mode (`--collector`), you also need the `otelcol-contrib`
+binary on your `$PATH`. See [Using the managed collector](#4-using-the-managed-collector)
+for installation instructions.
+
+For full installation details including Docker and GitHub Actions setup,
+see the [Install guide](install.md).
+
+---
+
+## 3. Using pre-collected traces
 
 Pass a trace file with `--otel-traces`:
 
@@ -61,7 +105,7 @@ nfr-review run /path/to/repo --otel-traces /path/to/traces.ndjson
 
 The file must be in OTLP JSON format — either a single JSON object with a
 top-level `resourceSpans` array, or newline-delimited JSON (NDJSON) where
-each line is an OTLP export batch. See [Trace file format](#4-trace-file-format)
+each line is an OTLP export batch. See [Trace file format](#6-trace-file-format)
 for details.
 
 This mode works with both `run` and `report` commands.
@@ -93,7 +137,7 @@ Or use the managed collector (next section) to automate this.
 
 ---
 
-## 3. Using the managed collector
+## 4. Using the managed collector
 
 The `--collector` flag tells nfr-review to start an OTel Collector subprocess
 before the scan and stop it afterwards. Collected traces are automatically fed
@@ -108,10 +152,18 @@ nfr-review run /path/to/repo --collector
 An OTel Collector binary must be on your `$PATH`. nfr-review searches for
 `otelcol-contrib` first, then `otelcol`.
 
-**macOS (Homebrew):**
+**macOS / Linux (setup script):**
 
 ```bash
-brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib
+# Automatically downloads the correct binary for your platform
+scripts/setup-all.sh
+```
+
+**Manual download:**
+
+```bash
+# Download from GitHub releases (pick your OS/arch):
+# https://github.com/open-telemetry/opentelemetry-collector-releases/releases
 ```
 
 **Linux (apt):**
@@ -122,7 +174,7 @@ sudo apt-get install otelcol-contrib
 ```
 
 **Docker / CI:** Install the binary in your CI image or download it as a
-workflow step. See [CI integration](#6-ci-integration) for a GitHub Actions
+workflow step. See [CI integration](#9-ci-integration) for a GitHub Actions
 example.
 
 ### How it works
@@ -142,6 +194,53 @@ example.
 If the collector binary is not found, nfr-review logs a warning and
 continues without dynamic trace collection — the scan still produces all
 static analysis findings.
+
+### Mutually exclusive flags
+
+`--collector` and `--otel-traces` cannot be used together. Use
+`--otel-traces` when you already have a trace file; use `--collector` when
+you want nfr-review to capture traces during the scan.
+
+---
+
+## 5. Collector configuration
+
+nfr-review ships a bundled default collector config at
+`src/nfr_review/data/otel-collector-config.yaml`. This config receives OTLP
+traces over both gRPC (port 4317) and HTTP (port 4318), applies a memory
+limiter and batching processor, and writes spans to a local NDJSON file.
+
+The bundled default:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  file:
+    path: "${NFR_TRACE_OUTPUT_PATH}"
+    format: json
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [file]
+```
 
 ### Custom collector config
 
@@ -168,18 +267,17 @@ service:
 ```
 
 The `NFR_TRACE_OUTPUT_PATH` environment variable is set by nfr-review to
-point to the temp trace file. Your config must use this variable in the
-file exporter path.
+point to the temp trace file. Your config **must** use this variable in the
+file exporter path — without it, nfr-review will not find the captured
+traces.
 
-### Mutually exclusive flags
-
-`--collector` and `--otel-traces` cannot be used together. Use
-`--otel-traces` when you already have a trace file; use `--collector` when
-you want nfr-review to capture traces during the scan.
+You can add extra processors (e.g. `filter`, `attributes`), additional
+receivers, or change the batch size, but the file exporter with the
+`NFR_TRACE_OUTPUT_PATH` variable is required.
 
 ---
 
-## 4. Trace file format
+## 6. Trace file format
 
 nfr-review accepts two OTLP JSON formats:
 
@@ -248,7 +346,7 @@ the OTel Collector file exporter:
 
 ---
 
-## 5. Band 3 rules
+## 7. Band 3 rules
 
 Band 3 rules analyse OTel trace data. They require either `--otel-traces`
 or `--collector` to activate. Without trace data, these rules are skipped.
@@ -265,12 +363,84 @@ and appear in all output formats (CSV, JSONL, SARIF, Markdown, PDF).
 
 ---
 
-## 6. CI integration
+## 8. End-to-end workflow
+
+This section walks through the full dynamic analysis lifecycle: start a
+collector, exercise your application, stop the collector, and run nfr-review
+against the captured traces.
+
+### With managed collector (simplest)
+
+```bash
+# 1. Start your instrumented application in the background
+./gradlew bootRun &
+APP_PID=$!
+sleep 10  # wait for startup
+
+# 2. Run nfr-review with managed collector — it starts the collector,
+#    waits for the scan to complete, then stops the collector
+nfr-review report /path/to/repo --collector
+
+# 3. Stop your application
+kill $APP_PID
+```
+
+nfr-review handles the collector lifecycle automatically. The report includes
+all static findings plus Band 3 dynamic analysis findings.
+
+### With pre-collected traces (manual control)
+
+When you need more control over the collection process — for example, to run
+a specific test suite or replay a load test — collect traces manually and
+pass the file to nfr-review:
+
+```bash
+# 1. Start the OTel Collector with a file exporter
+export NFR_TRACE_OUTPUT_PATH=/tmp/otel-traces.ndjson
+otelcol-contrib --config otel-collector-config.yaml &
+COLLECTOR_PID=$!
+
+# 2. Start your instrumented application
+./gradlew bootRun &
+APP_PID=$!
+sleep 10
+
+# 3. Exercise the application (run tests, replay traffic, etc.)
+./gradlew integrationTest
+
+# 4. Stop the application and collector
+kill $APP_PID
+kill $COLLECTOR_PID
+wait $COLLECTOR_PID
+
+# 5. Run nfr-review with the captured trace file
+nfr-review report /path/to/repo --otel-traces /tmp/otel-traces.ndjson
+```
+
+### Interpreting results
+
+Band 3 findings appear alongside static analysis findings in all output
+formats (CSV, JSONL, SARIF, Markdown, PDF). The report also includes:
+
+- A **Runtime Service Topology** diagram showing observed service-to-service
+  call relationships.
+- **Call Sequence Diagrams** embedded in findings that detected problematic
+  patterns (e.g. N+1 query loops).
+
+Use `-v` (verbose) to see detailed trace parsing and rule evaluation logs.
+
+---
+
+## 9. CI integration
 
 ### Pre-collected traces in CI
 
 The simplest CI approach is to collect traces during your test suite and
-pass the file to nfr-review:
+pass the file to nfr-review. A complete example workflow is available at
+[`docs/examples/nfr-review-dynamic.yml`](examples/nfr-review-dynamic.yml).
+
+Copy this file to `.github/workflows/nfr-review-dynamic.yml` in your
+repository and adjust the `--otel-traces` path to point to your trace file.
 
 ```yaml
 # .github/workflows/nfr-review-dynamic.yml
@@ -304,15 +474,19 @@ jobs:
 
       - name: Upload report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nfr-dynamic-report
-          path: "*-nfr-review-report.*"
+          path: |
+            *-nfr-review-report.md
+            *-nfr-review-report.pdf
+          retention-days: 30
 ```
 
 ### Managed collector in CI
 
-For integration tests that emit traces at runtime:
+For integration tests that emit traces at runtime, install the collector
+binary and use the `--collector` flag:
 
 ```yaml
       - name: Install OTel Collector
@@ -335,12 +509,13 @@ For integration tests that emit traces at runtime:
 
 ---
 
-## 7. Troubleshooting
+## 10. Troubleshooting
 
 ### "OTel Collector binary not found on PATH"
 
 Install `otelcol-contrib` or `otelcol` and ensure it is on your `$PATH`.
-See [Prerequisites](#prerequisites) for installation instructions.
+See [Using the managed collector](#4-using-the-managed-collector) for
+installation instructions.
 
 When the binary is not found, nfr-review continues without dynamic trace
 collection. All static analysis rules still run.

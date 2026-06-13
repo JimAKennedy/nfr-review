@@ -77,7 +77,7 @@ class TestSetupAllScriptStructure:
         assert "set -euo pipefail" in all_script_text
 
     def test_installs_all_extras(self, all_script_text: str) -> None:
-        assert "[dev,scancode,diagrams,pdf]" in all_script_text
+        assert "[dev,full,scancode,otel]" in all_script_text
 
     def test_installs_helm(self, all_script_text: str) -> None:
         assert "helm" in all_script_text

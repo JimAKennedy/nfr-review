@@ -1,7 +1,7 @@
 # Dependency License Inventory
 
-**Generated:** 2026-05-10
-**Project:** nfr-review v0.1.0
+**Generated:** 2026-06-12
+**Project:** nfr-review v0.2.0
 **License:** Apache-2.0
 
 This is a point-in-time inventory of licenses for all direct dependencies declared
