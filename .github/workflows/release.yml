@@ -89,9 +89,10 @@ jobs:
       - name: Sign container image
         env:
           COSIGN_EXPERIMENTAL: "1"
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          cosign sign --yes \
-            ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+          IMAGE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
@@ -103,10 +104,12 @@ jobs:
       - name: Attest SBOM
         env:
           COSIGN_EXPERIMENTAL: "1"
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
+          IMAGE=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           cosign attest --yes --predicate sbom.spdx.json \
             --type spdxjson \
-            ghcr.io/${{ github.repository }}@${{ steps.push.outputs.digest }}
+            "${IMAGE}@${DIGEST}"
 
   pypi-publish:
     runs-on: ubuntu-latest
@@ -126,6 +129,8 @@ jobs:
           python -m build
 
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          skip-existing: true
 
   github-release:
     runs-on: ubuntu-latest
