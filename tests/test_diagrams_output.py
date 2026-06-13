@@ -166,12 +166,15 @@ def test_jdepend_metrics_basic():
     assert "JDepend Package Metrics" in result
     assert "com.example.core" in result
     assert "0.20" in result
+    # Verify HTML output with nowrap classes
+    assert '<table class="jdepend-metrics">' in result
+    assert 'class="nowrap"' in result
 
 
 def test_jdepend_metrics_sorted_by_distance():
     packages = [
-        {"name": "low-d", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.1},
-        {"name": "high-d", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.9},
+        {"name": "low-d", "ca": 1, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.1},
+        {"name": "high-d", "ca": 0, "ce": 1, "a": 0.0, "i": 0.0, "d": 0.9},
     ]
     result = render_jdepend_metrics_table(packages)
     high_pos = result.index("high-d")
@@ -186,6 +189,35 @@ def test_jdepend_metrics_uppercase_keys():
     result = render_jdepend_metrics_table(packages)
     assert "pkg" in result
     assert "0.30" in result
+
+
+def test_jdepend_metrics_filters_all_zero_rows():
+    """External deps with Ca=0, Ce=0, total_classes=0 are filtered out."""
+    packages = [
+        {"name": "com.example.core", "ca": 5, "ce": 3, "a": 0.2, "i": 0.6, "d": 0.2},
+        {
+            "name": "java.lang",
+            "ca": 0,
+            "ce": 0,
+            "a": 0.0,
+            "i": 0.0,
+            "d": 0.0,
+            "total_classes": 0,
+        },
+        {"name": "org.springframework.web", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.0},
+    ]
+    result = render_jdepend_metrics_table(packages)
+    assert "com.example.core" in result
+    assert "java.lang" not in result
+    assert "org.springframework.web" not in result
+
+
+def test_jdepend_metrics_all_zero_returns_empty():
+    """If all packages are noise rows, return empty string."""
+    packages = [
+        {"name": "java.util", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.0},
+    ]
+    assert render_jdepend_metrics_table(packages) == ""
 
 
 # ── render_jdepend_dot ───────────────────────────────────────────────

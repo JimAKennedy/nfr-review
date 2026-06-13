@@ -71,7 +71,12 @@ _CSS = (  # noqa: E501
     " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
     " font-size: 9pt; }\n"
     "th, td { border: 1px solid #ddd; padding: 4px 8px;"
-    " text-align: left; overflow-wrap: anywhere; }\n"
+    " text-align: left; overflow-wrap: break-word; }\n"
+    ".nowrap { white-space: nowrap; }\n"
+    ".jdepend-metrics td:first-child { overflow-wrap: anywhere; }\n"
+    ".jdepend-metrics td:not(:first-child),"
+    " .jdepend-metrics th:not(:first-child)"
+    " { white-space: nowrap; text-align: right; }\n"
     "th { background: #f5f5f5; font-weight: 600; }\n"
     "tr:nth-child(even) { background: #fafafa; }\n"
     ".verdict-box { padding: 12px 16px; border-radius: 6px;"
@@ -494,6 +499,9 @@ def _md_deps_to_html(md: str) -> str:
                 f'padding:4px 8px;margin:0.5em 0;color:#721c24">'
                 f"{_h(line[2:])}</blockquote>"
             )
+        elif line.lstrip().startswith("<"):
+            # Pass through raw HTML (e.g. tables rendered by diagrams.py)
+            parts.append(line)
         elif line.strip():
             parts.append(f"<p>{_inline_md(line)}</p>")
 

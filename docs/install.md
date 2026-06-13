@@ -448,8 +448,10 @@ pip install nfr-review
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
-| `[full]` | All of the above: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai`. |
-| `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
+| `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
+| `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
+| `[full]` | All of the above (except `scancode` and `otel`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `monitor`. |
+| `[dev]` | pytest, ruff, pytest-cov, and test dependencies for development and CI. |
 
 Install extras individually or combine them:
 
@@ -528,10 +530,10 @@ A pre-built `linux/amd64` image is published to GHCR. It includes PDF
 generation (via WeasyPrint), LLM SDKs (Anthropic and OpenAI), and `git`.
 The container runs as non-root user `nfr` (UID 1000).
 
-> **Note (v2.0+):** The container no longer includes Node.js, Chromium, or
+> **Note:** The container does not include Node.js, Chromium, or
 > mermaid-cli (`mmdc`). Diagrams in HTML reports use bundled client-side
 > Mermaid.js instead. PDF diagrams use pure-Python SVG fallbacks. This
-> reduces the image size from ~800MB to under 200MB.
+> keeps the image size under 200MB.
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
@@ -622,11 +624,24 @@ nfr-review run /path/to/repo --collector
 ```
 
 The managed collector requires `otelcol-contrib` or `otelcol` on your
-`$PATH`. Install via Homebrew (`brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib`)
-or your system package manager.
+`$PATH`. Run `scripts/setup-all.sh` to install automatically, or download
+from [GitHub releases](https://github.com/open-telemetry/opentelemetry-collector-releases/releases).
 
 For the full guide — including trace file format, custom collector configs,
 and CI integration — see [Dynamic Analysis](dynamic-analysis.md).
+
+### Production interaction monitor (EXPERIMENTAL)
+
+nfr-review also includes an experimental production interaction monitor that
+continuously compares live traces against a UAT-derived baseline to detect
+novel service interactions. Install the monitor extra to use it:
+
+```bash
+pip install "nfr-review[monitor]"
+```
+
+See the [Production Monitor deployment guide](monitor-deployment.md) for
+setup and configuration.
 
 ---
 

@@ -18,8 +18,8 @@ Tagged pushes (`v*.*.*`) trigger the release workflow (`.github/workflows/releas
 ## Tag and Push
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v<VERSION>
+git push origin v<VERSION>
 ```
 
 The release workflow handles everything else automatically.

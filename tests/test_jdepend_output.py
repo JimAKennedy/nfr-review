@@ -62,8 +62,8 @@ def test_jdepend_section_with_cycles():
 
 
 def test_jdepend_section_multiple_modules():
-    pkg1 = [{"name": "mod1.core", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 1.0}]
-    pkg2 = [{"name": "mod2.api", "ca": 0, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.0}]
+    pkg1 = [{"name": "mod1.core", "ca": 3, "ce": 1, "a": 0.0, "i": 0.0, "d": 1.0}]
+    pkg2 = [{"name": "mod2.api", "ca": 2, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.0}]
     ev1 = _ev("jdepend-packages", {"packages": pkg1, "bytecode_dir": "module1"})
     ev2 = _ev("jdepend-packages", {"packages": pkg2, "bytecode_dir": "module2"})
     result = build_jdepend_section([ev1, ev2])

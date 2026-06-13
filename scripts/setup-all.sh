@@ -46,11 +46,12 @@ info "Upgrading pip"
 pip install --upgrade pip --quiet
 
 # --- Editable install with all optional extras ---
-info "Installing nfr-review in editable mode with ALL extras (dev, scancode, diagrams, pdf)"
-pip install -e "$PROJECT_ROOT[dev,scancode,diagrams,pdf]" --quiet
+info "Installing nfr-review in editable mode with ALL extras"
+pip install -e "$PROJECT_ROOT[dev,full,scancode,otel]" --quiet
 
 # --- External binaries ---
 MISSING_BINS=()
+_install_otelcol=false
 
 if command -v brew &>/dev/null; then
   if ! command -v helm &>/dev/null; then
@@ -75,13 +76,10 @@ if command -v brew &>/dev/null; then
   fi
 
   if ! command -v otelcol-contrib &>/dev/null; then
-    info "Installing otelcol-contrib via Homebrew (required for --collector / dynamic analysis)"
-    brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib || {
-      warn "Failed to install otelcol-contrib — --collector flag will not work"
-      MISSING_BINS+=("otelcol-contrib (brew install failed)")
-    }
+    _install_otelcol=true
   else
     info "otelcol-contrib already installed: $(otelcol-contrib --version 2>&1 | head -1 || echo 'unknown')"
+    _install_otelcol=false
   fi
 
   # macOS ships a /usr/bin/java stub that passes `command -v` but doesn't work.
@@ -107,13 +105,53 @@ else
     MISSING_BINS+=("libmagic (required by scancode-toolkit)")
   fi
   if ! command -v otelcol-contrib &>/dev/null; then
-    MISSING_BINS+=("otelcol-contrib (OpenTelemetry Collector Contrib — required for dynamic analysis)")
+    _install_otelcol=true
   fi
   if ! java -version &>/dev/null 2>&1; then
     MISSING_BINS+=("java (OpenJDK 21+ — required by JDepend)")
   fi
-  if ! command -v otelcol-contrib &>/dev/null; then
-    MISSING_BINS+=("otelcol-contrib (required for --collector / dynamic analysis)")
+fi
+
+# --- OpenTelemetry Collector Contrib (binary download) ---
+OTELCOL_DIR="$PROJECT_ROOT/.tools/otelcol-contrib"
+
+if $_install_otelcol; then
+  info "Installing otelcol-contrib (required for --collector / dynamic analysis)"
+  OTELCOL_ARCH="$(uname -m)"
+  case "$OTELCOL_ARCH" in
+    arm64|aarch64) OTELCOL_ARCH="arm64" ;;
+    x86_64)        OTELCOL_ARCH="amd64" ;;
+    *)             warn "Unsupported architecture $OTELCOL_ARCH for otelcol-contrib"; MISSING_BINS+=("otelcol-contrib (unsupported arch: $OTELCOL_ARCH)") ;;
+  esac
+
+  if [[ "$OTELCOL_ARCH" == "arm64" || "$OTELCOL_ARCH" == "amd64" ]]; then
+    OTELCOL_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    OTELCOL_VERSION="$(curl -fsSL "https://api.github.com/repos/open-telemetry/opentelemetry-collector-releases/releases/latest" 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null)" || true
+
+    if [[ -z "${OTELCOL_VERSION:-}" ]]; then
+      warn "Could not determine latest otelcol-contrib version — using fallback 0.154.0"
+      OTELCOL_VERSION="0.154.0"
+    fi
+
+    OTELCOL_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/otelcol-contrib_${OTELCOL_VERSION}_${OTELCOL_OS}_${OTELCOL_ARCH}.tar.gz"
+    mkdir -p "$OTELCOL_DIR"
+
+    if curl -fsSL "$OTELCOL_URL" -o "$OTELCOL_DIR/otelcol-contrib.tar.gz" 2>/dev/null; then
+      tar -xzf "$OTELCOL_DIR/otelcol-contrib.tar.gz" -C "$OTELCOL_DIR" otelcol-contrib 2>/dev/null || {
+        warn "Failed to extract otelcol-contrib"
+        MISSING_BINS+=("otelcol-contrib (extraction failed)")
+      }
+      rm -f "$OTELCOL_DIR/otelcol-contrib.tar.gz"
+
+      if [[ -x "$OTELCOL_DIR/otelcol-contrib" ]]; then
+        ln -sf "$OTELCOL_DIR/otelcol-contrib" "$VENV_DIR/bin/otelcol-contrib"
+        success "otelcol-contrib $OTELCOL_VERSION installed ($(uname -m))"
+      fi
+    else
+      warn "Failed to download otelcol-contrib v${OTELCOL_VERSION}"
+      MISSING_BINS+=("otelcol-contrib (download failed)")
+    fi
   fi
 fi
 
@@ -405,7 +443,7 @@ if [[ ${#MISSING_BINS[@]} -gt 0 ]]; then
   [[ "$_missing_joined" == *libmagic* ]] && warn "  libmagic: brew install libmagic (macOS) or apt-get install libmagic1 (Debian/Ubuntu)"
   [[ "$_missing_joined" == *java* ]]     && warn "  java:     brew install openjdk@21 (macOS) or apt-get install openjdk-21-jre (Debian/Ubuntu)"
   [[ "$_missing_joined" == *jdepend* ]]  && warn "  jdepend:  https://github.com/clarkware/jdepend (requires Java)"
-  [[ "$_missing_joined" == *otelcol* ]]  && warn "  otelcol:  brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib"
+  [[ "$_missing_joined" == *otelcol* ]]  && warn "  otelcol:  run scripts/setup-all.sh or download from https://github.com/open-telemetry/opentelemetry-collector-releases/releases"
   unset _missing_joined
 fi
 

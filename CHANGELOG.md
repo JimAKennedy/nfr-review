@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-12
+
+### Added
+
+- **Production interaction monitor** (experimental) — `nfr-review monitor`
+  accepts live OTLP traces, fingerprints service interactions, and alerts on
+  topology drift against a UAT baseline. Includes baseline management
+  (`monitor baseline`) and stats reporting.
+- **Dynamic analysis** — `--collector` flag on `run` and `report` starts an
+  OpenTelemetry Collector sidecar, captures runtime traces, and extracts
+  architecture diagrams from live traffic.
+- **OTel diagram extraction** — Mermaid sequence and topology diagrams
+  generated from OTel trace spans (`output/diagrams.py`).
+- **Monitor test framework** — 109 tests covering the full monitor pipeline:
+  fingerprinting, baseline comparison, alert classification, backpressure,
+  and end-to-end OTLP ingestion.
+- **`[monitor]` optional extra** — `pip install nfr-review[monitor]` for the
+  production monitor (aiohttp-based OTLP receiver).
+- **Lightweight reports** — `--slim` flag for minimal Markdown-only reports
+  without PDF, diagrams, or LLM summaries.
+- **Coverage at 88%** — formal coverage threshold enforced in CI.
+
+### Changed
+
+- Documentation reorganised: internal UAT scripts moved to `docs/internal/`.
+- Dynamic analysis and monitor deployment docs expanded with installation
+  instructions, architecture diagrams, and end-to-end workflow guides.
+- README updated with supported technologies matrix (18 categories),
+  architecture overview, and monitor CLI reference.
+- `setup-all.sh` installs otelcol-contrib via direct binary download instead
+  of the broken Homebrew tap.
+- pyproject.toml classifiers updated for Python 3.13, typed package marker.
+
+### Fixed
+
+- JDepend metrics table in PDF reports: external packages with all-zero
+  metrics are now filtered out; numeric columns use `white-space: nowrap`
+  to prevent mid-number wrapping.
+- LLM client no longer emits a noisy `WARNING` when no API key is
+  configured; downgraded to `DEBUG` since LLM features are optional.
+
 ## [0.1.3] - 2026-06-08
 
 ### Fixed

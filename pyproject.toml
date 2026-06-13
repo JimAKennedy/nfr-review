@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nfr-review"
-version = "0.1.3"
+version = "0.2.0"
 description = "Automated non-functional requirements review for polyglot codebases"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,11 +12,15 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "nfr-review contributors" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
 ]
 dependencies = [
     "click>=8.1",
@@ -80,7 +84,7 @@ monitor = [
     "aiohttp>=3.9",
 ]
 full = [
-    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,monitor]",
+    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,otel,monitor]",
 ]
 
 [project.scripts]

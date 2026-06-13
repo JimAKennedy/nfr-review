@@ -7,7 +7,49 @@
 
 Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++ source, gRPC proto files, APIM policies, and more) and evaluates 134 rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++/Node.js source, gRPC proto files, APIM policies, and more) and evaluates 147 rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
+
+## How it works
+
+nfr-review uses a three-stage pipeline:
+
+1. **Collectors** walk the target repository and extract structured evidence -- Spring configs, Kubernetes manifests, AST nodes from source files, CI workflow definitions, Helm charts, Terraform modules, etc. Each collector is technology-specific and only runs when its technology is detected (or explicitly enabled). Evidence is technology-neutral: a collector for Java AST and one for Go AST both produce the same `ASTEvidence` model.
+
+2. **Rules** evaluate the collected evidence against known patterns and best practices. Each rule targets a specific concern (e.g. "are liveness probes configured?", "are thread pools bounded?") and emits zero or more **findings** with a RAG status (Red / Amber / Green), severity, recommendation, and evidence locator pointing to the source file. Rules are grouped into NFR rules (resilience, observability, security, patching) and hygiene rules (documentation, CI, licensing, privacy).
+
+3. **Output formatters** write findings as CSV, JSONL, SARIF 2.1.0, Markdown, or PDF reports. The PDF renderer includes executive summaries (LLM-generated when a backend is configured), design maturity scores, and Mermaid/Graphviz architecture diagrams.
+
+## Supported technologies
+
+| Category | Technology | Collectors | AST analysis | Example rules |
+|----------|-----------|------------|:------------:|---------------|
+| **Languages** | Java | `java_ast`, `java_deps`, `jdepend`, `jacoco_report` | tree-sitter | Health endpoints, resilience annotations, exception handling, thread pools, dormant classes |
+| | Python | `python_ast`, `python_deps` | tree-sitter | Mutable defaults, star imports, bare exceptions, async fire-and-forget |
+| | Go | `go_ast`, `go_deps` | tree-sitter | Deferred calls in loops, ignored errors, goroutine leaks, HTTP client timeouts |
+| | C++ | `cpp_ast`, `cmake` | tree-sitter | Raw memory, include guards, exception safety, CMake config, sanitizer CI, dormant classes |
+| | C# | `csharp_ast`, `csharp_deps` | tree-sitter | Async void, blocking async, ConfigureAwait, disposable without using |
+| | Node.js / TypeScript | `nodejs_ast`, `nodejs_deps` | tree-sitter | Floating promises, unhandled rejections, sync FS APIs, callback errors ignored |
+| **Frameworks** | Spring Boot | `spring_config` | -- | Actuator exposure, logging config, profile misconfiguration |
+| | APIM (Azure) | `apim_policy` | -- | Auth policy missing, hardcoded backend URLs, rate limiting |
+| **Infrastructure** | Docker | `dockerfile` | tree-sitter | Base image pinning, multistage builds, USER directive, secret leakage, K8s image drift |
+| | Kubernetes | `k8s_manifest` | -- | Probes, resource limits, network policies, non-root containers, security context |
+| | Helm | `helm` | -- | Chart metadata, values validation, secret leakage, template rendering |
+| | Terraform | `terraform` | tree-sitter (HCL) | Provider pinning, state backend, IAM policy analysis |
+| | Istio | `istio`, `service_mesh` | -- | Circuit breakers, mTLS strict mode, traffic policies |
+| | Skaffold | `skaffold` | -- | Build configuration validation |
+| **CI/CD** | GitHub Actions | `ci_artifact` | -- | Test stage, security scan, coverage gates, lint, SAST, action pinning, release publish |
+| **Architecture** | ADRs | `adr`, `adr_derive` | -- | Lifecycle gaps, coverage gaps, architectural drift (LLM-assisted) |
+| | gRPC / Protobuf | `proto` | -- | Field numbering, method comments, service versioning |
+| **Observability** | OpenTelemetry | `otel`, `otel_trace`, `telemetry_config` | -- | Exporter config, pipeline completeness, sampling, W3C propagation, resource attributes |
+| **Dependencies** | PyPI, Maven, Go modules, npm, NuGet | `*_deps` collectors | -- | Freshness, upgrade paths, transitive resolution |
+| **Dynamic analysis** | OTel traces | `otel_trace` | -- | Latency P95, N+1 queries, correlation propagation, method coverage, call sequences |
+| **Security** | PII detection | -- | -- | PII in log statements (LLM-assisted) |
+| **Patching** | Deployment readiness | multiple | -- | 22 rules: update strategy, PDB coverage, graceful shutdown, rollback CI, and more |
+| **Performance** | Gatling | `gatling` | -- | Performance threshold validation |
+| **Code quality** | JaCoCo | `jacoco_report` | -- | Coverage thresholds, actual coverage reporting |
+| | JDepend | `jdepend` | -- | Package cycles, instability, distance from main sequence |
+
+Technologies are auto-detected (18 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
 
 ## Quick start
 
@@ -403,10 +445,11 @@ nfr-review report /path/to/repo --collector -v
 The `--collector` flag requires `otelcol-contrib` on your `$PATH`:
 
 ```bash
-# macOS
-brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib
+# Installs otelcol-contrib along with other optional tools
+scripts/setup-all.sh
 
-# Or run scripts/setup-all.sh which installs it along with other optional tools
+# Or download the binary directly from GitHub releases:
+# https://github.com/open-telemetry/opentelemetry-collector-releases/releases
 ```
 
 | Flag | Description |
@@ -497,6 +540,28 @@ nfr-review all /path/to/repo1 --output-dir my-reports --no-pdf --no-tests
 | `--workers` | `1` | Parallel collector threads per repo |
 | `--exclude-tests` | exclude | Exclude test directories from NFR analysis |
 
+### Manage interaction baselines
+
+Create and compare interaction baselines for production monitoring:
+
+```bash
+# Create a baseline from OTel trace data
+nfr-review baseline create --otel-traces traces.ndjson -o baseline.json
+
+# Diff production traces against a baseline
+nfr-review baseline diff --baseline baseline.json --otel-traces prod-traces.ndjson
+```
+
+### Run a production monitor
+
+Start a long-lived OTLP HTTP receiver that compares incoming production traces against a UAT baseline and emits JSON alerts for novel interactions:
+
+```bash
+nfr-review monitor --baseline baseline.json --port 4318
+```
+
+Requires the `[monitor]` extra (`pip install nfr-review[monitor]`).
+
 ### Check version
 
 ```bash
@@ -547,11 +612,10 @@ exclude_test_paths: true
 
 ## Rules
 
-nfr-review ships with 134 rules (106 NFR + 28 hygiene) across several domains. A selection:
+nfr-review ships with 147 rules (119 NFR + 28 hygiene) across several domains. A selection:
 
 | Rule ID | Domain | Description |
 |---------|--------|-------------|
-| `sample-readme-exists` | General | Verify a README exists at the repo root |
 | `ci-test-stage-missing` | CI/CD | Flag CI pipelines with no test step |
 | `ci-security-scan-missing` | CI/CD | Flag CI pipelines with no security scanning |
 | `adr-lifecycle-gap` | Architecture | Check ADR status lifecycle consistency |
@@ -559,29 +623,32 @@ nfr-review ships with 134 rules (106 NFR + 28 hygiene) across several domains. A
 | `probes-missing` | Kubernetes | Flag deployments without liveness/readiness probes |
 | `resource-limits-missing` | Kubernetes | Flag containers without CPU/memory limits |
 | `network-policy-missing` | Kubernetes | Flag namespaces without network policies |
-| `non-root-container-violation` | Kubernetes | Flag containers running as root |
 | `health-endpoint-missing` | Java | Flag services without a health endpoint |
 | `resilience-annotation-missing` | Java | Flag missing circuit breaker / retry patterns |
-| `exception-handling-antipattern` | Java | Detect bare catch blocks and swallowed exceptions |
 | `thread-pool-misconfiguration` | Java | Detect unbounded thread pools and queue configurations |
 | `actuator-exposure-risk` | Spring | Flag insecure actuator endpoint exposure |
-| `logging-config-missing` | Spring | Flag missing structured logging configuration |
-| `spring-profile-misconfiguration` | Spring | Detect profile configuration issues |
-| `apim-auth-policy-missing` | APIM | Flag API endpoints without authentication policies |
-| `apim-hardcoded-backend-url` | APIM | Detect hardcoded backend URLs in APIM policies |
-| `apim-rate-limit-missing` | APIM | Flag APIs without rate limiting |
-| `pii-in-log-statements` | Security | Detect potential PII in log statements (LLM-assisted) |
-| `cmake-build-config` | C++ | Flag CMake builds missing Release/RelWithDebInfo configuration |
-| `cmake-fetchcontent-pinning` | C++ | Flag FetchContent dependencies without a pinned tag or hash |
-| `cmake-minimum-version` | C++ | Flag cmake_minimum_required set below a supported floor |
-| `cpp-clang-format` | C++ | Check for a `.clang-format` configuration in the repo |
-| `cpp-clang-tidy` | C++ | Check for a `.clang-tidy` configuration in the repo |
-| `cpp-exception-safety` | C++ | Flag unsafe exception handling patterns in C++ source |
-| `cpp-include-guards` | C++ | Flag header files missing include guards or `#pragma once` |
+| `go-error-ignored` | Go | Flag ignored error return values |
+| `go-goroutine-leak` | Go | Detect goroutine leak patterns |
+| `python-mutable-default` | Python | Flag mutable default arguments |
+| `python-broad-except-silent` | Python | Detect silenced broad exceptions |
 | `cpp-raw-memory` | C++ | Flag raw `new`/`delete` usage that should use smart pointers |
-| `cpp-sanitizer-ci` | C++ | Flag CI pipelines missing AddressSanitizer / UBSan steps |
-| `dep-freshness` | Dependencies | Flag packages with updates available beyond their declared constraints |
-| `dep-upgrade-path` | Dependencies | Identify packages that require multi-step version upgrades |
+| `cpp-exception-safety` | C++ | Flag unsafe exception handling patterns in C++ source |
+| `csharp-async-void` | C# | Flag async void methods (should return Task) |
+| `csharp-blocking-async` | C# | Detect `.Result` / `.Wait()` on async calls |
+| `nodejs-floating-promise` | Node.js | Flag un-awaited promises |
+| `nodejs-sync-fs-api` | Node.js | Flag synchronous filesystem API usage |
+| `dockerfile-base-pinning` | Docker | Flag unpinned base images |
+| `dockerfile-secret-leakage` | Docker | Detect secrets copied into image layers |
+| `helm-secret-leakage` | Helm | Detect secrets in Helm values and templates |
+| `terraform-provider-pinning` | Terraform | Flag unpinned Terraform providers |
+| `terraform-iam-policy` | Terraform | Analyse IAM policies for overly broad permissions |
+| `istio-mtls-strict` | Istio | Flag missing strict mTLS mode |
+| `apim-auth-policy-missing` | APIM | Flag API endpoints without authentication policies |
+| `otel-pipeline-completeness` | Observability | Check OTel pipeline has traces, metrics, and logs |
+| `pii-in-log-statements` | Security | Detect potential PII in log statements (LLM-assisted) |
+| `dep-freshness` | Dependencies | Flag packages with updates available |
+| `dyn-latency-p95` | Dynamic | Flag P95 latency hotspots from OTel traces |
+| `dyn-n-plus-1` | Dynamic | Detect N+1 query patterns in runtime traces |
 | `PATCH-*` (22 rules) | Patching | Deployment and infrastructure patching readiness analysis |
 
 Rules marked "LLM-assisted" use an optional LLM call for deeper analysis and fall back gracefully when no API key is configured.

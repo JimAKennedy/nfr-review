@@ -94,7 +94,7 @@ Call Sequence 2 should show `POST /api/payments` flow:
 ## 2. Collector-Based E2E (Requires otelcol-contrib + Java 21)
 
 This section requires:
-- `otelcol-contrib` on PATH (install via `brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib`)
+- `otelcol-contrib` on PATH (install via `scripts/setup-all.sh` or download from [GitHub releases](https://github.com/open-telemetry/opentelemetry-collector-releases/releases))
 - Java 21 + Gradle (for running agentic-java-demo)
 
 ### 2.1 Start agentic-java-demo
