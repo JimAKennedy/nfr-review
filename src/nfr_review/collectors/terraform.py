@@ -38,13 +38,12 @@ Evidence payload contract (kind="terraform-analysis"):
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tree_sitter import Node, Parser
+    from tree_sitter import Node
 
-from nfr_review.collectors.ast_common import make_parser
+from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
 from nfr_review.collectors.payloads.terraform import (
     TerraformAnalysisPayload,
     TerraformBlock,
@@ -55,25 +54,9 @@ from nfr_review.collectors.payloads.terraform import (
     TerraformResourceBlock,
     TerraformVariableBlock,
 )
-from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.terraform")
-
-_HIDDEN_DIRS = frozenset({".git", ".svn", ".hg", ".idea", ".vscode", "node_modules"})
-
-
-def _text(node: Node, source: bytes) -> str:
-    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
-
-
-def _find_nodes(node: Node, target_type: str) -> list[Node]:
-    results: list[Node] = []
-    if node.type == target_type:
-        results.append(node)
-    for child in node.children:
-        results.extend(_find_nodes(child, target_type))
-    return results
 
 
 def _get_string_labels(block: Node, source: bytes) -> list[str]:
@@ -83,7 +66,7 @@ def _get_string_labels(block: Node, source: bytes) -> list[str]:
         if child.type == "string_lit":
             for sub in child.children:
                 if sub.type == "template_literal":
-                    labels.append(_text(sub, source))
+                    labels.append(text(sub, source))
     return labels
 
 
@@ -91,7 +74,7 @@ def _get_block_type(block: Node, source: bytes) -> str:
     """Get the identifier (block type) from a block node."""
     for child in block.children:
         if child.type == "identifier":
-            return _text(child, source)
+            return text(child, source)
     return ""
 
 
@@ -110,15 +93,15 @@ def _get_attr_value(body: Node, attr_name: str, source: bytes) -> str | None:
             ident = None
             for sub in child.children:
                 if sub.type == "identifier":
-                    ident = _text(sub, source)
+                    ident = text(sub, source)
                     break
             if ident == attr_name:
-                for tl in _find_nodes(child, "template_literal"):
-                    return _text(tl, source)
-                for ve in _find_nodes(child, "variable_expr"):
+                for tl in find_nodes(child, "template_literal"):
+                    return text(tl, source)
+                for ve in find_nodes(child, "variable_expr"):
                     for id_node in ve.children:
                         if id_node.type == "identifier":
-                            return _text(id_node, source)
+                            return text(id_node, source)
     return None
 
 
@@ -127,7 +110,7 @@ def _has_attr(body: Node, attr_name: str, source: bytes) -> bool:
     for child in body.children:
         if child.type == "attribute":
             for sub in child.children:
-                if sub.type == "identifier" and _text(sub, source) == attr_name:
+                if sub.type == "identifier" and text(sub, source) == attr_name:
                     return True
     return False
 
@@ -137,7 +120,7 @@ def _extract_terraform_blocks(
     source: bytes,
 ) -> list[TerraformBlock]:
     blocks: list[TerraformBlock] = []
-    for block in _find_nodes(root, "block"):
+    for block in find_nodes(root, "block"):
         if _get_block_type(block, source) != "terraform":
             continue
 
@@ -168,11 +151,11 @@ def _extract_terraform_blocks(
                     prov_name = ""
                     for c in attr.children:
                         if c.type == "identifier":
-                            prov_name = _text(c, source)
+                            prov_name = text(c, source)
                             break
                     prov_source: str | None = None
                     prov_version: str | None = None
-                    for obj_elem in _find_nodes(attr, "object_elem"):
+                    for obj_elem in find_nodes(attr, "object_elem"):
                         key_node = None
                         val_node = None
                         for c in obj_elem.children:
@@ -183,12 +166,12 @@ def _extract_terraform_blocks(
                                     val_node = c
                         if key_node is not None and val_node is not None:
                             key_text = ""
-                            for id_n in _find_nodes(key_node, "identifier"):
-                                key_text = _text(id_n, source)
+                            for id_n in find_nodes(key_node, "identifier"):
+                                key_text = text(id_n, source)
                                 break
                             val_text = ""
-                            for tl in _find_nodes(val_node, "template_literal"):
-                                val_text = _text(tl, source)
+                            for tl in find_nodes(val_node, "template_literal"):
+                                val_text = text(tl, source)
                                 break
                             if key_text == "source":
                                 prov_source = val_text
@@ -259,7 +242,7 @@ def _extract_resource_blocks(
         res_type = labels[0] if len(labels) >= 1 else ""
         res_name = labels[1] if len(labels) >= 2 else ""
         body = _get_body(block)
-        body_text = _text(body, source) if body is not None else ""
+        body_text = text(body, source) if body is not None else ""
 
         resources.append(
             TerraformResourceBlock(
@@ -287,7 +270,7 @@ def _extract_data_blocks(
         data_type = labels[0] if len(labels) >= 1 else ""
         data_name = labels[1] if len(labels) >= 2 else ""
         body = _get_body(block)
-        body_text = _text(body, source) if body is not None else ""
+        body_text = text(body, source) if body is not None else ""
 
         data_blocks.append(
             TerraformDataBlock(
@@ -363,96 +346,31 @@ def _extract_module_blocks(
     return modules
 
 
-def _parse_tf_file(
-    parser: Parser,
-    source: bytes,
-) -> dict[str, Any]:
-    tree = parser.parse(source)
-    root = tree.root_node
-
-    body = _get_body(root)
-    if body is None:
-        body = root
-
-    return {
-        "terraform_blocks": _extract_terraform_blocks(body, source),
-        "provider_blocks": _extract_provider_blocks(body, source),
-        "resource_blocks": _extract_resource_blocks(body, source),
-        "data_blocks": _extract_data_blocks(body, source),
-        "variable_blocks": _extract_variable_blocks(body, source),
-        "module_blocks": _extract_module_blocks(body, source),
-    }
-
-
-def _iter_tf_files(repo_path: Path) -> list[Path]:
-    found: list[Path] = []
-    try:
-        candidates = sorted(repo_path.rglob("*.tf"))
-    except OSError:
-        return []
-    for path in candidates:
-        if not path.is_file():
-            continue
-        rel = path.relative_to(repo_path)
-        if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
-            continue
-        found.append(path)
-    return found
-
-
-class TerraformCollector:
+class TerraformCollector(BaseASTCollector):
     name = "terraform"
     version = "0.1.0"
+    language = "hcl"
+    file_extensions = (".tf",)
+    evidence_kind = "terraform-analysis"
 
-    def __init__(self) -> None:
-        self._parser: Parser | None = None
+    def _parse_file(self, source: bytes, rel_path: str) -> TerraformAnalysisPayload:
+        assert self._parser is not None
+        tree = self._parser.parse(source)
+        root = tree.root_node
 
-    def _get_parser(self) -> Parser | None:
-        if self._parser is None:
-            try:
-                self._parser = make_parser("hcl")
-            except (ImportError, ModuleNotFoundError):
-                logger.warning(
-                    "tree-sitter grammar for hcl not installed — terraform collector disabled"
-                )
-                return None
-        return self._parser
+        body = _get_body(root)
+        if body is None:
+            body = root
 
-    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
-        if self._get_parser() is None:
-            return []
-        evidence: list[Evidence] = []
-        for tf_file in _iter_tf_files(repo_path):
-            rel = tf_file.relative_to(repo_path)
-            try:
-                source = tf_file.read_bytes()
-            except OSError as exc:
-                logger.debug("Cannot read %s: %s", rel, exc)
-                continue
-            try:
-                parsed = _parse_tf_file(self._parser, source)  # type: ignore[arg-type]
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Parse error in %s: %s", rel, exc)
-                continue
-            payload = TerraformAnalysisPayload(
-                file_path=str(rel),
-                terraform_blocks=parsed["terraform_blocks"],
-                provider_blocks=parsed["provider_blocks"],
-                resource_blocks=parsed["resource_blocks"],
-                data_blocks=parsed["data_blocks"],
-                variable_blocks=parsed["variable_blocks"],
-                module_blocks=parsed["module_blocks"],
-            )
-            evidence.append(
-                Evidence(
-                    collector_name=self.name,
-                    collector_version=self.version,
-                    locator=str(rel),
-                    kind="terraform-analysis",
-                    payload=payload,
-                )
-            )
-        return evidence
+        return TerraformAnalysisPayload(
+            file_path=rel_path,
+            terraform_blocks=_extract_terraform_blocks(body, source),
+            provider_blocks=_extract_provider_blocks(body, source),
+            resource_blocks=_extract_resource_blocks(body, source),
+            data_blocks=_extract_data_blocks(body, source),
+            variable_blocks=_extract_variable_blocks(body, source),
+            module_blocks=_extract_module_blocks(body, source),
+        )
 
 
 def _register() -> None:
