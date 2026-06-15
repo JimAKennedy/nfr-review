@@ -14,6 +14,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _DEFAULT_EXTENSIONS = frozenset({".py", ".java", ".go", ".ts", ".js", ".rs"})
 _SKIP_PREFIXES = (".agents/", ".gsd/", "venv/", ".venv/", "node_modules/")
@@ -53,17 +54,14 @@ class LicenseHeaderRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "license-header-presence",
                         summary="No source files in checked extensions found.",
-                        recommendation="No action required.",
-                        evidence_locator=".",
                         collector_name="license-scan",
                         collector_version="0.1.0",
+                        evidence_locator=".",
                         confidence=0.8,
-                        pattern_tag="license-header-presence",
                     )
                 ],
             )
@@ -100,20 +98,16 @@ class LicenseHeaderRule:
             )
         else:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "license-header-presence",
                     summary=(
                         f"All {len(relevant)} checked source file(s) "
                         "have license/copyright headers."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator=".",
                     collector_name="license-scan",
                     collector_version="0.1.0",
-                    confidence=0.85,
-                    pattern_tag="license-header-presence",
+                    evidence_locator=".",
                 )
             )
 

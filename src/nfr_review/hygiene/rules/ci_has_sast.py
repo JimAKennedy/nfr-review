@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _SAST_PATTERNS = re.compile(
     r"(codeql|semgrep|snyk|trivy|bandit|gitleaks|sonar"
@@ -54,31 +55,30 @@ class CiHasSastRule:
                 break
 
         if not found_sast:
-            rag: RAG = "amber"
-            severity: Severity = "medium"
-            summary = "No SAST or security scanning step detected in CI."
-            recommendation = (
-                "Add a security scanning step (e.g. CodeQL, Semgrep, Snyk, Trivy) "
-                "to detect vulnerabilities before deployment."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No SAST or security scanning step detected in CI.",
+                recommendation=(
+                    "Add a security scanning step (e.g. CodeQL, Semgrep, Snyk, Trivy) "
+                    "to detect vulnerabilities before deployment."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-has-sast",
             )
         else:
-            rag = "green"
-            severity = "info"
-            summary = "SAST/security scanning step detected in CI."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="ci-has-sast",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-has-sast",
+                ev,
+                summary="SAST/security scanning step detected in CI.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class PreCommitRule:
@@ -31,17 +32,13 @@ class PreCommitRule:
         tool = pre_commit.get("pre_commit_tool")
 
         if has_pre_commit:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "pre-commit-hooks",
+                ev,
                 summary=f"Git hooks configured via {tool}.",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="pre-commit-hooks",
             )
         else:
             finding = Finding(

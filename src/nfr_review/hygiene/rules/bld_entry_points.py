@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class EntryPointsRule:
@@ -30,17 +31,14 @@ class EntryPointsRule:
         has_build = build_info.get("has_build_system", False)
 
         if not has_build:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "entry-points-skipped",
+                ev,
                 summary="No build system detected — entry point check not applicable.",
                 recommendation="Configure a build system first (see HYG-BLD-001).",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="entry-points-skipped",
             )
             return RuleResult(rule_id=self.id, findings=[finding])
 
@@ -48,33 +46,32 @@ class EntryPointsRule:
         has_eps = ep_info.get("has_entry_points", False)
 
         if not has_eps:
-            rag: RAG = "amber"
-            severity: Severity = "medium"
-            summary = "No console_scripts or gui_scripts entry points defined."
-            recommendation = (
-                "Add [project.scripts] to pyproject.toml if this package "
-                "should be installable as a CLI tool."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No console_scripts or gui_scripts entry points defined.",
+                recommendation=(
+                    "Add [project.scripts] to pyproject.toml if this package "
+                    "should be installable as a CLI tool."
+                ),
+                evidence_locator=build_info.get("path") or ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="entry-points",
             )
         else:
             scripts = ep_info.get("scripts", {})
             count = len(scripts)
-            rag = "green"
-            severity = "info"
-            summary = f"{count} entry point(s) configured."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=build_info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="entry-points",
-        )
+            finding = make_green_finding(
+                self.id,
+                "entry-points",
+                ev,
+                summary=f"{count} entry point(s) configured.",
+                evidence_locator=build_info.get("path") or ev.locator,
+                confidence=1.0,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

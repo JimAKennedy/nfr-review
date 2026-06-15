@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class BuildSystemRule:
@@ -30,37 +31,36 @@ class BuildSystemRule:
         has_build = info.get("has_build_system", False)
 
         if not has_build:
-            rag: RAG = "red"
-            severity: Severity = "high"
-            summary = (
-                "No build system found (checked pyproject.toml, setup.py, "
-                "setup.cfg, pom.xml, build.gradle(.kts), go.mod, Cargo.toml, "
-                "*.csproj/*.sln)."
-            )
-            recommendation = (
-                "Add a build manifest: pyproject.toml [build-system] (Python), "
-                "pom.xml/build.gradle (JVM), go.mod (Go), Cargo.toml (Rust), "
-                "or *.csproj (C#)."
+            finding = Finding(
+                rule_id=self.id,
+                rag="red",
+                severity="high",
+                summary=(
+                    "No build system found (checked pyproject.toml, setup.py, "
+                    "setup.cfg, pom.xml, build.gradle(.kts), go.mod, Cargo.toml, "
+                    "*.csproj/*.sln)."
+                ),
+                recommendation=(
+                    "Add a build manifest: pyproject.toml [build-system] (Python), "
+                    "pom.xml/build.gradle (JVM), go.mod (Go), Cargo.toml (Rust), "
+                    "or *.csproj (C#)."
+                ),
+                evidence_locator=info.get("path") or ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="build-system-presence",
             )
         else:
             backend = info.get("backend", "unknown")
-            rag = "green"
-            severity = "info"
-            summary = f"Build system configured (backend: {backend})."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="build-system-presence",
-        )
+            finding = make_green_finding(
+                self.id,
+                "build-system-presence",
+                ev,
+                summary=f"Build system configured (backend: {backend}).",
+                evidence_locator=info.get("path") or ev.locator,
+                confidence=1.0,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

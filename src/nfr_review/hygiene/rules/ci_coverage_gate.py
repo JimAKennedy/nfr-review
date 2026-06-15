@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _COVERAGE_TOOL_PATTERNS = re.compile(
     r"(pytest-cov|pytest\s+--cov|coverage\s+run|coverage\s+report|coverage\s+xml"
@@ -68,39 +69,46 @@ class CiCoverageGateRule:
                 break
 
         if not found_tool:
-            rag: RAG = "amber"
-            severity: Severity = "medium"
-            summary = "No test coverage tooling detected in CI."
-            recommendation = (
-                "Add a coverage tool (e.g. pytest-cov, nyc, JaCoCo, go test -cover) "
-                "to measure test coverage and enforce minimum thresholds."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No test coverage tooling detected in CI.",
+                recommendation=(
+                    "Add a coverage tool (e.g. pytest-cov, nyc, JaCoCo, go test -cover) "
+                    "to measure test coverage and enforce minimum thresholds."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-coverage-gate",
             )
         elif not found_threshold:
-            rag = "amber"
-            severity = "low"
-            summary = "Coverage tool detected but no threshold enforcement found."
-            recommendation = (
-                "Add a coverage threshold gate (e.g. --fail-under=80) "
-                "to prevent coverage regressions."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="low",
+                summary="Coverage tool detected but no threshold enforcement found.",
+                recommendation=(
+                    "Add a coverage threshold gate (e.g. --fail-under=80) "
+                    "to prevent coverage regressions."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-coverage-gate",
             )
         else:
-            rag = "green"
-            severity = "info"
-            summary = "Test coverage tool with threshold enforcement detected in CI."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="ci-coverage-gate",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-coverage-gate",
+                ev,
+                summary="Test coverage tool with threshold enforcement detected in CI.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

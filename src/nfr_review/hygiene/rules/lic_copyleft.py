@@ -14,6 +14,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _STRONG_COPYLEFT = frozenset({"gpl", "agpl"})
 _WEAK_COPYLEFT = frozenset({"lgpl", "mpl"})
@@ -118,26 +119,29 @@ class CopyleftDetectionRule:
                 )
 
         if not findings:
-            collector_name = "license-scan"
-            collector_version = "0.1.0"
             if summary_ev:
-                collector_name = summary_ev.collector_name
-                collector_version = summary_ev.collector_version
-
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
-                    summary="No copyleft licenses detected in scanned files.",
-                    recommendation="No action required.",
-                    evidence_locator=".",
-                    collector_name=collector_name,
-                    collector_version=collector_version,
-                    confidence=0.9,
-                    pattern_tag="copyleft-detection",
+                findings.append(
+                    make_green_finding(
+                        self.id,
+                        "copyleft-detection",
+                        summary_ev,
+                        summary="No copyleft licenses detected in scanned files.",
+                        evidence_locator=".",
+                        confidence=0.9,
+                    )
                 )
-            )
+            else:
+                findings.append(
+                    make_green_finding(
+                        self.id,
+                        "copyleft-detection",
+                        summary="No copyleft licenses detected in scanned files.",
+                        collector_name="license-scan",
+                        collector_version="0.1.0",
+                        evidence_locator=".",
+                        confidence=0.9,
+                    )
+                )
 
         return RuleResult(rule_id=self.id, findings=findings)
 

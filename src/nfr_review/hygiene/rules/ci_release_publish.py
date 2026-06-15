@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _RELEASE_PATTERNS = re.compile(
     r"(twine\s+upload|flit\s+publish|poetry\s+publish|python\s+-m\s+build"
@@ -60,32 +61,31 @@ class CiReleasePublishRule:
                 break
 
         if not found_release:
-            rag: RAG = "amber"
-            severity: Severity = "low"
-            summary = "No release or publish automation detected in CI."
-            recommendation = (
-                "Add automated release/publish workflows (e.g. semantic-release, "
-                "goreleaser, pypa/gh-action-pypi-publish) to ensure reproducible, "
-                "auditable releases."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="low",
+                summary="No release or publish automation detected in CI.",
+                recommendation=(
+                    "Add automated release/publish workflows (e.g. semantic-release, "
+                    "goreleaser, pypa/gh-action-pypi-publish) to ensure reproducible, "
+                    "auditable releases."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-release-publish",
             )
         else:
-            rag = "green"
-            severity = "info"
-            summary = "Release/publish automation detected in CI."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="ci-release-publish",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-release-publish",
+                ev,
+                summary="Release/publish automation detected in CI.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

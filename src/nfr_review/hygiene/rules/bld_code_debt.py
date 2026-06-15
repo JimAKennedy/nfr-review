@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _DEFAULT_THRESHOLD = 20
 
@@ -36,36 +37,28 @@ class CodeDebtRule:
         threshold = _DEFAULT_THRESHOLD
 
         if total == 0:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "code-debt",
+                ev,
                 summary="No code debt markers (TODO/FIXME/HACK) found.",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="code-debt",
             )
         elif total <= threshold:
             marker_summary = ", ".join(
                 f"{k}: {v}" for k, v in sorted(per_marker.items()) if v > 0
             )
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "code-debt",
+                ev,
                 summary=(
                     f"{total} code debt marker(s) in {file_count} file(s) "
                     f"(within threshold of {threshold}). {marker_summary}."
                 ),
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="code-debt",
             )
         else:
             marker_summary = ", ".join(

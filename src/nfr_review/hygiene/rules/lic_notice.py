@@ -17,6 +17,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +55,13 @@ class NoticeCompletenessRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "notice-completeness",
+                        summary_ev,
                         summary="No third-party copyright holders detected.",
-                        recommendation="No action required.",
                         evidence_locator=".",
-                        collector_name=summary_ev.collector_name,
-                        collector_version=summary_ev.collector_version,
                         confidence=0.8,
-                        pattern_tag="notice-completeness",
                     )
                 ],
             )
@@ -129,20 +126,15 @@ class NoticeCompletenessRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "notice-completeness",
+                    summary_ev,
                     summary=(
                         f"NOTICE file covers all {len(all_holders)} "
                         "detected copyright holder(s)."
                     ),
-                    recommendation="No action required.",
                     evidence_locator="NOTICE",
-                    collector_name=summary_ev.collector_name,
-                    collector_version=summary_ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="notice-completeness",
                 )
             ],
         )

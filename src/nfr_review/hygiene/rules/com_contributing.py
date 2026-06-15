@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class ContributingPresenceRule:
@@ -29,32 +30,33 @@ class ContributingPresenceRule:
         info = ev.payload.get("contributing", {})
         exists = info.get("exists", False)
 
-        if exists:
-            rag: RAG = "green"
-            severity: Severity = "info"
-            summary = "CONTRIBUTING.md found."
-            recommendation = "No action required."
-        else:
-            rag = "amber"
-            severity = "medium"
-            summary = "No CONTRIBUTING.md found."
-            recommendation = (
-                "Add a CONTRIBUTING.md with contribution guidelines, "
-                "coding standards, and PR process."
-            )
+        locator = info.get("path") or ev.locator
 
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="contributing-presence",
-        )
+        if exists:
+            finding = make_green_finding(
+                self.id,
+                "contributing-presence",
+                ev,
+                summary="CONTRIBUTING.md found.",
+                evidence_locator=locator,
+                confidence=1.0,
+            )
+        else:
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No CONTRIBUTING.md found.",
+                recommendation=(
+                    "Add a CONTRIBUTING.md with contribution guidelines, "
+                    "coding standards, and PR process."
+                ),
+                evidence_locator=locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="contributing-presence",
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

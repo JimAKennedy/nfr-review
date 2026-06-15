@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class SecurityPresenceRule:
@@ -29,31 +30,33 @@ class SecurityPresenceRule:
         info = ev.payload.get("security", {})
         exists = info.get("exists", False)
 
-        if exists:
-            rag: RAG = "green"
-            severity: Severity = "info"
-            summary = "Security policy found."
-            recommendation = "No action required."
-        else:
-            rag = "red"
-            severity = "high"
-            summary = "No SECURITY.md or SECURITY.txt found."
-            recommendation = (
-                "Add a security policy documenting how to report vulnerabilities responsibly."
-            )
+        locator = info.get("path") or ev.locator
 
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="security-policy-presence",
-        )
+        if exists:
+            finding = make_green_finding(
+                self.id,
+                "security-policy-presence",
+                ev,
+                summary="Security policy found.",
+                evidence_locator=locator,
+                confidence=1.0,
+            )
+        else:
+            finding = Finding(
+                rule_id=self.id,
+                rag="red",
+                severity="high",
+                summary="No SECURITY.md or SECURITY.txt found.",
+                recommendation=(
+                    "Add a security policy documenting how to report "
+                    "vulnerabilities responsibly."
+                ),
+                evidence_locator=locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="security-policy-presence",
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

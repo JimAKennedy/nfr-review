@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class InternalRefsRule:
@@ -53,17 +54,13 @@ class InternalRefsRule:
                 pattern_tag="internal-refs-found",
             )
         else:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "internal-refs-clean",
+                ev,
                 summary="No internal organization references detected.",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=0.8,
-                pattern_tag="internal-refs-clean",
             )
 
         return RuleResult(rule_id=self.id, findings=[finding])

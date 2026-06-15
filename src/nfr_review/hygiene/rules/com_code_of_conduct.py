@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class CodeOfConductPresenceRule:
@@ -29,29 +30,32 @@ class CodeOfConductPresenceRule:
         info = ev.payload.get("code_of_conduct", {})
         exists = info.get("exists", False)
 
-        if exists:
-            rag: RAG = "green"
-            severity: Severity = "info"
-            summary = "CODE_OF_CONDUCT.md found."
-            recommendation = "No action required."
-        else:
-            rag = "amber"
-            severity = "medium"
-            summary = "No CODE_OF_CONDUCT.md found."
-            recommendation = "Add a CODE_OF_CONDUCT.md to set community behavior expectations."
+        locator = info.get("path") or ev.locator
 
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=info.get("path") or ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="code-of-conduct-presence",
-        )
+        if exists:
+            finding = make_green_finding(
+                self.id,
+                "code-of-conduct-presence",
+                ev,
+                summary="CODE_OF_CONDUCT.md found.",
+                evidence_locator=locator,
+                confidence=1.0,
+            )
+        else:
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No CODE_OF_CONDUCT.md found.",
+                recommendation=(
+                    "Add a CODE_OF_CONDUCT.md to set community behavior expectations."
+                ),
+                evidence_locator=locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="code-of-conduct-presence",
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 
