@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class CiPresenceRule:
@@ -29,32 +30,31 @@ class CiPresenceRule:
         has_ci = ev.payload.get("has_ci", False)
 
         if not has_ci:
-            rag: RAG = "red"
-            severity: Severity = "high"
-            summary = "No CI/CD configuration found."
-            recommendation = (
-                "Add a CI pipeline (e.g. GitHub Actions, GitLab CI) "
-                "to automate testing, linting, and deployment."
+            finding = Finding(
+                rule_id=self.id,
+                rag="red",
+                severity="high",
+                summary="No CI/CD configuration found.",
+                recommendation=(
+                    "Add a CI pipeline (e.g. GitHub Actions, GitLab CI) "
+                    "to automate testing, linting, and deployment."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=1.0,
+                pattern_tag="ci-presence",
             )
         else:
             systems = ev.payload.get("ci_systems", [])
-            rag = "green"
-            severity = "info"
-            summary = f"CI/CD detected: {', '.join(systems)}."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=1.0,
-            pattern_tag="ci-presence",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-presence",
+                ev,
+                summary=f"CI/CD detected: {', '.join(systems)}.",
+                evidence_locator=ev.locator,
+                confidence=1.0,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

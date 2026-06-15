@@ -7,8 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class ApiDocsRule:
@@ -42,54 +43,53 @@ class ApiDocsRule:
         has_api_docs_hint = ev.payload.get("has_api_docs_hint", False)
 
         if not has_python:
-            rag: RAG = "green"
-            severity: Severity = "info"
-            summary = "No Python package detected — API docstring check not applicable."
-            recommendation = "No action required."
+            return make_green_finding(
+                self.id,
+                "api-docs-hint",
+                ev,
+                summary="No Python package detected — API docstring check not applicable.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         elif has_api_docs_hint:
-            rag = "green"
-            severity = "info"
-            summary = "Top-level __init__.py has a module docstring."
-            recommendation = "No action required."
+            return make_green_finding(
+                self.id,
+                "api-docs-hint",
+                ev,
+                summary="Top-level __init__.py has a module docstring.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         else:
-            rag = "amber"
-            severity = "medium"
-            summary = (
-                "Top-level __init__.py lacks a module docstring — API docs may be missing."
+            return Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary=(
+                    "Top-level __init__.py lacks a module docstring — API docs may be missing."
+                ),
+                recommendation=(
+                    "Add a module docstring to the top-level __init__.py "
+                    "to document the package's public API."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="api-docs-hint",
             )
-            recommendation = (
-                "Add a module docstring to the top-level __init__.py "
-                "to document the package's public API."
-            )
-
-        return Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="api-docs-hint",
-        )
 
     def _check_py_typed(self, ev: Evidence) -> Finding:
         has_py_typed = ev.payload.get("has_py_typed", False)
 
         if has_py_typed:
-            return Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            return make_green_finding(
+                self.id,
+                "py-typed",
+                ev,
                 summary="py.typed marker present — PEP 561 inline types supported.",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=0.8,
-                pattern_tag="py-typed",
             )
 
         return Finding(
@@ -113,33 +113,26 @@ class ApiDocsRule:
         classifier_count = ev.payload.get("classifier_count", 0)
 
         if has_classifiers:
-            return Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            return make_green_finding(
+                self.id,
+                "classifiers",
+                ev,
                 summary=f"Trove classifiers present ({classifier_count} defined).",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=0.8,
-                pattern_tag="classifiers",
             )
 
-        return Finding(
-            rule_id=self.id,
-            rag="green",
-            severity="info",
+        return make_green_finding(
+            self.id,
+            "classifiers",
+            ev,
             summary="No trove classifiers defined in pyproject.toml.",
             recommendation=(
                 "Add classifiers for Development Status, License, "
                 "and Programming Language to improve discoverability on PyPI."
             ),
             evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
             confidence=0.7,
-            pattern_tag="classifiers",
         )
 
 

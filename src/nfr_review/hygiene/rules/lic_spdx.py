@@ -19,6 +19,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 logger = logging.getLogger(__name__)
 
@@ -288,17 +289,14 @@ class SpdxValidationRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "spdx-validation",
                         summary=f"Valid SPDX expression: {expr}",
-                        recommendation="No action required.",
-                        evidence_locator=source_file,
                         collector_name="spdx-validation",
                         collector_version="0.1.0",
+                        evidence_locator=source_file,
                         confidence=0.95,
-                        pattern_tag="spdx-validation",
                     )
                 )
 

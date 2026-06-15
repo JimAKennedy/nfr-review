@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DISPOSABLE_TYPES = frozenset(
     {
@@ -35,11 +36,7 @@ class CSharpDisposableNoUsingRule:
     required_collectors: list[str] = ["csharp-ast"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cs_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "csharp-ast" and e.kind == "csharp-ast-file"
-        ]
+        cs_evidence = filter_evidence(evidence, "csharp-ast", "csharp-ast-file")
         if not cs_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -72,17 +69,11 @@ class CSharpDisposableNoUsingRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "csharp-disposable-no-using",
+                    cs_evidence[0],
                     summary="All IDisposable objects properly wrapped in using.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cs_evidence[0].collector_name,
-                    collector_version=cs_evidence[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="csharp-disposable-no-using",
                 )
             )
 

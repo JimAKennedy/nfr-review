@@ -29,6 +29,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEPENDENCY_ANNOTATION_PREFIXES = (
     "app.kubernetes.io/part-of",
@@ -64,15 +65,11 @@ _COLLECTOR = "k8s-manifest"
 
 
 def _workload_evidence(evidence: list[Evidence]) -> list[Evidence]:
-    return [e for e in evidence if e.collector_name == _COLLECTOR and e.kind == "k8s-resource"]
+    return filter_evidence(evidence, _COLLECTOR, "k8s-resource")
 
 
 def _summary_evidence(evidence: list[Evidence]) -> list[Evidence]:
-    return [
-        e
-        for e in evidence
-        if e.collector_name == _COLLECTOR and e.kind == "k8s-manifest-summary"
-    ]
+    return filter_evidence(evidence, _COLLECTOR, "k8s-manifest-summary")
 
 
 def _has_dependency_annotation(annotations: dict[str, str] | None) -> list[str]:
@@ -109,20 +106,16 @@ class DependencyDeclarationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-deps-declaration",
+                        sm,
                         summary=(
                             "No workload resources found"
                             " — dependency declaration check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=".",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-deps-declaration",
+                        evidence_locator=".",
                     )
                 ],
             )
@@ -135,10 +128,10 @@ class DependencyDeclarationRule:
 
             if matched:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-deps-declaration",
+                        ev,
                         summary=(
                             f"Workload '{name}' declares dependencies"
                             f" via annotations: {', '.join(matched)}"
@@ -146,11 +139,8 @@ class DependencyDeclarationRule:
                         recommendation=(
                             "No action required — dependency declarations are present."
                         ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-deps-declaration",
+                        evidence_locator=ev.locator,
                     )
                 )
             else:
@@ -198,19 +188,15 @@ class SharedFateIndicatorRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-deps-shared-fate",
+                        sm,
                         summary=(
                             "No workload resources found — shared-fate check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=".",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-deps-shared-fate",
+                        evidence_locator=".",
                     )
                 ],
             )
@@ -289,17 +275,13 @@ class SharedFateIndicatorRule:
         if not findings:
             sm = summaries[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-deps-shared-fate",
+                    sm,
                     summary="No shared-fate indicators detected across workloads",
-                    recommendation="No action required.",
-                    evidence_locator=".",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
                     confidence=0.80,
-                    pattern_tag="patch-deps-shared-fate",
+                    evidence_locator=".",
                 )
             )
 
@@ -353,19 +335,15 @@ class CrossRingDependencyRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-deps-cross-ring",
+                        sm,
                         summary=(
                             "No workload resources found — cross-ring check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=".",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-deps-cross-ring",
+                        evidence_locator=".",
                     )
                 ],
             )
@@ -384,10 +362,10 @@ class CrossRingDependencyRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-deps-cross-ring",
+                        sm,
                         summary=(
                             "No ring labels found on workloads"
                             " — cross-ring dependency check not applicable"
@@ -396,11 +374,8 @@ class CrossRingDependencyRule:
                             "Consider adding ring labels (e.g. app.kubernetes.io/ring) "
                             "to workloads to enable patching dependency direction analysis."
                         ),
-                        evidence_locator=".",
-                        collector_name=sm.collector_name,
-                        collector_version=sm.collector_version,
                         confidence=0.75,
-                        pattern_tag="patch-deps-cross-ring",
+                        evidence_locator=".",
                     )
                 ],
             )
@@ -444,19 +419,14 @@ class CrossRingDependencyRule:
         if not findings:
             sm = summaries[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "patch-deps-cross-ring",
+                    sm,
                     summary=(
                         "Ring labels present and no cross-ring dependency violations detected"
                     ),
-                    recommendation="No action required.",
                     evidence_locator=".",
-                    collector_name=sm.collector_name,
-                    collector_version=sm.collector_version,
-                    confidence=0.85,
-                    pattern_tag="patch-deps-cross-ring",
                 )
             )
 

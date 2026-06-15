@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _SKIP_KINDS = {"DaemonSet"}
 
@@ -49,11 +50,7 @@ class UpdateStrategyRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -79,17 +76,13 @@ class UpdateStrategyRule:
         if not findings:
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "update-strategy",
+                    first,
                     summary="No Deployment/StatefulSet update strategy issues found.",
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.90,
-                    pattern_tag="update-strategy",
+                    evidence_locator="all-workloads",
                 )
             )
 
@@ -164,20 +157,17 @@ class UpdateStrategyRule:
 
             if is_safe:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "update-strategy",
+                        ev,
                         summary=(
                             f"Deployment '{resource_name}' uses RollingUpdate"
                             f" with maxUnavailable={desc}."
                         ),
                         recommendation="No action required — update strategy is safe.",
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="update-strategy",
+                        evidence_locator=f"{file_path}:{resource_name}",
                     )
                 )
             else:
@@ -269,17 +259,14 @@ class UpdateStrategyRule:
             )
         elif strategy_type == "RollingUpdate":
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "update-strategy",
+                    ev,
                     summary=(f"StatefulSet '{resource_name}' uses RollingUpdate strategy."),
                     recommendation="No action required — update strategy is safe.",
-                    evidence_locator=f"{file_path}:{resource_name}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
                     confidence=0.90,
-                    pattern_tag="update-strategy",
+                    evidence_locator=f"{file_path}:{resource_name}",
                 )
             )
 

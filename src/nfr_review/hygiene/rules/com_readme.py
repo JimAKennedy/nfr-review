@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _STUB_THRESHOLD = 200
 
@@ -97,17 +98,13 @@ class ReadmePresenceRule:
             return RuleResult(rule_id=self.id, findings=findings)
 
         findings.append(
-            Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            make_green_finding(
+                self.id,
+                "readme-presence",
+                ev,
                 summary=f"README found ({size} bytes).",
-                recommendation="No action required.",
                 evidence_locator=locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="readme-presence",
             )
         )
 
@@ -162,20 +159,17 @@ class ReadmePresenceRule:
         badges = ev.payload.get("readme_badges", [])
         if not badges:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "readme-badges",
+                    ev,
                     summary="README has no CI/coverage/registry badges.",
                     recommendation=(
                         "Consider adding badges for build status, "
                         "test coverage, or package registry."
                     ),
                     evidence_locator=locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
                     confidence=0.7,
-                    pattern_tag="readme-badges",
                 )
             )
 

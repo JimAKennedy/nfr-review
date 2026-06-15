@@ -17,6 +17,7 @@ from nfr_review.llm_client import (
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band, LlmClient
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +48,8 @@ class ArchitecturalDriftFromAdrRule:
         self._llm = llm_client if llm_client is not None else create_llm_client()
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        adr_evidence = [
-            e for e in evidence if e.collector_name == "adr" and e.kind == "adr-document"
-        ]
-        java_evidence = [
-            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
-        ]
+        adr_evidence = filter_evidence(evidence, "adr", "adr-document")
+        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
 
         if not adr_evidence:
             return RuleResult(
@@ -186,17 +183,12 @@ class ArchitecturalDriftFromAdrRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "adr-drift",
+                        first_ev,
                         summary="No architectural drift detected between ADRs and code.",
-                        recommendation="No action required.",
-                        evidence_locator="project-wide",
-                        collector_name=first_ev.collector_name,
-                        collector_version=first_ev.collector_version,
                         confidence=0.75,
-                        pattern_tag="adr-drift",
                     )
                 ],
             )

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class CmakeBuildConfigRule:
@@ -94,17 +95,11 @@ class CmakeBuildConfigRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "cmake-build-config-ok",
+                    cmake_ev[0],
                     summary="CMake build configuration follows modern practices.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cmake_ev[0].collector_name,
-                    collector_version=cmake_ev[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="cmake-build-config-ok",
                 )
             )
 

@@ -13,6 +13,7 @@ from packaging.version import InvalidVersion, Version
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _CONSTRAINT_RE = re.compile(r"^[><=!~^]+\s*")
 
@@ -86,17 +87,13 @@ class DepFreshnessRule:
         if not findings:
             first = dep_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dep-freshness-ok",
+                    first,
                     summary="All dependencies are up to date.",
-                    recommendation="No action required.",
-                    evidence_locator="all-dependencies",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.9,
-                    pattern_tag="dep-freshness-ok",
+                    evidence_locator="all-dependencies",
                 )
             )
 

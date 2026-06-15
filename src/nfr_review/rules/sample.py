@@ -14,6 +14,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class ReadmeExistsRule:
@@ -44,17 +45,14 @@ class ReadmeExistsRule:
         readme_name = repo_evidence.payload.get("readme_name")
 
         if has_readme:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "readme-presence",
+                repo_evidence,
                 summary=f"README found at repo root: {readme_name}",
                 recommendation="No action required — README is present.",
                 evidence_locator=str(readme_name or repo_evidence.locator),
-                collector_name=repo_evidence.collector_name,
-                collector_version=repo_evidence.collector_version,
                 confidence=1.0,
-                pattern_tag="readme-presence",
             )
         else:
             finding = Finding(

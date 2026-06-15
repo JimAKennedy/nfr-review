@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _TEST_PATTERNS = re.compile(
     r"(?:^|\s|/)(pytest|jest|mocha|cargo\s+test|go\s+test|dotnet\s+test|mvn\s+test"
@@ -54,35 +55,42 @@ class CiHasTestsRule:
                     break
 
         if configs_with_tests == 0:
-            rag: RAG = "red"
-            severity: Severity = "high"
-            summary = "No CI step appears to run tests."
-            recommendation = (
-                "Add a test step to your CI pipeline (e.g. pytest, jest, go test)."
+            finding = Finding(
+                rule_id=self.id,
+                rag="red",
+                severity="high",
+                summary="No CI step appears to run tests.",
+                recommendation=(
+                    "Add a test step to your CI pipeline (e.g. pytest, jest, go test)."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-has-tests",
             )
         elif configs_with_tests == 1 and len(configs) > 1:
-            rag = "amber"
-            severity = "medium"
-            summary = f"Test step found in only 1 of {len(configs)} CI configurations."
-            recommendation = "Consider adding test steps to all CI workflows."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary=f"Test step found in only 1 of {len(configs)} CI configurations.",
+                recommendation="Consider adding test steps to all CI workflows.",
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-has-tests",
+            )
         else:
-            rag = "green"
-            severity = "info"
-            summary = f"Test steps found in {configs_with_tests} CI configuration(s)."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="ci-has-tests",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-has-tests",
+                ev,
+                summary=f"Test steps found in {configs_with_tests} CI configuration(s).",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

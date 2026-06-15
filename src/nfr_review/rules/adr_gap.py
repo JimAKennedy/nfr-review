@@ -12,6 +12,7 @@ from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class AdrGapRule:
@@ -105,20 +106,16 @@ class AdrGapRule:
         if not findings:
             first = derived[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "adr-gap-ok",
+                    first,
                     summary=(
                         f"All {len(derived)} derived architectural decisions"
                         f" have matching ADR documents."
                     ),
-                    recommendation="No action required.",
-                    evidence_locator="adr-derive-summary",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.7,
-                    pattern_tag="adr-gap-ok",
+                    evidence_locator="adr-derive-summary",
                 )
             )
 

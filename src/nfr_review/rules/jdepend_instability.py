@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _INSTABILITY_THRESHOLD = 0.8
 _ABSTRACTNESS_THRESHOLD = 0.2
@@ -25,7 +26,7 @@ class JDepInstabilityRule:
     required_collectors: list[str] = ["jdepend"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        jdep_evidence = [e for e in evidence if e.collector_name == "jdepend"]
+        jdep_evidence = filter_evidence(evidence, "jdepend")
         if not jdep_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -89,17 +90,12 @@ class JDepInstabilityRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "jdep-instability-ok",
+                    jdep_evidence[0],
                     summary="All packages have acceptable instability/abstractness balance.",
-                    recommendation="No action required.",
                     evidence_locator="jdepend-summary",
-                    collector_name=jdep_evidence[0].collector_name,
-                    collector_version=jdep_evidence[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="jdep-instability-ok",
                 )
             )
 

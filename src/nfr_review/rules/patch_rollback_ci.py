@@ -19,6 +19,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROLLBACK_RE = re.compile(
     r"(rollback|roll[-_]?back|revert|canary[-_]?rollback)", re.IGNORECASE
@@ -41,11 +42,7 @@ class CiRollbackStageMissingRule:
     required_collectors: list[str] = ["ci-artifact"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_pipelines = [
-            e
-            for e in evidence
-            if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
-        ]
+        ci_pipelines = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
         if not ci_pipelines:
             return RuleResult(
                 rule_id=self.id,
@@ -58,20 +55,16 @@ class CiRollbackStageMissingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "patch-rollback-ci",
+                        first,
                         summary=(
                             "No K8s workloads or patching config detected"
                             " — CI rollback stage check not applicable"
                         ),
-                        recommendation="No action required.",
-                        evidence_locator="all-pipelines",
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
                         confidence=0.80,
-                        pattern_tag="patch-rollback-ci",
+                        evidence_locator="all-pipelines",
                     )
                 ],
             )
@@ -91,17 +84,14 @@ class CiRollbackStageMissingRule:
             if matched:
                 file_path = ev.payload.get("file_path", ev.locator)
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
-                        summary=("CI pipeline has a rollback-related stage."),
+                    make_green_finding(
+                        self.id,
+                        "patch-rollback-ci",
+                        ev,
+                        summary="CI pipeline has a rollback-related stage.",
                         recommendation="No action required — rollback stage detected.",
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="patch-rollback-ci",
+                        evidence_locator=file_path,
                     )
                 )
 

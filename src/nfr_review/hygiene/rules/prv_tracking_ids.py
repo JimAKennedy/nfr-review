@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class TrackingIdsRule:
@@ -53,17 +54,13 @@ class TrackingIdsRule:
                 pattern_tag="tracking-ids-found",
             )
         else:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "tracking-ids-clean",
+                ev,
                 summary="No hardcoded tracking or analytics IDs detected.",
-                recommendation="No action required.",
                 evidence_locator=ev.locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=0.9,
-                pattern_tag="tracking-ids-clean",
             )
 
         return RuleResult(rule_id=self.id, findings=[finding])

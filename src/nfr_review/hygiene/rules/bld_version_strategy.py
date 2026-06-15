@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _SEMVER_RE = re.compile(
     r"^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
@@ -74,36 +75,37 @@ class VersionStrategyRule:
             is_strategy_marker = value.startswith("(") and value.endswith(")")
 
             if is_strategy_marker or is_semver(value):
-                rag: RAG = "green"
-                severity: Severity = "info"
-                summary = f"Version {value} declared in {source}."
-                recommendation = "No action required."
+                findings.append(
+                    make_green_finding(
+                        self.id,
+                        "version-strategy",
+                        ev,
+                        summary=f"Version {value} declared in {source}.",
+                        evidence_locator=info.get("source") or ev.locator,
+                        confidence=1.0,
+                    )
+                )
             else:
-                rag = "amber"
-                severity = "low"
-                summary = (
-                    f"Version '{value}' in {source} does not follow "
-                    "Semantic Versioning (MAJOR.MINOR.PATCH)."
+                findings.append(
+                    Finding(
+                        rule_id=self.id,
+                        rag="amber",
+                        severity="low",
+                        summary=(
+                            f"Version '{value}' in {source} does not follow "
+                            "Semantic Versioning (MAJOR.MINOR.PATCH)."
+                        ),
+                        recommendation=(
+                            "Adopt SemVer (https://semver.org): use MAJOR.MINOR.PATCH "
+                            "with optional pre-release suffix (e.g. 1.0.0-alpha.1)."
+                        ),
+                        evidence_locator=info.get("source") or ev.locator,
+                        collector_name=ev.collector_name,
+                        collector_version=ev.collector_version,
+                        confidence=1.0,
+                        pattern_tag="version-strategy",
+                    )
                 )
-                recommendation = (
-                    "Adopt SemVer (https://semver.org): use MAJOR.MINOR.PATCH "
-                    "with optional pre-release suffix (e.g. 1.0.0-alpha.1)."
-                )
-
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag=rag,
-                    severity=severity,
-                    summary=summary,
-                    recommendation=recommendation,
-                    evidence_locator=info.get("source") or ev.locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=1.0,
-                    pattern_tag="version-strategy",
-                )
-            )
 
         return RuleResult(rule_id=self.id, findings=findings)
 

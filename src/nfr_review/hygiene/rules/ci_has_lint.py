@@ -8,8 +8,9 @@ import re
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _LINT_PATTERNS = re.compile(
     r"(?:^|[\s/:\-])"
@@ -69,31 +70,30 @@ class CiHasLintRule:
                 break
 
         if not found_lint:
-            rag: RAG = "amber"
-            severity: Severity = "medium"
-            summary = "No lint or format step detected in CI."
-            recommendation = (
-                "Add a linting step (e.g. ruff, eslint, golangci-lint) "
-                "to catch style issues and potential bugs early."
+            finding = Finding(
+                rule_id=self.id,
+                rag="amber",
+                severity="medium",
+                summary="No lint or format step detected in CI.",
+                recommendation=(
+                    "Add a linting step (e.g. ruff, eslint, golangci-lint) "
+                    "to catch style issues and potential bugs early."
+                ),
+                evidence_locator=ev.locator,
+                collector_name=ev.collector_name,
+                collector_version=ev.collector_version,
+                confidence=0.8,
+                pattern_tag="ci-has-lint",
             )
         else:
-            rag = "green"
-            severity = "info"
-            summary = "Lint/format step detected in CI."
-            recommendation = "No action required."
-
-        finding = Finding(
-            rule_id=self.id,
-            rag=rag,
-            severity=severity,
-            summary=summary,
-            recommendation=recommendation,
-            evidence_locator=ev.locator,
-            collector_name=ev.collector_name,
-            collector_version=ev.collector_version,
-            confidence=0.8,
-            pattern_tag="ci-has-lint",
-        )
+            finding = make_green_finding(
+                self.id,
+                "ci-has-lint",
+                ev,
+                summary="Lint/format step detected in CI.",
+                evidence_locator=ev.locator,
+                confidence=0.8,
+            )
         return RuleResult(rule_id=self.id, findings=[finding])
 
 

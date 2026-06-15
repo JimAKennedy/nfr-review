@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class NetworkPolicyMissingRule:
@@ -38,17 +39,14 @@ class NetworkPolicyMissingRule:
         has_network_policy = summary_ev.payload.get("has_network_policy", False)
 
         if has_network_policy:
-            finding = Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            finding = make_green_finding(
+                self.id,
+                "k8s-network-policy",
+                summary_ev,
                 summary="NetworkPolicy resource found in repository.",
                 recommendation="No action required — network policies are defined.",
-                evidence_locator=summary_ev.locator,
-                collector_name=summary_ev.collector_name,
-                collector_version=summary_ev.collector_version,
                 confidence=0.9,
-                pattern_tag="k8s-network-policy",
+                evidence_locator=summary_ev.locator,
             )
         else:
             finding = Finding(

@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _HIGH_RISK_TYPES = frozenset({"ssn", "credit_card"})
 _MEDIUM_RISK_TYPES = frozenset({"email", "phone"})
@@ -89,17 +90,13 @@ class PiiPatternsRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "pii-clean",
+                    ev,
                     summary="No PII patterns detected in source files.",
-                    recommendation="No action required.",
                     evidence_locator=ev.locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
                     confidence=0.7,
-                    pattern_tag="pii-clean",
                 )
             )
 

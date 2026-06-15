@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 
@@ -28,11 +29,7 @@ class PdbCoverageRule:
     required_collectors: list[str] = ["k8s-manifest"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = [
-            e
-            for e in evidence
-            if e.collector_name == "k8s-manifest" and e.kind == "k8s-resource"
-        ]
+        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
         if not k8s_resources:
             return RuleResult(
                 rule_id=self.id,
@@ -40,9 +37,7 @@ class PdbCoverageRule:
                 skip_reason="no k8s-manifest evidence available",
             )
 
-        pdb_evidence = [
-            e for e in evidence if e.collector_name == "k8s-manifest" and e.kind == "k8s-pdb"
-        ]
+        pdb_evidence = filter_evidence(evidence, "k8s-manifest", "k8s-pdb")
 
         findings: list[Finding] = []
 
@@ -112,20 +107,17 @@ class PdbCoverageRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "pdb-coverage",
+                        ev,
                         summary=(
                             f"{resource_kind} '{resource_name}' is covered by"
                             f" PodDisruptionBudget '{matching_pdb}'."
                         ),
                         recommendation="No action required — PDB coverage is present.",
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.90,
-                        pattern_tag="pdb-coverage",
+                        evidence_locator=f"{file_path}:{resource_name}",
                     )
                 )
 
@@ -133,17 +125,13 @@ class PdbCoverageRule:
             # No multi-replica workloads to check.
             first = k8s_resources[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "pdb-coverage",
+                    first,
                     summary="No multi-replica Deployment/StatefulSet resources to check.",
-                    recommendation="No action required.",
-                    evidence_locator="all-workloads",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.90,
-                    pattern_tag="pdb-coverage",
+                    evidence_locator="all-workloads",
                 )
             )
 

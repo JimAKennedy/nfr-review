@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _HEADER_EXTENSIONS = frozenset({".h", ".hpp", ".hxx"})
 
@@ -65,17 +66,12 @@ class CppIncludeGuardsRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "cpp-include-guards-ok",
+                    headers[0],
                     summary="All headers have include guards.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=headers[0].collector_name,
-                    collector_version=headers[0].collector_version,
                     confidence=0.95,
-                    pattern_tag="cpp-include-guards-ok",
                 )
             )
 

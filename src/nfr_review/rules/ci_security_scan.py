@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class CiSecurityScanMissingRule:
@@ -19,11 +20,7 @@ class CiSecurityScanMissingRule:
     required_collectors: list[str] = ["ci-artifact"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_pipelines = [
-            e
-            for e in evidence
-            if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
-        ]
+        ci_pipelines = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
         if not ci_pipelines:
             return RuleResult(
                 rule_id=self.id,
@@ -42,19 +39,16 @@ class CiSecurityScanMissingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "ci-security-scan",
+                        ci_pipelines[0],
                         summary=(
                             f"Security scanning found in: {', '.join(pipelines_with[:3])}"
                         ),
+                        confidence=0.9,
                         recommendation="No action required — security scanning is present.",
                         evidence_locator=pipelines_with[0],
-                        collector_name="ci-artifact",
-                        collector_version="0.1.0",
-                        confidence=0.9,
-                        pattern_tag="ci-security-scan",
                     )
                 ],
             )

@@ -11,6 +11,7 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.output.topology import build_topology_graph
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _ARROW_RE = re.compile(r"([\w][\w-]*)\s*(?:→|->|-->)\s*([\w][\w-]*)")
 
@@ -67,10 +68,9 @@ class DynAdrDriftRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "dyn-adr-drift-single-service",
                         summary=(
                             f"Single-service topology observed ({svc}). "
                             "ADR drift detection requires multi-service traces."
@@ -79,11 +79,10 @@ class DynAdrDriftRule:
                             "Provide traces from multiple services to enable "
                             "topology drift detection."
                         ),
+                        confidence=0.7,
                         evidence_locator="otel-trace",
                         collector_name="otel-trace",
                         collector_version="0.1.0",
-                        confidence=0.7,
-                        pattern_tag="dyn-adr-drift-single-service",
                     )
                 ],
             )
@@ -97,10 +96,9 @@ class DynAdrDriftRule:
 
         if not declared:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-adr-drift-no-declarations",
                     summary=(
                         f"Observed {len(graph.services)} services with "
                         f"{len(observed)} communication edge(s), but no ADR "
@@ -111,11 +109,10 @@ class DynAdrDriftRule:
                         "arrow notation (e.g. 'service-a → service-b') so "
                         "drift detection can compare declared vs observed."
                     ),
+                    confidence=0.6,
                     evidence_locator="otel-trace",
                     collector_name="otel-trace",
                     collector_version="0.1.0",
-                    confidence=0.6,
-                    pattern_tag="dyn-adr-drift-no-declarations",
                 )
             )
             return RuleResult(rule_id=self.id, findings=findings)
@@ -170,20 +167,17 @@ class DynAdrDriftRule:
         matched = observed & declared
         if matched and not undocumented and not unobserved:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-adr-drift-match",
                     summary=(
                         f"Runtime topology matches ADR declarations: "
                         f"{len(matched)} edge(s) confirmed."
                     ),
-                    recommendation="No action required.",
+                    confidence=0.9,
                     evidence_locator="otel-trace",
                     collector_name="otel-trace",
                     collector_version="0.1.0",
-                    confidence=0.9,
-                    pattern_tag="dyn-adr-drift-match",
                 )
             )
 

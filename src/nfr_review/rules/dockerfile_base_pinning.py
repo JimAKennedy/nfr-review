@@ -10,6 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _FLOATING_TAGS = frozenset({"latest", "stable", "edge", "beta", "nightly"})
 
@@ -25,11 +26,7 @@ class DockerfileBasePinningRule:
     required_tech: list[str] = ["dockerfile"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "dockerfile" and e.kind == "dockerfile-analysis"
-        ]
+        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
         if not df_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -85,17 +82,14 @@ class DockerfileBasePinningRule:
         if not findings:
             first = df_evidence[0]
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dockerfile-base-pinning",
+                    first,
                     summary="All base images are pinned to specific versions or digests.",
                     recommendation="No action required — base images are pinned.",
-                    evidence_locator="all-dockerfiles",
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.9,
-                    pattern_tag="dockerfile-base-pinning",
+                    evidence_locator="all-dockerfiles",
                 )
             )
 

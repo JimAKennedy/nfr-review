@@ -10,6 +10,7 @@ from typing import Any, Literal
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 CORRELATION_KEYS = ("correlation.id", "baggage.correlation.id", "X-Correlation-ID")
 
@@ -23,9 +24,7 @@ class DynCorrelationPropagationRule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = [
-            e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
-        ]
+        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
         if not trace_ev:
             return RuleResult(
                 rule_id=self.id,
@@ -78,21 +77,16 @@ class DynCorrelationPropagationRule:
 
         if broken == 0 and good > 0:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-correlation-propagation-pass",
+                    first,
                     summary=(
                         f"Correlation-ID propagation consistent across all "
                         f"{good} configured trace(s) "
                         f"(total={total}, unconfigured={unconfigured})."
                     ),
-                    recommendation="No action required.",
                     evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="dyn-correlation-propagation-pass",
                 )
             )
         elif broken > 0:
@@ -124,10 +118,10 @@ class DynCorrelationPropagationRule:
 
         if unconfigured > 0 and good == 0 and broken == 0:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "dyn-correlation-propagation-unconfigured",
+                    first,
                     summary=(
                         f"No correlation-ID attributes found on any of {unconfigured} "
                         f"trace(s). Correlation propagation may not be configured."
@@ -136,11 +130,8 @@ class DynCorrelationPropagationRule:
                         "Consider adding correlation-ID propagation via OTel "
                         "baggage if end-to-end request tracing is required."
                     ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
                     confidence=0.7,
-                    pattern_tag="dyn-correlation-propagation-unconfigured",
+                    evidence_locator=first.locator,
                 )
             )
 

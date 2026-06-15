@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _W3C_PROPAGATOR_NAMES = frozenset({"tracecontext", "w3c", "traceparent"})
 
@@ -22,9 +23,7 @@ class OTelW3CPropagationRule:
     required_tech: list[str] = []
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        sdk_evidence = [
-            e for e in evidence if e.collector_name == "otel" and e.kind == "otel-sdk-config"
-        ]
+        sdk_evidence = filter_evidence(evidence, "otel", "otel-sdk-config")
         if not sdk_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -44,17 +43,13 @@ class OTelW3CPropagationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "otel-w3c-propagation",
+                        first,
                         summary="W3C trace-context propagation is configured.",
-                        recommendation="No action required.",
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
                         confidence=0.9,
-                        pattern_tag="otel-w3c-propagation",
+                        evidence_locator=first.locator,
                     )
                 ],
             )

@@ -17,6 +17,7 @@ from nfr_review.llm_client import (
 from nfr_review.models import RAG, Evidence, Finding, RuleResult
 from nfr_review.protocols import Band, LlmClient
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +58,8 @@ class PiiInLogStatementsRule:
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         java_evidence = [
             e
-            for e in evidence
-            if e.collector_name == "java-ast"
-            and e.kind == "java-ast-file"
-            and e.payload.get("log_statements")
+            for e in filter_evidence(evidence, "java-ast", "java-ast-file")
+            if e.payload.get("log_statements")
         ]
         if not java_evidence:
             return RuleResult(
@@ -94,17 +93,11 @@ class PiiInLogStatementsRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "pii-logging",
+                        java_evidence[0],
                         summary="No PII patterns detected in log statements.",
-                        recommendation="No action required.",
-                        evidence_locator="project-wide",
-                        collector_name=java_evidence[0].collector_name,
-                        collector_version=java_evidence[0].collector_version,
-                        confidence=0.85,
-                        pattern_tag="pii-logging",
                     )
                 ],
             )

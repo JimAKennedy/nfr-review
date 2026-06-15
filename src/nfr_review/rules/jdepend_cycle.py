@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class JDepCycleRule:
@@ -19,7 +20,7 @@ class JDepCycleRule:
     required_collectors: list[str] = ["jdepend"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        jdep_evidence = [e for e in evidence if e.collector_name == "jdepend"]
+        jdep_evidence = filter_evidence(evidence, "jdepend")
         if not jdep_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -43,17 +44,13 @@ class JDepCycleRule:
             cycle_groups = ev.payload.get("cycle_groups", [])
             if not cycle_groups:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "jdep-cycle-ok",
+                        ev,
                         summary="No package dependency cycles detected.",
-                        recommendation="No action required.",
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="jdep-cycle-ok",
+                        evidence_locator=ev.locator,
                     )
                 )
                 continue

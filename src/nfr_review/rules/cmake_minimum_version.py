@@ -11,6 +11,7 @@ from packaging.version import InvalidVersion, Version
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _MODERN_CMAKE_VERSION = Version("3.14")
 
@@ -80,17 +81,12 @@ class CmakeMinimumVersionRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "cmake-minimum-version-ok",
+                    cmake_ev[0],
                     summary="cmake_minimum_required is present and modern.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cmake_ev[0].collector_name,
-                    collector_version=cmake_ev[0].collector_version,
                     confidence=0.95,
-                    pattern_tag="cmake-minimum-version-ok",
                 )
             )
 

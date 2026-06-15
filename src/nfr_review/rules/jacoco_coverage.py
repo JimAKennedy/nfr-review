@@ -13,6 +13,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
 class JaCoCoCoverageActualRule:
@@ -30,11 +31,7 @@ class JaCoCoCoverageActualRule:
     required_collectors: list[str] = ["jacoco-report"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        jacoco_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "jacoco-report" and e.kind == "jacoco-report"
-        ]
+        jacoco_evidence = filter_evidence(evidence, "jacoco-report", "jacoco-report")
         if not jacoco_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -96,20 +93,17 @@ class JaCoCoCoverageActualRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "jacoco-coverage",
+                        ev,
                         summary=(
                             f"Line coverage is {line_pct}% in {report_name} — "
                             f"meets 70% threshold"
                         ),
                         recommendation="No action required — coverage is adequate.",
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.95,
-                        pattern_tag="jacoco-coverage",
+                        evidence_locator=ev.locator,
                     )
                 )
 

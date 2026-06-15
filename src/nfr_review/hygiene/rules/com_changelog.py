@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.hygiene import hygiene_rule_registry
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _STUB_THRESHOLD = 50
 
@@ -78,17 +79,13 @@ class ChangelogPresenceRule:
             return RuleResult(rule_id=self.id, findings=findings)
 
         findings.append(
-            Finding(
-                rule_id=self.id,
-                rag="green",
-                severity="info",
+            make_green_finding(
+                self.id,
+                "changelog-presence",
+                ev,
                 summary="Changelog found.",
-                recommendation="No action required.",
                 evidence_locator=locator,
-                collector_name=ev.collector_name,
-                collector_version=ev.collector_version,
                 confidence=1.0,
-                pattern_tag="changelog-presence",
             )
         )
 
@@ -119,10 +116,10 @@ class ChangelogPresenceRule:
 
         if has_versions and not follows_kac:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "changelog-no-categories",
+                    ev,
                     summary=(
                         "Changelog has version headers but does not use "
                         "Keep a Changelog categories (Added/Changed/Fixed etc.)."
@@ -132,10 +129,7 @@ class ChangelogPresenceRule:
                         "standard categories for better readability."
                     ),
                     evidence_locator=locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
                     confidence=0.8,
-                    pattern_tag="changelog-no-categories",
                 )
             )
 

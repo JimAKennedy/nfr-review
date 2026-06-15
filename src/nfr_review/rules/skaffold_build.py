@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _EXPLICIT_TAG_POLICIES = frozenset(
     {
@@ -30,11 +31,7 @@ class SkaffoldBuildConfigRule:
     required_tech: list[str] = ["skaffold"]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        skaffold_evidence = [
-            e
-            for e in evidence
-            if e.collector_name == "skaffold" and e.kind == "skaffold-analysis"
-        ]
+        skaffold_evidence = filter_evidence(evidence, "skaffold", "skaffold-analysis")
         if not skaffold_evidence:
             return RuleResult(
                 rule_id=self.id,
@@ -118,20 +115,16 @@ class SkaffoldBuildConfigRule:
                 )
             else:
                 findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="green",
-                        severity="info",
+                    make_green_finding(
+                        self.id,
+                        "skaffold-build-config",
+                        ev,
                         summary=(
                             "Skaffold build config uses an explicit tag policy"
                             " for reproducible image tagging."
                         ),
-                        recommendation="No action required.",
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
                         confidence=0.9,
-                        pattern_tag="skaffold-build-config",
+                        evidence_locator=ev.locator,
                     )
                 )
 

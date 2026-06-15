@@ -9,6 +9,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.registry import rule_registry
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 class CppExceptionSafetyRule:
@@ -52,17 +53,11 @@ class CppExceptionSafetyRule:
 
         if not findings:
             findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="green",
-                    severity="info",
+                make_green_finding(
+                    self.id,
+                    "cpp-exception-safety-ok",
+                    cpp_ev[0],
                     summary="No exception safety issues detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=cpp_ev[0].collector_name,
-                    collector_version=cpp_ev[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="cpp-exception-safety-ok",
                 )
             )
 
