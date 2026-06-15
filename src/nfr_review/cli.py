@@ -40,7 +40,7 @@ from nfr_review.config import Config, ConfigError, load_config
 from nfr_review.detect import detect_technologies
 from nfr_review.engine import Engine, EngineError, RunResult
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
-from nfr_review.models import Severity
+from nfr_review.models import Finding, Severity
 from nfr_review.output import OutputError, write_csv, write_jsonl
 from nfr_review.registry import Registry, rule_registry
 
@@ -831,135 +831,37 @@ def hygiene_cmd(
             raise click.exceptions.Exit(2)
 
 
-def run_report_pipeline(
+@dataclasses.dataclass
+class _ReportSections:
+    """Intermediate report sections produced by :func:`_build_report_sections`."""
+
+    suppressed_pairs: list[tuple[Finding, Any]] | None
+    pytest_result: Any
+    deps_section: str
+    deps_reports: list[Any]
+    diagrams: dict[str, str] | None
+    jdepend_section: str
+    derived_adrs_section: str
+    adr_section: str
+    score_section: str
+    llm_info: tuple[str, str] | None
+
+
+def _run_scans(
     target: Path,
+    config: Config,
     *,
-    output_dir: Path = Path("reports"),
-    config_path: Path | None = None,
-    no_tests: bool = False,
-    no_deps: bool = False,
-    no_diagrams: bool = False,
-    pdf: bool = True,
-    html: bool = False,
-    no_summary: bool = False,
-    test_timeout: int = 900,
-    sarif_path: Path | None = None,
-    show_score: bool = True,
-    max_resolve_rounds: int | None = None,
-    include_tests: bool = True,
-    quiet: bool = False,
-    stem: str | None = None,
-    workers: int = 1,
-    otel_traces: Path | None = None,
-    collector: bool = False,
-) -> ReportResult:
-    """Run the full NFR + hygiene report pipeline and return structured results.
-
-    This is the core pipeline extracted from the ``report`` CLI command so that
-    callers (e.g. the ``all`` command) can invoke it without a Click context.
-    """
-    from nfr_review.output.jdepend_section import (
-        build_adr_section,
-        build_derived_adrs_section,
-        build_jdepend_section,
-    )
-    from nfr_review.output.markdown import render_markdown_report
-    from nfr_review.output.pytest_runner import run_pytest
-
-    repo = _repo_name(target)
-    phases = ["config", "detect", "nfr-scan", "hygiene-scan"]
-    opts: dict[str, str] = {}
-    if not no_tests:
-        phases.append("pytest")
-        opts["test_timeout"] = f"{test_timeout}s"
-    else:
-        opts["tests"] = "skipped"
-    if not no_deps:
-        phases.append("deps")
-    else:
-        opts["deps"] = "skipped"
-    if not no_diagrams:
-        phases.append("diagrams")
-    if pdf:
-        phases.append("pdf")
-        if not no_summary:
-            phases.append("llm-summary")
-    phases.append("output")
-    if not include_tests:
-        opts["exclude_tests"] = "true"
-    _banner("report", repo, target, options=opts or None, phases=phases, quiet=quiet)
-
-    _phase("Loading configuration", quiet=quiet)
-    effective_config_path = config_path
-    if effective_config_path is None:
-        default = Path("nfr-review.yaml")
-        if default.exists():
-            effective_config_path = default
-
-    try:
-        config: Config = load_config(effective_config_path)
-    except ConfigError as exc:
-        click.echo(f"error: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-
-    # Merge repo-local scoring overrides when a central config is provided
-    # and the target repo has its own nfr-review.yaml with scoring settings.
-    repo_local_cfg_path = target / "nfr-review.yaml"
-    if (
-        effective_config_path is not None
-        and repo_local_cfg_path.exists()
-        and repo_local_cfg_path.resolve() != effective_config_path.resolve()
-    ):
-        try:
-            repo_config = load_config(repo_local_cfg_path)
-            config = config.with_repo_scoring(repo_config)
-        except ConfigError:
-            pass  # repo-local config is malformed — use central defaults
-
-    _phase("Detecting technologies", quiet=quiet)
-    try:
-        detected = detect_technologies(target)
-    except Exception as e:  # noqa: BLE001
-        logger.debug("Technology detection failed for %s: %s", target, e)
-        detected = {}
-    merged_tech = {**detected, **config.tech}
-    report_updates: dict[str, Any] = {
-        "tech": merged_tech,
-        "exclude_test_paths": not include_tests,
-    }
-    if otel_traces is not None:
-        report_updates["otel_traces"] = otel_traces.resolve()
-
-    collector_mgr: CollectorManager | None = None
-    if collector:
-        from nfr_review.collector_manager import CollectorManager, find_binary, resolve_config
-
-        binary = find_binary()
-        if binary is None:
-            _ts_echo(
-                "warning: OTel Collector binary not found on PATH, "
-                "continuing without dynamic trace collection",
-                quiet=quiet,
-            )
-        else:
-            coll_config = resolve_config(target)
-            collector_mgr = CollectorManager(binary, coll_config)
-
-    config = config.model_copy(update=report_updates)
-    active_tech = [k for k, v in merged_tech.items() if v]
-    if active_tech:
-        _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
-
+    workers: int,
+    collector_mgr: Any,
+    quiet: bool,
+) -> tuple[RunResult, RunResult]:
+    """Execute NFR and hygiene scans with OTel collector lifecycle management."""
     try:
         if collector_mgr is not None:
             trace_path = collector_mgr.start()
             config = config.model_copy(update={"otel_traces": trace_path})
-            _ts_echo(
-                f"OTel Collector started: pid={collector_mgr.pid}",
-                quiet=quiet,
-            )
+            _ts_echo(f"OTel Collector started: pid={collector_mgr.pid}", quiet=quiet)
 
-        # NFR scan
         t0 = _phase("Running NFR scan (collect + evaluate)", quiet=quiet)
         try:
             nfr_result: RunResult = Engine(workers=workers).run(target, config)
@@ -968,7 +870,6 @@ def run_report_pipeline(
             raise click.exceptions.Exit(1) from exc
         _phase_done("NFR scan", t0, quiet=quiet)
 
-        # Hygiene scan
         t0 = _phase("Running hygiene scan (collect + evaluate)", quiet=quiet)
         try:
             hygiene_result: RunResult = Engine(
@@ -985,29 +886,54 @@ def run_report_pipeline(
             collector_mgr.stop()
             collector_mgr.cleanup()
 
-    # Suppressions
+    return nfr_result, hygiene_result
+
+
+def _build_report_sections(
+    *,
+    nfr_result: RunResult,
+    hygiene_result: RunResult,
+    combined_findings: list[Finding],
+    target: Path,
+    config: Config,
+    merged_tech: dict[str, Any],
+    no_tests: bool,
+    no_deps: bool,
+    no_diagrams: bool,
+    show_score: bool,
+    test_timeout: int,
+    max_resolve_rounds: int | None,
+    quiet: bool,
+) -> _ReportSections:
+    """Build all report sections from scan results."""
+    from nfr_review.output.jdepend_section import (
+        build_adr_section,
+        build_derived_adrs_section,
+        build_jdepend_section,
+    )
+    from nfr_review.output.pytest_runner import run_pytest
     from nfr_review.suppression import apply_suppressions
 
-    all_findings = list(nfr_result.findings) + list(hygiene_result.findings)
-    active_report_findings, suppressed_report_pairs = apply_suppressions(
-        all_findings, target_root=target.resolve()
+    # Suppressions
+    _active_findings, suppressed_pairs = apply_suppressions(
+        combined_findings, target_root=target.resolve()
     )
-    if suppressed_report_pairs:
-        with_reason = sum(1 for _, info in suppressed_report_pairs if info.reason)
+    if suppressed_pairs:
+        with_reason = sum(1 for _, info in suppressed_pairs if info.reason)
         _ts_echo(
-            f"Suppressed: {len(suppressed_report_pairs)} finding(s) via inline markers"
+            f"Suppressed: {len(suppressed_pairs)} finding(s) via inline markers"
             f" ({with_reason} with justification)",
             quiet=quiet,
         )
 
-    # Pytest execution
+    # Pytest
     pytest_result = None
     if not no_tests:
         t0 = _phase(f"Running pytest (timeout: {test_timeout}s)", quiet=quiet)
         pytest_result = run_pytest(target, timeout=test_timeout)
         _phase_done("Pytest", t0, quiet=quiet)
 
-    # Dependency analysis
+    # Dependencies
     deps_section = ""
     deps_reports: list[Any] = []
     if not no_deps:
@@ -1036,7 +962,7 @@ def run_report_pipeline(
             )
         _phase_done("Dependency analysis", t0, quiet=quiet)
 
-    # Build diagram sections
+    # Diagrams
     diagrams: dict[str, str] | None = None
     if not no_diagrams:
         from nfr_review.output.diagrams import (
@@ -1047,11 +973,10 @@ def run_report_pipeline(
         )
 
         _phase("Building diagrams", quiet=quiet)
-        all_findings = list(nfr_result.findings) + list(hygiene_result.findings)
         diagrams = {}
-        if all_findings:
+        if combined_findings:
             diagrams["Severity Distribution"] = render_mermaid_severity_pie(
-                all_findings,
+                combined_findings,
             )
         if merged_tech:
             diagrams["Technology Overview"] = render_mermaid_tech_overview(
@@ -1059,7 +984,7 @@ def run_report_pipeline(
             )
         if not no_deps and deps_reports:
             diagrams["Dependency Graph"] = render_mermaid_dep_graph(deps_reports)
-        dynamic = collect_dynamic_diagrams(all_findings, nfr_result.evidence)
+        dynamic = collect_dynamic_diagrams(combined_findings, nfr_result.evidence)
         if dynamic:
             diagrams.update(dynamic)
             logger.info(
@@ -1068,70 +993,100 @@ def run_report_pipeline(
                 ", ".join(dynamic.keys()),
             )
 
-    # Build evidence-aware report sections
+    # Evidence-aware sections
     jdepend_section = build_jdepend_section(nfr_result.evidence)
     derived_adrs_section = build_derived_adrs_section(nfr_result.evidence)
     adr_section = build_adr_section(nfr_result.evidence)
 
-    # Compute maturity score section for report
-    score_section = ""
-    if show_score:
-        from nfr_review.output.markdown import render_score_section
-        from nfr_review.scoring import compute_maturity_score
+    # Maturity score
+    score_section = _compute_score(combined_findings, nfr_result, config) if show_score else ""
 
-        all_report_findings = list(nfr_result.findings) + list(hygiene_result.findings)
-        nfr_meta = nfr_result.run_metadata
-        score = compute_maturity_score(
-            all_report_findings,
-            nfr_meta.rules_run if nfr_meta else [],
-            nfr_meta.rules_skipped if nfr_meta else [],
-            config.scoring,
-        )
-        score_section = render_score_section(score)
+    # LLM provenance
+    llm_info = _resolve_llm_info(config)
 
-    # Build LLM provenance for methodology appendix.
-    # Always check — collectors like adr-derive use the LLM independently
-    # of the executive summary, so the disclosure must not be gated on
-    # no_summary.  Use the no-args factory (same path collectors use) so
-    # legacy env-var fallbacks (NFR_LLM_BACKEND) are also detected.
-    from nfr_review.llm_client import (
-        ClaudeCliClient,
-        create_llm_client,
+    return _ReportSections(
+        suppressed_pairs=suppressed_pairs or None,
+        pytest_result=pytest_result,
+        deps_section=deps_section,
+        deps_reports=deps_reports,
+        diagrams=diagrams,
+        jdepend_section=jdepend_section,
+        derived_adrs_section=derived_adrs_section,
+        adr_section=adr_section,
+        score_section=score_section,
+        llm_info=llm_info,
     )
 
+
+def _compute_score(
+    combined_findings: list[Finding],
+    nfr_result: RunResult,
+    config: Config,
+) -> str:
+    """Compute maturity score and return the rendered Markdown section."""
+    from nfr_review.output.markdown import render_score_section
+    from nfr_review.scoring import compute_maturity_score
+
+    nfr_meta = nfr_result.run_metadata
+    score = compute_maturity_score(
+        combined_findings,
+        nfr_meta.rules_run if nfr_meta else [],
+        nfr_meta.rules_skipped if nfr_meta else [],
+        config.scoring,
+    )
+    return render_score_section(score)
+
+
+def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
+    """Detect available LLM for methodology appendix disclosure."""
+    from nfr_review.llm_client import ClaudeCliClient, create_llm_client
+
     resolved_llm = config.llm.resolve()
-    llm_info: tuple[str, str] | None = None
     _llm_client = create_llm_client(resolved_llm)
     if _llm_client.available:
-        llm_info = (resolved_llm.provider, resolved_llm.model)
-    else:
-        _default_client = create_llm_client()
-        if _default_client.available:
-            _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
-            llm_info = (_prov, resolved_llm.model)
+        return (resolved_llm.provider, resolved_llm.model)
+    _default_client = create_llm_client()
+    if _default_client.available:
+        _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
+        return (_prov, resolved_llm.model)
+    return None
 
-    # Generate report
+
+def _write_outputs(
+    *,
+    nfr_result: RunResult,
+    hygiene_result: RunResult,
+    combined_result: RunResult,
+    sections: _ReportSections,
+    output_dir: Path,
+    stem: str,
+    sarif_path: Path | None,
+    html_flag: bool,
+    pdf_flag: bool,
+    no_summary: bool,
+    quiet: bool,
+) -> ReportResult:
+    """Render and write all output formats (Markdown, CSV, JSONL, SARIF, HTML, PDF)."""
+    from nfr_review.output.markdown import render_markdown_report
+
+    # Markdown
     _phase("Rendering Markdown report", quiet=quiet)
     md_content = render_markdown_report(
         nfr_result=nfr_result,
         hygiene_result=hygiene_result,
-        pytest_result=pytest_result,
-        deps_section=deps_section,
-        jdepend_section=jdepend_section,
-        adr_section=adr_section,
-        derived_adrs_section=derived_adrs_section,
-        diagrams=diagrams,
-        score_section=score_section,
-        suppressed_findings=suppressed_report_pairs or None,
-        llm_info=llm_info,
+        pytest_result=sections.pytest_result,
+        deps_section=sections.deps_section,
+        jdepend_section=sections.jdepend_section,
+        adr_section=sections.adr_section,
+        derived_adrs_section=sections.derived_adrs_section,
+        diagrams=sections.diagrams,
+        score_section=sections.score_section,
+        suppressed_findings=sections.suppressed_pairs,
+        llm_info=sections.llm_info,
     )
 
-    # Write output files
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
-    if stem is None:
-        stem = f"{repo}-nfr-review-{timestamp}"
+    # File outputs
     output_dir.mkdir(parents=True, exist_ok=True)
-
     md_path = output_dir / f"{stem}.md"
     csv_path = output_dir / f"{stem}.csv"
     jsonl_path = output_dir / f"{stem}.jsonl"
@@ -1139,22 +1094,15 @@ def run_report_pipeline(
     _phase("Writing output files", quiet=quiet)
     try:
         md_path.write_text(md_content, encoding="utf-8")
-
-        combined_result = RunResult(
-            findings=list(nfr_result.findings) + list(hygiene_result.findings),
-            rule_results=(list(nfr_result.rule_results) + list(hygiene_result.rule_results)),
-            run_metadata=nfr_result.run_metadata,
-            warnings=list(nfr_result.warnings) + list(hygiene_result.warnings),
-        )
         write_csv(
             combined_result,
             csv_path,
-            suppressed_findings=suppressed_report_pairs or None,
+            suppressed_findings=sections.suppressed_pairs,
         )
         write_jsonl(
             combined_result,
             jsonl_path,
-            suppressed_findings=suppressed_report_pairs or None,
+            suppressed_findings=sections.suppressed_pairs,
         )
         actual_sarif: Path | None = None
         if sarif_path is not None:
@@ -1166,9 +1114,9 @@ def run_report_pipeline(
         click.echo(f"error: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
 
-    # HTML generation
+    # HTML
     html_path: Path | None = None
-    if html:
+    if html_flag:
         from nfr_review.output.html import render_html_report
 
         _phase("Rendering HTML report", quiet=quiet)
@@ -1180,9 +1128,9 @@ def run_report_pipeline(
             click.echo(f"error: HTML generation failed: {exc}", err=True)
             html_path = None
 
-    # PDF generation
+    # PDF
     pdf_path: Path | None = None
-    if pdf:
+    if pdf_flag:
         try:
             from nfr_review.output.pdf import render_pdf
         except ImportError as exc:
@@ -1193,14 +1141,13 @@ def run_report_pipeline(
             )
             raise click.exceptions.Exit(1) from exc
 
-        # Generate executive summary
         exec_summary = None
         if not no_summary:
             from nfr_review.output.summarize import generate_executive_summary
 
             t0 = _phase("Generating executive summary via LLM", quiet=quiet)
             exec_summary = generate_executive_summary(
-                nfr_result, hygiene_result, pytest_result, deps_section
+                nfr_result, hygiene_result, sections.pytest_result, sections.deps_section
             )
             if exec_summary is None:
                 _ts_echo("skipped (LLM not configured or unavailable)")
@@ -1215,14 +1162,14 @@ def run_report_pipeline(
                 output_path=pdf_path,
                 hygiene_result=hygiene_result,
                 exec_summary=exec_summary,
-                pytest_result=pytest_result,
-                deps_section_md=deps_section,
-                jdepend_section_md=jdepend_section,
-                adr_section_md=adr_section,
-                derived_adrs_section_md=derived_adrs_section,
-                diagrams=diagrams,
-                score_section_md=score_section,
-                llm_info=llm_info,
+                pytest_result=sections.pytest_result,
+                deps_section_md=sections.deps_section,
+                jdepend_section_md=sections.jdepend_section,
+                adr_section_md=sections.adr_section,
+                derived_adrs_section_md=sections.derived_adrs_section,
+                diagrams=sections.diagrams,
+                score_section_md=sections.score_section,
+                llm_info=sections.llm_info,
             )
             _phase_done("PDF generation", t0, quiet=quiet)
         # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
@@ -1230,6 +1177,7 @@ def run_report_pipeline(
             click.echo(f"error: PDF generation failed: {exc}", err=True)
             pdf_path = None
 
+    # Summary line
     nfr_count = len(nfr_result.findings)
     hygiene_count = len(hygiene_result.findings)
     total = nfr_count + hygiene_count
@@ -1258,6 +1206,167 @@ def run_report_pipeline(
         total_findings=total,
         nfr_count=nfr_count,
         hygiene_count=hygiene_count,
+    )
+
+
+def run_report_pipeline(
+    target: Path,
+    *,
+    output_dir: Path = Path("reports"),
+    config_path: Path | None = None,
+    no_tests: bool = False,
+    no_deps: bool = False,
+    no_diagrams: bool = False,
+    pdf: bool = True,
+    html: bool = False,
+    no_summary: bool = False,
+    test_timeout: int = 900,
+    sarif_path: Path | None = None,
+    show_score: bool = True,
+    max_resolve_rounds: int | None = None,
+    include_tests: bool = True,
+    quiet: bool = False,
+    stem: str | None = None,
+    workers: int = 1,
+    otel_traces: Path | None = None,
+    collector: bool = False,
+) -> ReportResult:
+    """Run the full NFR + hygiene report pipeline and return structured results.
+
+    This is the core pipeline extracted from the ``report`` CLI command so that
+    callers (e.g. the ``all`` command) can invoke it without a Click context.
+    """
+    repo = _repo_name(target)
+    phases = ["config", "detect", "nfr-scan", "hygiene-scan"]
+    opts: dict[str, str] = {}
+    if not no_tests:
+        phases.append("pytest")
+        opts["test_timeout"] = f"{test_timeout}s"
+    else:
+        opts["tests"] = "skipped"
+    if not no_deps:
+        phases.append("deps")
+    else:
+        opts["deps"] = "skipped"
+    if not no_diagrams:
+        phases.append("diagrams")
+    if pdf:
+        phases.append("pdf")
+        if not no_summary:
+            phases.append("llm-summary")
+    phases.append("output")
+    if not include_tests:
+        opts["exclude_tests"] = "true"
+    _banner("report", repo, target, options=opts or None, phases=phases, quiet=quiet)
+
+    # --- Configuration ---
+    _phase("Loading configuration", quiet=quiet)
+    effective_config_path = config_path
+    if effective_config_path is None:
+        default = Path("nfr-review.yaml")
+        if default.exists():
+            effective_config_path = default
+
+    try:
+        config: Config = load_config(effective_config_path)
+    except ConfigError as exc:
+        click.echo(f"error: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+
+    repo_local_cfg_path = target / "nfr-review.yaml"
+    if (
+        effective_config_path is not None
+        and repo_local_cfg_path.exists()
+        and repo_local_cfg_path.resolve() != effective_config_path.resolve()
+    ):
+        try:
+            repo_config = load_config(repo_local_cfg_path)
+            config = config.with_repo_scoring(repo_config)
+        except ConfigError:
+            pass
+
+    _phase("Detecting technologies", quiet=quiet)
+    try:
+        detected = detect_technologies(target)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Technology detection failed for %s: %s", target, e)
+        detected = {}
+    merged_tech = {**detected, **config.tech}
+    report_updates: dict[str, Any] = {
+        "tech": merged_tech,
+        "exclude_test_paths": not include_tests,
+    }
+    if otel_traces is not None:
+        report_updates["otel_traces"] = otel_traces.resolve()
+
+    collector_mgr = None
+    if collector:
+        from nfr_review.collector_manager import CollectorManager, find_binary, resolve_config
+
+        binary = find_binary()
+        if binary is None:
+            _ts_echo(
+                "warning: OTel Collector binary not found on PATH, "
+                "continuing without dynamic trace collection",
+                quiet=quiet,
+            )
+        else:
+            coll_config = resolve_config(target)
+            collector_mgr = CollectorManager(binary, coll_config)
+
+    config = config.model_copy(update=report_updates)
+    active_tech = [k for k, v in merged_tech.items() if v]
+    if active_tech:
+        _ts_echo(f"Technologies: {', '.join(sorted(active_tech))}", quiet=quiet)
+
+    # --- Scans ---
+    nfr_result, hygiene_result = _run_scans(
+        target, config, workers=workers, collector_mgr=collector_mgr, quiet=quiet
+    )
+
+    # Combined findings and result — computed once, shared by all downstream phases
+    combined_findings = list(nfr_result.findings) + list(hygiene_result.findings)
+    combined_result = RunResult(
+        findings=combined_findings,
+        rule_results=list(nfr_result.rule_results) + list(hygiene_result.rule_results),
+        run_metadata=nfr_result.run_metadata,
+        warnings=list(nfr_result.warnings) + list(hygiene_result.warnings),
+    )
+
+    # --- Report sections ---
+    sections = _build_report_sections(
+        nfr_result=nfr_result,
+        hygiene_result=hygiene_result,
+        combined_findings=combined_findings,
+        target=target,
+        config=config,
+        merged_tech=merged_tech,
+        no_tests=no_tests,
+        no_deps=no_deps,
+        no_diagrams=no_diagrams,
+        show_score=show_score,
+        test_timeout=test_timeout,
+        max_resolve_rounds=max_resolve_rounds,
+        quiet=quiet,
+    )
+
+    # --- Outputs ---
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+    if stem is None:
+        stem = f"{repo}-nfr-review-{timestamp}"
+
+    return _write_outputs(
+        nfr_result=nfr_result,
+        hygiene_result=hygiene_result,
+        combined_result=combined_result,
+        sections=sections,
+        output_dir=output_dir,
+        stem=stem,
+        sarif_path=sarif_path,
+        html_flag=html,
+        pdf_flag=pdf,
+        no_summary=no_summary,
+        quiet=quiet,
     )
 
 
