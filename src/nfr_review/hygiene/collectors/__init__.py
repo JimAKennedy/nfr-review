@@ -4,10 +4,14 @@
 
 from __future__ import annotations
 
-import nfr_review.hygiene.collectors.build_readiness  # noqa: F401
-import nfr_review.hygiene.collectors.ci_automation  # noqa: F401
-import nfr_review.hygiene.collectors.code_debt  # noqa: F401
-import nfr_review.hygiene.collectors.community  # noqa: F401
-import nfr_review.hygiene.collectors.documentation  # noqa: F401
-import nfr_review.hygiene.collectors.license_scan  # noqa: F401
-import nfr_review.hygiene.collectors.privacy  # noqa: F401
+import importlib
+import pkgutil
+
+_discovered: list[str] = []
+for _info in pkgutil.iter_modules(__path__):
+    if _info.name == "__init__":
+        continue
+    importlib.import_module(f"{__name__}.{_info.name}")
+    _discovered.append(_info.name)
+
+__all__ = sorted(_discovered)

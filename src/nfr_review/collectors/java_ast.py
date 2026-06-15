@@ -54,13 +54,9 @@ Evidence payload contract (kind="java-ast-file"):
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from tree_sitter import Parser
-
-from nfr_review.collectors.ast_common import make_parser
+from nfr_review.collectors.ast_common import BaseASTCollector, find_nodes, text
 from nfr_review.collectors.payloads.java_ast import (
     JavaAstFilePayload,
     JavaBaseClass,
@@ -72,8 +68,6 @@ from nfr_review.collectors.payloads.java_ast import (
     JavaParameter,
     JavaThreadPool,
 )
-from nfr_review.models import Evidence
-from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger("nfr_review.collectors.java_ast")
@@ -88,8 +82,6 @@ _MAPPING_ANNOTATIONS = frozenset(
         "PatchMapping",
     }
 )
-
-_HIDDEN_DIRS = frozenset({".git", ".svn", ".hg", ".idea", ".vscode", "node_modules"})
 
 _THREAD_POOL_CLASSES = frozenset(
     {
@@ -117,26 +109,13 @@ _REJECTION_POLICY_TYPES = frozenset(
 )
 
 
-def _text(node: Any, source: bytes) -> str:
-    return source[node.start_byte : node.end_byte].decode("utf-8", errors="replace")
-
-
-def _find_nodes(node: Any, target_type: str) -> list[Any]:
-    results: list[Any] = []
-    if node.type == target_type:
-        results.append(node)
-    for child in node.children:
-        results.extend(_find_nodes(child, target_type))
-    return results
-
-
 def _extract_annotations(modifiers_node: Any, source: bytes) -> list[str]:
     annotations: list[str] = []
     for child in modifiers_node.children:
         if child.type in ("marker_annotation", "annotation"):
             for sub in child.children:
                 if sub.type == "identifier":
-                    annotations.append(_text(sub, source))
+                    annotations.append(text(sub, source))
                     break
     return annotations
 
@@ -148,7 +127,7 @@ def _extract_mapping_paths(modifiers_node: Any, source: bytes) -> list[str]:
             ann_name = ""
             for sub in child.children:
                 if sub.type == "identifier":
-                    ann_name = _text(sub, source)
+                    ann_name = text(sub, source)
                     break
             if ann_name not in _MAPPING_ANNOTATIONS:
                 continue
@@ -156,17 +135,17 @@ def _extract_mapping_paths(modifiers_node: Any, source: bytes) -> list[str]:
                 if sub.type == "annotation_argument_list":
                     for arg in sub.children:
                         if arg.type == "string_literal":
-                            path_val = _text(arg, source).strip('"')
+                            path_val = text(arg, source).strip('"')
                             paths.append(path_val)
                         elif arg.type == "element_value_pair":
                             for ev in arg.children:
                                 if ev.type == "string_literal":
-                                    path_val = _text(ev, source).strip('"')
+                                    path_val = text(ev, source).strip('"')
                                     paths.append(path_val)
                                 elif ev.type == "element_value_array_initializer":
                                     for arr_child in ev.children:
                                         if arr_child.type == "string_literal":
-                                            path_val = _text(arr_child, source).strip('"')
+                                            path_val = text(arr_child, source).strip('"')
                                             paths.append(path_val)
     return paths
 
@@ -182,7 +161,7 @@ def _extract_return_type(method_node: Any, source: bytes) -> str:
             "generic_type",
             "array_type",
         ):
-            return _text(child, source)
+            return text(child, source)
     return "void"
 
 
@@ -194,7 +173,7 @@ def _extract_access(modifiers_node: Any | None, source: bytes) -> str:
         return "private"
     for child in modifiers_node.children:
         if child.type in _ACCESS_KEYWORDS:
-            return _text(child, source)
+            return text(child, source)
     return "private"
 
 
@@ -216,7 +195,7 @@ def _extract_type_node(node: Any, source: bytes) -> str:
             "array_type",
             "scoped_type_identifier",
         ):
-            return _text(child, source)
+            return text(child, source)
     return ""
 
 
@@ -230,7 +209,7 @@ def _extract_parameters(method_node: Any, source: bytes) -> list[JavaParameter]:
                     pname = ""
                     for sub in param.children:
                         if sub.type == "identifier":
-                            pname = _text(sub, source)
+                            pname = text(sub, source)
                     if pname:
                         params.append(JavaParameter(name=pname, type=ptype))
     return params
@@ -253,7 +232,7 @@ def _extract_fields(class_body_node: Any, source: bytes) -> list[JavaField]:
                         if var_child.type == "identifier":
                             fields.append(
                                 JavaField(
-                                    name=_text(var_child, source),
+                                    name=text(var_child, source),
                                     type=ftype,
                                     access=access,
                                     line=child.start_point[0] + 1,
@@ -269,7 +248,7 @@ def _extract_base_classes(class_node: Any, source: bytes) -> list[JavaBaseClass]
         if child.type == "superclass":
             for sub in child.children:
                 if sub.type in ("type_identifier", "generic_type", "scoped_type_identifier"):
-                    bases.append(JavaBaseClass(name=_text(sub, source), access="public"))
+                    bases.append(JavaBaseClass(name=text(sub, source), access="public"))
         elif child.type in ("super_interfaces", "extends_interfaces"):
             for sub in child.children:
                 if sub.type == "type_list":
@@ -280,7 +259,7 @@ def _extract_base_classes(class_node: Any, source: bytes) -> list[JavaBaseClass]
                             "scoped_type_identifier",
                         ):
                             bases.append(
-                                JavaBaseClass(name=_text(iface, source), access="public")
+                                JavaBaseClass(name=text(iface, source), access="public")
                             )
     return bases
 
@@ -290,7 +269,7 @@ def _extract_package(root: Any, source: bytes) -> str:
         if child.type == "package_declaration":
             for sub in child.children:
                 if sub.type in ("scoped_identifier", "identifier"):
-                    return _text(sub, source)
+                    return text(sub, source)
     return ""
 
 
@@ -304,7 +283,7 @@ def _extract_methods(class_body_node: Any, source: bytes) -> list[JavaMethod]:
             modifiers_node = None
             for sub in child.children:
                 if sub.type == "identifier":
-                    name = _text(sub, source)
+                    name = text(sub, source)
                 elif sub.type == "modifiers":
                     modifiers_node = sub
                     annotations = _extract_annotations(sub, source)
@@ -331,16 +310,16 @@ def _extract_methods(class_body_node: Any, source: bytes) -> list[JavaMethod]:
 
 def _extract_catch_blocks(root: Any, source: bytes) -> list[JavaCatchBlock]:
     blocks: list[JavaCatchBlock] = []
-    for catch_node in _find_nodes(root, "catch_clause"):
+    for catch_node in find_nodes(root, "catch_clause"):
         caught_type = ""
-        for param in _find_nodes(catch_node, "catch_formal_parameter"):
-            for ct in _find_nodes(param, "catch_type"):
+        for param in find_nodes(catch_node, "catch_formal_parameter"):
+            for ct in find_nodes(param, "catch_type"):
                 for ti in ct.children:
                     if ti.type == "type_identifier":
-                        caught_type = _text(ti, source)
+                        caught_type = text(ti, source)
                         break
             break
-        rethrows = len(_find_nodes(catch_node, "throw_statement")) > 0
+        rethrows = len(find_nodes(catch_node, "throw_statement")) > 0
         line = catch_node.start_point[0] + 1
         blocks.append(
             JavaCatchBlock(
@@ -354,10 +333,10 @@ def _extract_catch_blocks(root: Any, source: bytes) -> list[JavaCatchBlock]:
 
 def _extract_imports(root: Any, source: bytes) -> list[str]:
     imports: list[str] = []
-    for imp_node in _find_nodes(root, "import_declaration"):
+    for imp_node in find_nodes(root, "import_declaration"):
         for child in imp_node.children:
             if child.type == "scoped_identifier":
-                imports.append(_text(child, source))
+                imports.append(text(child, source))
                 break
     return imports
 
@@ -365,16 +344,16 @@ def _extract_imports(root: Any, source: bytes) -> list[str]:
 def _oce_type_name(oce_node: Any, source: bytes) -> str:
     for child in oce_node.children:
         if child.type == "type_identifier":
-            return _text(child, source)
+            return text(child, source)
         if child.type == "generic_type":
             for sub in child.children:
                 if sub.type == "type_identifier":
-                    return _text(sub, source)
+                    return text(sub, source)
     return ""
 
 
 def _has_bounded_queue(args_node: Any, source: bytes) -> bool:
-    for oce in _find_nodes(args_node, "object_creation_expression"):
+    for oce in find_nodes(args_node, "object_creation_expression"):
         type_name = _oce_type_name(oce, source)
         if type_name in _BOUNDED_QUEUE_TYPES:
             arg_list = None
@@ -393,17 +372,17 @@ def _has_bounded_queue(args_node: Any, source: bytes) -> bool:
 
 
 def _has_rejection_policy(args_node: Any, source: bytes) -> bool:
-    full_text = _text(args_node, source)
+    full_text = text(args_node, source)
     return any(rp in full_text for rp in _REJECTION_POLICY_TYPES)
 
 
 def _extract_thread_pools(root: Any, source: bytes) -> list[JavaThreadPool]:
     pools: list[JavaThreadPool] = []
-    for oce in _find_nodes(root, "object_creation_expression"):
+    for oce in find_nodes(root, "object_creation_expression"):
         type_name = ""
         for child in oce.children:
             if child.type == "type_identifier":
-                type_name = _text(child, source)
+                type_name = text(child, source)
                 break
         if type_name not in _THREAD_POOL_CLASSES:
             continue
@@ -432,20 +411,20 @@ _STDOUT_OBJECTS = frozenset({"System.out", "System.err"})
 
 def _extract_log_statements(root: Any, source: bytes) -> list[JavaLogStatement]:
     statements: list[JavaLogStatement] = []
-    for mi in _find_nodes(root, "method_invocation"):
+    for mi in find_nodes(root, "method_invocation"):
         children = mi.children
         identifiers = [c for c in children if c.type == "identifier"]
 
         if len(identifiers) >= 2:
-            obj_name = _text(identifiers[0], source)
-            method_name = _text(identifiers[1], source)
+            obj_name = text(identifiers[0], source)
+            method_name = text(identifiers[1], source)
             if obj_name.lower() in {"log", "logger"} and method_name in _LOG_LEVEL_METHODS:
                 arg_list = None
                 for c in children:
                     if c.type == "argument_list":
                         arg_list = c
                         break
-                arguments_text = _text(arg_list, source) if arg_list else ""
+                arguments_text = text(arg_list, source) if arg_list else ""
                 statements.append(
                     JavaLogStatement(
                         method=f"{obj_name}.{method_name}",
@@ -456,11 +435,11 @@ def _extract_log_statements(root: Any, source: bytes) -> list[JavaLogStatement]:
                 continue
 
         if children and children[0].type == "field_access":
-            obj_text = _text(children[0], source)
+            obj_text = text(children[0], source)
             if obj_text in _STDOUT_OBJECTS:
                 method_ids = [c for c in children if c.type == "identifier"]
                 if method_ids:
-                    method_name = _text(method_ids[0], source)
+                    method_name = text(method_ids[0], source)
                     arg_list = None
                     for c in children:
                         if c.type == "argument_list":
@@ -469,7 +448,7 @@ def _extract_log_statements(root: Any, source: bytes) -> list[JavaLogStatement]:
                     statements.append(
                         JavaLogStatement(
                             method=f"{obj_text}.{method_name}",
-                            arguments_text=_text(arg_list, source) if arg_list else "",
+                            arguments_text=text(arg_list, source) if arg_list else "",
                             line=mi.start_point[0] + 1,
                         )
                     )
@@ -493,7 +472,7 @@ def _extract_class_or_interface(
     modifiers_node = None
     for child in node.children:
         if child.type == "identifier":
-            class_name = _text(child, source)
+            class_name = text(child, source)
         elif child.type == "modifiers":
             modifiers_node = child
             annotations = _extract_annotations(child, source)
@@ -557,99 +536,51 @@ def _extract_class_or_interface(
     return results
 
 
-def _parse_file(parser: Parser, source: bytes) -> dict[str, Any]:
-    tree = parser.parse(source)
-    root = tree.root_node
-
-    package = _extract_package(root, source)
-    imports = _extract_imports(root, source)
-    catch_blocks = _extract_catch_blocks(root, source)
-    thread_pools = _extract_thread_pools(root, source)
-    log_statements = _extract_log_statements(root, source)
-
-    classes: list[JavaClass] = []
-    all_methods: list[JavaMethod] = []
-
-    for node in root.children:
-        if node.type == "class_declaration":
-            for cls in _extract_class_or_interface(
-                node, source, is_interface=False, namespace=package
-            ):
-                classes.append(cls)
-                all_methods.extend(cls.methods)
-        elif node.type == "interface_declaration":
-            for cls in _extract_class_or_interface(
-                node, source, is_interface=True, namespace=package
-            ):
-                classes.append(cls)
-                all_methods.extend(cls.methods)
-
-    return {
-        "package": package,
-        "classes": classes,
-        "methods": all_methods,
-        "catch_blocks": catch_blocks,
-        "imports": imports,
-        "thread_pool_constructions": thread_pools,
-        "log_statements": log_statements,
-    }
-
-
-class JavaAstCollector:
+class JavaAstCollector(BaseASTCollector):
     name = "java-ast"
     version = "0.1.0"
+    language = "java"
+    file_extensions = (".java",)
+    evidence_kind = "java-ast-file"
 
-    def __init__(self) -> None:
-        self._parser: Parser | None = None
+    def _parse_file(self, source: bytes, rel_path: str) -> JavaAstFilePayload:
+        assert self._parser is not None
+        tree = self._parser.parse(source)
+        root = tree.root_node
 
-    def _get_parser(self) -> Parser | None:
-        if self._parser is None:
-            try:
-                self._parser = make_parser("java")
-            except (ImportError, ModuleNotFoundError):
-                logger.warning(
-                    "tree-sitter grammar for java not installed — java-ast collector disabled"
-                )
-                return None
-        return self._parser
+        package = _extract_package(root, source)
+        imports = _extract_imports(root, source)
+        catch_blocks = _extract_catch_blocks(root, source)
+        thread_pools = _extract_thread_pools(root, source)
+        log_statements = _extract_log_statements(root, source)
 
-    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
-        if self._get_parser() is None:
-            return []
-        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
-        exclude_test = getattr(config, "exclude_test_paths", True)
-        evidence: list[Evidence] = []
-        for java_file in sorted(repo_path.rglob("*.java")):
-            rel = java_file.relative_to(repo_path)
-            if any(part.startswith(".") or part in _HIDDEN_DIRS for part in rel.parts):
-                continue
-            if should_exclude_path(
-                str(rel),
-                exclude_test_paths=exclude_test,
-                exclude_patterns=exclude_pats or None,
-            ):
-                continue
-            try:
-                source = java_file.read_bytes()
-            except OSError as exc:
-                logger.debug("Cannot read %s: %s", rel, exc)
-                continue
-            try:
-                parsed = _parse_file(self._parser, source)  # type: ignore[arg-type]
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Parse error in %s: %s", rel, exc)
-                continue
-            payload = JavaAstFilePayload(file_path=str(rel), **parsed)
-            evidence.append(
-                Evidence(
-                    collector_name=self.name,
-                    collector_version=self.version,
-                    locator=str(rel),
-                    kind="java-ast-file",
-                    payload=payload,
-                )
-            )
-        return evidence
+        classes: list[JavaClass] = []
+        all_methods: list[JavaMethod] = []
+
+        for node in root.children:
+            if node.type == "class_declaration":
+                for cls in _extract_class_or_interface(
+                    node, source, is_interface=False, namespace=package
+                ):
+                    classes.append(cls)
+                    all_methods.extend(cls.methods)
+            elif node.type == "interface_declaration":
+                for cls in _extract_class_or_interface(
+                    node, source, is_interface=True, namespace=package
+                ):
+                    classes.append(cls)
+                    all_methods.extend(cls.methods)
+
+        return JavaAstFilePayload(
+            file_path=rel_path,
+            package=package,
+            classes=classes,
+            methods=all_methods,
+            catch_blocks=catch_blocks,
+            imports=imports,
+            thread_pool_constructions=thread_pools,
+            log_statements=log_statements,
+        )
 
 
 def _register() -> None:
