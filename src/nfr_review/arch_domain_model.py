@@ -22,6 +22,7 @@ from nfr_review.arch_models import (
     DomainModelSection,
     EntityRelationship,
 )
+from nfr_review.arch_utils import safe_read_text as _safe_read_text
 from nfr_review.llm_client import (
     LlmUnavailableError,
     serialize_evidence_bundle,
@@ -55,17 +56,6 @@ _SKIP_DIRS = frozenset(
         ".gradle",
     }
 )
-
-# ---------------------------------------------------------------------------
-# Safe I/O
-# ---------------------------------------------------------------------------
-
-
-def _safe_read_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except (OSError, UnicodeDecodeError):
-        return None
 
 
 # ---------------------------------------------------------------------------
