@@ -105,6 +105,18 @@ def _ts_echo(msg: str, *, quiet: bool = False) -> None:
         click.echo(f"[{_timestamp()}] {msg}", err=True)
 
 
+def _print_collector_warnings(warnings: list[str], *, quiet: bool = False) -> None:
+    """Print a summary line for collector/engine warnings visible without -v."""
+    if not warnings:
+        return
+    _ts_echo(
+        f"WARNING: {len(warnings)} collector(s) produced warnings — run with -v for details",
+        quiet=quiet,
+    )
+    for w in warnings:
+        logger.info("%s", w)
+
+
 def _phase(name: str, *, quiet: bool = False) -> float:
     _ts_echo(name, quiet=quiet)
     return time.monotonic()
@@ -541,8 +553,7 @@ def run_cmd(
         summary_parts.append(f"sarif={sarif_path}")
 
     _ts_echo(" ".join(summary_parts))
-    for warning in result.warnings:
-        _ts_echo(f"warning: {warning}")
+    _print_collector_warnings(result.warnings)
 
     if metadata is not None and metadata.rules_skipped:
         _ts_echo(
@@ -814,8 +825,7 @@ def hygiene_cmd(
         f"findings={len(result.findings)} files_emitted={files_emitted} "
         f"output={', '.join(output_paths)}"
     )
-    for warning in result.warnings:
-        _ts_echo(f"warning: {warning}")
+    _print_collector_warnings(result.warnings)
 
     if metadata is not None and metadata.rules_skipped:
         _ts_echo(
@@ -1195,6 +1205,7 @@ def _write_outputs(
     if actual_sarif is not None:
         summary_parts.append(f"sarif={actual_sarif}")
     _ts_echo(" ".join(summary_parts))
+    _print_collector_warnings(combined_result.warnings)
 
     return ReportResult(
         md_path=md_path,
@@ -2438,6 +2449,20 @@ def all_cmd(
         click.echo(f"Targets:    {', '.join(str(t) for t in target_list)}", err=True)
         click.echo(f"Started:    {_timestamp()}", err=True)
         click.echo("", err=True)
+
+    if not no_arch and not no_llm and not quiet:
+        from nfr_review.llm_client import create_llm_client
+
+        _llm_probe = create_llm_client()
+        if _llm_probe.available:
+            click.echo(
+                "NOTE: Architecture analysis uses LLM calls which may incur "
+                "cost and take significant time.\n"
+                "      Use --no-arch to skip architecture analysis entirely, "
+                "or --no-llm to run without LLM features.",
+                err=True,
+            )
+            click.echo("", err=True)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     arch_result: dict[str, Any] | None = None
