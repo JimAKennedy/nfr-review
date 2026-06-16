@@ -5,7 +5,18 @@
 [![mypy](https://img.shields.io/badge/mypy-strict-blue)](https://github.com/JimAKennedy/nfr-review/blob/main/pyproject.toml)
 [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Automated non-functional design reviews for software projects.
+## Why nfr-review exists
+
+Non-functional architecture and design reviews — covering resilience, observability, security posture, operational readiness, and code quality — are among the most valuable activities an engineering team can do, and among the hardest to scale. They depend on expert knowledge, take significant time, and rarely produce findings in a form that can be tracked or automated. When teams are small, reviews happen inconsistently. When teams are large, standards diverge. Either way, the institutional knowledge that makes a great reviewer effective is difficult to transfer.
+
+nfr-review started as an experiment in automating and accelerating that process: using static analysis, AST inspection, configuration parsing, and runtime trace analysis to surface the same patterns an experienced reviewer would look for, consistently, on every pull request. A secondary goal is to make it easy to identify new areas of concern, add rules that encode emerging standards, and apply findings read-across between projects. The third goal is to help engineers quickly orient to unfamiliar codebases — not just flagging what is wrong, but generating architecture documentation and technology maps that accelerate understanding.
+
+The tool is in active development. The static analysis and CI integration are stable, but will no doubt need significant enhancement as the tool is used in anger. The architecture-level features, dynamic trace analysis and the production interaction monitor are experimental.
+
+Contributions — new rules, new collectors, compliance framework mappings — are welcome.
+
+
+## Automated non-functional design reviews for software projects.
 
 `nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++/Node.js source, gRPC proto files, APIM policies, and more) and evaluates 147 rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
 
@@ -187,6 +198,9 @@ pip install nfr-review
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
+| `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
+| `[monitor]` | [aiohttp](https://docs.aiohttp.org/) for the `nfr-review monitor` production interaction server. |
+| `[full]` | All of the above (excluding `[dev]`). |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 Install extras individually or combine them:
@@ -244,7 +258,7 @@ llm:
 
 Env vars (`NFR_LLM_PROVIDER`, `NFR_LLM_MODEL`, `NFR_LLM_BASE_URL`) override the config file. Without a backend configured, LLM features are skipped gracefully and all other rules still run normally.
 
-## Usage
+## Core Commands
 
 ### Scan a repository
 
@@ -394,73 +408,6 @@ nfr-review deps --dot deps.dot --render-diagrams /path/to/target/repo
 | `--max-resolve-rounds N` | `2000` | Maximum resolver iterations for dependency analysis |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
-### Generate architecture documentation \[experimental\]
-
-```bash
-# Generate architecture docs for a single repo (JSON + Markdown + PDF)
-nfr-review arch /path/to/target/repo
-
-# Generate for multiple repos as a unified report
-nfr-review arch /path/to/repo1 /path/to/repo2
-
-# Skip LLM-based analysis (domain model enhancement, market comparison)
-nfr-review arch --no-llm /path/to/target/repo
-
-# Output only JSON and Markdown (no PDF)
-nfr-review arch --format json --format md /path/to/target/repo
-```
-
-**Options:**
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--output-dir PATH` | `reports` | Directory where report files are written |
-| `--format FORMAT` | `json` + `md` + `pdf` | Output format(s): `json`, `md`, `pdf` (repeat for multiple) |
-| `--no-llm` | off | Skip LLM-based analysis (domain model enhancement, market comparison) |
-| `--diagram-mode MODE` | `hierarchical` | Component diagram layout: `hierarchical` (overview + detail) or `flat` |
-| `-v` / `-q` / `--log-file` | — | Same as `run` command |
-
-### Dynamic analysis (runtime traces)
-
-nfr-review can analyse OpenTelemetry traces captured from a running application to detect latency hotspots, N+1 query patterns, missing trace correlation, and service coverage gaps.
-
-**Option A — Pre-collected traces:**
-
-```bash
-# Run your app's integration tests (or exercise it manually) while an OTel Collector
-# exports traces to an NDJSON file, then point nfr-review at the file:
-nfr-review report /path/to/repo --otel-traces /path/to/traces.ndjson
-```
-
-**Option B — Managed collector** (nfr-review starts/stops `otelcol-contrib` for you):
-
-```bash
-# 1. Start your instrumented application (it must export OTLP to localhost:4317 or :4318)
-#    e.g. ./gradlew bootRun, docker compose up, python manage.py runserver, etc.
-
-# 2. nfr-review starts the collector, captures traces during the scan, then stops it
-nfr-review report /path/to/repo --collector -v
-```
-
-The `--collector` flag requires `otelcol-contrib` on your `$PATH`:
-
-```bash
-# Installs otelcol-contrib along with other optional tools
-scripts/setup-all.sh
-
-# Or download the binary directly from GitHub releases:
-# https://github.com/open-telemetry/opentelemetry-collector-releases/releases
-```
-
-| Flag | Description |
-|------|-------------|
-| `--otel-traces PATH` | Path to a pre-collected OTLP JSON / NDJSON trace file |
-| `--collector` | Start a managed OTel Collector during the scan (mutually exclusive with `--otel-traces`) |
-
-Dynamic analysis produces **Runtime Service Topology** graphs and **Call Sequence Diagrams** in reports. Without trace data, Band 3 rules are skipped and all static analysis still runs normally.
-
-See [docs/dynamic-analysis.md](docs/dynamic-analysis.md) for the full reference (trace format, CI integration, custom collector config, troubleshooting).
-
 ### Initialize a configuration file
 
 ```bash
@@ -470,6 +417,22 @@ nfr-review init /path/to/target/repo
 # Preview without writing a file
 nfr-review init --dry-run /path/to/target/repo
 ```
+
+### Check version
+
+```bash
+nfr-review version
+```
+
+## Advanced Commands
+
+### Experimental Features
+
+nfr-review includes experimental features that are under active development:
+
+- **Architecture documentation** (`nfr-review arch`) — generates technology maps, domain models, component diagrams, and market comparisons for one or more repositories. See [docs/experimental-arch.md](docs/experimental-arch.md).
+- **Dynamic analysis** (`nfr-review report --otel-traces` / `--collector`) — analyses OpenTelemetry traces for latency hotspots, N+1 queries, missing correlation, and service topology. See [docs/experimental-dynamic.md](docs/experimental-dynamic.md).
+- **Production monitor** (`nfr-review monitor` / `nfr-review baseline`) — long-lived OTLP receiver that compares production traces against a UAT baseline and emits alerts for novel interactions. See [docs/experimental-dynamic.md](docs/experimental-dynamic.md#production-monitor).
 
 ### File or sync GitHub issues
 
@@ -539,34 +502,6 @@ nfr-review all /path/to/repo1 --output-dir my-reports --no-pdf --no-tests
 | `--test-timeout` | `900` | Pytest timeout per repo (seconds) |
 | `--workers` | `1` | Parallel collector threads per repo |
 | `--exclude-tests` | exclude | Exclude test directories from NFR analysis |
-
-### Manage interaction baselines
-
-Create and compare interaction baselines for production monitoring:
-
-```bash
-# Create a baseline from OTel trace data
-nfr-review baseline create --otel-traces traces.ndjson -o baseline.json
-
-# Diff production traces against a baseline
-nfr-review baseline diff --baseline baseline.json --otel-traces prod-traces.ndjson
-```
-
-### Run a production monitor
-
-Start a long-lived OTLP HTTP receiver that compares incoming production traces against a UAT baseline and emits JSON alerts for novel interactions:
-
-```bash
-nfr-review monitor --baseline baseline.json --port 4318
-```
-
-Requires the `[monitor]` extra (`pip install nfr-review[monitor]`).
-
-### Check version
-
-```bash
-nfr-review version
-```
 
 ## Configuration
 
