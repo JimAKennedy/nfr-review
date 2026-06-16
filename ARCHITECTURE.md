@@ -105,7 +105,7 @@ all command (nfr-review all <target1> <target2> ...):
 | `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `Band` | Serialization format details (CSV column order lives in output/) |
 | `protocols.py` | `Collector` and `Rule` runtime-checkable protocols | Registration, instantiation |
 | `registry.py` | Generic `Registry[T]` container, global singletons `rule_registry` / `collector_registry` | What gets registered (that's the plugin modules' job) |
-| `llm_client.py` | LLM abstraction (Anthropic, OpenAI-compatible, Claude CLI); availability gating, `ClaudeClient` | Prompt design (rules own their prompts), evidence selection |
+| `llm_client.py` | LLM abstraction (Anthropic, OpenAI-compatible, Claude CLI); availability gating, retry with backoff | Prompt design (rules own their prompts), evidence selection |
 | `rule_metadata.py` | `RuleMetadata` model: severity, category, tags, compliance references; loaded alongside rules for `list-rules --format json` | Rule evaluation, evidence gathering |
 | `auditability.py` | Git probe (SHA, branch, dirty), `RunMetadata` assembly | Output writing, config |
 | `collectors/*` | Evidence gathering from target repo files | Evaluating findings, accessing config.rules |
@@ -121,7 +121,7 @@ all command (nfr-review all <target1> <target2> ...):
 | `output/pytest_runner.py` | Subprocess pytest execution, summary line parsing, `PytestResult` | Test framework logic, assertions |
 | `output/pdf.py` | PDF report generation via weasyprint; assembles HTML from rendered Markdown + diagrams + summary section, converts to PDF | Markdown rendering, diagram rendering, LLM calls |
 | `output/render.py` | Mermaid diagram rendering to PNG/SVG via subprocess; image embedding helpers for PDF | Diagram content generation, rule logic |
-| `output/summarize.py` | LLM executive summary generation; calls `ClaudeClient` with structured findings, returns `SummaryResult` | PDF assembly, finding evaluation |
+| `output/summarize.py` | LLM executive summary generation; calls LLM client with structured findings, returns `SummaryResult` | PDF assembly, finding evaluation |
 | `output/summary_models.py` | Pydantic models for executive summary: `SummaryResult`, `SummarySection`, `RiskItem` | LLM prompt design, serialization |
 | `output/diagrams.py` | Mermaid diagram section helpers; generates architecture and dependency diagrams for Markdown and PDF | Diagram rendering (that's `render.py`), rule logic |
 | `output/dot.py` | Graphviz DOT graph generation from `DepReport` list; `render_dot_to_file()` for SVG output | Dependency resolution, rule logic |
@@ -227,7 +227,7 @@ triggering registration. The CLI imports these packages at startup.
 | Change pre-collector path exclusion | `path_filter.py` (edit `_TEST_PATH_PATTERNS` or `should_exclude_path`) | Tests in `test_path_filter.py` |
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a typed evidence payload | `collectors/payloads/<name>.py` with `BasePayload` subclass | Collector's `collect()` method, existing rules consuming the payload |
-| Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject `ClaudeClient` | Tests must mock `nfr_review.llm_client.anthropic` |
+| Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject LLM client via `create_llm_client()` | Tests must mock `nfr_review.llm_client.anthropic` |
 | Add rule metadata (tags, compliance refs) | `rule_metadata.py` via `RuleMetadata(...)` | `list-rules --format json` output, `docs/continuous-compliance.md` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |
 | Add a new hygiene collector | `hygiene/collectors/<name>.py` with `_register()` | `hygiene/collectors/__init__.py` (import), test fixtures |
@@ -280,7 +280,7 @@ Conventions:
 - Universal rules (ADR lifecycle, CI checks) omit `required_tech`
 - Tech-specific rules (Spring, APIM) declare `required_tech`
 - Filter evidence by `collector_name` -- don't scan all evidence
-- Band 2 rules: inject `ClaudeClient`, check `self._llm.available` before calling
+- Band 2 rules: inject LLM client via `create_llm_client()`, check `self._llm.available` before calling
 - Never do file I/O on the target repo -- consume evidence only
 
 ## Optional Dependency Pattern

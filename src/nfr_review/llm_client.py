@@ -24,6 +24,8 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404 — intentional: shells out to claude CLI
+import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -42,11 +44,14 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_BACKEND_ENV = "NFR_LLM_BACKEND"
-_BACKEND_API = "api"
-_BACKEND_CLI = "claude-cli"
-
 _ENV_LOADED = False
+
+_DEFAULT_TIMEOUT_SECONDS = 120
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 1.0
+_RETRY_MAX_DELAY = 16.0
+
+_TRANSIENT_STATUS_CODES = frozenset({429, 500, 502, 503, 529})
 
 
 def _load_dotenv_once() -> None:
@@ -74,128 +79,94 @@ class LlmUnavailableError(Exception):
     """Raised when an LLM call is attempted but no backend is usable."""
 
 
-def _resolve_backend() -> str:
-    """Return the active backend name, validated."""
-    _load_dotenv_once()
-    raw = os.environ.get(_BACKEND_ENV, _BACKEND_API).strip().lower()
-    if raw in (_BACKEND_API, _BACKEND_CLI):
-        return raw
-    logger.warning("Unknown %s=%r — falling back to %r", _BACKEND_ENV, raw, _BACKEND_API)
-    return _BACKEND_API
+def _is_transient(exc: Exception) -> bool:
+    """Return True if *exc* looks like a transient API error worth retrying."""
+    status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if isinstance(status, int) and status in _TRANSIENT_STATUS_CODES:
+        return True
+    if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+        return True
+    cls_name = type(exc).__name__.lower()
+    return any(k in cls_name for k in ("timeout", "ratelimit", "rate_limit", "connection"))
 
 
-# nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
-class ClaudeClient:
-    """Legacy LLM client supporting the Anthropic API or the Claude CLI.
+def _retry_with_backoff(
+    fn: Any,
+    *,
+    max_retries: int = _MAX_RETRIES,
+    base_delay: float = _RETRY_BASE_DELAY,
+    max_delay: float = _RETRY_MAX_DELAY,
+    label: str = "LLM",
+) -> Any:
+    """Call *fn* with bounded exponential backoff on transient errors."""
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except LlmUnavailableError:
+            raise
+        except Exception as exc:
+            last_exc = exc
+            if not _is_transient(exc) or attempt == max_retries - 1:
+                raise
+            delay = min(base_delay * (2**attempt), max_delay)
+            logger.warning(
+                "%s transient error (attempt %d/%d), retrying in %.1fs: %s",
+                label,
+                attempt + 1,
+                max_retries,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+    raise last_exc  # type: ignore[misc]  # unreachable but satisfies type checker
 
-    Prefer :func:`create_llm_client` for new code. This class is kept for
-    backward compatibility and will be removed in a future release.
+
+# ---------------------------------------------------------------------------
+# Abstract base for SDK-backed clients
+# ---------------------------------------------------------------------------
+
+
+class _BaseSdkClient(ABC):
+    """Shared scaffold for SDK-backed LLM clients.
+
+    Subclasses implement :meth:`_call_sdk` only.  Availability checking,
+    prompt combining, logging, retry, and timeout are handled here.
     """
 
-    def __init__(self) -> None:
-        self._backend = _resolve_backend()
-        self._model = os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
-
-        if self._backend == _BACKEND_CLI:
-            self._cli_path: str | None = shutil.which("claude")
-            self._client: Any | None = None
-            if self._cli_path is None:
-                logger.warning("claude CLI not found on PATH; LLM calls will be unavailable")
-        else:
-            self._cli_path = None
-            key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-            if key:
-                if anthropic is None:
-                    logger.debug(
-                        "anthropic SDK not installed; "
-                        "install nfr-review[llm-anthropic] for API access"
-                    )
-                    self._client = None
-                else:
-                    self._client = anthropic.Anthropic(api_key=key)
-            else:
-                self._client = None
+    _model: str
+    _client: Any | None
+    _timeout_seconds: int
+    _backend_label: str
 
     @property
     def available(self) -> bool:
-        if self._backend == _BACKEND_CLI:
-            return self._cli_path is not None
         return self._client is not None
 
-    def analyze(
-        self,
-        prompt: str,
-        evidence_bundle: str,
-        max_tokens: int = 1024,
-    ) -> str:
+    def analyze(self, prompt: str, evidence_bundle: str, max_tokens: int = 1024) -> str:
         if not self.available:
-            if self._backend == _BACKEND_CLI:
-                raise LlmUnavailableError(
-                    "claude CLI not found on PATH; cannot perform LLM analysis"
-                )
-            if anthropic is None:
-                raise LlmUnavailableError(
-                    "anthropic SDK not installed; "
-                    "install nfr-review[llm-anthropic] for LLM analysis"
-                )
-            raise LlmUnavailableError(
-                "ANTHROPIC_API_KEY is not set; cannot perform LLM analysis"
-            )
-
+            raise LlmUnavailableError(self._unavailable_message())
+        assert self._client is not None  # noqa: S101
         combined = prompt + "\n\n" + evidence_bundle
-
         logger.info(
-            "LLM call [%s]: sending %d-char prompt + %d-char bundle",
-            self._backend,
+            "LLM call [%s/%s]: sending %d-char prompt + %d-char bundle",
+            self._backend_label,
+            self._model,
             len(prompt),
             len(evidence_bundle),
         )
-
-        if self._backend == _BACKEND_CLI:
-            return self._analyze_cli(combined, max_tokens)
-        return self._analyze_api(combined, max_tokens)
-
-    def _analyze_api(self, combined: str, max_tokens: int) -> str:
-        assert self._client is not None
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "user", "content": combined},
-            ],
+        return _retry_with_backoff(
+            lambda: self._call_sdk(combined, max_tokens),
+            label=self._backend_label,
         )
-        block = response.content[0]
-        if not hasattr(block, "text"):
-            raise TypeError(f"Expected TextBlock, got {type(block).__name__}")
-        return block.text
 
-    def _analyze_cli(self, combined: str, max_tokens: int) -> str:
-        assert self._cli_path is not None
-        cmd = [
-            self._cli_path,
-            "-p",
-            combined,
-            "--output-format",
-            "text",
-            "--max-turns",
-            "1",
-            "--allowedTools",
-            "",
-        ]
-        try:
-            result = subprocess.run(  # nosec B603 — cmd is hardcoded, no user input
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise LlmUnavailableError("claude CLI timed out after 120s") from exc
+    @abstractmethod
+    def _call_sdk(self, combined: str, max_tokens: int) -> str:
+        """Execute the actual SDK/subprocess call.  Must not handle retries."""
 
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            raise LlmUnavailableError(f"claude CLI exited {result.returncode}: {stderr[:200]}")
-        return result.stdout.strip()
+    @abstractmethod
+    def _unavailable_message(self) -> str:
+        """Return the error message for :class:`LlmUnavailableError`."""
 
 
 # ---------------------------------------------------------------------------
@@ -204,11 +175,21 @@ class ClaudeClient:
 
 
 # nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
-class AnthropicClient:
+class AnthropicClient(_BaseSdkClient):
     """LLM backend using the Anthropic Python SDK."""
 
-    def __init__(self, *, model: str, api_key: str, base_url: str | None = None) -> None:
+    _backend_label = "anthropic"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        base_url: str | None = None,
+        timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
         self._model = model
+        self._timeout_seconds = timeout_seconds
         if anthropic is None:
             self._client: Any | None = None
             logger.warning(
@@ -217,28 +198,13 @@ class AnthropicClient:
         elif not api_key:
             self._client = None
         else:
-            kwargs: dict[str, Any] = {"api_key": api_key}
+            kwargs: dict[str, Any] = {"api_key": api_key, "timeout": float(timeout_seconds)}
             if base_url:
                 kwargs["base_url"] = base_url
             self._client = anthropic.Anthropic(**kwargs)
 
-    @property
-    def available(self) -> bool:
-        return self._client is not None
-
-    def analyze(self, prompt: str, evidence_bundle: str, max_tokens: int = 1024) -> str:
-        if not self.available:
-            raise LlmUnavailableError(
-                "anthropic SDK not installed; install nfr-review[llm-anthropic]"
-            )
+    def _call_sdk(self, combined: str, max_tokens: int) -> str:
         assert self._client is not None
-        combined = prompt + "\n\n" + evidence_bundle
-        logger.info(
-            "LLM call [anthropic/%s]: sending %d-char prompt + %d-char bundle",
-            self._model,
-            len(prompt),
-            len(evidence_bundle),
-        )
         response = self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
@@ -249,13 +215,26 @@ class AnthropicClient:
             raise TypeError(f"Expected TextBlock, got {type(block).__name__}")
         return block.text
 
+    def _unavailable_message(self) -> str:
+        return "anthropic SDK not installed; install nfr-review[llm-anthropic]"
+
 
 # nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
-class OpenAICompatibleClient:
+class OpenAICompatibleClient(_BaseSdkClient):
     """LLM backend using any OpenAI-compatible API."""
 
-    def __init__(self, *, model: str, api_key: str, base_url: str | None = None) -> None:
+    _backend_label = "openai"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str,
+        base_url: str | None = None,
+        timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
         self._model = model
+        self._timeout_seconds = timeout_seconds
         if openai_mod is None:
             self._client: Any | None = None
             logger.warning(
@@ -264,28 +243,13 @@ class OpenAICompatibleClient:
         elif not api_key:
             self._client = None
         else:
-            kwargs: dict[str, Any] = {"api_key": api_key}
+            kwargs: dict[str, Any] = {"api_key": api_key, "timeout": float(timeout_seconds)}
             if base_url:
                 kwargs["base_url"] = base_url
             self._client = openai_mod.OpenAI(**kwargs)
 
-    @property
-    def available(self) -> bool:
-        return self._client is not None
-
-    def analyze(self, prompt: str, evidence_bundle: str, max_tokens: int = 1024) -> str:
-        if not self.available:
-            raise LlmUnavailableError(
-                "openai SDK not installed; install nfr-review[llm-openai]"
-            )
+    def _call_sdk(self, combined: str, max_tokens: int) -> str:
         assert self._client is not None
-        combined = prompt + "\n\n" + evidence_bundle
-        logger.info(
-            "LLM call [openai/%s]: sending %d-char prompt + %d-char bundle",
-            self._model,
-            len(prompt),
-            len(evidence_bundle),
-        )
         response = self._client.chat.completions.create(
             model=self._model,
             max_tokens=max_tokens,
@@ -296,32 +260,31 @@ class OpenAICompatibleClient:
             raise TypeError("OpenAI response contained no content")
         return choice.message.content
 
+    def _unavailable_message(self) -> str:
+        return "openai SDK not installed; install nfr-review[llm-openai]"
+
 
 # nfr-review:skip(python-dormant-classes) reason: instantiated by create_llm_client factory
-class ClaudeCliClient:
+class ClaudeCliClient(_BaseSdkClient):
     """LLM backend that shells out to the Claude Code CLI."""
 
-    def __init__(self) -> None:
+    _backend_label = "claude-cli"
+
+    def __init__(self, *, timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS) -> None:
+        self._model = "claude-cli"
+        self._client: Any | None = True  # sentinel — availability means CLI found
         self._cli_path: str | None = shutil.which("claude")
+        self._timeout_seconds = timeout_seconds
         if self._cli_path is None:
+            self._client = None
             logger.warning("claude CLI not found on PATH; LLM calls will be unavailable")
 
     @property
     def available(self) -> bool:
         return self._cli_path is not None
 
-    def analyze(self, prompt: str, evidence_bundle: str, max_tokens: int = 1024) -> str:
-        if not self.available:
-            raise LlmUnavailableError(
-                "claude CLI not found on PATH; cannot perform LLM analysis"
-            )
-        assert self._cli_path is not None
-        combined = prompt + "\n\n" + evidence_bundle
-        logger.info(
-            "LLM call [claude-cli]: sending %d-char prompt + %d-char bundle",
-            len(prompt),
-            len(evidence_bundle),
-        )
+    def _call_sdk(self, combined: str, max_tokens: int) -> str:
+        assert self._cli_path is not None  # noqa: S101
         cmd = [
             self._cli_path,
             "-p",
@@ -338,15 +301,20 @@ class ClaudeCliClient:
                 input=combined,
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=self._timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
-            raise LlmUnavailableError("claude CLI timed out after 120s") from exc
+            raise LlmUnavailableError(
+                f"claude CLI timed out after {self._timeout_seconds}s"
+            ) from exc
 
         if result.returncode != 0:
             stderr = result.stderr.strip()
             raise LlmUnavailableError(f"claude CLI exited {result.returncode}: {stderr[:200]}")
         return result.stdout.strip()
+
+    def _unavailable_message(self) -> str:
+        return "claude CLI not found on PATH; cannot perform LLM analysis"
 
 
 # ---------------------------------------------------------------------------
@@ -430,22 +398,14 @@ def create_llm_client(config: LlmConfig | None = None) -> LlmClientImpl:
 
     _load_dotenv_once()
 
-    _apply_legacy = config is None
     if config is None:
         config = _LlmConfig()
     resolved = config.resolve()
 
-    # Legacy setup scripts wrote NFR_LLM_BACKEND (not NFR_LLM_PROVIDER).
-    # Only apply when no explicit config was passed and NFR_LLM_PROVIDER is absent.
-    if _apply_legacy and not os.environ.get("NFR_LLM_PROVIDER", "").strip():
-        _legacy_map = {"api": "anthropic", "claude-cli": "claude-cli"}
-        if legacy := os.environ.get("NFR_LLM_BACKEND", "").strip():
-            mapped = _legacy_map.get(legacy, legacy)
-            if mapped != resolved.provider:
-                resolved = resolved.model_copy(update={"provider": mapped})
+    timeout = _DEFAULT_TIMEOUT_SECONDS
 
     if resolved.provider == "claude-cli":
-        return ClaudeCliClient()
+        return ClaudeCliClient(timeout_seconds=timeout)
 
     api_key = os.environ.get(resolved.api_key_env_var, "").strip()
     if not api_key:
@@ -459,12 +419,14 @@ def create_llm_client(config: LlmConfig | None = None) -> LlmClientImpl:
             model=resolved.model,
             api_key=api_key,
             base_url=resolved.base_url,
+            timeout_seconds=timeout,
         )
 
     return AnthropicClient(
         model=resolved.model,
         api_key=api_key,
         base_url=resolved.base_url,
+        timeout_seconds=timeout,
     )
 
 
@@ -490,7 +452,6 @@ def serialize_evidence_bundle(
 __all__ = [
     "AnthropicClient",
     "ClaudeCliClient",
-    "ClaudeClient",
     "LlmClientImpl",
     "LlmUnavailableError",
     "OpenAICompatibleClient",
