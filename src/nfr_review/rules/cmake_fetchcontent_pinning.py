@@ -30,28 +30,28 @@ class CmakeFetchcontentPinningRule:
         findings: list[Finding] = []
         has_any_fetchcontent = False
         for ev in cmake_ev:
-            file_path = ev.payload.get("file_path", ev.locator)
-            declares = ev.payload.get("fetchcontent_declares", [])
+            file_path = ev.payload.file_path
+            declares = ev.payload.fetchcontent_declares
             if not declares:
                 continue
             has_any_fetchcontent = True
             for dep in declares:
-                if not dep.get("is_pinned"):
-                    tag = dep.get("tag", "(none)")
+                if not dep.is_pinned:
+                    tag = dep.tag or "(none)"
                     findings.append(
                         Finding(
                             rule_id=self.id,
-                            rag="red" if not dep.get("tag") else "amber",
-                            severity="high" if not dep.get("tag") else "medium",
+                            rag="red" if not dep.tag else "amber",
+                            severity="high" if not dep.tag else "medium",
                             summary=(
-                                f"FetchContent dependency '{dep['name']}' uses "
-                                f"unpinned tag '{tag}' in {file_path}:{dep['line']}"
+                                f"FetchContent dependency '{dep.name}' uses "
+                                f"unpinned tag '{tag}' in {file_path}:{dep.line}"
                             ),
                             recommendation=(
-                                f"Pin '{dep['name']}' to a specific version tag "
+                                f"Pin '{dep.name}' to a specific version tag "
                                 f"or commit hash instead of a branch name."
                             ),
-                            evidence_locator=f"{file_path}:{dep['line']}",
+                            evidence_locator=f"{file_path}:{dep.line}",
                             collector_name=ev.collector_name,
                             collector_version=ev.collector_version,
                             confidence=0.9,

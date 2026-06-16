@@ -30,7 +30,7 @@ class PiiPatternsRule:
                 skip_reason="no privacy-analysis evidence available",
             )
 
-        matches = ev.payload.get("pii_matches", [])
+        matches = ev.payload.pii_matches
         high_risk = [m for m in matches if m.get("pattern_type") in _HIGH_RISK_TYPES]
         medium_risk = [m for m in matches if m.get("pattern_type") in _MEDIUM_RISK_TYPES]
 

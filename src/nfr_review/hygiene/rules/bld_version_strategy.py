@@ -38,7 +38,7 @@ class VersionStrategyRule:
                 skip_reason="no build-readiness-analysis evidence available",
             )
 
-        info = ev.payload.get("version", {})
+        info = ev.payload.version
         declared = info.get("declared", False)
 
         findings: list[Finding] = []

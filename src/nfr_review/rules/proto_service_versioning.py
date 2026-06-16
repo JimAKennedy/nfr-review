@@ -35,11 +35,11 @@ class ProtoServiceVersioningRule:
 
         findings: list[Finding] = []
         for ev in proto_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            package = ev.payload.get("package") or ""
+            file_path = ev.payload.file_path
+            package = ev.payload.package or ""
             package_versioned = bool(_VERSION_IN_PACKAGE.search(package))
 
-            for svc in ev.payload.get("services", []):
+            for svc in ev.payload.services:
                 svc_name = svc.get("name", "Unknown")
                 name_versioned = bool(_VERSION_IN_NAME.search(svc_name))
 

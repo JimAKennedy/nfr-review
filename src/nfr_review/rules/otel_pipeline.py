@@ -37,11 +37,11 @@ class OTelPipelineCompletenessRule:
         all_receivers: set[str] = set()
         all_exporters: set[str] = set()
         for ev in otel_evidence:
-            pipelines = ev.payload.get("pipelines", {})
+            pipelines = ev.payload.pipelines
             if isinstance(pipelines, dict):
                 all_pipelines.update(pipelines)
-            all_receivers.update(ev.payload.get("receivers", []))
-            all_exporters.update(ev.payload.get("exporters", []))
+            all_receivers.update(ev.payload.receivers)
+            all_exporters.update(ev.payload.exporters)
 
         if not all_pipelines:
             return RuleResult(

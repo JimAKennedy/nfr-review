@@ -37,8 +37,8 @@ class OTelTestObservabilityRule:
 
         first = (sdk_evidence or ci_evidence)[0]
 
-        has_test_steps = any(e.payload.get("has_test_step") for e in ci_evidence)
-        has_otel_in_tests = any(e.payload.get("agent_attached") for e in sdk_evidence)
+        has_test_steps = any(e.payload.has_test_step for e in ci_evidence)
+        has_otel_in_tests = any(e.payload.agent_attached for e in sdk_evidence)
 
         if not has_test_steps:
             return RuleResult(

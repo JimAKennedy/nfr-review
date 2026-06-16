@@ -33,10 +33,10 @@ class SingletonDeploymentRule:
 
         findings: list[Finding] = []
         for ev in k8s_resources:
-            resource_kind = ev.payload.get("kind", "")
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
-            replicas = ev.payload.get("replicas")
+            resource_kind = ev.payload.kind
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
+            replicas = ev.payload.replicas
 
             # DaemonSets run on every node — replica count is not applicable.
             if resource_kind in _SKIP_KINDS:

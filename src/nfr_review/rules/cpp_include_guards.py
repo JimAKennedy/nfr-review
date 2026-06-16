@@ -32,7 +32,7 @@ class CppIncludeGuardsRule:
         headers = [
             e
             for e in cpp_ev
-            if any(e.payload.get("file_path", "").endswith(ext) for ext in _HEADER_EXTENSIONS)
+            if any(e.payload.file_path.endswith(ext) for ext in _HEADER_EXTENSIONS)
         ]
         if not headers:
             return RuleResult(
@@ -43,9 +43,9 @@ class CppIncludeGuardsRule:
 
         findings: list[Finding] = []
         for ev in headers:
-            file_path = ev.payload.get("file_path", ev.locator)
-            has_pragma = ev.payload.get("has_pragma_once", False)
-            has_guard = ev.payload.get("has_include_guard", False)
+            file_path = ev.payload.file_path
+            has_pragma = ev.payload.has_pragma_once
+            has_guard = ev.payload.has_include_guard
             if not has_pragma and not has_guard:
                 findings.append(
                     Finding(

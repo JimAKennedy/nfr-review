@@ -32,8 +32,8 @@ class ExceptionHandlingAntipatternRule:
 
         findings: list[Finding] = []
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for block in ev.payload.get("catch_blocks", []):
+            file_path = ev.payload.file_path
+            for block in ev.payload.catch_blocks:
                 if block["caught_type"] in _BROAD_TYPES and not block["rethrows"]:
                     findings.append(
                         Finding(

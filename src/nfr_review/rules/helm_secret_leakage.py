@@ -80,8 +80,8 @@ class HelmSecretLeakageRule:
 
         findings: list[Finding] = []
         for ev in helm_evidence:
-            chart_path = ev.payload.get("chart_path", ev.locator)
-            values = ev.payload.get("chart_values", {})
+            chart_path = ev.payload.chart_path
+            values = ev.payload.chart_values
 
             for key_path, val in _scan_dict_for_secrets(values):
                 display_val = val[:20] + "..." if len(val) > 20 else val
@@ -109,7 +109,7 @@ class HelmSecretLeakageRule:
                     )
                 )
 
-            for manifest in ev.payload.get("rendered_manifests", []):
+            for manifest in ev.payload.rendered_manifests:
                 kind = manifest.get("kind", "")
                 name = manifest.get("metadata", {}).get("name", "unknown")
                 if kind == "Secret":

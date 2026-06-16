@@ -28,20 +28,18 @@ class CiTestStageMissingRule:
                 skip_reason="no CI pipeline evidence available",
             )
 
-        any_test = any(e.payload.get("has_test_step") for e in ci_pipelines)
+        any_test = any(e.payload.has_test_step for e in ci_pipelines)
 
         cmake_signals = filter_evidence(evidence, "ci-artifact", "cmake-test-signals")
-        has_cmake_tests = any(e.payload.get("has_test_framework") for e in cmake_signals)
+        has_cmake_tests = any(e.payload.has_test_framework for e in cmake_signals)
 
         if any_test or has_cmake_tests:
             if any_test:
                 locator = next(
-                    e.payload.get("file_path", e.locator)
-                    for e in ci_pipelines
-                    if e.payload.get("has_test_step")
+                    e.payload.file_path for e in ci_pipelines if e.payload.has_test_step
                 )
             else:
-                locator = cmake_signals[0].payload["files"][0]["file_path"]
+                locator = cmake_signals[0].payload.files[0].file_path
             return RuleResult(
                 rule_id=self.id,
                 findings=[
@@ -57,7 +55,7 @@ class CiTestStageMissingRule:
                 ],
             )
 
-        pipeline_files = [e.payload.get("file_path", e.locator) for e in ci_pipelines]
+        pipeline_files = [e.payload.file_path for e in ci_pipelines]
         return RuleResult(
             rule_id=self.id,
             findings=[

@@ -41,12 +41,12 @@ class TerminationGracePeriodRule:
         findings: list[Finding] = []
 
         for ev in k8s_resources:
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
-            containers = ev.payload.get("containers", [])
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
+            containers = ev.payload.containers
 
             # termination_grace_period is at the pod level; treat None as default
-            raw_grace = ev.payload.get("termination_grace_period")
+            raw_grace = ev.payload.termination_grace_period
             grace_period = raw_grace if raw_grace is not None else _DEFAULT_GRACE_PERIOD
 
             # Check if any container has a preStop hook

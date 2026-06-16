@@ -27,7 +27,7 @@ class EntryPointsRule:
                 skip_reason="no build-readiness-analysis evidence available",
             )
 
-        build_info = ev.payload.get("build_system", {})
+        build_info = ev.payload.build_system
         has_build = build_info.get("has_build_system", False)
 
         if not has_build:
@@ -42,7 +42,7 @@ class EntryPointsRule:
             )
             return RuleResult(rule_id=self.id, findings=[finding])
 
-        ep_info = ev.payload.get("entry_points", {})
+        ep_info = ev.payload.entry_points
         has_eps = ep_info.get("has_entry_points", False)
 
         if not has_eps:

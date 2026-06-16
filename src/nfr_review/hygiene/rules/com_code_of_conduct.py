@@ -27,7 +27,7 @@ class CodeOfConductPresenceRule:
                 skip_reason="no community-analysis evidence available",
             )
 
-        info = ev.payload.get("code_of_conduct", {})
+        info = ev.payload.code_of_conduct
         exists = info.get("exists", False)
 
         locator = info.get("path") or ev.locator

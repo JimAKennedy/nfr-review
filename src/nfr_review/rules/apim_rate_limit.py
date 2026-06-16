@@ -31,8 +31,8 @@ class ApimRateLimitMissingRule:
 
         findings: list[Finding] = []
         for ev in apim_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            if ev.payload.get("has_rate_limit"):
+            file_path = ev.payload.file_path
+            if ev.payload.has_rate_limit:
                 findings.append(
                     make_green_finding(
                         self.id,

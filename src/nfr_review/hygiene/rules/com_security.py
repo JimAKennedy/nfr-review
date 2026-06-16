@@ -27,7 +27,7 @@ class SecurityPresenceRule:
                 skip_reason="no community-analysis evidence available",
             )
 
-        info = ev.payload.get("security", {})
+        info = ev.payload.security
         exists = info.get("exists", False)
 
         locator = info.get("path") or ev.locator

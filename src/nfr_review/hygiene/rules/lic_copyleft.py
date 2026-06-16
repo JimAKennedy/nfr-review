@@ -68,7 +68,7 @@ class CopyleftDetectionRule:
             if any(ev.locator.endswith(s) for s in _LICENSE_INFRA_SUFFIXES):
                 continue
 
-            licenses = ev.payload.get("licenses", [])
+            licenses = ev.payload.licenses
             for lic in licenses:
                 spdx = lic.get("spdx_key", "")
                 family = _classify_license(spdx)

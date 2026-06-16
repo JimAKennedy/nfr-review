@@ -68,8 +68,8 @@ class LicenseHeaderRule:
 
         missing: list[str] = []
         for ev in relevant:
-            copyrights = ev.payload.get("copyrights", [])
-            licenses = ev.payload.get("licenses", [])
+            copyrights = ev.payload.copyrights
+            licenses = ev.payload.licenses
             if not copyrights and not licenses:
                 missing.append(ev.locator)
 

@@ -45,7 +45,7 @@ class ActuatorExposureRiskRule:
 
         for ev in spring_evidence:
             payload = ev.payload
-            actuator = payload.get("actuator", {}) or {}
+            actuator = payload.actuator or {}
             include_val = actuator.get("include", "")
             exclude_val = actuator.get("exclude", "")
 
@@ -55,13 +55,13 @@ class ActuatorExposureRiskRule:
             if not include_str:
                 continue
 
-            management = payload.get("management", {}) or {}
-            server = payload.get("server", {}) or {}
+            management = payload.management or {}
+            server = payload.server or {}
             mgmt_port = _deep_str(management, "server", "port")
             server_port = _deep_str(server, "port")
-            profile = payload.get("profile")
+            profile = payload.profile
             is_prod = profile and profile.lower() in _PROD_PROFILES
-            file_path = payload.get("file_path", ev.locator)
+            file_path = payload.file_path
 
             if include_str == "*":
                 exposed_sensitive = _SENSITIVE_ENDPOINTS - _parse_endpoint_set(exclude_str)
@@ -149,9 +149,7 @@ class ActuatorExposureRiskRule:
                         spring_evidence[0],
                         summary="Actuator endpoints are properly restricted.",
                         confidence=0.8,
-                        evidence_locator=spring_evidence[0].payload.get(
-                            "file_path", spring_evidence[0].locator
-                        ),
+                        evidence_locator=spring_evidence[0].payload.file_path,
                     )
                 ],
             )

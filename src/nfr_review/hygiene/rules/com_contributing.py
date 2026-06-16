@@ -27,7 +27,7 @@ class ContributingPresenceRule:
                 skip_reason="no community-analysis evidence available",
             )
 
-        info = ev.payload.get("contributing", {})
+        info = ev.payload.contributing
         exists = info.get("exists", False)
 
         locator = info.get("path") or ev.locator

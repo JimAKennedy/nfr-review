@@ -75,22 +75,22 @@ class DockerfileK8sImageDriftRule:
         # The final stage is the last entry in the stages list
         df_final_images: list[tuple[str, str, str]] = []  # (file_path, base_image, base_tag)
         for ev in df_evidence:
-            stages = ev.payload.get("stages", [])
+            stages = ev.payload.stages
             if not stages:
                 continue
             final_stage = stages[-1]
             base_image = final_stage.get("base_image", "")
             base_tag = final_stage.get("base_tag")
-            file_path = ev.payload.get("file_path", ev.locator)
+            file_path = ev.payload.file_path
             if base_image:
                 df_final_images.append((file_path, base_image, base_tag))
 
         findings: list[Finding] = []
         for ev in k8s_evidence:
-            resource_name = ev.payload.get("name", "")
-            k8s_file = ev.payload.get("file_path", ev.locator)
+            resource_name = ev.payload.name
+            k8s_file = ev.payload.file_path
 
-            for container in ev.payload.get("containers", []):
+            for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 k8s_image = container.get("image", "")
                 if not k8s_image:

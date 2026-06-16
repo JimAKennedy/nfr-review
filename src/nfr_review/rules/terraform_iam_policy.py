@@ -114,9 +114,9 @@ class TerraformIamPolicyRule:
         found_iam = False
 
         for ev in tf_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
+            file_path = ev.payload.file_path
 
-            for rb in ev.payload.get("resource_blocks", []):
+            for rb in ev.payload.resource_blocks:
                 res_type = rb.get("type", "")
                 if not _is_iam_resource(res_type):
                     continue
@@ -132,7 +132,7 @@ class TerraformIamPolicyRule:
                     )
                 )
 
-            for db in ev.payload.get("data_blocks", []):
+            for db in ev.payload.data_blocks:
                 data_type = db.get("type", "")
                 if not _is_iam_data(data_type):
                     continue

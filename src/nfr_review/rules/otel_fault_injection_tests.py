@@ -124,7 +124,7 @@ class OTelFaultInjectionTestsRule:
     @staticmethod
     def _check_spring_resilience(spring_evidence: list[Evidence]) -> bool:
         for ev in spring_evidence:
-            raw_keys = ev.payload.get("raw_keys", [])
+            raw_keys = ev.payload.raw_keys
             if isinstance(raw_keys, list):
                 for key in raw_keys:
                     if isinstance(key, str) and key.lower() in _RESILIENCE_CONFIG_KEYS:
@@ -134,10 +134,10 @@ class OTelFaultInjectionTestsRule:
     @staticmethod
     def _check_ast_resilience(java_evidence: list[Evidence]) -> bool:
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", "")
+            file_path = ev.payload.file_path
             if "/test/" in file_path:
                 continue
-            classes = ev.payload.get("classes", [])
+            classes = ev.payload.classes
             for cls in classes:
                 if not isinstance(cls, dict):
                     continue
@@ -155,13 +155,13 @@ class OTelFaultInjectionTestsRule:
     @staticmethod
     def _check_fault_tests(java_evidence: list[Evidence]) -> bool:
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", "")
+            file_path = ev.payload.file_path
             if "/test/" not in file_path:
                 continue
             path_lower = file_path.lower()
             if any(pat in path_lower for pat in _FAULT_TEST_PATTERNS):
                 return True
-            imports = ev.payload.get("imports", [])
+            imports = ev.payload.imports
             if isinstance(imports, list):
                 imports_lower = " ".join(str(i).lower() for i in imports)
                 if any(pat in imports_lower for pat in _FAULT_TEST_PATTERNS):

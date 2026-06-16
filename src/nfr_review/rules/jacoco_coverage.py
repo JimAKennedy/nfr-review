@@ -42,8 +42,8 @@ class JaCoCoCoverageActualRule:
         findings: list[Finding] = []
 
         for ev in jacoco_evidence:
-            overall = ev.payload.get("overall", {})
-            report_name = ev.payload.get("report_name", "unknown")
+            overall = ev.payload.overall
+            report_name = ev.payload.report_name
             line_pct = overall.get("line_pct", 0.0)
             branch_pct = overall.get("branch_pct", 0.0)
 

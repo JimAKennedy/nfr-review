@@ -57,12 +57,12 @@ class DockerfileK8sUserConflictRule:
         dockerfile_nonroot = False
         dockerfile_path = ""
         for ev in df_evidence:
-            user_directives = ev.payload.get("user_directives", [])
+            user_directives = ev.payload.user_directives
             for directive in user_directives:
                 user = directive.get("user", "")
                 if _is_nonroot_user(user):
                     dockerfile_nonroot = True
-                    dockerfile_path = ev.payload.get("file_path", ev.locator)
+                    dockerfile_path = ev.payload.file_path
                     break
             if dockerfile_nonroot:
                 break
@@ -88,11 +88,11 @@ class DockerfileK8sUserConflictRule:
 
         findings: list[Finding] = []
         for ev in k8s_evidence:
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
 
             # Check pod-level securityContext
-            pod_sc = ev.payload.get("security_context")
+            pod_sc = ev.payload.security_context
             if _runasuser_is_root(pod_sc):
                 findings.append(
                     Finding(
@@ -117,7 +117,7 @@ class DockerfileK8sUserConflictRule:
                 continue
 
             # Check container-level securityContext
-            for container in ev.payload.get("containers", []):
+            for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 container_sc = container.get("security_context")
                 if _runasuser_is_root(container_sc):

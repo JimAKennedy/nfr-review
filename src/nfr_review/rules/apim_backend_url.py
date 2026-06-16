@@ -34,8 +34,8 @@ class ApimHardcodedBackendUrlRule:
 
         findings: list[Finding] = []
         for ev in apim_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            backend_urls = ev.payload.get("backend_urls", [])
+            file_path = ev.payload.file_path
+            backend_urls = ev.payload.backend_urls
 
             if not backend_urls:
                 # No backend URLs to check -- skip this file

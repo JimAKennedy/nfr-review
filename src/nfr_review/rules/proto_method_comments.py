@@ -31,8 +31,8 @@ class ProtoMethodCommentsRule:
 
         findings: list[Finding] = []
         for ev in proto_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for svc in ev.payload.get("services", []):
+            file_path = ev.payload.file_path
+            for svc in ev.payload.services:
                 svc_name = svc.get("name", "Unknown")
                 for method in svc.get("methods", []):
                     if not method.get("has_comment", False):

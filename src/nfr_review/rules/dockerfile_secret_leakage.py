@@ -74,9 +74,9 @@ class DockerfileSecretLeakageRule:
 
         findings: list[Finding] = []
         for ev in df_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
+            file_path = ev.payload.file_path
 
-            for cmd in ev.payload.get("copy_add_commands", []):
+            for cmd in ev.payload.copy_add_commands:
                 line = cmd.get("line", 0)
                 instruction = cmd.get("instruction", "COPY")
                 for src in cmd.get("sources", []):
@@ -103,7 +103,7 @@ class DockerfileSecretLeakageRule:
                             )
                         )
 
-            for entry in ev.payload.get("env_args", []):
+            for entry in ev.payload.env_args:
                 name = entry.get("name", "")
                 line = entry.get("line", 0)
                 instruction = entry.get("instruction", "ARG")

@@ -44,13 +44,13 @@ class JDepDistanceRule:
                 return RuleResult(
                     rule_id=self.id,
                     skipped=True,
-                    skip_reason=ev.payload.get("reason", "jdepend unavailable"),
+                    skip_reason=ev.payload.reason,
                 )
 
             if ev.kind != "jdepend-packages":
                 continue
 
-            for pkg in ev.payload.get("packages", []):
+            for pkg in ev.payload.packages:
                 checked_any = True
                 distance = pkg.get("d", pkg.get("D", 0.0))
                 name = pkg.get("name", "unknown")

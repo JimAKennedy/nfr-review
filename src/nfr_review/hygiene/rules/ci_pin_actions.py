@@ -31,14 +31,14 @@ class CiPinActionsRule:
                 skip_reason="no ci-automation-analysis evidence available",
             )
 
-        if not ev.payload.get("has_ci", False):
+        if not ev.payload.has_ci:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no CI configuration found",
             )
 
-        ci_systems = ev.payload.get("ci_systems", [])
+        ci_systems = ev.payload.ci_systems
         if "github-actions" not in ci_systems:
             finding = make_green_finding(
                 self.id,
@@ -50,7 +50,7 @@ class CiPinActionsRule:
             )
             return RuleResult(rule_id=self.id, findings=[finding])
 
-        configs = ev.payload.get("configs", [])
+        configs = ev.payload.configs
         unpinned: list[str] = []
         total_uses = 0
 

@@ -35,13 +35,13 @@ class JDepCycleRule:
                 return RuleResult(
                     rule_id=self.id,
                     skipped=True,
-                    skip_reason=ev.payload.get("reason", "jdepend unavailable"),
+                    skip_reason=ev.payload.reason,
                 )
 
             if ev.kind != "jdepend-packages":
                 continue
 
-            cycle_groups = ev.payload.get("cycle_groups", [])
+            cycle_groups = ev.payload.cycle_groups
             if not cycle_groups:
                 findings.append(
                     make_green_finding(

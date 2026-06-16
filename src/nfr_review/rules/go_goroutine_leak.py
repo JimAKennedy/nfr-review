@@ -30,8 +30,8 @@ class GoGoroutineLeakRule:
 
         findings: list[Finding] = []
         for ev in go_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for launch in ev.payload.get("goroutine_launches", []):
+            file_path = ev.payload.file_path
+            for launch in ev.payload.goroutine_launches:
                 findings.append(
                     Finding(
                         rule_id=self.id,

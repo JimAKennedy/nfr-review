@@ -151,7 +151,7 @@ Evidence
   collector_version: str
   locator: str               # file path or identifier
   kind: str                  # e.g. "java-ast-file", "repo-structure-summary"
-  payload: BasePayload | dict[str, Any]  # typed payload or raw dict
+  payload: BasePayload | dict[str, Any]  # typed payload (rules use attribute access)
 
 Finding
   rule_id, rag, severity, summary, recommendation,

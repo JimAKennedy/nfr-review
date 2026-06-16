@@ -40,10 +40,10 @@ class GatlingPerformanceThresholdsRule:
         findings: list[Finding] = []
 
         for ev in gatling_evidence:
-            error_rate = ev.payload.get("error_rate", 0.0)
-            p95 = ev.payload.get("p95_response_time_ms", 0)
-            p99 = ev.payload.get("p99_response_time_ms", 0)
-            sim_dir = ev.payload.get("simulation_dir", ev.locator)
+            error_rate = ev.payload.error_rate
+            p95 = ev.payload.p95_response_time_ms
+            p99 = ev.payload.p99_response_time_ms
+            sim_dir = ev.payload.simulation_dir
 
             worst_rag: RAG = "green"
             worst_severity: Severity = "info"

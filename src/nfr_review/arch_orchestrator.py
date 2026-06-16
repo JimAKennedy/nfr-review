@@ -144,9 +144,9 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
                 logger.debug("%s collection failed for %s", class_name, target, exc_info=True)
                 continue
             for ev in evidence_list:
-                if _is_vendor_path(ev.payload.get("file_path", "")):
+                if _is_vendor_path(ev.payload.file_path):
                     continue
-                for cls in ev.payload.get(payload_key, []):
+                for cls in getattr(ev.payload, payload_key, []):
                     if cls.get("name") and (
                         cls.get("base_classes") or cls.get("methods") or cls.get("fields")
                     ):

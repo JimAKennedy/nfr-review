@@ -122,8 +122,8 @@ class DependencyDeclarationRule:
 
         findings: list[Finding] = []
         for ev in workloads:
-            name = ev.payload.get("name", "")
-            annotations = ev.payload.get("annotations")
+            name = ev.payload.name
+            annotations = ev.payload.annotations
             matched = _has_dependency_annotation(annotations)
 
             if matched:
@@ -205,13 +205,13 @@ class SharedFateIndicatorRule:
         db_host_groups: dict[str, list[tuple[str, Evidence]]] = defaultdict(list)
 
         for ev in workloads:
-            name = ev.payload.get("name", "")
-            ns = ev.payload.get("node_selector")
+            name = ev.payload.name
+            ns = ev.payload.node_selector
             if ns:
                 key = str(sorted(ns.items()))
                 node_selector_groups[key].append((name, ev))
 
-            for container in ev.payload.get("containers") or []:
+            for container in ev.payload.containers or []:
                 for env_entry in container.get("env") or []:
                     env_name = env_entry.get("name", "")
                     env_value = env_entry.get("value") or ""
@@ -351,8 +351,8 @@ class CrossRingDependencyRule:
         ring_map: dict[str, int] = {}
         workload_map: dict[str, Evidence] = {}
         for ev in workloads:
-            name = ev.payload.get("name", "")
-            ring = _get_ring(ev.payload.get("labels"))
+            name = ev.payload.name
+            ring = _get_ring(ev.payload.labels)
             if ring is not None:
                 ring_map[name] = ring
                 workload_map[name] = ev
@@ -383,12 +383,12 @@ class CrossRingDependencyRule:
         findings: list[Finding] = []
 
         for ev in workloads:
-            name = ev.payload.get("name", "")
+            name = ev.payload.name
             caller_ring = ring_map.get(name)
             if caller_ring is None:
                 continue
 
-            service_refs = _extract_service_refs(ev.payload.get("containers") or [])
+            service_refs = _extract_service_refs(ev.payload.containers or [])
             for ref_name in service_refs:
                 target_ring = ring_map.get(ref_name)
                 if target_ring is None:

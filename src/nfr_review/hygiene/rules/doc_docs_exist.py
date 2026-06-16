@@ -27,8 +27,8 @@ class DocsExistRule:
                 skip_reason="no documentation-analysis evidence available",
             )
 
-        has_docs_dir = ev.payload.get("has_docs_dir", False)
-        doc_tool = ev.payload.get("doc_tool", "none")
+        has_docs_dir = ev.payload.has_docs_dir
+        doc_tool = ev.payload.doc_tool
 
         if not has_docs_dir and doc_tool == "none":
             finding = Finding(

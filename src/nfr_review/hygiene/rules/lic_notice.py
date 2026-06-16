@@ -45,7 +45,7 @@ class NoticeCompletenessRule:
         per_file = [e for e in evidence if e.kind == "license-scan"]
         all_holders: set[str] = set()
         for ev in per_file:
-            for h in ev.payload.get("holders", []):
+            for h in ev.payload.holders:
                 if h and h.strip():
                     cleaned = _SPDX_JUNK.sub("", h).strip()
                     if cleaned:

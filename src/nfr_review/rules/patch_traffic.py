@@ -50,8 +50,8 @@ class ProgressiveTrafficShiftingRule:
         findings: list[Finding] = []
 
         for ev in vs_evidence:
-            name = ev.payload.get("name", "")
-            if ev.payload.get("has_weighted_routing"):
+            name = ev.payload.name
+            if ev.payload.has_weighted_routing:
                 findings.append(
                     make_green_finding(
                         self.id,
@@ -88,9 +88,9 @@ class ProgressiveTrafficShiftingRule:
                 )
 
         for ev in rollout_evidence:
-            name = ev.payload.get("name", "")
-            steps = ev.payload.get("canary_steps") or []
-            strategy = ev.payload.get("strategy_type", "unknown")
+            name = ev.payload.name
+            steps = ev.payload.canary_steps or []
+            strategy = ev.payload.strategy_type
             if strategy == "canary" and len(steps) > 0:
                 findings.append(
                     make_green_finding(
@@ -202,8 +202,8 @@ class FailoverDocumentationRule:
             )
 
         ev = summaries[0]
-        top_files: list[str] = ev.payload.get("top_level_files", [])
-        top_dirs: list[str] = ev.payload.get("top_level_dirs", [])
+        top_files: list[str] = ev.payload.top_level_files
+        top_dirs: list[str] = ev.payload.top_level_dirs
 
         matched: list[str] = []
 
@@ -278,8 +278,8 @@ class ConnectionDrainingRule:
         findings: list[Finding] = []
 
         for ev in dr_evidence:
-            name = ev.payload.get("name", "")
-            if ev.payload.get("has_connection_pool"):
+            name = ev.payload.name
+            if ev.payload.has_connection_pool:
                 findings.append(
                     make_green_finding(
                         self.id,

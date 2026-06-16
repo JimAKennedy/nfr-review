@@ -34,7 +34,7 @@ class DynCorrelationPropagationRule:
 
         traces: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for ev in trace_ev:
-            for span in ev.payload.get("spans", []):
+            for span in ev.payload.spans:
                 tid = span.get("trace_id", "")
                 if tid:
                     traces[tid].append(span)

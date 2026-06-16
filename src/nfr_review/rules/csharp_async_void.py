@@ -30,8 +30,8 @@ class CSharpAsyncVoidRule:
 
         findings: list[Finding] = []
         for ev in cs_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for method in ev.payload.get("methods", []):
+            file_path = ev.payload.file_path
+            for method in ev.payload.methods:
                 if method["is_async"] and method["return_type"] == "void":
                     findings.append(
                         Finding(

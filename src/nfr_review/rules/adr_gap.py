@@ -42,8 +42,8 @@ class AdrGapRule:
                 title = (ev.payload.title or "").lower().strip()
                 status = ev.payload.status or ""
             else:
-                title = (ev.payload.get("title") or "").lower().strip()
-                status = ev.payload.get("status", "")
+                title = (ev.payload.title or "").lower().strip()
+                status = ev.payload.status
             if title:
                 existing_titles.add(title)
             if status and "superseded" in status.lower():
@@ -52,10 +52,10 @@ class AdrGapRule:
         findings: list[Finding] = []
 
         for ev in derived:
-            derived_title = ev.payload.get("title", "")
-            category = ev.payload.get("category", "unknown")
-            confidence = ev.payload.get("confidence", 0.5)
-            rationale = ev.payload.get("rationale", "")
+            derived_title = ev.payload.title
+            category = ev.payload.category
+            confidence = ev.payload.confidence
+            rationale = ev.payload.rationale
 
             matched = self._find_match(derived_title, existing_titles)
 

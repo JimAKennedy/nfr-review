@@ -72,8 +72,8 @@ class CiRollbackStageMissingRule:
         findings: list[Finding] = []
 
         for ev in ci_pipelines:
-            job_names: list[str] = ev.payload.get("job_names", [])
-            step_names: list[str] = ev.payload.get("step_names", [])
+            job_names: list[str] = ev.payload.job_names
+            step_names: list[str] = ev.payload.step_names
 
             matched = False
             for name in job_names + step_names:
@@ -82,7 +82,7 @@ class CiRollbackStageMissingRule:
                     break
 
             if matched:
-                file_path = ev.payload.get("file_path", ev.locator)
+                file_path = ev.payload.file_path
                 findings.append(
                     make_green_finding(
                         self.id,

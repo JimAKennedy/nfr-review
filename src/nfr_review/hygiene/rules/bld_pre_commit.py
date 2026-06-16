@@ -27,7 +27,7 @@ class PreCommitRule:
                 skip_reason="no build-readiness-analysis evidence available",
             )
 
-        pre_commit = ev.payload.get("pre_commit", {})
+        pre_commit = ev.payload.pre_commit
         has_pre_commit = pre_commit.get("has_pre_commit", False)
         tool = pre_commit.get("pre_commit_tool")
 

@@ -27,14 +27,14 @@ def _extract_declared_edges(evidence: list[Evidence]) -> set[tuple[str, str]]:
         if ev.collector_name != "adr" or ev.kind != "adr-document":
             continue
         status = (
-            ev.payload.get("status", "")
+            ev.payload.status
             if hasattr(ev.payload, "get")
             else getattr(ev.payload, "status", "")
         )
         if status and status not in ("accepted", "proposed"):
             continue
         body = (
-            ev.payload.get("body_text", "")
+            ev.payload.body_text
             if hasattr(ev.payload, "get")
             else getattr(ev.payload, "body_text", "")
         )

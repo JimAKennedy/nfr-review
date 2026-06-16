@@ -70,8 +70,8 @@ class RollbackDocsMissingRule:
             )
 
         ev = summaries[0]
-        top_files: list[str] = ev.payload.get("top_level_files", [])
-        top_dirs: list[str] = ev.payload.get("top_level_dirs", [])
+        top_files: list[str] = ev.payload.top_level_files
+        top_dirs: list[str] = ev.payload.top_level_dirs
 
         matched: list[str] = []
 

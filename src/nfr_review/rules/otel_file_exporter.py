@@ -37,14 +37,14 @@ class OTelFileExporterRule:
         has_file_exporter = False
 
         for ev in sdk_evidence:
-            exporter_type = ev.payload.get("exporter_type")
+            exporter_type = ev.payload.exporter_type
             if exporter_type and exporter_type.lower() in ("file", "otlp/file"):
                 has_file_exporter = True
                 break
 
         if not has_file_exporter:
             for ev in collector_evidence:
-                exporters = ev.payload.get("exporters", [])
+                exporters = ev.payload.exporters
                 for exp in exporters:
                     base = exp.split("/")[0]
                     if base in _FILE_EXPORTER_KEYWORDS:

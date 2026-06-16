@@ -166,51 +166,49 @@ def _detect_orphans(
             rule_id=rule_id, skipped=True, skip_reason=f"no {evidence_kind} evidence available"
         )
 
-    all_classes: list[dict] = []
+    all_classes: list[Any] = []
     class_file: dict[str, str] = {}
     for ev in lang_ev:
-        for cls in ev.payload.get(classes_key, []):
-            name = cls.get("name", "")
+        for cls in getattr(ev.payload, classes_key, []):
+            name = cls.name
             if name:
                 all_classes.append(cls)
-                class_file[name] = ev.payload.get("file_path", "unknown")
+                class_file[name] = ev.payload.file_path
 
     if len(all_classes) < 2:
         return RuleResult(rule_id=rule_id, findings=[])
 
-    known_names = {c["name"] for c in all_classes}
+    known_names = {c.name for c in all_classes}
     connected: set[str] = set()
 
     for cls in all_classes:
-        name = cls["name"]
+        name = cls.name
 
-        for base in cls.get("base_classes", []):
-            base_name = base.get("name", "")
+        for base in cls.base_classes:
+            base_name = base.name
             if base_name in known_names:
                 connected.add(name)
                 connected.add(base_name)
 
-        for field in cls.get("fields", []):
-            for ref in _type_refs(field.get("type", ""), known_names, noise):
+        for field in cls.fields:
+            for ref in _type_refs(field.type, known_names, noise):
                 if ref != name:
                     connected.add(name)
                     connected.add(ref)
 
-        for method in cls.get("methods", []):
-            for type_str in [method.get("return_type", "")] + [
-                p.get("type", "") for p in method.get("parameters", [])
-            ]:
+        for method in cls.methods:
+            for type_str in [method.return_type] + [p.type for p in method.parameters]:
                 for ref in _type_refs(type_str, known_names, noise):
                     if ref != name:
                         connected.add(name)
                         connected.add(ref)
 
-        for friend_name in cls.get("friends", []):
+        for friend_name in getattr(cls, "friends", []):
             if friend_name in known_names and friend_name != name:
                 connected.add(name)
                 connected.add(friend_name)
 
-        outer = cls.get("outer_class", "")
+        outer = cls.outer_class
         if outer and outer in known_names:
             connected.add(name)
             connected.add(outer)
@@ -220,8 +218,8 @@ def _detect_orphans(
     findings: list[Finding] = []
     for orphan_name in orphans:
         file_path = class_file.get(orphan_name, "unknown")
-        cls_data = next(c for c in all_classes if c["name"] == orphan_name)
-        line = cls_data.get("line", 0)
+        cls_data = next(c for c in all_classes if c.name == orphan_name)
+        line = cls_data.line
         findings.append(
             Finding(
                 rule_id=rule_id,

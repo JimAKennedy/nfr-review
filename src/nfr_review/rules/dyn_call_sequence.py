@@ -34,7 +34,7 @@ class DynCallSequenceRule:
 
         all_spans: list[dict[str, Any]] = []
         for ev in trace_evidence:
-            for span in ev.payload.get("spans", []):
+            for span in ev.payload.spans:
                 if isinstance(span, dict):
                     all_spans.append(span)
                 else:

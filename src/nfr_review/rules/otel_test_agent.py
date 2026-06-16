@@ -29,7 +29,7 @@ class OTelTestAgentRule:
                 skip_reason="no otel-sdk-config evidence available",
             )
 
-        any_agent = any(e.payload.get("agent_attached") for e in sdk_evidence)
+        any_agent = any(e.payload.agent_attached for e in sdk_evidence)
 
         first = sdk_evidence[0]
         if any_agent:

@@ -46,8 +46,8 @@ class CSharpDisposableNoUsingRule:
 
         findings: list[Finding] = []
         for ev in cs_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for creation in ev.payload.get("object_creations", []):
+            file_path = ev.payload.file_path
+            for creation in ev.payload.object_creations:
                 if creation["type_name"] in _DISPOSABLE_TYPES and not creation["in_using"]:
                     findings.append(
                         Finding(

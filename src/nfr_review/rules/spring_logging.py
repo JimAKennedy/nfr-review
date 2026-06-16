@@ -40,11 +40,11 @@ class LoggingConfigMissingRule:
 
         for ev in spring_evidence:
             payload = ev.payload
-            logging_section = payload.get("logging", {}) or {}
-            raw_keys = payload.get("raw_keys", [])
+            logging_section = payload.logging or {}
+            raw_keys = payload.raw_keys
 
             if _has_structured_logging(logging_section, raw_keys):
-                file_path = payload.get("file_path", ev.locator)
+                file_path = payload.file_path
                 return RuleResult(
                     rule_id=self.id,
                     findings=[
@@ -61,7 +61,7 @@ class LoggingConfigMissingRule:
                     ],
                 )
 
-        file_path = spring_evidence[0].payload.get("file_path", spring_evidence[0].locator)
+        file_path = spring_evidence[0].payload.file_path
         return RuleResult(
             rule_id=self.id,
             findings=[

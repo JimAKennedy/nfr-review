@@ -60,9 +60,9 @@ class UpdateStrategyRule:
 
         findings: list[Finding] = []
         for ev in k8s_resources:
-            resource_kind = ev.payload.get("kind", "")
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
+            resource_kind = ev.payload.kind
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
 
             # DaemonSets have their own update patterns — skip.
             if resource_kind in _SKIP_KINDS:
@@ -99,7 +99,7 @@ class UpdateStrategyRule:
         file_path: str,
         findings: list[Finding],
     ) -> None:
-        strategy = ev.payload.get("strategy")
+        strategy = ev.payload.strategy
 
         if strategy is None:
             findings.append(
@@ -203,7 +203,9 @@ class UpdateStrategyRule:
         file_path: str,
         findings: list[Finding],
     ) -> None:
-        update_strategy = ev.payload.get("updateStrategy") or ev.payload.get("update_strategy")
+        update_strategy = getattr(ev.payload, "updateStrategy", None) or getattr(
+            ev.payload, "update_strategy", None
+        )
 
         if update_strategy is None:
             findings.append(

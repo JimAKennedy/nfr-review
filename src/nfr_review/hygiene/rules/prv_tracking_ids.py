@@ -27,7 +27,7 @@ class TrackingIdsRule:
                 skip_reason="no privacy-analysis evidence available",
             )
 
-        ids = ev.payload.get("tracking_ids", [])
+        ids = ev.payload.tracking_ids
 
         if ids:
             types = sorted({m["pattern_type"] for m in ids})

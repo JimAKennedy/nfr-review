@@ -32,8 +32,8 @@ class GoHttpNoTimeoutRule:
 
         findings: list[Finding] = []
         for ev in go_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for call in ev.payload.get("http_calls", []):
+            file_path = ev.payload.file_path
+            for call in ev.payload.http_calls:
                 call_name = call["call"]
                 if call_name in _DEFAULT_CLIENT_CALLS:
                     findings.append(
