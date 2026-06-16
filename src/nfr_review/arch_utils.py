@@ -290,6 +290,93 @@ def resolve_env_refs(value: str, env_vars: dict[str, str], depth: int = 3) -> st
 
 
 # ---------------------------------------------------------------------------
+# Shared integration helpers
+# ---------------------------------------------------------------------------
+
+ADDR_ENV_SUFFIXES = ("_ADDR", "_HOST", "_URL", "_SERVICE_ADDR", "_ENDPOINT")
+
+IGNORED_HOSTS = frozenset(
+    {
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",  # nosec B104 — filter list, not a bind call
+        "example.com",
+        "example.org",
+        "schemas.xmlsoap.org",
+        "www.w3.org",
+        "xmlns.jcp.org",
+        "www.springframework.org",
+        "maven.apache.org",
+        "json-schema.org",
+    }
+)
+
+IGNORED_DOMAINS = (
+    ".example.com",
+    ".example.org",
+    ".example.net",
+    ".test",
+    ".invalid",
+    ".localhost",
+    ".local",
+)
+
+
+def is_ignorable_host(host: str) -> bool:
+    """Return True if the host is a generic/non-meaningful target."""
+    host_lower = host.lower()
+    if host_lower in IGNORED_HOSTS or host_lower.startswith("$"):
+        return True
+    for suffix in IGNORED_DOMAINS:
+        if host_lower.endswith(suffix):
+            return True
+    return False
+
+
+def infer_style_from_protocol(protocol: str) -> IntegrationStyle:
+    """Map a detected protocol to an integration style."""
+    mapping: dict[str, IntegrationStyle] = {
+        "jdbc": "shared_database",
+        "postgresql": "shared_database",
+        "mysql": "shared_database",
+        "sqlserver": "shared_database",
+        "oracle": "shared_database",
+        "h2": "shared_database",
+        "mongodb": "shared_database",
+        "redis": "shared_database",
+        "cassandra": "shared_database",
+        "cql": "shared_database",
+        "neo4j": "shared_database",
+        "bolt": "shared_database",
+        "amqp": "message_queue",
+        "kafka": "message_queue",
+        "nats": "message_queue",
+        "http": "api_call",
+        "https": "api_call",
+        "grpc": "api_call",
+        "smtp": "api_call",
+    }
+    return mapping.get(protocol.lower(), "api_call")
+
+
+def guess_protocol_from_env(key: str, value: str) -> str:
+    """Guess protocol from an env var name/value."""
+    key_upper = key.upper()
+    val_lower = value.lower()
+    if "kafka" in key_upper.lower() or "kafka" in val_lower:
+        return "kafka"
+    if "redis" in key_upper.lower() or "valkey" in key_upper.lower():
+        return "redis"
+    if "amqp" in val_lower or "rabbit" in key_upper.lower():
+        return "amqp"
+    if "mongo" in key_upper.lower():
+        return "mongodb"
+    if val_lower.startswith("http://") or val_lower.startswith("https://"):
+        return "http"
+    return "grpc"
+
+
+# ---------------------------------------------------------------------------
 # Table-driven build-dependency matching
 # ---------------------------------------------------------------------------
 
