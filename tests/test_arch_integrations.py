@@ -9,16 +9,26 @@ from pathlib import Path
 import pytest
 
 from nfr_review.arch_integrations import (
-    _infer_env_from_compose_filename,
-    _infer_env_from_k8s_filepath,
-    _infer_env_from_k8s_namespace,
-    _infer_env_from_path_parts,
-    _infer_environment,
     discover_integrations,
     discover_integrations_multi_repo,
     materialize_infra_components,
 )
 from nfr_review.arch_models import Component, ComponentBoundary, IntegrationPoint
+from nfr_review.arch_utils import (
+    infer_env_from_compose_filename as _infer_env_from_compose_filename,
+)
+from nfr_review.arch_utils import (
+    infer_env_from_k8s_filepath as _infer_env_from_k8s_filepath,
+)
+from nfr_review.arch_utils import (
+    infer_env_from_k8s_namespace as _infer_env_from_k8s_namespace,
+)
+from nfr_review.arch_utils import (
+    infer_env_from_path_parts as _infer_env_from_path_parts,
+)
+from nfr_review.arch_utils import (
+    infer_environment as _infer_environment,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2611,7 +2621,7 @@ class TestCmakeIntegrationDiscovery:
 
     def test_repo_name_from_url_variants(self) -> None:
         """_repo_name_from_url handles various Git URL formats."""
-        from nfr_review.arch_integrations import _repo_name_from_url
+        from nfr_review.arch_integ_build import repo_name_from_url as _repo_name_from_url
 
         assert _repo_name_from_url("https://github.com/org/repo.git") == "repo"
         assert _repo_name_from_url("https://github.com/org/repo") == "repo"
