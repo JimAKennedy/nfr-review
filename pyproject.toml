@@ -158,7 +158,7 @@ exclude_lines = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra"
+addopts = "-ra -n auto --dist worksteal"
 markers = [
     "regression: clones public repos and diffs output against snapshot baselines (requires network)",
     "slow: full analysis pass on the repo (may hit network for dep resolution)",
