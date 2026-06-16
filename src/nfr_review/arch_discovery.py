@@ -9,7 +9,6 @@ boundaries. Operates without LLM — pure structural inference.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -19,6 +18,18 @@ from typing import Any, Literal
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.arch_models import Component, ComponentBoundary, TechStackEntry
+from nfr_review.arch_utils import (
+    make_id as _make_id,
+)
+from nfr_review.arch_utils import (
+    safe_read_text as _safe_read_text,
+)
+from nfr_review.arch_utils import (
+    safe_yaml_load as _safe_yaml_load,
+)
+from nfr_review.arch_utils import (
+    safe_yaml_load_all as _safe_yaml_load_all,
+)
 from nfr_review.path_filter import should_exclude_path
 
 logger = logging.getLogger(__name__)
@@ -66,35 +77,6 @@ _BUILD_FILES = frozenset(
         "CMakeLists.txt",
     }
 )
-
-
-def _safe_read_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except (OSError, UnicodeDecodeError):
-        return None
-
-
-def _safe_yaml_load(text: str) -> Any:
-    _yaml = YAML(typ="safe")
-    try:
-        return _yaml.load(text)
-    except YAMLError:
-        return None
-
-
-def _safe_yaml_load_all(text: str) -> list[Any]:
-    _yaml = YAML(typ="safe")
-    try:
-        return [doc for doc in _yaml.load_all(text) if doc is not None]
-    except YAMLError:
-        return []
-
-
-def _make_id(prefix: str, name: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    short_hash = hashlib.sha256(name.encode()).hexdigest()[:6]
-    return f"{prefix}-{slug}-{short_hash}"
 
 
 _ML_FRAMEWORK_MARKERS: dict[str, tuple[str, str]] = {

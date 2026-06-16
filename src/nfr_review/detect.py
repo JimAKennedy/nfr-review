@@ -8,6 +8,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
+from nfr_review.arch_utils import safe_read_text as _safe_read_text
 from nfr_review.path_filter import should_exclude_path
 
 logger = logging.getLogger(__name__)
@@ -51,13 +52,6 @@ _K8S_RESOURCE_TYPES = {
     "Namespace",
     "HorizontalPodAutoscaler",
 }
-
-
-def _safe_read_text(path: Path) -> str | None:
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except (OSError, UnicodeDecodeError):
-        return None
 
 
 def _safe_exists(path: Path) -> bool:
