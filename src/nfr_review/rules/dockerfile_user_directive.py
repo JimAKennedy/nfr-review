@@ -31,8 +31,8 @@ class DockerfileUserDirectiveRule:
 
         findings: list[Finding] = []
         for ev in df_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            has_user = ev.payload.get("has_user_directive", False)
+            file_path = ev.payload.file_path
+            has_user = ev.payload.has_user_directive
 
             if not has_user:
                 findings.append(

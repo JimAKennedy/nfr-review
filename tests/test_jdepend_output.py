@@ -39,7 +39,10 @@ def test_jdepend_section_basic():
     packages = [
         {"name": "com.example.core", "ca": 5, "ce": 3, "a": 0.2, "i": 0.6, "d": 0.2},
     ]
-    ev = _ev("jdepend-packages", {"packages": packages, "bytecode_dir": "target/classes"})
+    ev = _ev(
+        "jdepend-packages",
+        {"packages": packages, "bytecode_dir": "target/classes", "cycle_groups": []},
+    )
     result = build_jdepend_section([ev])
     assert "JDepend Structural Analysis" in result
     assert "com.example.core" in result
@@ -53,6 +56,7 @@ def test_jdepend_section_with_cycles():
         "jdepend-packages",
         {
             "packages": packages,
+            "bytecode_dir": "target/classes",
             "cycle_groups": [["com.a", "com.b", "com.a"]],
         },
     )
@@ -64,8 +68,14 @@ def test_jdepend_section_with_cycles():
 def test_jdepend_section_multiple_modules():
     pkg1 = [{"name": "mod1.core", "ca": 3, "ce": 1, "a": 0.0, "i": 0.0, "d": 1.0}]
     pkg2 = [{"name": "mod2.api", "ca": 2, "ce": 0, "a": 0.0, "i": 0.0, "d": 0.0}]
-    ev1 = _ev("jdepend-packages", {"packages": pkg1, "bytecode_dir": "module1"})
-    ev2 = _ev("jdepend-packages", {"packages": pkg2, "bytecode_dir": "module2"})
+    ev1 = _ev(
+        "jdepend-packages",
+        {"packages": pkg1, "bytecode_dir": "module1", "cycle_groups": []},
+    )
+    ev2 = _ev(
+        "jdepend-packages",
+        {"packages": pkg2, "bytecode_dir": "module2", "cycle_groups": []},
+    )
     result = build_jdepend_section([ev1, ev2])
     assert "Module: `module1`" in result
     assert "Module: `module2`" in result
@@ -103,7 +113,16 @@ def test_derived_adrs_basic():
 
 
 def test_derived_adrs_missing_optional_fields():
-    ev = _ev("adr-derived", {"title": "Unknown", "category": "unknown", "confidence": 0.0})
+    ev = _ev(
+        "adr-derived",
+        {
+            "title": "Unknown",
+            "category": "unknown",
+            "confidence": 0.0,
+            "rationale": "",
+            "evidence_refs": [],
+        },
+    )
     result = build_derived_adrs_section([ev])
     assert "Unknown" in result
 
@@ -163,7 +182,10 @@ def test_adr_section_with_dict_payloads():
 
 
 def test_adr_section_dict_summary():
-    doc = _ev("adr-document", {"file_path": "adr.md", "title": "Test"})
+    doc = _ev(
+        "adr-document",
+        {"file_path": "adr.md", "title": "Test", "status": None, "superseded_by": None},
+    )
     summary = _ev(
         "adr-summary",
         {
@@ -178,7 +200,10 @@ def test_adr_section_dict_summary():
 
 
 def test_adr_section_no_lifecycle():
-    doc = _ev("adr-document", {"file_path": "adr.md"})
+    doc = _ev(
+        "adr-document",
+        {"file_path": "adr.md", "title": None, "status": None, "superseded_by": None},
+    )
     summary = _ev(
         "adr-summary",
         {

@@ -42,7 +42,7 @@ class SkaffoldBuildConfigRule:
         findings: list[Finding] = []
 
         for ev in skaffold_evidence:
-            build = ev.payload.get("build", {})
+            build = ev.payload.build
 
             if not build or not build.get("artifacts"):
                 findings.append(

@@ -30,8 +30,8 @@ class ThreadPoolMisconfigurationRule:
 
         findings: list[Finding] = []
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for pool in ev.payload.get("thread_pool_constructions", []):
+            file_path = ev.payload.file_path
+            for pool in ev.payload.thread_pool_constructions:
                 if not pool["has_bounded_queue"] or not pool["has_rejection_policy"]:
                     issues: list[str] = []
                     if not pool["has_bounded_queue"]:

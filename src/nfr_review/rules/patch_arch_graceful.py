@@ -32,11 +32,11 @@ class GracefulShutdownMissingRule:
 
         findings: list[Finding] = []
         for ev in k8s_resources:
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
 
             # Check each container for preStop lifecycle hook
-            for container in ev.payload.get("containers", []):
+            for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 has_pre_stop = container.get("pre_stop") is not None
 
@@ -65,7 +65,7 @@ class GracefulShutdownMissingRule:
                     )
 
             # Check terminationGracePeriodSeconds at the workload level
-            grace_period = ev.payload.get("termination_grace_period")
+            grace_period = ev.payload.termination_grace_period
             if grace_period is None or grace_period < _MIN_GRACE_PERIOD:
                 period_display = (
                     "not set (defaults to 30s)" if grace_period is None else f"{grace_period}s"

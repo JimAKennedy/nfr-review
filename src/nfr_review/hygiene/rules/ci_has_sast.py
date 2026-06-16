@@ -36,14 +36,14 @@ class CiHasSastRule:
                 skip_reason="no ci-automation-analysis evidence available",
             )
 
-        if not ev.payload.get("has_ci", False):
+        if not ev.payload.has_ci:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no CI configuration found",
             )
 
-        configs = ev.payload.get("configs", [])
+        configs = ev.payload.configs
         found_sast = False
 
         for cfg in configs:

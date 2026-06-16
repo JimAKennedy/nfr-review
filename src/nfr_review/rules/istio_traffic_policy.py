@@ -31,7 +31,7 @@ class IstioTrafficPolicyRule:
 
         dest_rules: list[dict[str, Any]] = []
         for ev in istio_evidence:
-            for resource in ev.payload.get("resources", []):
+            for resource in ev.payload.resources:
                 if resource.get("kind") == "DestinationRule":
                     dest_rules.append(resource)
 

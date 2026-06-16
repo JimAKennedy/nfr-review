@@ -153,14 +153,14 @@ class TestGatlingPerformanceRule:
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "amber"
         assert result.findings[0].severity == "medium"
-        assert "p95 response time 2500ms" in result.findings[0].summary
+        assert "p95 response time 2500.0ms" in result.findings[0].summary
 
     def test_slow_p99_red(self) -> None:
         ev = _gatling_evidence(error_rate=0.1, p95=1500, p99=6000)
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "red"
         assert result.findings[0].severity == "high"
-        assert "p99 response time 6000ms" in result.findings[0].summary
+        assert "p99 response time 6000.0ms" in result.findings[0].summary
 
     def test_multiple_issues_worst_wins(self) -> None:
         ev = _gatling_evidence(error_rate=10.0, p95=3000, p99=7000)

@@ -109,7 +109,7 @@ class GoldenSignalEmissionRule:
 
         all_signals: set[str] = set()
         for ev in pipelines:
-            all_signals.update(ev.payload.get("signal_types", []))
+            all_signals.update(ev.payload.signal_types)
 
         missing = _GOLDEN_SIGNAL_TYPES - all_signals
         ref = pipelines[0]
@@ -205,7 +205,7 @@ class MandatoryLabelPresenceRule:
 
         merged_attrs: dict[str, Any] = {}
         for ev in pipelines:
-            merged_attrs.update(ev.payload.get("resource_attributes", {}))
+            merged_attrs.update(ev.payload.resource_attributes)
 
         ref = pipelines[0]
         missing = [
@@ -281,8 +281,8 @@ class SyntheticTransactionConfigRule:
         has_otel = len(pipelines) > 0
 
         if synths:
-            total_targets = sum(len(s.payload.get("targets", [])) for s in synths)
-            tools = sorted({s.payload.get("tool", "unknown") for s in synths})
+            total_targets = sum(len(s.payload.targets) for s in synths)
+            tools = sorted({s.payload.tool for s in synths})
             ref = synths[0]
 
             if total_targets > 0:

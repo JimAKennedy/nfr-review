@@ -41,8 +41,8 @@ class ReadmeExistsRule:
                 skip_reason="no repo-structure evidence available",
             )
 
-        has_readme = bool(repo_evidence.payload.get("has_readme"))
-        readme_name = repo_evidence.payload.get("readme_name")
+        has_readme = bool(repo_evidence.payload.has_readme)
+        readme_name = repo_evidence.payload.readme_name
 
         if has_readme:
             finding = make_green_finding(

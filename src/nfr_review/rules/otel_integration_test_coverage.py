@@ -34,8 +34,8 @@ class OTelIntegrationTestCoverageRule:
         test_files: set[str] = set()
 
         for ev in java_ast_evidence:
-            file_path = ev.payload.get("file_path", "")
-            classes = ev.payload.get("classes", [])
+            file_path = ev.payload.file_path
+            classes = ev.payload.classes
 
             is_test = "/test/" in file_path or file_path.endswith("Test.java")
             if is_test:

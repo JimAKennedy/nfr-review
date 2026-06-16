@@ -31,7 +31,7 @@ class IstioMtlsStrictRule:
 
         has_strict = False
         for ev in istio_evidence:
-            for resource in ev.payload.get("resources", []):
+            for resource in ev.payload.resources:
                 if resource.get("kind") != "PeerAuthentication":
                     continue
                 spec = resource.get("spec", {})

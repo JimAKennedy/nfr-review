@@ -31,8 +31,8 @@ class ApimAuthPolicyMissingRule:
 
         findings: list[Finding] = []
         for ev in apim_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            if ev.payload.get("has_auth_policy"):
+            file_path = ev.payload.file_path
+            if ev.payload.has_auth_policy:
                 findings.append(
                     make_green_finding(
                         self.id,

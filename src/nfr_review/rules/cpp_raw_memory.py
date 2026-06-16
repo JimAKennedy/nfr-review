@@ -58,10 +58,10 @@ class CppRawMemoryRule:
         findings: list[Finding] = []
         has_smart_ptrs = False
         for ev in cpp_ev:
-            if ev.payload.get("smart_pointers"):
+            if ev.payload.smart_pointers:
                 has_smart_ptrs = True
 
-            for expr in ev.payload.get("new_expressions", []):
+            for expr in ev.payload.new_expressions:
                 if _is_ownership_suppressed(expr):
                     findings.append(
                         Finding(
@@ -100,7 +100,7 @@ class CppRawMemoryRule:
                     )
                 )
 
-            for expr in ev.payload.get("delete_expressions", []):
+            for expr in ev.payload.delete_expressions:
                 findings.append(
                     Finding(
                         rule_id=self.id,
@@ -120,7 +120,7 @@ class CppRawMemoryRule:
                     )
                 )
 
-            for call in ev.payload.get("malloc_calls", []):
+            for call in ev.payload.malloc_calls:
                 if call["call"] in ("malloc", "calloc", "realloc"):
                     findings.append(
                         Finding(

@@ -30,8 +30,8 @@ class CSharpBlockingAsyncRule:
 
         findings: list[Finding] = []
         for ev in cs_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for call in ev.payload.get("blocking_calls", []):
+            file_path = ev.payload.file_path
+            for call in ev.payload.blocking_calls:
                 findings.append(
                     Finding(
                         rule_id=self.id,

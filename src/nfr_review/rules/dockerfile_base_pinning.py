@@ -36,8 +36,8 @@ class DockerfileBasePinningRule:
 
         findings: list[Finding] = []
         for ev in df_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for stage in ev.payload.get("stages", []):
+            file_path = ev.payload.file_path
+            for stage in ev.payload.stages:
                 base_image = stage.get("base_image", "")
                 base_tag = stage.get("base_tag")
                 has_digest = stage.get("has_digest", False)

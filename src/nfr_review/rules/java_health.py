@@ -31,13 +31,13 @@ class HealthEndpointMissingRule:
             )
 
         for ev in java_evidence:
-            for cls in ev.payload.get("classes", []):
+            for cls in ev.payload.classes:
                 if "RestController" not in cls.get("annotations", []):
                     continue
                 for method in cls.get("methods", []):
                     for path in method.get("mapping_paths", []):
                         if path in _HEALTH_PATHS:
-                            file_ref = ev.payload.get("file_path", ev.locator)
+                            file_ref = ev.payload.file_path
                             locator = f"{file_ref}:{cls['name']}"
                             return RuleResult(
                                 rule_id=self.id,

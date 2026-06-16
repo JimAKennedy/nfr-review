@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import re
+import warnings
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field
 
 RAG = Literal["red", "amber", "green", "skipped"]
 Severity = Literal["critical", "high", "medium", "low", "info"]
@@ -19,40 +20,116 @@ class BasePayload(BaseModel):
     config catches typos and drift between collector output and rule expectations
     at Evidence construction time.
 
-    Provides dict-compatible ``get()`` and ``__getitem__()`` so existing rules
-    using ``ev.payload.get("key")`` work without changes during migration.
+    Rules access typed attributes directly. Dict-compat helpers are retained
+    for test backward compatibility; ``get`` / ``__getitem__`` delegate to
+    ``getattr`` so typed and dict-style access see the same values.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    def _warn_dict_compat(self, method: str) -> None:
+        warnings.warn(
+            f"BasePayload.{method}() is deprecated — use attribute access instead",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
     def get(self, key: str, default: Any = None) -> Any:
-        """Dict-compatible attribute access for gradual migration."""
+        """Dict-compatible attribute access (deprecated — prefer direct attribute)."""
+        self._warn_dict_compat("get")
         return getattr(self, key, default)
 
     def __getitem__(self, key: str) -> Any:
-        """Dict-compatible subscript access for gradual migration."""
+        """Dict-compatible subscript (deprecated — prefer direct attribute)."""
+        self._warn_dict_compat("__getitem__")
         try:
             return getattr(self, key)
         except AttributeError:
             raise KeyError(key) from None
 
     def __contains__(self, key: object) -> bool:
-        """Dict-compatible membership test for gradual migration."""
+        """Dict-compatible membership test (deprecated — prefer ``hasattr``)."""
+        self._warn_dict_compat("__contains__")
         if not isinstance(key, str):
             return False
         return key in type(self).model_fields
 
     def keys(self) -> list[str]:
-        """Dict-compatible keys() for gradual migration."""
+        """Dict-compatible keys() (deprecated — prefer ``model_fields``)."""
+        self._warn_dict_compat("keys")
         return list(type(self).model_fields.keys())
 
     def values(self) -> list[Any]:
-        """Dict-compatible values() for gradual migration."""
+        """Dict-compatible values() (deprecated — prefer ``model_dump()``)."""
+        self._warn_dict_compat("values")
         return [getattr(self, k) for k in type(self).model_fields]
 
     def items(self) -> list[tuple[str, Any]]:
-        """Dict-compatible items() for gradual migration."""
+        """Dict-compatible items() (deprecated — prefer ``model_dump().items()``)."""
+        self._warn_dict_compat("items")
         return [(k, getattr(self, k)) for k in type(self).model_fields]
+
+
+def _fill_defaults(data: dict[str, Any], model_cls: type[BasePayload]) -> dict[str, Any]:
+    """Recursively fill missing required fields with zero-value defaults."""
+    from pydantic_core import PydanticUndefined
+
+    filled = dict(data)
+    for fname, finfo in model_cls.model_fields.items():
+        ann = finfo.annotation
+        origin = getattr(ann, "__origin__", None)
+        args = getattr(ann, "__args__", ())
+
+        if fname in filled:
+            val = filled[fname]
+            if origin is list and args and isinstance(val, list):
+                inner = args[0]
+                if isinstance(inner, type) and issubclass(inner, BasePayload):
+                    filled[fname] = [
+                        _fill_defaults(item, inner) if isinstance(item, dict) else item
+                        for item in val
+                    ]
+            elif (
+                isinstance(ann, type)
+                and issubclass(ann, BasePayload)
+                and isinstance(val, dict)
+            ):
+                filled[fname] = _fill_defaults(val, ann)
+            continue
+
+        if finfo.default is not PydanticUndefined:
+            continue
+        if finfo.default_factory is not None:
+            continue
+
+        if ann is str:
+            filled[fname] = ""
+        elif ann is int:
+            filled[fname] = 0
+        elif ann is float:
+            filled[fname] = 0.0
+        elif ann is bool:
+            filled[fname] = False
+        elif origin is list:
+            filled[fname] = []
+        elif origin is dict:
+            filled[fname] = {}
+    return filled
+
+
+class _DictPayloadProxy(dict):  # type: ignore[type-arg]
+    """Thin dict subclass that adds attribute access.
+
+    Used as a fallback when auto-coercion of a dict payload to a typed
+    BasePayload subclass fails. Provides ``proxy.field`` access alongside
+    normal dict operations so rules using typed attribute access still work.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name) from None
 
 
 class Evidence(BaseModel):
@@ -64,7 +141,33 @@ class Evidence(BaseModel):
     collector_version: str
     locator: str
     kind: str
-    payload: SerializeAsAny[BasePayload] | dict[str, Any] = Field(default_factory=dict)
+    payload: Any = Field(default_factory=dict)
+
+    @classmethod
+    def _coerce_dict_payload(
+        cls, collector_name: str, kind: str, payload: dict[str, Any]
+    ) -> Any:
+        """Try to coerce a dict payload to the matching typed payload class."""
+        from nfr_review._payload_registry import PAYLOAD_REGISTRY
+
+        payload_cls = PAYLOAD_REGISTRY.get((collector_name, kind))
+        if payload_cls is None:
+            return _DictPayloadProxy(payload)
+        filled = _fill_defaults(payload, payload_cls)
+        try:
+            return payload_cls.model_validate(filled)
+        except (ValueError, TypeError):
+            return _DictPayloadProxy(payload)
+
+    def model_post_init(self, __context: Any) -> None:
+        if (
+            isinstance(self.payload, dict)
+            and not isinstance(self.payload, _DictPayloadProxy)
+            and self.payload
+        ):
+            coerced = self._coerce_dict_payload(self.collector_name, self.kind, self.payload)
+            if coerced is not self.payload:
+                object.__setattr__(self, "payload", coerced)
 
 
 class Finding(BaseModel):

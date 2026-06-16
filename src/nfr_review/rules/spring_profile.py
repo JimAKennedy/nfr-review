@@ -36,9 +36,9 @@ class SpringProfileMisconfigurationRule:
         prod_evidence = [
             e
             for e in spring_evidence
-            if e.payload.get("profile") and e.payload["profile"].lower() in _PROD_PROFILES
+            if e.payload.profile and e.payload.profile.lower() in _PROD_PROFILES
         ]
-        base_evidence = [e for e in spring_evidence if not e.payload.get("profile")]
+        base_evidence = [e for e in spring_evidence if not e.payload.profile]
 
         if not prod_evidence:
             return RuleResult(
@@ -50,9 +50,7 @@ class SpringProfileMisconfigurationRule:
                         spring_evidence[0],
                         summary="No production profile config found to check.",
                         confidence=0.7,
-                        evidence_locator=spring_evidence[0].payload.get(
-                            "file_path", spring_evidence[0].locator
-                        ),
+                        evidence_locator=spring_evidence[0].payload.file_path,
                     )
                 ],
             )
@@ -61,7 +59,7 @@ class SpringProfileMisconfigurationRule:
 
         for ev in prod_evidence:
             payload = ev.payload
-            file_path = payload.get("file_path", ev.locator)
+            file_path = payload.file_path
             issues = _check_prod_issues(payload)
 
             if not issues and base_evidence:
@@ -84,7 +82,7 @@ class SpringProfileMisconfigurationRule:
                 )
 
         if not findings:
-            file_path = prod_evidence[0].payload.get("file_path", prod_evidence[0].locator)
+            file_path = prod_evidence[0].payload.file_path
             return RuleResult(
                 rule_id=self.id,
                 findings=[
@@ -102,9 +100,9 @@ class SpringProfileMisconfigurationRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
-def _check_prod_issues(payload: dict[str, Any] | Any) -> list[dict[str, str]]:
+def _check_prod_issues(payload: Any) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
-    logging_section = payload.get("logging", {}) or {}
+    logging_section = getattr(payload, "logging", {}) or {}
 
     if _has_debug_logging(logging_section):
         issues.append(
@@ -139,7 +137,7 @@ def _has_debug_logging(logging_section: dict[str, Any]) -> bool:
     return False
 
 
-def _check_datasource(payload: dict[str, Any], issues: list[dict[str, str]]) -> None:
+def _check_datasource(payload: Any, issues: list[dict[str, str]]) -> None:
     raw_values = _flatten_values(payload).lower()
     if any(marker in raw_values for marker in _INMEMORY_DB_MARKERS):
         issues.append(
@@ -155,8 +153,8 @@ def _check_datasource(payload: dict[str, Any], issues: list[dict[str, str]]) -> 
         )
 
 
-def _check_show_sql(payload: dict[str, Any], issues: list[dict[str, str]]) -> None:
-    spring = payload.get("spring", {})
+def _check_show_sql(payload: Any, issues: list[dict[str, str]]) -> None:
+    spring = getattr(payload, "spring", {})
     if not isinstance(spring, dict):
         return
     jpa = spring.get("jpa", {})
@@ -179,13 +177,13 @@ def _check_show_sql(payload: dict[str, Any], issues: list[dict[str, str]]) -> No
 
 
 def _check_inherited_issues(
-    base_payload: dict[str, Any] | Any,
-    prod_payload: dict[str, Any] | Any,
+    base_payload: Any,
+    prod_payload: Any,
 ) -> list[dict[str, str]]:
     """Check if base config has debug settings not overridden by prod."""
     issues: list[dict[str, str]] = []
-    base_logging = base_payload.get("logging", {}) or {}
-    prod_logging = prod_payload.get("logging", {}) or {}
+    base_logging = getattr(base_payload, "logging", {}) or {}
+    prod_logging = getattr(prod_payload, "logging", {}) or {}
 
     if _has_debug_logging(base_logging) and not prod_logging:
         issues.append(

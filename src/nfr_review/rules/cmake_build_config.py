@@ -29,9 +29,9 @@ class CmakeBuildConfigRule:
 
         findings: list[Finding] = []
         for ev in cmake_ev:
-            file_path = ev.payload.get("file_path", ev.locator)
+            file_path = ev.payload.file_path
 
-            if ev.payload.get("has_global_cmake_flags"):
+            if ev.payload.has_global_cmake_flags:
                 findings.append(
                     Finding(
                         rule_id=self.id,
@@ -52,10 +52,10 @@ class CmakeBuildConfigRule:
                     )
                 )
 
-            has_target = ev.payload.get("has_target_compile_features") or ev.payload.get(
-                "has_target_compile_options"
+            has_target = (
+                ev.payload.has_target_compile_features or ev.payload.has_target_compile_options
             )
-            if not has_target and not ev.payload.get("has_global_cmake_flags"):
+            if not has_target and not ev.payload.has_global_cmake_flags:
                 findings.append(
                     Finding(
                         rule_id=self.id,
@@ -74,7 +74,7 @@ class CmakeBuildConfigRule:
                     )
                 )
 
-            if not ev.payload.get("project_version"):
+            if not ev.payload.project_version:
                 findings.append(
                     Finding(
                         rule_id=self.id,

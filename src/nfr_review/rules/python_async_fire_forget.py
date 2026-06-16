@@ -30,8 +30,8 @@ class PythonAsyncFireForgetRule:
 
         findings: list[Finding] = []
         for ev in py_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for call in ev.payload.get("async_calls", []):
+            file_path = ev.payload.file_path
+            for call in ev.payload.async_calls:
                 if not call["stored"]:
                     findings.append(
                         Finding(

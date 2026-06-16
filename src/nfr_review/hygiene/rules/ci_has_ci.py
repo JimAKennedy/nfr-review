@@ -27,7 +27,7 @@ class CiPresenceRule:
                 skip_reason="no ci-automation-analysis evidence available",
             )
 
-        has_ci = ev.payload.get("has_ci", False)
+        has_ci = ev.payload.has_ci
 
         if not has_ci:
             finding = Finding(
@@ -46,7 +46,7 @@ class CiPresenceRule:
                 pattern_tag="ci-presence",
             )
         else:
-            systems = ev.payload.get("ci_systems", [])
+            systems = ev.payload.ci_systems
             finding = make_green_finding(
                 self.id,
                 "ci-presence",

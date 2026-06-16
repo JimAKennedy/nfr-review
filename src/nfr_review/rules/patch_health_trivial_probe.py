@@ -38,9 +38,9 @@ class TrivialProbeRule:
         probes_checked = 0
 
         for ev in k8s_resources:
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
-            for container in ev.payload.get("containers", []):
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
+            for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 readiness_probe = container.get("readiness_probe")
                 if readiness_probe is None:

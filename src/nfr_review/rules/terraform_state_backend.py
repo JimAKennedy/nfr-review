@@ -31,7 +31,7 @@ class TerraformStateBackendRule:
 
         has_backend = False
         for ev in tf_evidence:
-            for tb in ev.payload.get("terraform_blocks", []):
+            for tb in ev.payload.terraform_blocks:
                 if tb.get("backend_type") is not None:
                     has_backend = True
                     break

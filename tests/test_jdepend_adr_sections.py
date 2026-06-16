@@ -129,6 +129,7 @@ class TestBuildJdependSection:
                             "total_classes": 5,
                         }
                     ],
+                    "cycle_groups": [],
                 },
             ),
         ]

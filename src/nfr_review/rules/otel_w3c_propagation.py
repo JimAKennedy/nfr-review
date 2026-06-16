@@ -34,7 +34,7 @@ class OTelW3CPropagationRule:
         first = sdk_evidence[0]
         all_propagators: set[str] = set()
         for ev in sdk_evidence:
-            propagators = ev.payload.get("propagators", [])
+            propagators = ev.payload.propagators
             all_propagators.update(p.lower() for p in propagators)
 
         has_w3c = bool(all_propagators & _W3C_PROPAGATOR_NAMES)

@@ -30,8 +30,8 @@ class NodejsFloatingPromiseRule:
 
         findings: list[Finding] = []
         for ev in js_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for chain in ev.payload.get("promise_chains", []):
+            file_path = ev.payload.file_path
+            for chain in ev.payload.promise_chains:
                 if not chain["has_catch"]:
                     findings.append(
                         Finding(

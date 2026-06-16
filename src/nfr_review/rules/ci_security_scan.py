@@ -28,13 +28,11 @@ class CiSecurityScanMissingRule:
                 skip_reason="no CI pipeline evidence available",
             )
 
-        any_security = any(e.payload.get("has_security_scan") for e in ci_pipelines)
+        any_security = any(e.payload.has_security_scan for e in ci_pipelines)
 
         if any_security:
             pipelines_with = [
-                e.payload.get("file_path", e.locator)
-                for e in ci_pipelines
-                if e.payload.get("has_security_scan")
+                e.payload.file_path for e in ci_pipelines if e.payload.has_security_scan
             ]
             return RuleResult(
                 rule_id=self.id,
@@ -53,7 +51,7 @@ class CiSecurityScanMissingRule:
                 ],
             )
 
-        pipeline_files = [e.payload.get("file_path", e.locator) for e in ci_pipelines]
+        pipeline_files = [e.payload.file_path for e in ci_pipelines]
         return RuleResult(
             rule_id=self.id,
             findings=[

@@ -51,7 +51,7 @@ class OTelExporterConfigRule:
         first = otel_evidence[0]
         all_exporters: set[str] = set()
         for ev in otel_evidence:
-            all_exporters.update(ev.payload.get("exporters", []))
+            all_exporters.update(ev.payload.exporters)
 
         base_names = {e.split("/")[0] for e in all_exporters}
 

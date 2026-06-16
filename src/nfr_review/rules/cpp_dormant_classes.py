@@ -55,11 +55,11 @@ class CppDormantClassesRule:
         all_classes: list[dict] = []
         class_file: dict[str, str] = {}
         for ev in cpp_ev:
-            for cls in ev.payload.get("classes", []):
+            for cls in ev.payload.classes:
                 name = cls.get("name", "")
                 if name:
                     all_classes.append(cls)
-                    class_file[name] = ev.payload.get("file_path", "unknown")
+                    class_file[name] = ev.payload.file_path
 
         if len(all_classes) < 2:
             return RuleResult(rule_id=self.id, findings=[])

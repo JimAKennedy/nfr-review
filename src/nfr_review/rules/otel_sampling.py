@@ -48,8 +48,8 @@ class OTelSamplingRule:
         all_processors: set[str] = set()
         pipeline_processors: set[str] = set()
         for ev in otel_evidence:
-            all_processors.update(ev.payload.get("processors", []))
-            for _name, cfg in ev.payload.get("pipelines", {}).items():
+            all_processors.update(ev.payload.processors)
+            for _name, cfg in ev.payload.pipelines.items():
                 if isinstance(cfg, dict):
                     pipeline_processors.update(cfg.get("processors", []))
 
@@ -61,7 +61,7 @@ class OTelSamplingRule:
         if "memory_limiter" in processor_base_names:
             for ev in otel_evidence:
                 processors_config = {}
-                for p in ev.payload.get("processors", []):
+                for p in ev.payload.processors:
                     processors_config[p] = True
             has_rate_limiting = True
 

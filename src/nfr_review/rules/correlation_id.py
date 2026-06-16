@@ -51,7 +51,7 @@ class CorrelationIdMissingRule:
             )
 
         ev = java_deps_evidence[0]
-        dependencies: list[dict[str, Any]] = ev.payload.get("dependencies", [])
+        dependencies: list[dict[str, Any]] = ev.payload.dependencies
 
         has_tracing = any(_is_tracing_dep(dep.get("name", "")) for dep in dependencies)
 
@@ -72,7 +72,7 @@ class CorrelationIdMissingRule:
                 ],
             )
 
-        manifest_files = ev.payload.get("manifest_files_found", [])
+        manifest_files = ev.payload.manifest_files_found
         locator = manifest_files[0] if manifest_files else ev.locator
 
         return RuleResult(

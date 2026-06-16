@@ -437,7 +437,8 @@ class TestTerminationGracePeriodRule004:
     def test_none_grace_period_treated_as_default(self) -> None:
         """Payload may contain termination_grace_period=None (parsed but unset)."""
         ev = _k8s_ev(containers=[_container()])
-        ev.payload["termination_grace_period"] = None
+        new_payload = ev.payload.model_copy(update={"termination_grace_period": None})
+        ev = ev.model_copy(update={"payload": new_payload})
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "amber"
         assert "default" in result.findings[0].summary.lower()

@@ -32,8 +32,8 @@ class ProtoFieldNumberingRule:
 
         findings: list[Finding] = []
         for ev in proto_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for msg in ev.payload.get("messages", []):
+            file_path = ev.payload.file_path
+            for msg in ev.payload.messages:
                 msg_name = msg.get("name", "Unknown")
                 fields = msg.get("fields", [])
                 if not fields:

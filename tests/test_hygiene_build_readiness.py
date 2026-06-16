@@ -584,17 +584,47 @@ class TestNegativeCases:
 
     def test_empty_payload_keys(self) -> None:
         rule = BuildSystemRule()
-        result = rule.evaluate(_make_evidence({}), context=None)
+        empty_payload = _build_payload(
+            has_build_system=False,
+            backend=None,
+            build_path=None,
+            version_declared=False,
+            version_value=None,
+            version_source=None,
+            has_entry_points=False,
+            scripts=None,
+        )
+        result = rule.evaluate(_make_evidence(empty_payload), context=None)
         assert result.findings[0].rag == "red"
 
     def test_version_empty_payload(self) -> None:
         rule = VersionStrategyRule()
-        result = rule.evaluate(_make_evidence({}), context=None)
+        empty_payload = _build_payload(
+            has_build_system=False,
+            backend=None,
+            build_path=None,
+            version_declared=False,
+            version_value=None,
+            version_source=None,
+            has_entry_points=False,
+            scripts=None,
+        )
+        result = rule.evaluate(_make_evidence(empty_payload), context=None)
         assert result.findings[0].rag == "amber"
 
     def test_entry_points_empty_payload_no_build(self) -> None:
         rule = EntryPointsRule()
-        result = rule.evaluate(_make_evidence({}), context=None)
+        empty_payload = _build_payload(
+            has_build_system=False,
+            backend=None,
+            build_path=None,
+            version_declared=False,
+            version_value=None,
+            version_source=None,
+            has_entry_points=False,
+            scripts=None,
+        )
+        result = rule.evaluate(_make_evidence(empty_payload), context=None)
         assert result.findings[0].rag == "green"
         assert result.findings[0].severity == "info"
 

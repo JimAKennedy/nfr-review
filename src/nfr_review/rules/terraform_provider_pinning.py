@@ -32,7 +32,7 @@ class TerraformProviderPinningRule:
         provider_versions: dict[str, str | None] = {}
 
         for ev in tf_evidence:
-            for pb in ev.payload.get("provider_blocks", []):
+            for pb in ev.payload.provider_blocks:
                 name = pb.get("name", "")
                 if not name:
                     continue
@@ -40,7 +40,7 @@ class TerraformProviderPinningRule:
                 if name not in provider_versions or version is not None:
                     provider_versions[name] = version
 
-            for tb in ev.payload.get("terraform_blocks", []):
+            for tb in ev.payload.terraform_blocks:
                 for rp in tb.get("required_providers", []):
                     name = rp.get("name", "")
                     if not name:

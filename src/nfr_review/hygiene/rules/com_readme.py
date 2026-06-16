@@ -51,7 +51,7 @@ class ReadmePresenceRule:
                 skip_reason="no community-analysis evidence available",
             )
 
-        info = ev.payload.get("readme", {})
+        info = ev.payload.readme
         exists = info.get("exists", False)
         size = info.get("size", 0)
         locator = info.get("path") or ev.locator
@@ -108,7 +108,7 @@ class ReadmePresenceRule:
             )
         )
 
-        sections = ev.payload.get("readme_sections", {})
+        sections = ev.payload.readme_sections
         well_known = set(sections.get("well_known_sections", []))
 
         has_required = bool(well_known & _REQUIRED_SECTIONS)
@@ -156,7 +156,7 @@ class ReadmePresenceRule:
                 )
             )
 
-        badges = ev.payload.get("readme_badges", [])
+        badges = ev.payload.readme_badges
         if not badges:
             findings.append(
                 make_green_finding(

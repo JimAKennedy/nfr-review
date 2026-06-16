@@ -30,8 +30,8 @@ class CSharpConfigureAwaitRule:
 
         findings: list[Finding] = []
         for ev in cs_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for await_expr in ev.payload.get("await_expressions", []):
+            file_path = ev.payload.file_path
+            for await_expr in ev.payload.await_expressions:
                 if not await_expr["has_configure_await"]:
                     findings.append(
                         Finding(

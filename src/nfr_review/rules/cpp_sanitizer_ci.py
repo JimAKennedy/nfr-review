@@ -42,9 +42,7 @@ class CppSanitizerCiRule:
 
         has_sanitizer = False
         for ev in ci_ev:
-            searchable = " ".join(
-                ev.payload.get("step_names", []) + ev.payload.get("job_names", [])
-            ).lower()
+            searchable = " ".join(ev.payload.step_names + ev.payload.job_names).lower()
             for keyword in _SANITIZER_KEYWORDS:
                 if keyword in searchable:
                     has_sanitizer = True

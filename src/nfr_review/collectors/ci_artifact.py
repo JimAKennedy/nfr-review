@@ -299,11 +299,9 @@ class CiArtifactCollector:
         # Emit summary
         if evidence:
             pipelines = [e for e in evidence if e.kind == "ci-pipeline"]
-            ci_systems = list({ev.payload["ci_system"] for ev in pipelines})
-            any_test = any(ev.payload["has_test_step"] for ev in pipelines) or bool(
-                cmake_signals
-            )
-            any_security = any(ev.payload["has_security_scan"] for ev in pipelines)
+            ci_systems = list({ev.payload.ci_system for ev in pipelines})
+            any_test = any(ev.payload.has_test_step for ev in pipelines) or bool(cmake_signals)
+            any_security = any(ev.payload.has_security_scan for ev in pipelines)
             evidence.append(
                 Evidence(
                     collector_name=self.name,

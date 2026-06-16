@@ -42,31 +42,31 @@ class PdbCoverageRule:
         findings: list[Finding] = []
 
         for ev in k8s_resources:
-            resource_kind = ev.payload.get("kind", "")
+            resource_kind = ev.payload.kind
             if resource_kind not in _WORKLOAD_KINDS:
                 continue
 
-            replicas = ev.payload.get("replicas")
+            replicas = ev.payload.replicas
             if replicas is None or replicas <= 1:
                 # Singleton or unset — PDB is not the concern here (PATCH-ARCH-001 covers it).
                 continue
 
-            resource_name = ev.payload.get("name", "")
-            namespace = ev.payload.get("namespace")
-            file_path = ev.payload.get("file_path", ev.locator)
-            workload_labels = ev.payload.get("labels")
+            resource_name = ev.payload.name
+            namespace = ev.payload.namespace
+            file_path = ev.payload.file_path
+            workload_labels = ev.payload.labels
 
             # Find PDBs that are namespace-compatible and whose matchLabels
             # are a subset of this workload's pod template labels.
             matching_pdb: str | None = None
             for pdb_ev in pdb_evidence:
-                pdb_namespace = pdb_ev.payload.get("namespace")
+                pdb_namespace = pdb_ev.payload.namespace
                 # Namespace must match (both None counts as same namespace).
                 if pdb_namespace != namespace:
                     continue
-                match_labels = pdb_ev.payload.get("match_labels")
+                match_labels = pdb_ev.payload.match_labels
                 if _labels_overlap(match_labels, workload_labels):
-                    matching_pdb = pdb_ev.payload.get("name", pdb_ev.locator)
+                    matching_pdb = pdb_ev.payload.name
                     break
 
             if matching_pdb is None:
@@ -76,10 +76,10 @@ class PdbCoverageRule:
                     ns_pdbs = [
                         pdb_ev
                         for pdb_ev in pdb_evidence
-                        if pdb_ev.payload.get("namespace") == namespace
+                        if pdb_ev.payload.namespace == namespace
                     ]
                     if ns_pdbs:
-                        matching_pdb = ns_pdbs[0].payload.get("name", ns_pdbs[0].locator)
+                        matching_pdb = ns_pdbs[0].payload.name
 
             if matching_pdb is None:
                 findings.append(

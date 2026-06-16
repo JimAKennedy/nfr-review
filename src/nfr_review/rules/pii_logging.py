@@ -59,7 +59,7 @@ class PiiInLogStatementsRule:
         java_evidence = [
             e
             for e in filter_evidence(evidence, "java-ast", "java-ast-file")
-            if e.payload.get("log_statements")
+            if e.payload.log_statements
         ]
         if not java_evidence:
             return RuleResult(
@@ -70,19 +70,19 @@ class PiiInLogStatementsRule:
 
         regex_hits: list[dict[str, Any]] = []
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for stmt in ev.payload["log_statements"]:
+            file_path = ev.payload.file_path
+            for stmt in ev.payload.log_statements:
                 matched_patterns: list[str] = []
                 for pattern_name, pattern_re in PII_PATTERNS:
-                    if pattern_re.search(stmt["arguments_text"]):
+                    if pattern_re.search(stmt.arguments_text):
                         matched_patterns.append(pattern_name)
                 if matched_patterns:
                     regex_hits.append(
                         {
                             "file_path": file_path,
-                            "method": stmt["method"],
-                            "arguments_text": stmt["arguments_text"],
-                            "line": stmt["line"],
+                            "method": stmt.method,
+                            "arguments_text": stmt.arguments_text,
+                            "line": stmt.line,
                             "matched_patterns": matched_patterns,
                             "collector_name": ev.collector_name,
                             "collector_version": ev.collector_version,

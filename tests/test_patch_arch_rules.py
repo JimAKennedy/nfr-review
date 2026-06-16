@@ -93,8 +93,7 @@ class TestSingletonDeploymentRule:
         assert "explicitly set to 1" in f.summary
 
     def test_singleton_replicas_none_red(self) -> None:
-        ev = _k8s_evidence()
-        ev.payload.pop("replicas", None)
+        ev = _k8s_evidence(replicas=None)
         result = self.rule.evaluate([ev], None)
         assert len(result.findings) == 1
         f = result.findings[0]
@@ -403,8 +402,7 @@ class TestPdbCoverageRule:
         assert "No multi-replica" in result.findings[0].summary
 
     def test_replicas_none_not_checked(self) -> None:
-        ev = _k8s_evidence(labels={"app": "web"})
-        ev.payload.pop("replicas", None)
+        ev = _k8s_evidence(replicas=None, labels={"app": "web"})
         result = self.rule.evaluate([ev], None)
         assert result.findings[0].rag == "green"
         assert "No multi-replica" in result.findings[0].summary

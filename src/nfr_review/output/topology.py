@@ -63,7 +63,7 @@ def build_topology_graph(evidence: list[Evidence]) -> TopologyGraph:
     all_spans: list[tuple[str, str, str, str]] = []  # (trace_id, span_id, parent_span_id, svc)
 
     for ev in trace_ev:
-        for span in ev.payload.get("spans", []):
+        for span in ev.payload.spans:
             svc = (
                 span.get("service_name", "")
                 if hasattr(span, "get")

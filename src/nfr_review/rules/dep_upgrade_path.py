@@ -77,7 +77,7 @@ class DepUpgradePathRule:
             if ecosystem is None:
                 continue
 
-            deps = ev.payload.get("dependencies", [])
+            deps = ev.payload.dependencies
             filtered = self._filter_deps(deps)
             if not filtered:
                 logger.warning(

@@ -34,7 +34,7 @@ class OTelResourceAttrsRule:
         first = sdk_evidence[0]
         all_attrs: set[str] = set()
         for ev in sdk_evidence:
-            resource_attrs = ev.payload.get("resource_attributes", {})
+            resource_attrs = ev.payload.resource_attributes
             if isinstance(resource_attrs, dict):
                 all_attrs.update(resource_attrs.keys())
 

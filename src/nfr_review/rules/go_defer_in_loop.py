@@ -30,8 +30,8 @@ class GoDeferInLoopRule:
 
         findings: list[Finding] = []
         for ev in go_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for stmt in ev.payload.get("defer_statements", []):
+            file_path = ev.payload.file_path
+            for stmt in ev.payload.defer_statements:
                 if stmt["in_loop"]:
                     findings.append(
                         Finding(

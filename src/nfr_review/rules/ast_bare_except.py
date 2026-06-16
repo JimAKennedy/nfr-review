@@ -54,8 +54,8 @@ class BareExceptCatchAllRule:
             broad = _BROAD_TYPES.get(lang.language, frozenset())
 
             for ev in lang_ev:
-                file_path = ev.payload.get("file_path", ev.locator)
-                for block in ev.payload.get("catch_blocks", []):
+                file_path = ev.payload.file_path
+                for block in ev.payload.catch_blocks:
                     caught = block["caught_type"]
                     if block["rethrows"]:
                         continue

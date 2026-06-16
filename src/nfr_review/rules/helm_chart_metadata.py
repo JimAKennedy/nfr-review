@@ -39,9 +39,9 @@ class HelmChartMetadataRule:
 
         findings: list[Finding] = []
         for ev in helm_evidence:
-            chart_path = ev.payload.get("chart_path", ev.locator)
+            chart_path = ev.payload.chart_path
 
-            if not ev.payload.get("description"):
+            if not ev.payload.description:
                 findings.append(
                     Finding(
                         rule_id=self.id,
@@ -57,7 +57,7 @@ class HelmChartMetadataRule:
                     )
                 )
 
-            if not ev.payload.get("app_version"):
+            if not ev.payload.app_version:
                 findings.append(
                     Finding(
                         rule_id=self.id,
@@ -76,7 +76,7 @@ class HelmChartMetadataRule:
                     )
                 )
 
-            chart_version = ev.payload.get("chart_version")
+            chart_version = ev.payload.chart_version
             if chart_version and not _SEMVER_RE.match(str(chart_version)):
                 findings.append(
                     Finding(
@@ -98,7 +98,7 @@ class HelmChartMetadataRule:
                     )
                 )
 
-            maintainers = ev.payload.get("maintainers")
+            maintainers = ev.payload.maintainers
             if not maintainers:
                 findings.append(
                     Finding(

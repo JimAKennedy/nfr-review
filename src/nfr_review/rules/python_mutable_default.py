@@ -32,8 +32,8 @@ class PythonMutableDefaultRule:
 
         findings: list[Finding] = []
         for ev in py_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for func in ev.payload.get("functions", []):
+            file_path = ev.payload.file_path
+            for func in ev.payload.functions:
                 for default in func.get("default_args", []):
                     if default["default_type"] in _MUTABLE_TYPES:
                         findings.append(

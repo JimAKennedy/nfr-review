@@ -27,7 +27,7 @@ class BuildSystemRule:
                 skip_reason="no build-readiness-analysis evidence available",
             )
 
-        info = ev.payload.get("build_system", {})
+        info = ev.payload.build_system
         has_build = info.get("has_build_system", False)
 
         if not has_build:

@@ -133,8 +133,8 @@ def _group_by_ecosystem(
         ecosystem = _KIND_TO_ECOSYSTEM.get(ev.kind)
         if ecosystem is None:
             continue
-        deps = ev.payload.get("dependencies", [])
-        manifests = ev.payload.get("manifest_files_found", [])
+        deps = ev.payload.dependencies
+        manifests = ev.payload.manifest_files_found
         if ecosystem in result:
             existing_manifests, existing_deps = result[ecosystem]
             existing_manifests.extend(manifests)

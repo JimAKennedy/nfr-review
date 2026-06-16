@@ -40,7 +40,7 @@ class DynLatencyP95Rule:
 
         route_durations: dict[str, list[float]] = {}
         for ev in trace_ev:
-            for span in ev.payload.get("spans", []):
+            for span in ev.payload.spans:
                 if span.get("kind") != 2:
                     continue
                 route = span.get("attributes", {}).get("http.route", "")

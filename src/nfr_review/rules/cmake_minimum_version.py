@@ -33,8 +33,8 @@ class CmakeMinimumVersionRule:
 
         findings: list[Finding] = []
         for ev in cmake_ev:
-            file_path = ev.payload.get("file_path", ev.locator)
-            version_str = ev.payload.get("cmake_minimum_required")
+            file_path = ev.payload.file_path
+            version_str = ev.payload.cmake_minimum_required
             if version_str is None:
                 findings.append(
                     Finding(

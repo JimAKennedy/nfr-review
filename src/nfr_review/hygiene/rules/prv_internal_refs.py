@@ -27,7 +27,7 @@ class InternalRefsRule:
                 skip_reason="no privacy-analysis evidence available",
             )
 
-        refs = ev.payload.get("internal_references", [])
+        refs = ev.payload.internal_references
 
         if refs:
             types = sorted({m["pattern_type"] for m in refs})

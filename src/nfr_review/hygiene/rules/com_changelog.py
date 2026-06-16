@@ -29,7 +29,7 @@ class ChangelogPresenceRule:
                 skip_reason="no community-analysis evidence available",
             )
 
-        info = ev.payload.get("changelog", {})
+        info = ev.payload.changelog
         exists = info.get("exists", False)
         size = info.get("size", 0)
         locator = info.get("path") or ev.locator
@@ -89,7 +89,7 @@ class ChangelogPresenceRule:
             )
         )
 
-        structure = ev.payload.get("changelog_structure", {})
+        structure = ev.payload.changelog_structure
         has_versions = structure.get("has_versions", False)
         follows_kac = structure.get("follows_keep_a_changelog", False)
 

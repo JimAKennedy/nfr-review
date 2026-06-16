@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.llm_client import (
     LlmUnavailableError,
     create_llm_client,
@@ -84,45 +83,32 @@ class ArchitecturalDriftFromAdrRule:
     ) -> str:
         adr_items: list[dict[str, Any]] = []
         for ev in adr_evidence:
-            if isinstance(ev.payload, AdrDocumentPayload):
-                if not ev.payload.title:
-                    continue
-                adr_items.append(
-                    {
-                        "title": ev.payload.title,
-                        "status": ev.payload.status,
-                        "date": ev.payload.date,
-                        "file": ev.payload.file_path,
-                    }
-                )
-            else:
-                payload = ev.payload
-                if not payload.get("title"):
-                    continue
-                adr_items.append(
-                    {
-                        "title": payload.get("title"),
-                        "status": payload.get("status"),
-                        "date": payload.get("date"),
-                        "file": payload.get("file_path", ev.locator),
-                    }
-                )
+            payload = ev.payload
+            if not payload.title:
+                continue
+            adr_items.append(
+                {
+                    "title": payload.title,
+                    "status": payload.status,
+                    "date": payload.date,
+                    "file": payload.file_path,
+                }
+            )
 
         java_items: list[dict[str, Any]] = []
         for ev in java_evidence:
             payload = ev.payload
-            classes = payload.get("classes", [])
             java_items.append(
                 {
-                    "file": payload.get("file_path", ev.locator),
+                    "file": payload.file_path,
                     "classes": [
                         {
-                            "name": c.get("name"),
-                            "annotations": c.get("annotations", []),
+                            "name": c.name,
+                            "annotations": c.annotations,
                         }
-                        for c in classes
+                        for c in payload.classes
                     ],
-                    "imports": payload.get("imports", []),
+                    "imports": payload.imports,
                 }
             )
 

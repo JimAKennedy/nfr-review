@@ -68,8 +68,8 @@ def _matches_dir_pattern(name: str) -> bool:
 
 
 def _find_config_files(ev: Evidence) -> list[str]:
-    top_files: list[str] = ev.payload.get("top_level_files", [])
-    top_dirs: list[str] = ev.payload.get("top_level_dirs", [])
+    top_files: list[str] = ev.payload.top_level_files
+    top_dirs: list[str] = ev.payload.top_level_dirs
     matched = [f for f in top_files if _matches_file_pattern(f)]
     matched += [d for d in top_dirs if _matches_dir_pattern(d)]
     return matched
@@ -138,8 +138,8 @@ class PatchClassSoakConfigRule:
     def _evaluate_parsed(self, parsed: list[Evidence]) -> RuleResult:
         findings: list[Finding] = []
         for ev in parsed:
-            file_path = ev.payload.get("file_path", ev.locator)
-            patch_classes = ev.payload.get("patch_classes", [])
+            file_path = ev.payload.file_path
+            patch_classes = ev.payload.patch_classes
             if patch_classes:
                 findings.append(
                     make_green_finding(
@@ -256,8 +256,8 @@ class AcceleratedCadenceRule:
         found_critical = False
 
         for ev in parsed:
-            file_path = ev.payload.get("file_path", ev.locator)
-            patch_classes = ev.payload.get("patch_classes", [])
+            file_path = ev.payload.file_path
+            patch_classes = ev.payload.patch_classes
             if not patch_classes:
                 continue
             has_any_classes = True

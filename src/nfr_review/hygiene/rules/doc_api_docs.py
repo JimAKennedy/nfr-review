@@ -27,7 +27,7 @@ class ApiDocsRule:
                 skip_reason="no documentation-analysis evidence available",
             )
 
-        manifests = ev.payload.get("manifests", [])
+        manifests = ev.payload.manifests
         has_python = any(m.get("type") == "pyproject.toml" for m in manifests)
 
         findings: list[Finding] = []
@@ -40,7 +40,7 @@ class ApiDocsRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
     def _check_docstring(self, ev: Evidence, has_python: bool) -> Finding:
-        has_api_docs_hint = ev.payload.get("has_api_docs_hint", False)
+        has_api_docs_hint = ev.payload.has_api_docs_hint
 
         if not has_python:
             return make_green_finding(
@@ -80,7 +80,7 @@ class ApiDocsRule:
             )
 
     def _check_py_typed(self, ev: Evidence) -> Finding:
-        has_py_typed = ev.payload.get("has_py_typed", False)
+        has_py_typed = ev.payload.has_py_typed
 
         if has_py_typed:
             return make_green_finding(
@@ -109,8 +109,8 @@ class ApiDocsRule:
         )
 
     def _check_classifiers(self, ev: Evidence) -> Finding:
-        has_classifiers = ev.payload.get("has_classifiers", False)
-        classifier_count = ev.payload.get("classifier_count", 0)
+        has_classifiers = ev.payload.has_classifiers
+        classifier_count = ev.payload.classifier_count
 
         if has_classifiers:
             return make_green_finding(

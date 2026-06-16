@@ -44,15 +44,15 @@ class ResilienceAnnotationMissingRule:
 
         findings: list[Finding] = []
         for ev in java_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            imports = ev.payload.get("imports", [])
+            file_path = ev.payload.file_path
+            imports = ev.payload.imports
             uses_http_client = any(
                 any(pattern in imp for imp in imports) for pattern in _HTTP_CLIENT_PATTERNS
             )
             if not uses_http_client:
                 continue
 
-            for cls in ev.payload.get("classes", []):
+            for cls in ev.payload.classes:
                 class_annotations = set(cls.get("annotations", []))
                 method_annotations: set[str] = set()
                 for method in cls.get("methods", []):

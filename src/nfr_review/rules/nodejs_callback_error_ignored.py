@@ -30,8 +30,8 @@ class NodejsCallbackErrorIgnoredRule:
 
         findings: list[Finding] = []
         for ev in js_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for cb in ev.payload.get("callback_patterns", []):
+            file_path = ev.payload.file_path
+            for cb in ev.payload.callback_patterns:
                 if not cb["checks_error"]:
                     findings.append(
                         Finding(

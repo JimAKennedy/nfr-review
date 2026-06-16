@@ -436,7 +436,13 @@ class TestCppClangFormat:
         rule = CppClangFormatRule()
         ev = _make_evidence(
             "repo-structure-summary",
-            {"files": [".clang-format", "src/main.cpp"]},
+            {
+                "top_level_files": [".clang-format", "src/main.cpp"],
+                "top_level_dirs": [],
+                "has_readme": False,
+                "has_git_dir": False,
+                "has_pyproject": False,
+            },
             collector_name="repo-structure",
         )
         result = rule.evaluate([ev], context=None)
@@ -447,7 +453,13 @@ class TestCppClangFormat:
         rule = CppClangFormatRule()
         ev = _make_evidence(
             "repo-structure-summary",
-            {"files": ["src/main.cpp", "CMakeLists.txt"]},
+            {
+                "top_level_files": ["src/main.cpp", "CMakeLists.txt"],
+                "top_level_dirs": [],
+                "has_readme": False,
+                "has_git_dir": False,
+                "has_pyproject": False,
+            },
             collector_name="repo-structure",
         )
         result = rule.evaluate([ev], context=None)
@@ -458,7 +470,13 @@ class TestCppClangFormat:
         rule = CppClangFormatRule()
         ev = _make_evidence(
             "repo-structure-summary",
-            {"files": ["_clang-format"]},
+            {
+                "top_level_files": ["_clang-format"],
+                "top_level_dirs": [],
+                "has_readme": False,
+                "has_git_dir": False,
+                "has_pyproject": False,
+            },
             collector_name="repo-structure",
         )
         result = rule.evaluate([ev], context=None)
@@ -488,7 +506,13 @@ class TestCppClangTidy:
         rule = CppClangTidyRule()
         ev = _make_evidence(
             "repo-structure-summary",
-            {"files": [".clang-tidy", "src/main.cpp"]},
+            {
+                "top_level_files": [".clang-tidy", "src/main.cpp"],
+                "top_level_dirs": [],
+                "has_readme": False,
+                "has_git_dir": False,
+                "has_pyproject": False,
+            },
             collector_name="repo-structure",
         )
         result = rule.evaluate([ev], context=None)
@@ -499,7 +523,13 @@ class TestCppClangTidy:
         rule = CppClangTidyRule()
         ev = _make_evidence(
             "repo-structure-summary",
-            {"files": ["src/main.cpp"]},
+            {
+                "top_level_files": ["src/main.cpp"],
+                "top_level_dirs": [],
+                "has_readme": False,
+                "has_git_dir": False,
+                "has_pyproject": False,
+            },
             collector_name="repo-structure",
         )
         result = rule.evaluate([ev], context=None)

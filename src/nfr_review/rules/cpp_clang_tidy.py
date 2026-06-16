@@ -29,9 +29,9 @@ class CppClangTidyRule:
 
         all_files: set[str] = set()
         for ev in repo_ev:
-            for f in ev.payload.get("files", []):
+            for f in getattr(ev.payload, "files", []):
                 all_files.add(f if isinstance(f, str) else f.get("path", ""))
-            for f in ev.payload.get("top_level_files", []):
+            for f in getattr(ev.payload, "top_level_files", []):
                 all_files.add(f if isinstance(f, str) else f.get("path", ""))
 
         has_tidy = any(f.endswith(".clang-tidy") for f in all_files)

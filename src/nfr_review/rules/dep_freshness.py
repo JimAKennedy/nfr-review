@@ -80,7 +80,7 @@ class DepFreshnessRule:
         findings: list[Finding] = []
 
         for ev in dep_evidence:
-            for dep in ev.payload.get("dependencies", []):
+            for dep in ev.payload.dependencies:
                 dep_findings = self._assess_dep(dep, ev, now)
                 findings.extend(dep_findings)
 

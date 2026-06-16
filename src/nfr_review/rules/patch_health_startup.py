@@ -45,9 +45,9 @@ class StartupProbeMissingRule:
         findings: list[Finding] = []
 
         for ev in k8s_resources:
-            resource_kind = ev.payload.get("kind", "")
-            resource_name = ev.payload.get("name", "")
-            file_path = ev.payload.get("file_path", ev.locator)
+            resource_kind = ev.payload.kind
+            resource_name = ev.payload.name
+            file_path = ev.payload.file_path
 
             # DaemonSets are explicitly GREEN — startup probes less critical
             if resource_kind == "DaemonSet":
@@ -73,10 +73,10 @@ class StartupProbeMissingRule:
             if resource_kind not in _WORKLOAD_KINDS:
                 continue
 
-            replicas = ev.payload.get("replicas")
+            replicas = ev.payload.replicas
             is_multi_replica = replicas is not None and replicas > 1
 
-            for container in ev.payload.get("containers", []):
+            for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 has_startup_probe = container.get("startup_probe") is not None
                 locator = f"{file_path}:{resource_name}:{container_name}"

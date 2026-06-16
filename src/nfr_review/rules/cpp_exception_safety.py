@@ -29,7 +29,7 @@ class CppExceptionSafetyRule:
 
         findings: list[Finding] = []
         for ev in cpp_ev:
-            for block in ev.payload.get("catch_blocks", []):
+            for block in ev.payload.catch_blocks:
                 caught = block.get("caught_type", "")
                 rethrows = block.get("rethrows", False)
                 if "..." in caught and not rethrows:

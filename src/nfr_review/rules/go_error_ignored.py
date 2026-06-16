@@ -30,8 +30,8 @@ class GoErrorIgnoredRule:
 
         findings: list[Finding] = []
         for ev in go_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for entry in ev.payload.get("error_assignments", []):
+            file_path = ev.payload.file_path
+            for entry in ev.payload.error_assignments:
                 if entry["error_ignored"]:
                     findings.append(
                         Finding(

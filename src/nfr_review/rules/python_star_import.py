@@ -30,8 +30,8 @@ class PythonStarImportRule:
 
         findings: list[Finding] = []
         for ev in py_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            for imp in ev.payload.get("imports", []):
+            file_path = ev.payload.file_path
+            for imp in ev.payload.imports:
                 if imp.get("is_star"):
                     findings.append(
                         Finding(

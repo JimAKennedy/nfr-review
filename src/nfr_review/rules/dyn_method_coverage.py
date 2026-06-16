@@ -34,7 +34,7 @@ class DynMethodCoverageRule:
         total_spans = 0
 
         for ev in trace_evidence:
-            for span in ev.payload.get("spans", []):
+            for span in ev.payload.spans:
                 total_spans += 1
                 ns = span.get("code_namespace", "")
                 fn = span.get("code_function", "")
@@ -44,7 +44,7 @@ class DynMethodCoverageRule:
                     method_hits[fn] += 1
 
         first = trace_evidence[0]
-        service_names = first.payload.get("service_names", [])
+        service_names = first.payload.service_names
         services_str = ", ".join(service_names) if service_names else "unknown"
 
         if not method_hits:
@@ -95,7 +95,7 @@ class DynMethodCoverageRule:
                         f"Observed {len(method_hits)} distinct instrumented methods "
                         f"across {total_spans} spans from service(s): {services_str}.\n"
                         f"Sample size: {total_spans} spans, "
-                        f"{len(first.payload.get('trace_ids', []))} trace(s).\n"
+                        f"{len(first.payload.trace_ids)} trace(s).\n"
                         f"Top methods:\n{method_list}"
                     ),
                     evidence_locator=first.locator,

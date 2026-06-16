@@ -36,7 +36,7 @@ class DynNPlus1Rule:
         children: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
         for ev in trace_ev:
-            for span in ev.payload.get("spans", []):
+            for span in ev.payload.spans:
                 sid = span.get("span_id", "")
                 if sid:
                     spans_by_id[sid] = span

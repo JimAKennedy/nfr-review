@@ -29,10 +29,10 @@ class CodeDebtRule:
                 skip_reason="no code-debt-analysis evidence available",
             )
 
-        total = ev.payload.get("total_markers", 0)
-        per_marker = ev.payload.get("per_marker", {})
-        top_files = ev.payload.get("top_files", [])
-        file_count = ev.payload.get("file_count", 0)
+        total = ev.payload.total_markers
+        per_marker = ev.payload.per_marker
+        top_files = ev.payload.top_files
+        file_count = ev.payload.file_count
 
         threshold = _DEFAULT_THRESHOLD
 

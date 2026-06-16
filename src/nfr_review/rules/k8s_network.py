@@ -36,7 +36,7 @@ class NetworkPolicyMissingRule:
                 skip_reason="no k8s-manifest evidence available",
             )
 
-        has_network_policy = summary_ev.payload.get("has_network_policy", False)
+        has_network_policy = summary_ev.payload.has_network_policy
 
         if has_network_policy:
             finding = make_green_finding(

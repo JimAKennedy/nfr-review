@@ -31,9 +31,9 @@ class DockerfileMultistageRule:
 
         findings: list[Finding] = []
         for ev in df_evidence:
-            file_path = ev.payload.get("file_path", ev.locator)
-            is_multistage = ev.payload.get("is_multistage", False)
-            run_commands = ev.payload.get("run_commands", [])
+            file_path = ev.payload.file_path
+            is_multistage = ev.payload.is_multistage
+            run_commands = ev.payload.run_commands
 
             if not is_multistage and len(run_commands) > 0:
                 findings.append(

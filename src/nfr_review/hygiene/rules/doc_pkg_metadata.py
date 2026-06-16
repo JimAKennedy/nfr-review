@@ -29,7 +29,7 @@ class PkgMetadataRule:
                 skip_reason="no documentation-analysis evidence available",
             )
 
-        manifests: list[dict[str, Any]] = ev.payload.get("manifests", [])
+        manifests: list[dict[str, Any]] = ev.payload.manifests
 
         if not manifests:
             finding = Finding(

@@ -76,8 +76,8 @@ class LoggingToStdoutRule:
             methods = _STDOUT_METHODS.get(lang.language, frozenset())
 
             for ev in lang_ev:
-                file_path = ev.payload.get("file_path", ev.locator)
-                for stmt in ev.payload.get("log_statements", []):
+                file_path = ev.payload.file_path
+                for stmt in ev.payload.log_statements:
                     if stmt["method"] in methods:
                         findings.append(
                             Finding(
