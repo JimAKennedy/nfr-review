@@ -51,6 +51,10 @@ nfr-review uses a three-stage pipeline:
 
 Technologies are auto-detected (18 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
 
+For a precise breakdown of how deeply each language, platform, and command is
+supported — including support tiers and known gaps — see
+[COVERAGE.md](COVERAGE.md).
+
 ## Quick start
 
 ### GitHub Action (CI integration)
@@ -719,6 +723,9 @@ ruff format --check src/ tests/
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting a pull request.
 
+- [Architecture Guide](ARCHITECTURE.md) — where logic belongs; read before adding a collector, rule, or output format
+- [Coverage Matrix](COVERAGE.md) — per-language / per-command support tiers and gaps
+- [Cleanup & Refactoring Tasks](CLEANUP_TASKS.md) — prioritized architecture backlog
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 - [Changelog](CHANGELOG.md)
