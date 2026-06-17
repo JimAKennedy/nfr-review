@@ -13,7 +13,11 @@ from pydantic import ValidationError
 
 from nfr_review.arch_models import C4Diagram
 from nfr_review.cli import cli
-from nfr_review.experimental_models import CrossRepoEdge, ExperimentalReport
+from nfr_review.experimental_models import (
+    CrossRepoEdge,
+    DynamicAnalysisSection,
+    ExperimentalReport,
+)
 from nfr_review.experimental_orchestrator import run_experimental_review
 from nfr_review.output.experimental_render import render_experimental_report
 
@@ -348,3 +352,246 @@ class TestExperimentalCli:
             ["experimental", str(CPP_FIXTURE), "-v", "-q"],
         )
         assert result.exit_code != 0
+
+
+# ===================================================================
+# 5. Dynamic analysis integration tests
+# ===================================================================
+
+
+def _make_trace_evidence() -> list:
+    """Create fake OTel trace evidence for testing."""
+    from nfr_review.models import Evidence
+
+    return [
+        Evidence(
+            collector_name="otel-trace",
+            collector_version="1.0.0",
+            locator="traces.jsonl",
+            kind="otel-trace",
+            payload={
+                "spans": [
+                    {
+                        "trace_id": "abc123",
+                        "span_id": "span-1",
+                        "parent_span_id": "",
+                        "name": "GET /api/orders",
+                        "service_name": "order-service",
+                        "kind": 2,
+                        "start_time_unix_nano": 1000000000,
+                        "end_time_unix_nano": 2000000000,
+                        "status_code": 1,
+                        "code_namespace": "com.example",
+                        "code_function": "getOrders",
+                        "attributes": {},
+                    },
+                    {
+                        "trace_id": "abc123",
+                        "span_id": "span-2",
+                        "parent_span_id": "span-1",
+                        "name": "POST /api/payments",
+                        "service_name": "payment-service",
+                        "kind": 3,
+                        "start_time_unix_nano": 1100000000,
+                        "end_time_unix_nano": 1900000000,
+                        "status_code": 1,
+                        "code_namespace": "com.example",
+                        "code_function": "processPayment",
+                        "attributes": {},
+                    },
+                ],
+                "trace_ids": ["abc123"],
+                "service_names": ["order-service", "payment-service"],
+                "source_file": "traces.jsonl",
+            },
+        ),
+    ]
+
+
+class TestDynamicAnalysisModel:
+    def test_section_defaults(self) -> None:
+        section = DynamicAnalysisSection()
+        assert section.service_count == 0
+        assert section.edge_count == 0
+        assert section.topology_mermaid == ""
+        assert section.services == []
+
+    def test_section_with_data(self) -> None:
+        section = DynamicAnalysisSection(
+            service_count=2,
+            edge_count=1,
+            topology_mermaid="graph TD\n  A --> B\n",
+            services=["order-service", "payment-service"],
+        )
+        assert section.service_count == 2
+        assert "graph TD" in section.topology_mermaid
+
+    def test_report_with_dynamic_analysis(self) -> None:
+        section = DynamicAnalysisSection(
+            service_count=2,
+            edge_count=1,
+            topology_mermaid="graph TD\n  A --> B\n",
+            services=["svc-a", "svc-b"],
+        )
+        report = ExperimentalReport(
+            repo_name="test",
+            dynamic_analysis=section,
+        )
+        assert report.dynamic_analysis is not None
+        assert report.dynamic_analysis.service_count == 2
+
+    def test_report_without_dynamic_analysis(self) -> None:
+        report = ExperimentalReport(repo_name="test")
+        assert report.dynamic_analysis is None
+
+
+class TestDynamicAnalysisOrchestrator:
+    def test_with_otel_evidence(self) -> None:
+        evidence = _make_trace_evidence()
+        report = run_experimental_review(
+            [CPP_FIXTURE],
+            evidence=evidence,
+        )
+        assert report.dynamic_analysis is not None
+        assert report.dynamic_analysis.service_count == 2
+        assert "order-service" in report.dynamic_analysis.services
+        assert "payment-service" in report.dynamic_analysis.services
+        assert report.dynamic_analysis.edge_count >= 1
+        assert "graph TD" in report.dynamic_analysis.topology_mermaid
+
+    def test_without_evidence(self) -> None:
+        report = run_experimental_review([CPP_FIXTURE])
+        assert report.dynamic_analysis is None
+
+    def test_with_empty_evidence(self) -> None:
+        report = run_experimental_review([CPP_FIXTURE], evidence=[])
+        assert report.dynamic_analysis is None
+
+    def test_with_non_trace_evidence(self) -> None:
+        from nfr_review.models import Evidence
+
+        evidence = [
+            Evidence(
+                collector_name="repo",
+                collector_version="1.0.0",
+                locator=".",
+                kind="repo-analysis",
+                payload={"has_readme": True},
+            ),
+        ]
+        report = run_experimental_review([CPP_FIXTURE], evidence=evidence)
+        assert report.dynamic_analysis is None
+
+
+class TestDynamicAnalysisRenderer:
+    def test_markdown_includes_dynamic_section(self, tmp_path: Path) -> None:
+        section = DynamicAnalysisSection(
+            service_count=2,
+            edge_count=1,
+            topology_mermaid="graph TD\n  order_service --> payment_service\n",
+            services=["order-service", "payment-service"],
+        )
+        report = ExperimentalReport(
+            repo_name="test-repo",
+            dynamic_analysis=section,
+            metadata={"timestamp": "2026-06-17T00:00:00Z"},
+        )
+        results = render_experimental_report(report, tmp_path, formats=["md"])
+        md_path = results["md"]
+        assert md_path is not None
+        content = md_path.read_text()
+        assert "## Dynamic Analysis" in content
+        assert "order-service" in content
+        assert "payment-service" in content
+        assert "```mermaid" in content
+        assert "graph TD" in content
+        assert "Services observed:** 2" in content
+        assert "Cross-service edges:** 1" in content
+
+    def test_markdown_omits_dynamic_when_absent(self, tmp_path: Path) -> None:
+        report = ExperimentalReport(
+            repo_name="test-repo",
+            metadata={"timestamp": "2026-06-17T00:00:00Z"},
+        )
+        results = render_experimental_report(report, tmp_path, formats=["md"])
+        content = results["md"].read_text()
+        assert "## Dynamic Analysis" not in content
+
+    def test_json_includes_dynamic_section(self, tmp_path: Path) -> None:
+        section = DynamicAnalysisSection(
+            service_count=3,
+            edge_count=2,
+            topology_mermaid="graph TD\n",
+            services=["a", "b", "c"],
+        )
+        report = ExperimentalReport(
+            repo_name="test-repo",
+            dynamic_analysis=section,
+        )
+        results = render_experimental_report(report, tmp_path, formats=["json"])
+        data = json.loads(results["json"].read_text())
+        assert data["dynamic_analysis"]["service_count"] == 3
+        assert data["dynamic_analysis"]["services"] == ["a", "b", "c"]
+
+    def test_json_null_dynamic_when_absent(self, tmp_path: Path) -> None:
+        report = ExperimentalReport(repo_name="test-repo")
+        results = render_experimental_report(report, tmp_path, formats=["json"])
+        data = json.loads(results["json"].read_text())
+        assert data["dynamic_analysis"] is None
+
+
+class TestEvidenceDirCli:
+    def test_evidence_dir_option_loads_traces(self, tmp_path: Path) -> None:
+        evidence_dir = tmp_path / "evidence"
+        evidence_dir.mkdir()
+
+        trace_data = {
+            "collector_name": "otel-trace",
+            "collector_version": "1.0.0",
+            "locator": "traces.jsonl",
+            "kind": "otel-trace",
+            "payload": {
+                "spans": [
+                    {
+                        "trace_id": "t1",
+                        "span_id": "s1",
+                        "parent_span_id": "",
+                        "name": "GET /",
+                        "service_name": "web",
+                        "kind": 2,
+                        "start_time_unix_nano": 1000000000,
+                        "end_time_unix_nano": 2000000000,
+                        "status_code": 1,
+                        "code_namespace": "",
+                        "code_function": "",
+                        "attributes": {},
+                    },
+                ],
+                "trace_ids": ["t1"],
+                "service_names": ["web"],
+                "source_file": "traces.jsonl",
+            },
+        }
+        (evidence_dir / "traces.jsonl").write_text(json.dumps(trace_data) + "\n")
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "experimental",
+                str(CPP_FIXTURE),
+                "--evidence-dir",
+                str(evidence_dir),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--format",
+                "json",
+            ],
+        )
+        assert result.exit_code == 0, result.output + (
+            result.stderr if hasattr(result, "stderr") else ""
+        )
+        report_path = tmp_path / "out" / "experimental-report.json"
+        data = json.loads(report_path.read_text())
+        assert data["dynamic_analysis"] is not None
+        assert data["dynamic_analysis"]["service_count"] >= 1
