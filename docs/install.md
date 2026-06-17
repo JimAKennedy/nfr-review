@@ -23,7 +23,8 @@ all the reference tables you need along the way.
 11. [Dynamic analysis](#11-dynamic-analysis)
 12. [Troubleshooting](#12-troubleshooting)
 13. [Rule catalogue](#13-rule-catalogue)
-14. [Uninstalling](#14-uninstalling)
+14. [External dependencies](#14-external-dependencies)
+15. [Uninstalling](#15-uninstalling)
 
 ---
 
@@ -462,6 +463,10 @@ pip install "nfr-review[llm-anthropic,pdf,scancode]"
 pip install "nfr-review[full]"
 ```
 
+For a complete list of all external dependencies — including GitHub Actions,
+LLM providers, CI services, and runtime binaries — see the
+[External Dependencies](dependencies.md) catalog.
+
 ### Install from source (development)
 
 ```bash
@@ -746,7 +751,19 @@ directly in a browser.
 
 ---
 
-## 14. Uninstalling
+## 14. External dependencies
+
+For a comprehensive catalog of every external dependency — Python libraries,
+LLM providers, GitHub Actions, external APIs, CI services, runtime binaries,
+and environment variables — see **[External Dependencies](dependencies.md)**.
+
+The catalog includes adaptation notes for adopters who are forking or deploying
+nfr-review internally (what to change, what to remove, what breaks without
+each dependency).
+
+---
+
+## 15. Uninstalling
 
 ### Remove the GitHub Action
 
