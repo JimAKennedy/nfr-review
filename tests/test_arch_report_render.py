@@ -366,6 +366,46 @@ class TestRenderArchMarkdown:
         assert "graph TD" in content
         assert "User-->API" in content
 
+    def test_no_class_diagram_section_in_markdown(self, tmp_path: Path) -> None:
+        """Arch markdown should not contain class diagram sections (moved to experimental)."""
+        report = ArchReport(
+            metadata=_make_metadata(),
+            components=[
+                Component(
+                    id="comp-api",
+                    name="API Service",
+                    description="REST API gateway",
+                    component_type="service",
+                )
+            ],
+            diagrams=[
+                C4Diagram(
+                    level="context",
+                    title="System Context",
+                    scope="Full system",
+                    mermaid="graph TD\n  User-->API",
+                    component_ids=["comp-api"],
+                ),
+                C4Diagram(
+                    level="code",
+                    title="Class Diagram",
+                    scope="classes",
+                    mermaid="classDiagram\n    class Widget\n",
+                    component_ids=[],
+                ),
+            ],
+        )
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        # The context diagram should be present
+        assert "System Context" in content
+        assert "User-->API" in content
+        # The class diagram should NOT be rendered
+        assert "classDiagram" not in content
+        assert "Class Diagram" not in content
+
     def test_risk_sections_grouped_by_severity(self, tmp_path: Path) -> None:
         report = _make_full_report()
         out = tmp_path / "report.md"
