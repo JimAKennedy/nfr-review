@@ -36,6 +36,7 @@ import nfr_review.hygiene.collectors  # noqa: F401  # side-effect: register hygi
 import nfr_review.hygiene.rules  # noqa: F401  # side-effect: register hygiene rules
 import nfr_review.rules  # noqa: F401  # side-effect: register built-ins
 from nfr_review import __version__
+from nfr_review.compliance_mapping import FRAMEWORK_LABELS, FRAMEWORK_SLUGS
 from nfr_review.config import Config, ConfigError, load_config
 from nfr_review.detect import detect_technologies
 from nfr_review.engine import Engine, EngineError, RunResult
@@ -63,6 +64,20 @@ class ReportResult:
 
 
 _SEVERITY_ORDER: tuple[Severity, ...] = ("info", "low", "medium", "high", "critical")
+
+
+def _apply_framework_filter(
+    findings: list[Finding], framework: str
+) -> tuple[list[Finding], int]:
+    """Filter findings to only those mapped to *framework*.
+
+    Returns ``(filtered_findings, excluded_count)``.
+    """
+    from nfr_review.compliance_mapping import rules_for_framework
+
+    mapped_rules = rules_for_framework(framework)
+    filtered = [f for f in findings if f.rule_id in mapped_rules]
+    return filtered, len(findings) - len(filtered)
 
 
 def _severity_rank(sev: Severity) -> int:
@@ -310,6 +325,12 @@ def cli() -> None:
     default=False,
     help="Start/stop an OTel Collector subprocess to capture traces during the scan.",
 )
+@click.option(
+    "--framework",
+    type=click.Choice(FRAMEWORK_SLUGS, case_sensitive=False),
+    default=None,
+    help="Filter findings to rules mapped to a compliance framework.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -325,6 +346,7 @@ def run_cmd(
     workers: int = 1,
     otel_traces_path: Path | None = None,
     collector: bool = False,
+    framework: str | None = None,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -471,6 +493,21 @@ def run_cmd(
         )
         result = RunResult(
             findings=new_findings,
+            rule_results=result.rule_results,
+            run_metadata=result.run_metadata,
+            warnings=result.warnings,
+            evidence=result.evidence,
+        )
+
+    if framework is not None:
+        filtered, excluded = _apply_framework_filter(result.findings, framework)
+        _ts_echo(
+            f"Framework filter ({FRAMEWORK_LABELS[framework]}): "
+            f"{len(filtered)} mapped, {excluded} excluded",
+            quiet=quiet,
+        )
+        result = RunResult(
+            findings=filtered,
             rule_results=result.rule_results,
             run_metadata=result.run_metadata,
             warnings=result.warnings,
@@ -1075,6 +1112,7 @@ def _write_outputs(
     pdf_flag: bool,
     no_summary: bool,
     quiet: bool,
+    framework: str | None = None,
 ) -> ReportResult:
     """Render and write all output formats (Markdown, CSV, JSONL, SARIF, HTML, PDF)."""
     from nfr_review.output.markdown import render_markdown_report
@@ -1093,6 +1131,7 @@ def _write_outputs(
         score_section=sections.score_section,
         suppressed_findings=sections.suppressed_pairs,
         llm_info=sections.llm_info,
+        framework=framework,
     )
 
     # File outputs
@@ -1241,6 +1280,7 @@ def run_report_pipeline(
     workers: int = 1,
     otel_traces: Path | None = None,
     collector: bool = False,
+    framework: str | None = None,
 ) -> ReportResult:
     """Run the full NFR + hygiene report pipeline and return structured results.
 
@@ -1337,6 +1377,34 @@ def run_report_pipeline(
 
     # Combined findings and result — computed once, shared by all downstream phases
     combined_findings = list(nfr_result.findings) + list(hygiene_result.findings)
+
+    if framework is not None:
+        nfr_filtered, nfr_excl = _apply_framework_filter(list(nfr_result.findings), framework)
+        hyg_filtered, hyg_excl = _apply_framework_filter(
+            list(hygiene_result.findings), framework
+        )
+        _ts_echo(
+            f"Framework filter ({FRAMEWORK_LABELS[framework]}): "
+            f"{len(nfr_filtered) + len(hyg_filtered)} mapped, "
+            f"{nfr_excl + hyg_excl} excluded",
+            quiet=quiet,
+        )
+        nfr_result = RunResult(
+            findings=nfr_filtered,
+            rule_results=nfr_result.rule_results,
+            run_metadata=nfr_result.run_metadata,
+            warnings=nfr_result.warnings,
+            evidence=nfr_result.evidence,
+        )
+        hygiene_result = RunResult(
+            findings=hyg_filtered,
+            rule_results=hygiene_result.rule_results,
+            run_metadata=hygiene_result.run_metadata,
+            warnings=hygiene_result.warnings,
+            evidence=hygiene_result.evidence,
+        )
+        combined_findings = nfr_filtered + hyg_filtered
+
     combined_result = RunResult(
         findings=combined_findings,
         rule_results=list(nfr_result.rule_results) + list(hygiene_result.rule_results),
@@ -1378,6 +1446,7 @@ def run_report_pipeline(
         pdf_flag=pdf,
         no_summary=no_summary,
         quiet=quiet,
+        framework=framework,
     )
 
 
@@ -1506,6 +1575,12 @@ def run_report_pipeline(
     default=False,
     help="Start/stop an OTel Collector subprocess to capture traces during the scan.",
 )
+@click.option(
+    "--framework",
+    type=click.Choice(FRAMEWORK_SLUGS, case_sensitive=False),
+    default=None,
+    help="Filter findings to rules mapped to a compliance framework.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -1527,6 +1602,7 @@ def report_cmd(
     workers: int = 1,
     otel_traces_path: Path | None = None,
     collector: bool = False,
+    framework: str | None = None,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     if verbose and quiet:
@@ -1565,6 +1641,7 @@ def report_cmd(
         workers=workers,
         otel_traces=otel_traces_path,
         collector=collector,
+        framework=framework,
     )
 
 

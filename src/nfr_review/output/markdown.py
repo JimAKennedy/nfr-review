@@ -22,6 +22,12 @@ _RAG_ORDER: tuple[RAG, ...] = ("red", "amber", "green")
 _SEVERITY_ORDER: tuple[Severity, ...] = ("critical", "high", "medium", "low", "info")
 
 
+def _framework_label(slug: str) -> str:
+    from nfr_review.compliance_mapping import FRAMEWORK_LABELS
+
+    return FRAMEWORK_LABELS.get(slug, slug)
+
+
 def _category_severity_table(findings: list[Finding], title: str) -> str:
     """Render a category x severity count table."""
     counts: dict[str, Counter[Severity]] = defaultdict(Counter)
@@ -553,6 +559,7 @@ def render_markdown_report(
     score_section: str = "",
     suppressed_findings: list[tuple[Finding, SuppressionInfo]] | None = None,
     llm_info: tuple[str, str] | None = None,
+    framework: str | None = None,
 ) -> str:
     """Render a complete Markdown report from scan results.
 
@@ -596,6 +603,11 @@ def render_markdown_report(
         sections.append(f"| **Tool version** | {meta.tool_version} |")
         if meta.git_error:
             sections.append(f"| **Git error** | {meta.git_error} |")
+        if framework is not None:
+            sections.append(f"| **Compliance filter** | {_framework_label(framework)} |")
+        sections.append("")
+    elif framework is not None:
+        sections.append(f"> **Compliance filter:** {_framework_label(framework)}")
         sections.append("")
 
     # Summary table

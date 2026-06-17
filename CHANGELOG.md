@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--framework` compliance filter** — `nfr-review run` and `report` accept
+  `--framework {soc2,iso27001,pci-dss,nist-800-53}` to restrict findings to
+  rules mapped to the specified compliance framework. Unmapped rules are
+  excluded from all output formats. Report header shows the active filter.
+- **External rule plugin API** — third-party packages can register custom rules
+  and hygiene rules via `nfr_review.rules` and `nfr_review.hygiene_rules`
+  entry-point groups. See `CONTRIBUTING.md` for authoring guide.
+- **Compliance mapping module** — `src/nfr_review/compliance_mapping.py`
+  provides structured rule-to-framework mapping data extracted from
+  `docs/continuous-compliance.md`.
+
+### Changed
+
+- **README restructured** — motivation section added; installation, usage, and
+  CLI reference reorganised for clarity.
+- **Collector failure surfacing** — when collectors fail or produce warnings,
+  a summary line is printed across all output paths (not just verbose mode).
+- **`all` command LLM cost warning** — the `all` command now prints a note
+  when LLM-based features are active, warning about potential cost and time.
+
 ## [0.2.0] - 2026-06-12
 
 ### Added
