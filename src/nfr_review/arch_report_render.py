@@ -324,6 +324,9 @@ def _md_diagrams(report: ArchReport) -> str:
 
     lines = ["## C4 Diagrams", ""]
     for diagram in report.diagrams:
+        # Skip class diagrams — they are now rendered by the experimental report.
+        if diagram.scope == "classes":
+            continue
         lines.append(f"### {diagram.title}")
         if diagram.scope:
             lines.append(f"\n*Scope: {diagram.scope}*")
@@ -600,6 +603,9 @@ def _pdf_diagrams_html(report: ArchReport) -> str:
         return ""
     parts: list[str] = []
     for diagram in report.diagrams:
+        # Skip class diagrams — they are now rendered by the experimental report.
+        if diagram.scope == "classes":
+            continue
         result = _render_mermaid_to_img(diagram.mermaid)
         if result:
             img_html, is_landscape = result

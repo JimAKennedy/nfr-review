@@ -2866,6 +2866,138 @@ def monitor_cmd(
     asyncio.run(engine.run())
 
 
+@cli.command(
+    "experimental",
+    help=(
+        "[EXPERIMENTAL] Generate a class-diagram-focused report for TARGET"
+        " repository/repositories."
+    ),
+    epilog="This command is experimental and its output format may change.",
+)
+@click.argument(
+    "targets",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+)
+@click.option(
+    "-v",
+    "--verbose",
+    count=True,
+    help="Increase verbosity (-v for INFO, -vv for DEBUG).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress warnings (ERROR level only).",
+)
+@click.option(
+    "--log-file",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Write diagnostics to FILE instead of stderr.",
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("reports"),
+    show_default=True,
+    help="Directory where report files are written.",
+)
+@click.option(
+    "--format",
+    "output_formats",
+    multiple=True,
+    type=click.Choice(["json", "md", "both"]),
+    help="Output format(s). Repeat for multiple. Default: both (json + md).",
+)
+def experimental_cmd(
+    targets: tuple[Path, ...],
+    verbose: int,
+    quiet: bool,
+    log_file: Path | None,
+    output_dir: Path,
+    output_formats: tuple[str, ...],
+) -> None:
+    """Generate an experimental class-diagram-focused report."""
+    from nfr_review.experimental_orchestrator import run_experimental_review
+    from nfr_review.output.experimental_render import render_experimental_report
+
+    click.echo(
+        "WARNING: The experimental command is experimental and subject to change.",
+        err=True,
+    )
+
+    if verbose and quiet:
+        raise click.UsageError("--verbose and --quiet are mutually exclusive")
+    _configure_logging(verbose, quiet, log_file)
+
+    target_list = list(targets)
+    repo_names = [_repo_name(t) for t in target_list]
+    primary_repo = repo_names[0] if repo_names else "unknown"
+
+    opts: dict[str, str] = {}
+    if len(target_list) > 1:
+        opts["repos"] = str(len(target_list))
+    if output_formats:
+        opts["formats"] = ",".join(output_formats)
+
+    phases = ["collecting", "filtering", "edges", "diagrams", "output"]
+
+    _banner(
+        "experimental",
+        primary_repo,
+        target_list[0],
+        options=opts or None,
+        phases=phases,
+        quiet=quiet,
+    )
+
+    def _progress(phase: str, detail: str) -> None:
+        _ts_echo(f"[{phase}] {detail}", quiet=quiet)
+
+    t0 = _phase("Running experimental review", quiet=quiet)
+    try:
+        report = run_experimental_review(
+            target_list,
+            progress_callback=_progress,
+        )
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"error: experimental review failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+    _phase_done("Experimental review", t0, quiet=quiet)
+
+    # Determine formats
+    formats: list[str] | None = None
+    if output_formats:
+        fmt_set: set[str] = set()
+        for f in output_formats:
+            if f == "both":
+                fmt_set.update(("json", "md"))
+            else:
+                fmt_set.add(f)
+        formats = sorted(fmt_set)
+
+    t0 = _phase("Rendering output files", quiet=quiet)
+    try:
+        results = render_experimental_report(report, output_dir, formats=formats)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"error: report rendering failed: {exc}", err=True)
+        raise click.exceptions.Exit(1) from exc
+    _phase_done("Output rendering", t0, quiet=quiet)
+
+    # Summary
+    produced = {k: v for k, v in results.items() if v is not None}
+    parts = [
+        f"Experimental: {len(report.class_diagrams)} class diagrams,",
+        f"{len(report.cross_repo_edges)} cross-repo edges",
+    ]
+    for fmt, path in produced.items():
+        parts.append(f"{fmt}={path}")
+    _ts_echo(" ".join(parts))
+
+
 @cli.command("version", help="Print the nfr-review version and exit.")
 def version_cmd() -> None:
     """Print version."""
