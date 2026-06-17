@@ -7,6 +7,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 
+from nfr_review.plugin_discovery import RULES_GROUP, discover_plugins
+from nfr_review.registry import rule_registry
+
 _EXCLUDE = frozenset({"__init__", "ast_common", "rule_helpers", "_cross_language"})
 
 _discovered: list[str] = []
@@ -15,5 +18,7 @@ for _info in pkgutil.iter_modules(__path__):
         continue
     importlib.import_module(f"{__name__}.{_info.name}")
     _discovered.append(_info.name)
+
+discover_plugins(rule_registry, RULES_GROUP)
 
 __all__ = sorted(_discovered)

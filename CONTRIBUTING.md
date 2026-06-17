@@ -136,6 +136,83 @@ pre-commit install
 3. Add tests in `tests/` with appropriate fixtures.
 4. The rule auto-registers on import via the `_register()` convention.
 
+## External Rule Packs (Plugin API)
+
+Third-party rule packs can be distributed as pip-installable packages. nfr-review
+discovers them at startup via
+[entry points](https://packaging.python.org/en/latest/specifications/entry-points/).
+
+### How it works
+
+When nfr-review loads its built-in rules, it also scans two entry-point groups:
+
+| Group | Registry | Purpose |
+|-------|----------|---------|
+| `nfr_review.rules` | Core rule registry | NFR analysis rules |
+| `nfr_review.hygiene_rules` | Hygiene rule registry | Project hygiene rules |
+
+Each entry point should reference a module that self-registers rules on import
+— the same pattern built-in rules use.
+
+### Creating a rule pack
+
+1. **Write rule modules** following the same conventions as built-in rules.
+   Each rule class needs `id`, `band`, `required_collectors` attributes and
+   an `evaluate(evidence, context) -> RuleResult` method.
+
+2. **Self-register** each rule at module scope:
+
+   ```python
+   # my_rules/custom_rule.py
+   from nfr_review.registry import rule_registry
+   from nfr_review.models import Evidence, Finding, RuleResult
+
+   class MyCustomRule:
+       id = "CUSTOM-001"
+       band = 1
+       required_collectors = ["ci"]
+
+       def evaluate(self, evidence, context):
+           # ... your logic ...
+           return RuleResult(rule_id=self.id, findings=findings)
+
+   def _register():
+       if "CUSTOM-001" not in rule_registry:
+           rule_registry.register("CUSTOM-001", MyCustomRule())
+
+   _register()
+   ```
+
+3. **Declare the entry point** in your package's `pyproject.toml`:
+
+   ```toml
+   [project]
+   name = "nfr-review-my-rules"
+   version = "0.1.0"
+   dependencies = ["nfr-review"]
+
+   [project.entry-points."nfr_review.rules"]
+   my_rules = "my_rules.custom_rule"
+   ```
+
+   For hygiene rules, use the `nfr_review.hygiene_rules` group instead and
+   register into `hygiene_rule_registry` from `nfr_review.hygiene`.
+
+4. **Install** the package alongside nfr-review:
+
+   ```bash
+   pip install nfr-review-my-rules
+   ```
+
+   The rules will be discovered and loaded automatically on the next run.
+
+### Conflict handling
+
+Built-in rules are loaded first. If an external rule tries to register an ID
+that already exists, the registration is skipped and a warning is logged.
+Choose unique prefixes for your rule IDs (e.g. `MYORG-001`) to avoid
+conflicts.
+
 ## Adding a New Collector
 
 1. Create a module in `src/nfr_review/collectors/`.

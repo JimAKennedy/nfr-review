@@ -7,11 +7,16 @@ from __future__ import annotations
 import importlib
 import pkgutil
 
+from nfr_review.hygiene import hygiene_rule_registry
+from nfr_review.plugin_discovery import HYGIENE_RULES_GROUP, discover_plugins
+
 _discovered: list[str] = []
 for _info in pkgutil.iter_modules(__path__):
     if _info.name == "__init__":
         continue
     importlib.import_module(f"{__name__}.{_info.name}")
     _discovered.append(_info.name)
+
+discover_plugins(hygiene_rule_registry, HYGIENE_RULES_GROUP)
 
 __all__ = sorted(_discovered)
