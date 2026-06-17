@@ -10,7 +10,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from nfr_review import __version__
-from nfr_review.experimental_models import CrossRepoEdge, ExperimentalReport
+from nfr_review.experimental_models import (
+    CrossRepoEdge,
+    DynamicAnalysisSection,
+    ExperimentalReport,
+)
+from nfr_review.models import Evidence
+from nfr_review.output.topology import build_topology_graph, render_topology_mermaid
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +87,43 @@ def _find_cross_repo_edges(class_data: list[dict]) -> list[CrossRepoEdge]:
     return edges
 
 
+def _build_dynamic_analysis(
+    evidence: list[Evidence],
+    cb: Callable[[str, str], None],
+) -> DynamicAnalysisSection | None:
+    """Build a dynamic analysis section from OTel trace evidence."""
+    trace_evidence = [
+        e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
+    ]
+    if not trace_evidence:
+        cb("dynamic", "No OTel trace evidence found — skipping dynamic analysis")
+        return None
+
+    cb("dynamic", f"Building topology from {len(trace_evidence)} trace evidence item(s)")
+    graph = build_topology_graph(trace_evidence)
+
+    if not graph.services:
+        cb("dynamic", "No services found in trace data")
+        return None
+
+    mermaid = render_topology_mermaid(graph)
+    section = DynamicAnalysisSection(
+        service_count=len(graph.services),
+        edge_count=len(graph.edges),
+        topology_mermaid=mermaid,
+        services=sorted(graph.services),
+    )
+    cb(
+        "dynamic",
+        f"Topology: {section.service_count} services, {section.edge_count} edges",
+    )
+    return section
+
+
 def run_experimental_review(
     targets: list[Path],
     *,
+    evidence: list[Evidence] | None = None,
     progress_callback: Callable[[str, str], None] | None = None,
 ) -> ExperimentalReport:
     """Run an experimental class-diagram-focused review.
@@ -92,13 +132,17 @@ def run_experimental_review(
     ----------
     targets:
         One or more repository root directories to analyze.
+    evidence:
+        Optional pre-collected evidence list.  When OTel trace evidence
+        is present, a Dynamic Analysis section is added to the report.
     progress_callback:
         Optional callback invoked with ``(phase, detail)`` status messages.
 
     Returns
     -------
     ExperimentalReport
-        A report containing class diagrams and cross-repo edges.
+        A report containing class diagrams, cross-repo edges, and
+        optionally a dynamic analysis topology.
     """
     from nfr_review.arch_diagrams import render_partitioned_class_diagrams
     from nfr_review.arch_orchestrator import _collect_class_data
@@ -115,10 +159,16 @@ def run_experimental_review(
 
     class_data = _collect_class_data(targets, _progress_adapter)
 
+    # --- dynamic analysis (independent of class data) ---
+    dynamic_section: DynamicAnalysisSection | None = None
+    if evidence:
+        dynamic_section = _build_dynamic_analysis(evidence, cb)
+
     if class_data is None:
         cb("collecting", "No class data found")
         return ExperimentalReport(
             repo_name=repo_name,
+            dynamic_analysis=dynamic_section,
             metadata={
                 "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "version": __version__,
@@ -164,14 +214,14 @@ def run_experimental_review(
         repo_name=repo_name,
         class_diagrams=class_diagrams,
         cross_repo_edges=cross_repo_edges,
+        dynamic_analysis=dynamic_section,
         metadata=metadata,
     )
 
-    cb(
-        "complete",
-        f"Experimental report: {len(class_diagrams)} diagrams, "
-        f"{len(cross_repo_edges)} cross-repo edges",
-    )
+    parts = [f"{len(class_diagrams)} diagrams", f"{len(cross_repo_edges)} cross-repo edges"]
+    if dynamic_section:
+        parts.append(f"{dynamic_section.service_count} services in topology")
+    cb("complete", f"Experimental report: {', '.join(parts)}")
     return report
 
 

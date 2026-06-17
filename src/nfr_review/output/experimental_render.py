@@ -58,6 +58,28 @@ def _render_markdown(report: ExperimentalReport, output_path: Path) -> Path:
         lines.append("No class diagrams generated.")
         lines.append("")
 
+    # Dynamic analysis
+    if report.dynamic_analysis:
+        da = report.dynamic_analysis
+        lines.append("## Dynamic Analysis")
+        lines.append("")
+        lines.append(f"**Services observed:** {da.service_count}  ")
+        lines.append(f"**Cross-service edges:** {da.edge_count}  ")
+        lines.append("")
+        if da.services:
+            lines.append("### Observed Services")
+            lines.append("")
+            for svc in da.services:
+                lines.append(f"- {svc}")
+            lines.append("")
+        if da.topology_mermaid:
+            lines.append("### Service Topology")
+            lines.append("")
+            lines.append("```mermaid")
+            lines.append(da.topology_mermaid.rstrip("\n"))
+            lines.append("```")
+            lines.append("")
+
     # Cross-repo edges
     lines.append("## Cross-Repository Edges")
     lines.append("")

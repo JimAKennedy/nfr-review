@@ -2866,6 +2866,37 @@ def monitor_cmd(
     asyncio.run(engine.run())
 
 
+def _load_evidence_from_dir(evidence_dir: Path) -> list:
+    """Load Evidence objects from JSONL files in a directory."""
+    import json as _json
+
+    from nfr_review.models import Evidence
+
+    logger = logging.getLogger(__name__)
+    items: list = []
+    for jsonl_file in sorted(evidence_dir.glob("*.jsonl")):
+        for line in jsonl_file.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = _json.loads(line)
+                items.append(Evidence.model_validate(data))
+            except Exception:  # noqa: BLE001
+                logger.debug("Skipping unparseable JSONL line in %s", jsonl_file)
+    for json_file in sorted(evidence_dir.glob("*.json")):
+        try:
+            data = _json.loads(json_file.read_text())
+            if isinstance(data, list):
+                for item in data:
+                    items.append(Evidence.model_validate(item))
+            elif isinstance(data, dict):
+                items.append(Evidence.model_validate(data))
+        except Exception:  # noqa: BLE001
+            logger.debug("Skipping unparseable JSON file %s", json_file)
+    return items
+
+
 @cli.command(
     "experimental",
     help=(
@@ -2912,6 +2943,12 @@ def monitor_cmd(
     type=click.Choice(["json", "md", "both"]),
     help="Output format(s). Repeat for multiple. Default: both (json + md).",
 )
+@click.option(
+    "--evidence-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Directory containing evidence JSONL files (e.g. OTel traces).",
+)
 def experimental_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -2919,6 +2956,7 @@ def experimental_cmd(
     log_file: Path | None,
     output_dir: Path,
     output_formats: tuple[str, ...],
+    evidence_dir: Path | None,
 ) -> None:
     """Generate an experimental class-diagram-focused report."""
     from nfr_review.experimental_orchestrator import run_experimental_review
@@ -2944,6 +2982,8 @@ def experimental_cmd(
         opts["formats"] = ",".join(output_formats)
 
     phases = ["collecting", "filtering", "edges", "diagrams", "output"]
+    if evidence_dir:
+        phases.insert(0, "evidence")
 
     _banner(
         "experimental",
@@ -2957,10 +2997,20 @@ def experimental_cmd(
     def _progress(phase: str, detail: str) -> None:
         _ts_echo(f"[{phase}] {detail}", quiet=quiet)
 
+    # Load evidence if provided
+    evidence_list = None
+    if evidence_dir:
+        evidence_list = _load_evidence_from_dir(evidence_dir)
+        _ts_echo(
+            f"[evidence] Loaded {len(evidence_list)} evidence items from {evidence_dir}",
+            quiet=quiet,
+        )
+
     t0 = _phase("Running experimental review", quiet=quiet)
     try:
         report = run_experimental_review(
             target_list,
+            evidence=evidence_list,
             progress_callback=_progress,
         )
     except Exception as exc:  # noqa: BLE001
