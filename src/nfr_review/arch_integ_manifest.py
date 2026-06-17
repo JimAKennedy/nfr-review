@@ -408,6 +408,10 @@ def discover_manifest_cross_repo_integrations(
                 if target is None:
                     continue
 
+                # Skip intra-repo edges — per-ecosystem strategies handle those.
+                if comp.repo == target.repo:
+                    continue
+
                 edge_key = (comp.id, target.id)
                 if edge_key in seen:
                     continue
