@@ -33,6 +33,7 @@ from nfr_review.arch_integ_k8s import (
     discover_k8s_env_integrations,
     discover_k8s_integrations,
 )
+from nfr_review.arch_integ_manifest import discover_manifest_cross_repo_integrations
 from nfr_review.arch_models import (
     Component,
     ComponentBoundary,
@@ -63,6 +64,7 @@ _STRATEGIES: list[tuple[str, StrategyFn]] = [
     ("grpc", discover_grpc_integrations),
     ("build-deps", discover_build_dep_integrations),
     ("cmake", discover_cmake_integrations),
+    ("manifest-cross-repo", discover_manifest_cross_repo_integrations),
 ]
 
 
