@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import nfr_review.design_change.structural_signals as structural_signals  # noqa: F401
 from nfr_review.design_change.diff import (
     CategoryDiff,
     NumericDelta,
     SetDelta,
+    apply_thresholds,
     diff_baselines,
     format_diff_summary,
 )
@@ -35,6 +37,7 @@ __all__ = [
     "SetDelta",
     "SetMetric",
     "StructuralBaseline",
+    "apply_thresholds",
     "build_baseline",
     "diff_baselines",
     "extract_all_metrics",

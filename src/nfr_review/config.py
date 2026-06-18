@@ -165,6 +165,30 @@ class NfrTargetsConfig(BaseModel):
     custom_thresholds: dict[str, Any] = Field(default_factory=dict)
 
 
+DEFAULT_DESIGN_CHANGE_THRESHOLDS: dict[str, float] = {
+    "class_count": 20.0,
+    "jdepend_instability": 15.0,
+    "dormant_class_count": 25.0,
+    "dependency_count": 30.0,
+    "test_coverage": 5.0,
+    "adr_count": 1.0,
+    "api_endpoint_count": 1.0,
+    "bounded_context_count": 1.0,
+    "deployment_service_count": 1.0,
+    "schema_migration_count": 1.0,
+}
+
+
+class DesignChangeConfig(BaseModel):
+    """Configuration for design-change detection thresholds."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    thresholds: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_DESIGN_CHANGE_THRESHOLDS),
+    )
+
+
 class Config(BaseModel):
     """Validated nfr-review.yaml configuration.
 
@@ -184,6 +208,7 @@ class Config(BaseModel):
     max_resolve_rounds: int = 2000
     llm: LlmConfig = Field(default_factory=LlmConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
+    design_change: DesignChangeConfig = Field(default_factory=DesignChangeConfig)
     nfr_targets: NfrTargetsConfig = Field(default_factory=NfrTargetsConfig)
     otel_traces: Path | None = None
     target: Path | None = Field(default=None, exclude=True)
@@ -270,7 +295,9 @@ __all__ = [
     "ConfigError",
     "CollectorsConfig",
     "DEFAULT_CATEGORY_WEIGHTS",
+    "DEFAULT_DESIGN_CHANGE_THRESHOLDS",
     "DEFAULT_SEVERITY_DEDUCTIONS",
+    "DesignChangeConfig",
     "ISO_25010_CATEGORIES",
     "LlmConfig",
     "LlmProvider",
