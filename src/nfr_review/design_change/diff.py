@@ -100,6 +100,48 @@ def diff_baselines(
     return result
 
 
+def apply_thresholds(
+    diffs: dict[str, CategoryDiff],
+    thresholds: dict[str, float],
+) -> dict[str, CategoryDiff]:
+    """Filter diffs, keeping only changes that exceed configured thresholds.
+
+    For numeric deltas: the threshold is the minimum absolute pct_change (%).
+    If pct_change is None (zero-base), the delta always passes.
+    Threshold lookup: tries "<metric_name>" in the thresholds dict.
+    If no matching threshold, the delta passes through unfiltered.
+
+    For set deltas: the threshold is the minimum total count of (added + removed).
+    Threshold lookup uses "<metric_name>".
+    If no matching threshold, the delta passes through unfiltered.
+    """
+    result: dict[str, CategoryDiff] = {}
+
+    for cat_name, cat_diff in diffs.items():
+        filtered_numeric = [
+            nd
+            for nd in cat_diff.numeric_deltas
+            if nd.name not in thresholds
+            or nd.pct_change is None
+            or abs(nd.pct_change) >= thresholds[nd.name]
+        ]
+        filtered_sets = [
+            sd
+            for sd in cat_diff.set_deltas
+            if sd.name not in thresholds
+            or len(sd.added) + len(sd.removed) >= thresholds[sd.name]
+        ]
+        filtered_cat = CategoryDiff(
+            category=cat_name,
+            numeric_deltas=filtered_numeric,
+            set_deltas=filtered_sets,
+        )
+        if filtered_cat.has_changes:
+            result[cat_name] = filtered_cat
+
+    return result
+
+
 def format_diff_summary(diffs: dict[str, CategoryDiff]) -> str:
     if not diffs:
         return "No structural changes detected."
