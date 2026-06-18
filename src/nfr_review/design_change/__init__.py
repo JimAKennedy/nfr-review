@@ -7,6 +7,7 @@ import nfr_review.design_change.api_surface_signals as api_surface_signals  # no
 import nfr_review.design_change.bounded_context_signals as bounded_context_signals  # noqa: F401
 import nfr_review.design_change.dependency_coverage_signals as dependency_coverage_signals  # noqa: F401
 import nfr_review.design_change.deployment_topology_signals as deployment_topology_signals  # noqa: F401
+import nfr_review.design_change.schema_migration_signals as schema_migration_signals  # noqa: F401
 import nfr_review.design_change.structural_signals as structural_signals  # noqa: F401
 from nfr_review.design_change.diff import (
     CategoryDiff,

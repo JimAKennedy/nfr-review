@@ -2901,3 +2901,414 @@ class TestDeploymentTopologySignalsDiff:
         result = apply_thresholds(diffs, {"deployment_service_count": 1.0})
 
         assert "deployment_topology" not in result
+
+
+class TestSchemaMigrationExtractor:
+    """Tests for the SchemaMigrationExtractor."""
+
+    def test_detects_flyway_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="flyway-core",
+                    declared_version="9.0",
+                    version_constraint="^9.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "schema_migration"
+        assert "tool:flyway" in category.set_metrics["schema_migrations"].items
+        assert category.numeric_metrics["schema_migration_count"].value == 1.0
+
+    def test_detects_alembic_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="alembic",
+                    declared_version="1.12",
+                    version_constraint=">=1.12",
+                    source_file="requirements.txt",
+                ),
+            ],
+            manifest_files_found=["requirements.txt"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="python-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="python-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert "tool:alembic" in category.set_metrics["schema_migrations"].items
+
+    def test_detects_migration_files_from_ast(self) -> None:
+        from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/001_create_users.py",
+                    module_path="alembic.versions.001_create_users",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/002_add_orders.py",
+                    module_path="alembic.versions.002_add_orders",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="src/app/main.py",
+                    module_path="src.app.main",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+        ]
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract(evidence)
+
+        migrations = category.set_metrics["schema_migrations"].items
+        assert "file:alembic/versions/001_create_users.py" in migrations
+        assert "file:alembic/versions/002_add_orders.py" in migrations
+        assert category.numeric_metrics["schema_migration_count"].value == 2.0
+
+    def test_detects_flyway_java_migrations(self) -> None:
+        from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = JavaAstFilePayload(
+            file_path="src/main/resources/db/migration/V1__create_users.java",
+            package="db.migration",
+            classes=[],
+            methods=[],
+            catch_blocks=[],
+            imports=[],
+            thread_pool_constructions=[],
+            log_statements=[],
+        )
+        ev = Evidence(
+            collector_name="java-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-ast-file",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert (
+            "file:src/main/resources/db/migration/V1__create_users.java"
+            in category.set_metrics["schema_migrations"].items
+        )
+
+    def test_combines_deps_and_files(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="python-deps",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-deps",
+                payload=DepsPayload(
+                    dependencies=[
+                        DependencyItem(
+                            name="alembic",
+                            declared_version="1.12",
+                            version_constraint=">=1.12",
+                            source_file="requirements.txt",
+                        ),
+                    ],
+                    manifest_files_found=["requirements.txt"],
+                    enrichment_errors=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/001_init.py",
+                    module_path="alembic.versions.001_init",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+        ]
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract(evidence)
+
+        migrations = category.set_metrics["schema_migrations"].items
+        assert "tool:alembic" in migrations
+        assert "file:alembic/versions/001_init.py" in migrations
+        assert category.numeric_metrics["schema_migration_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "schema_migration"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_migration_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestSchemaMigrationSignalsDiff:
+    """S09 demo criterion: diff two baselines where fixture B has 3 new Flyway
+    migrations and a new Alembic versions directory — signal fires with
+    migration file names."""
+
+    def test_new_flyway_migrations_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 1.0},
+                    sets={"schema_migrations": ["tool:flyway"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 4.0},
+                    sets={
+                        "schema_migrations": [
+                            "file:db/migration/V2__add_orders.java",
+                            "file:db/migration/V3__add_payments.java",
+                            "file:db/migration/V4__add_shipping.java",
+                            "tool:flyway",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "schema_migration" in diffs
+        sd = [
+            d for d in diffs["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ][0]
+        assert sorted(sd.added) == [
+            "file:db/migration/V2__add_orders.java",
+            "file:db/migration/V3__add_payments.java",
+            "file:db/migration/V4__add_shipping.java",
+        ]
+
+    def test_new_alembic_directory_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    sets={"schema_migrations": []},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    sets={
+                        "schema_migrations": [
+                            "file:alembic/versions/001_init.py",
+                            "tool:alembic",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "schema_migration" in diffs
+        sd = [
+            d for d in diffs["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ][0]
+        assert "tool:alembic" in sd.added
+        assert "file:alembic/versions/001_init.py" in sd.added
+
+    def test_full_s09_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 1.0},
+                    sets={"schema_migrations": ["tool:flyway"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 5.0},
+                    sets={
+                        "schema_migrations": [
+                            "file:db/migration/V2__add_orders.java",
+                            "file:db/migration/V3__add_payments.java",
+                            "file:db/migration/V4__add_shipping.java",
+                            "file:alembic/versions/001_init.py",
+                            "tool:alembic",
+                            "tool:flyway",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "schema_migration" in result
+
+        # 3 new Flyway files + new Alembic tool + Alembic migration file
+        sd = [
+            d for d in result["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ]
+        assert len(sd) == 1
+        assert len(sd[0].added) == 5
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration", numeric={"schema_migration_count": 2.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration", numeric={"schema_migration_count": 2.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"schema_migration_count": 1.0})
+
+        assert "schema_migration" not in result
