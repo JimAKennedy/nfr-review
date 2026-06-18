@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import warnings
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,53 +19,35 @@ class BasePayload(BaseModel):
     config catches typos and drift between collector output and rule expectations
     at Evidence construction time.
 
-    Rules access typed attributes directly. Dict-compat helpers are retained
-    for test backward compatibility; ``get`` / ``__getitem__`` delegate to
-    ``getattr`` so typed and dict-style access see the same values.
+    Rules can access fields via typed attributes or dict-style subscript.
+    Both ``get`` / ``__getitem__`` / ``__contains__`` delegate to ``getattr``
+    so the two styles always see the same values.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    def _warn_dict_compat(self, method: str) -> None:
-        warnings.warn(
-            f"BasePayload.{method}() is deprecated — use attribute access instead",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-
     def get(self, key: str, default: Any = None) -> Any:
-        """Dict-compatible attribute access (deprecated — prefer direct attribute)."""
-        self._warn_dict_compat("get")
+        """Return the field value for *key*, or *default* if absent."""
         return getattr(self, key, default)
 
     def __getitem__(self, key: str) -> Any:
-        """Dict-compatible subscript (deprecated — prefer direct attribute)."""
-        self._warn_dict_compat("__getitem__")
         try:
             return getattr(self, key)
         except AttributeError:
             raise KeyError(key) from None
 
     def __contains__(self, key: object) -> bool:
-        """Dict-compatible membership test (deprecated — prefer ``hasattr``)."""
-        self._warn_dict_compat("__contains__")
         if not isinstance(key, str):
             return False
         return key in type(self).model_fields
 
     def keys(self) -> list[str]:
-        """Dict-compatible keys() (deprecated — prefer ``model_fields``)."""
-        self._warn_dict_compat("keys")
         return list(type(self).model_fields.keys())
 
     def values(self) -> list[Any]:
-        """Dict-compatible values() (deprecated — prefer ``model_dump()``)."""
-        self._warn_dict_compat("values")
         return [getattr(self, k) for k in type(self).model_fields]
 
     def items(self) -> list[tuple[str, Any]]:
-        """Dict-compatible items() (deprecated — prefer ``model_dump().items()``)."""
-        self._warn_dict_compat("items")
         return [(k, getattr(self, k)) for k in type(self).model_fields]
 
 
