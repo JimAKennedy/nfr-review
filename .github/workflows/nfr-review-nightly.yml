@@ -39,6 +39,7 @@ jobs:
           sarif-upload: "true"
           comment: "false"
           create-issues: "false"
+          origin: "first_party"
 
       - name: Upload baseline artifact
         if: always() && steps.nfr.outputs.jsonl-path != ''

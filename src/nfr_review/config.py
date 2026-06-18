@@ -21,7 +21,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ruamel.yaml import YAML, YAMLError
 
-from nfr_review.models import Severity
+from nfr_review.models import Origin, Severity
 
 
 # nfr-review:skip(python-dormant-classes) reason: caught by cli.py run/report commands
@@ -165,6 +165,16 @@ class NfrTargetsConfig(BaseModel):
     custom_thresholds: dict[str, Any] = Field(default_factory=dict)
 
 
+DEFAULT_DEPENDENCY_PATHS: list[str] = [
+    "vendor/*",
+    "vendored/*",
+    "third_party/*",
+    "third-party/*",
+    "thirdparty/*",
+    "*.min.js",
+    "*.min.css",
+]
+
 DEFAULT_DESIGN_CHANGE_THRESHOLDS: dict[str, float] = {
     "class_count": 20.0,
     "jdepend_instability": 15.0,
@@ -211,6 +221,10 @@ class Config(BaseModel):
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     design_change: DesignChangeConfig = Field(default_factory=DesignChangeConfig)
     nfr_targets: NfrTargetsConfig = Field(default_factory=NfrTargetsConfig)
+    dependency_paths: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_DEPENDENCY_PATHS),
+    )
+    origin_filter: Origin | None = None
     otel_traces: Path | None = None
     target: Path | None = Field(default=None, exclude=True)
 
@@ -296,6 +310,7 @@ __all__ = [
     "ConfigError",
     "CollectorsConfig",
     "DEFAULT_CATEGORY_WEIGHTS",
+    "DEFAULT_DEPENDENCY_PATHS",
     "DEFAULT_DESIGN_CHANGE_THRESHOLDS",
     "DEFAULT_SEVERITY_DEDUCTIONS",
     "DesignChangeConfig",

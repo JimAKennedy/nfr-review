@@ -20,6 +20,7 @@ from typing import Any
 from nfr_review.auditability import build_run_metadata
 from nfr_review.config import Config
 from nfr_review.models import Evidence, Finding, RuleResult, RunMetadata
+from nfr_review.output.classify import apply_origin_classification
 from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
 from nfr_review.protocols import Collector, Rule
 from nfr_review.registry import Registry
@@ -336,6 +337,8 @@ class Engine:
             len(findings),
             rules_elapsed,
         )
+
+        apply_origin_classification(findings, config.dependency_paths)
 
         run_metadata = build_run_metadata(target, active_collectors, rules_run, rules_skipped)
 

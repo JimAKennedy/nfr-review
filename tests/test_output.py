@@ -23,6 +23,7 @@ R007_HEADER = (
     "confidence",
     "pattern_tag",
     "content_hash",
+    "origin",
 )
 
 
@@ -103,6 +104,7 @@ def test_csv_finding_row_preserves_field_order(tmp_path: Path) -> None:
         "0.95",
         "documentation",
         "",
+        "first_party",
     ]
 
 

@@ -25,6 +25,7 @@ _R007_FIELDS = {
     "confidence",
     "pattern_tag",
     "content_hash",
+    "origin",
 }
 
 
