@@ -22,6 +22,7 @@ FINDING_FIELD_ORDER = (
     "confidence",
     "pattern_tag",
     "content_hash",
+    "origin",
 )
 
 
@@ -38,6 +39,7 @@ def _valid_finding_payload() -> dict:
         "confidence": 0.95,
         "pattern_tag": "documentation",
         "content_hash": "",
+        "origin": "first_party",
     }
 
 
@@ -90,7 +92,10 @@ def test_finding_accepts_all_severity_values() -> None:
         Finding(**payload)
 
 
-_REQUIRED_FINDING_FIELDS = tuple(f for f in FINDING_FIELD_ORDER if f != "content_hash")
+_OPTIONAL_FINDING_FIELDS = {"content_hash", "origin"}
+_REQUIRED_FINDING_FIELDS = tuple(
+    f for f in FINDING_FIELD_ORDER if f not in _OPTIONAL_FINDING_FIELDS
+)
 
 
 @pytest.mark.parametrize("missing", _REQUIRED_FINDING_FIELDS)

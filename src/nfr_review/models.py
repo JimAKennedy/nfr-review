@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 RAG = Literal["red", "amber", "green", "skipped"]
 Severity = Literal["critical", "high", "medium", "low", "info"]
+Origin = Literal["first_party", "dependency"]
 
 
 class BasePayload(BaseModel):
@@ -172,6 +173,7 @@ class Finding(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     pattern_tag: str
     content_hash: str = ""
+    origin: Origin = "first_party"
 
     @property
     def identity_key(self) -> tuple[str, str, str]:
@@ -240,6 +242,7 @@ def compute_content_hash(text: str) -> str:
 __all__ = [
     "RAG",
     "Severity",
+    "Origin",
     "BasePayload",
     "Evidence",
     "Finding",

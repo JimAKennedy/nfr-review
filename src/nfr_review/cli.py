@@ -41,7 +41,7 @@ from nfr_review.config import Config, ConfigError, load_config
 from nfr_review.detect import detect_technologies
 from nfr_review.engine import Engine, EngineError, RunResult
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
-from nfr_review.models import Finding, Severity
+from nfr_review.models import Finding, Origin, Severity
 from nfr_review.output import OutputError, write_csv, write_jsonl
 from nfr_review.registry import Registry, rule_registry
 
@@ -344,6 +344,12 @@ def cli() -> None:
     default=False,
     help="Ignore project design-change threshold overrides; use built-in defaults.",
 )
+@click.option(
+    "--origin",
+    type=click.Choice(["first_party", "dependency"], case_sensitive=False),
+    default=None,
+    help="Filter findings by origin: first_party (direct repo issues) or dependency.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -362,6 +368,7 @@ def run_cmd(
     framework: str | None = None,
     design_baseline_dir: Path | None = None,
     force_standard_config: bool = False,
+    origin: str | None = None,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -523,6 +530,25 @@ def run_cmd(
         )
         result = RunResult(
             findings=filtered,
+            rule_results=result.rule_results,
+            run_metadata=result.run_metadata,
+            warnings=result.warnings,
+            evidence=result.evidence,
+        )
+
+    if origin is not None:
+        from nfr_review.output.classify import filter_findings_by_origin
+
+        origin_val: Origin = origin  # type: ignore[assignment]
+        before = len(result.findings)
+        filtered_origin = filter_findings_by_origin(result.findings, origin_val)
+        _ts_echo(
+            f"Origin filter ({origin}): {len(filtered_origin)} kept, "
+            f"{before - len(filtered_origin)} excluded",
+            quiet=quiet,
+        )
+        result = RunResult(
+            findings=filtered_origin,
             rule_results=result.rule_results,
             run_metadata=result.run_metadata,
             warnings=result.warnings,
@@ -1343,6 +1369,7 @@ def run_report_pipeline(
     otel_traces: Path | None = None,
     collector: bool = False,
     framework: str | None = None,
+    origin: str | None = None,
 ) -> ReportResult:
     """Run the full NFR + hygiene report pipeline and return structured results.
 
@@ -1466,6 +1493,35 @@ def run_report_pipeline(
             evidence=hygiene_result.evidence,
         )
         combined_findings = nfr_filtered + hyg_filtered
+
+    if origin is not None:
+        from nfr_review.output.classify import filter_findings_by_origin
+
+        origin_val: Origin = origin  # type: ignore[assignment]
+        nfr_before = len(nfr_result.findings)
+        hyg_before = len(hygiene_result.findings)
+        nfr_origin = filter_findings_by_origin(list(nfr_result.findings), origin_val)
+        hyg_origin = filter_findings_by_origin(list(hygiene_result.findings), origin_val)
+        _ts_echo(
+            f"Origin filter ({origin}): {len(nfr_origin) + len(hyg_origin)} kept, "
+            f"{(nfr_before - len(nfr_origin)) + (hyg_before - len(hyg_origin))} excluded",
+            quiet=quiet,
+        )
+        nfr_result = RunResult(
+            findings=nfr_origin,
+            rule_results=nfr_result.rule_results,
+            run_metadata=nfr_result.run_metadata,
+            warnings=nfr_result.warnings,
+            evidence=nfr_result.evidence,
+        )
+        hygiene_result = RunResult(
+            findings=hyg_origin,
+            rule_results=hygiene_result.rule_results,
+            run_metadata=hygiene_result.run_metadata,
+            warnings=hygiene_result.warnings,
+            evidence=hygiene_result.evidence,
+        )
+        combined_findings = nfr_origin + hyg_origin
 
     combined_result = RunResult(
         findings=combined_findings,
@@ -1643,6 +1699,12 @@ def run_report_pipeline(
     default=None,
     help="Filter findings to rules mapped to a compliance framework.",
 )
+@click.option(
+    "--origin",
+    type=click.Choice(["first_party", "dependency"], case_sensitive=False),
+    default=None,
+    help="Filter findings by origin: first_party (direct repo issues) or dependency.",
+)
 def report_cmd(
     target: Path,
     verbose: int,
@@ -1665,6 +1727,7 @@ def report_cmd(
     otel_traces_path: Path | None = None,
     collector: bool = False,
     framework: str | None = None,
+    origin: str | None = None,
 ) -> None:
     """Report command — run NFR + hygiene scans, optional pytest, emit report."""
     if verbose and quiet:
@@ -1704,6 +1767,7 @@ def report_cmd(
         otel_traces=otel_traces_path,
         collector=collector,
         framework=framework,
+        origin=origin,
     )
 
 
