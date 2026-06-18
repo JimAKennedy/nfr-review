@@ -23,7 +23,7 @@ nfr-review arch --format json --format md /path/to/target/repo
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--output-dir PATH` | `reports` | Directory where report files are written |
-| `--format FORMAT` | `json` + `md` + `pdf` | Output format(s): `json`, `md`, `pdf` (repeat for multiple) |
+| `--format FORMAT` | `json` + `md` + `pdf` | Output format(s): `json`, `md`, `pdf`, `dsl` (repeat for multiple) |
 | `--no-llm` | off | Skip LLM-based analysis (domain model enhancement, market comparison) |
 | `--diagram-mode MODE` | `hierarchical` | Component diagram layout: `hierarchical` (overview + detail) or `flat` |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
@@ -35,6 +35,16 @@ nfr-review arch --format json --format md /path/to/target/repo
 - **Component diagrams** — Mermaid architecture diagrams in hierarchical or flat layout
 - **Market comparison** — how the project's architecture compares to common patterns in its domain (LLM-assisted)
 - **Multi-repo unified view** — when given multiple repos, produces a cross-repo architecture overview
+
+## Structurizr DSL output
+
+Use `--format dsl` to generate a [Structurizr DSL](https://docs.structurizr.com/dsl) workspace file from the scan. The DSL is a human-readable, version-controllable C4 architecture model that can be rendered with Structurizr Lite, exported via the Structurizr CLI, or diffed in Git to track architectural evolution.
+
+```bash
+nfr-review arch --format dsl /path/to/target/repo
+```
+
+See [structurizr-dsl.md](structurizr-dsl.md) for worked examples, drift detection, and rendering options.
 
 ## LLM dependency
 

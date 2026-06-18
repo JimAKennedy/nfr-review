@@ -215,3 +215,95 @@ class TestRenderMarkdownReport:
         assert "**openai**" in md
         assert "`gpt-4o`" in md
         assert "without LLM" not in md
+
+
+class TestOriginPartitioning:
+    """Tests for origin-based report partitioning (M059 S01)."""
+
+    def _dep_finding(
+        self,
+        *,
+        rule_id: str = "dep-vuln",
+        locator: str = "dep:lodash@4.17.20",
+    ) -> Finding:
+        return Finding(
+            rule_id=rule_id,
+            rag="amber",
+            severity="medium",
+            summary=f"Dep finding in {locator}",
+            recommendation="Upgrade dependency",
+            evidence_locator=locator,
+            collector_name="test-collector",
+            collector_version="0.1.0",
+            confidence=0.8,
+            pattern_tag="dep-pattern",
+            origin="dependency",
+        )
+
+    def test_dependency_findings_in_separate_section(self) -> None:
+        findings = [
+            _finding(evidence_locator="src/app.py"),
+            self._dep_finding(),
+        ]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        assert "## Dependency Findings" in md
+        assert "dep:lodash@4.17.20" in md
+
+    def test_first_party_only_in_main_sections(self) -> None:
+        findings = [
+            _finding(evidence_locator="src/app.py"),
+            self._dep_finding(locator="dep:requests@2.31.0"),
+        ]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        source_start = md.index("## Source Code Findings")
+        test_start = md.index("## Test Code Findings")
+        source_section = md[source_start:test_start]
+        assert "src/app.py" in source_section
+        assert "dep:requests@2.31.0" not in source_section
+
+    def test_summary_table_excludes_dependency_findings(self) -> None:
+        findings = [
+            _finding(evidence_locator="src/app.py", rag="red", severity="high"),
+            self._dep_finding(),
+            self._dep_finding(locator="dep:axios@1.0.0"),
+        ]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        summary = md.split("### Findings Summary")[1].split("##")[0]
+        assert "**1**" in summary
+
+    def test_no_dependency_section_when_no_dep_findings(self) -> None:
+        findings = [_finding(evidence_locator="src/app.py")]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        assert "## Dependency Findings" not in md
+
+    def test_dependency_section_has_own_summary_table(self) -> None:
+        findings = [
+            _finding(evidence_locator="src/app.py"),
+            self._dep_finding(),
+        ]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        dep_start = md.index("## Dependency Findings")
+        dep_section = md[dep_start:]
+        assert "### Dependency Findings Summary" in dep_section
+
+    def test_dependency_section_explains_exclusion(self) -> None:
+        findings = [self._dep_finding()]
+        result = FakeRunResult(findings=findings, run_metadata=_metadata())
+        md = render_markdown_report(nfr_result=result)  # type: ignore[arg-type]
+        dep_section = md.split("## Dependency Findings")[1]
+        assert "excluded from the Design Maturity Score" in dep_section
+
+    def test_methodology_explains_origin_classification(self) -> None:
+        result = FakeRunResult(run_metadata=_metadata())
+        md = render_markdown_report(
+            nfr_result=result,  # type: ignore[arg-type]
+            score_section="## Score\n100",
+        )
+        assert "### Finding Origin Classification" in md
+        assert "first-party" in md
+        assert "dependency" in md
