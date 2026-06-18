@@ -130,6 +130,12 @@ pre-commit install
 
 ## Adding a New Rule
 
+See the **[Custom Rules Guide](docs/custom-rules.md)** for a complete
+step-by-step walkthrough covering rule creation, registration, metadata,
+scoring integration, testing, and the external plugin API.
+
+The short version:
+
 1. Create a module in `src/nfr_review/rules/`.
 2. Implement the rule following the existing registry pattern (see any rule in
    that directory for reference).
@@ -208,16 +214,17 @@ Each entry point should reference a module that self-registers rules on import
 
 ### Conflict handling
 
-Built-in rules are loaded first. If an external rule tries to register an ID
-that already exists, the registration is skipped and a warning is logged.
-Choose unique prefixes for your rule IDs (e.g. `MYORG-001`) to avoid
-conflicts.
+Built-in rules are loaded first. Each rule's `_register()` function checks
+`if id not in rule_registry` before registering, so duplicate IDs are silently
+skipped. Choose unique prefixes for your rule IDs (e.g. `MYORG-001`) to avoid
+conflicts with built-in rules.
 
 ## Adding a New Collector
 
 1. Create a module in `src/nfr_review/collectors/`.
 2. Implement the `Collector` protocol from `src/nfr_review/protocols.py`.
-3. Register in `src/nfr_review/collectors/__init__.py`.
+3. Self-register via a `_register()` function at module scope (same pattern as
+   rules). The collector auto-discovers on import via `pkgutil.iter_modules()`.
 4. Add test fixtures and tests.
 
 ## License

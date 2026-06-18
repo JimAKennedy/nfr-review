@@ -451,7 +451,7 @@ pip install nfr-review
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
 | `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
-| `[full]` | All of the above (except `scancode` and `otel`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `monitor`. |
+| `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor`. |
 | `[dev]` | pytest, ruff, pytest-cov, and test dependencies for development and CI. |
 
 Install extras individually or combine them:
@@ -748,6 +748,9 @@ nfr-review list-rules --format json | python scripts/generate_catalogue.py --out
 
 The catalogue is self-contained (no external dependencies) and can be opened
 directly in a browser.
+
+To create your own custom rules or distribute rule packs as pip-installable
+plugins, see the [Custom Rules Guide](custom-rules.md).
 
 ---
 

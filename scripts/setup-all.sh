@@ -83,17 +83,24 @@ if command -v brew &>/dev/null; then
   fi
 
   # macOS ships a /usr/bin/java stub that passes `command -v` but doesn't work.
-  # Test with `java -version` to detect a real JRE.
-  if ! java -version &>/dev/null 2>&1; then
+  # openjdk@21 is keg-only — check brew prefix before falling back to install.
+  _brew_java="$(brew --prefix openjdk@21 2>/dev/null)/bin/java"
+  if [[ -x "$_brew_java" ]] && "$_brew_java" -version &>/dev/null 2>&1; then
+    info "java already installed (brew keg-only): $("$_brew_java" -version 2>&1 | head -1)"
+    export PATH="$(brew --prefix openjdk@21)/bin:$PATH"
+  elif java -version &>/dev/null 2>&1; then
+    info "java already installed: $(java -version 2>&1 | head -1)"
+  else
     info "Installing OpenJDK 21 via Homebrew (required by JDepend)"
-    brew install openjdk@21
-    # openjdk is keg-only — add to PATH for the rest of this script
-    if [[ -d "$(brew --prefix openjdk@21)/bin" ]]; then
+    brew install openjdk@21 || {
+      warn "brew install openjdk@21 failed — JDepend analysis will be skipped"
+      MISSING_BINS+=("java (brew install failed)")
+    }
+    if [[ -d "$(brew --prefix openjdk@21 2>/dev/null)/bin" ]]; then
       export PATH="$(brew --prefix openjdk@21)/bin:$PATH"
     fi
-  else
-    info "java already installed: $(java -version 2>&1 | head -1)"
   fi
+  unset _brew_java
 else
   if ! command -v helm &>/dev/null; then
     MISSING_BINS+=("helm")
@@ -137,7 +144,8 @@ if $_install_otelcol; then
     OTELCOL_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/otelcol-contrib_${OTELCOL_VERSION}_${OTELCOL_OS}_${OTELCOL_ARCH}.tar.gz"
     mkdir -p "$OTELCOL_DIR"
 
-    if curl -fsSL "$OTELCOL_URL" -o "$OTELCOL_DIR/otelcol-contrib.tar.gz" 2>/dev/null; then
+    info "Downloading otelcol-contrib v${OTELCOL_VERSION} (${OTELCOL_OS}/${OTELCOL_ARCH}) — this may take a minute…"
+    if curl -fSL --connect-timeout 15 --max-time 300 "$OTELCOL_URL" -o "$OTELCOL_DIR/otelcol-contrib.tar.gz" 2>/dev/null; then
       tar -xzf "$OTELCOL_DIR/otelcol-contrib.tar.gz" -C "$OTELCOL_DIR" otelcol-contrib 2>/dev/null || {
         warn "Failed to extract otelcol-contrib"
         MISSING_BINS+=("otelcol-contrib (extraction failed)")
@@ -192,12 +200,13 @@ JDWRAPPER
   success "JDepend wrapper installed at $wrapper (java: $java_bin)"
 }
 
-JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
+JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null || true)"
 JDEPEND_NEEDS_INSTALL=true
 JDEPEND_NEEDS_WRAPPER=false
 
 # If wrapper exists, verify it actually works (java binary may have moved/vanished).
-if command -v jdepend &>/dev/null && jdepend 2>&1 | grep -qi 'usage\|jdepend' &>/dev/null; then
+# Note: jdepend exits 1 on usage (no args), so use subshell to avoid pipefail killing the check.
+if command -v jdepend &>/dev/null && (jdepend 2>&1 || true) | grep -qi 'usage\|jdepend' &>/dev/null; then
   info "jdepend already installed and working"
   JDEPEND_NEEDS_INSTALL=false
 elif [[ -n "$JDEPEND_JAR" ]]; then
@@ -230,7 +239,7 @@ if $JDEPEND_NEEDS_INSTALL; then
         warn "Failed to extract JDepend archive"
         MISSING_BINS+=("jdepend (extraction failed)")
       }
-      JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null)"
+      JDEPEND_JAR="$(find "$JDEPEND_DIR" -name 'jdepend-*.jar' -print -quit 2>/dev/null || true)"
       if [[ -n "$JDEPEND_JAR" ]]; then
         write_jdepend_wrapper "$JAVA_BIN" "$JDEPEND_JAR"
       else
@@ -270,7 +279,7 @@ fi
 # --- Source validation ---
 info "Validating install"
 
-NFR_BIN="$(which nfr-review)"
+NFR_BIN="$(command -v nfr-review)"
 if [[ "$NFR_BIN" != "$VENV_DIR"/* ]]; then
   error "nfr-review binary resolved to $NFR_BIN (expected under $VENV_DIR/)"
   exit 1

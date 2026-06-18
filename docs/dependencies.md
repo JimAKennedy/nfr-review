@@ -327,5 +327,5 @@ Third-party plugins install themselves as Python packages with entry points.
 Discovery is automatic via `importlib.metadata.entry_points()` — no central
 registry.
 
-See the [Plugin API documentation](../README.md) for details on writing rule
+See the [Custom Rules Guide](custom-rules.md) for details on writing rule
 plugins.

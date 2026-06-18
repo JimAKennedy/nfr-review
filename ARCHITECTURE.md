@@ -102,8 +102,8 @@ all command (nfr-review all <target1> <target2> ...):
 | `scoring.py` | Maturity score computation, grade assignment, category mapping, trend tracking, baseline loading | Evidence gathering, rule evaluation, output writing |
 | `detect.py` | File-system probing for 18 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
-| `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `Band` | Serialization format details (CSV column order lives in output/) |
-| `protocols.py` | `Collector` and `Rule` runtime-checkable protocols | Registration, instantiation |
+| `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `BasePayload` | Serialization format details (CSV column order lives in output/) |
+| `protocols.py` | `Band`, `Collector`, `Rule`, and `LlmClient` runtime-checkable protocols | Registration, instantiation |
 | `registry.py` | Generic `Registry[T]` container, global singletons `rule_registry` / `collector_registry` | What gets registered (that's the plugin modules' job) |
 | `llm_client.py` | LLM abstraction (Anthropic, OpenAI-compatible, Claude CLI); availability gating, retry with backoff | Prompt design (rules own their prompts), evidence selection |
 | `rule_metadata.py` | `RuleMetadata` model: severity, category, tags, compliance references; loaded alongside rules for `list-rules --format json` | Rule evaluation, evidence gathering |
