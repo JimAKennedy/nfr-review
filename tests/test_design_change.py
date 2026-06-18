@@ -1398,3 +1398,528 @@ class TestAdrSignalsDiff:
         result = apply_thresholds(diffs, {"adr_count": 1.0})
 
         assert "adrs" not in result
+
+
+class TestApiSurfaceExtractor:
+    """Tests for the ApiSurfaceExtractor."""
+
+    def test_extracts_proto_rpcs(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/order.proto",
+            syntax="proto3",
+            package="com.example.order",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="OrderService",
+                    line=10,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="CreateOrder",
+                            request_type="CreateOrderRequest",
+                            response_type="CreateOrderResponse",
+                            line=12,
+                            has_comment=True,
+                        ),
+                        ProtoRpcMethod(
+                            name="GetOrder",
+                            request_type="GetOrderRequest",
+                            response_type="GetOrderResponse",
+                            line=14,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics["api_endpoint_count"].value == 2.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "OrderService.CreateOrder",
+            "OrderService.GetOrder",
+        ]
+
+    def test_extracts_openapi_endpoints(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = OpenApiAnalysisPayload(
+            file_path="api/openapi.yaml",
+            openapi_version="3.0.1",
+            title="Order API",
+            endpoints=[
+                OpenApiEndpoint(method="GET", path="/api/orders"),
+                OpenApiEndpoint(method="POST", path="/api/orders"),
+                OpenApiEndpoint(method="DELETE", path="/api/orders/{id}"),
+            ],
+        )
+
+        ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics["api_endpoint_count"].value == 3.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "DELETE /api/orders/{id}",
+            "GET /api/orders",
+            "POST /api/orders",
+        ]
+
+    def test_combines_proto_and_openapi(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        proto_ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=ProtoAnalysisPayload(
+                file_path="api/order.proto",
+                imports=[],
+                messages=[],
+                services=[
+                    ProtoService(
+                        name="OrderService",
+                        line=1,
+                        has_comment=True,
+                        methods=[
+                            ProtoRpcMethod(
+                                name="CreateOrder",
+                                request_type="Req",
+                                response_type="Resp",
+                                line=2,
+                                has_comment=True,
+                            ),
+                        ],
+                    ),
+                ],
+                enums=[],
+            ),
+        )
+        openapi_ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=OpenApiAnalysisPayload(
+                file_path="api/openapi.yaml",
+                endpoints=[
+                    OpenApiEndpoint(method="GET", path="/api/orders"),
+                ],
+            ),
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([proto_ev, openapi_ev])
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 2.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "GET /api/orders",
+            "OrderService.CreateOrder",
+        ]
+
+    def test_normalises_http_method_to_uppercase(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = OpenApiAnalysisPayload(
+            file_path="api/spec.yaml",
+            endpoints=[OpenApiEndpoint(method="get", path="/health")],
+        )
+        ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.set_metrics["api_endpoints"].items == ["GET /health"]
+
+    def test_multiple_proto_services(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/services.proto",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="UserService",
+                    line=1,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="GetUser",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=2,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+                ProtoService(
+                    name="AuthService",
+                    line=10,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="Login",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=11,
+                            has_comment=True,
+                        ),
+                        ProtoRpcMethod(
+                            name="Logout",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=12,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 3.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "AuthService.Login",
+            "AuthService.Logout",
+            "UserService.GetUser",
+        ]
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_api_evidence(self) -> None:
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deduplicates_across_files(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        svc = ProtoService(
+            name="OrderService",
+            line=1,
+            has_comment=True,
+            methods=[
+                ProtoRpcMethod(
+                    name="CreateOrder",
+                    request_type="Req",
+                    response_type="Resp",
+                    line=2,
+                    has_comment=True,
+                ),
+            ],
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="proto",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="proto-analysis",
+                payload=ProtoAnalysisPayload(
+                    file_path="api/v1/order.proto",
+                    imports=[],
+                    messages=[],
+                    services=[svc],
+                    enums=[],
+                ),
+            ),
+            Evidence(
+                collector_name="proto",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="proto-analysis",
+                payload=ProtoAnalysisPayload(
+                    file_path="api/v1/order_copy.proto",
+                    imports=[],
+                    messages=[],
+                    services=[svc],
+                    enums=[],
+                ),
+            ),
+        ]
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 1.0
+        assert category.set_metrics["api_endpoints"].items == ["OrderService.CreateOrder"]
+
+
+class TestApiSurfaceSignalsDiff:
+    """S06 demo criterion: diff two baselines where fixture B added 3 new proto RPCs,
+    2 new OpenAPI endpoints, and removed 1 endpoint — finding shows specific
+    additions and removals."""
+
+    def test_new_proto_rpcs_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 2.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 5.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "OrderService.UpdateOrder",
+                            "OrderService.DeleteOrder",
+                            "OrderService.ListOrders",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "api_surface" in diffs
+        nd = [
+            d for d in diffs["api_surface"].numeric_deltas if d.name == "api_endpoint_count"
+        ][0]
+        assert nd.delta == 3.0
+
+        sd = [d for d in diffs["api_surface"].set_deltas if d.name == "api_endpoints"][0]
+        assert sorted(sd.added) == [
+            "OrderService.DeleteOrder",
+            "OrderService.ListOrders",
+            "OrderService.UpdateOrder",
+        ]
+        assert sd.removed == []
+
+    def test_removed_endpoint_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    sets={
+                        "api_endpoints": [
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "DELETE /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    sets={
+                        "api_endpoints": [
+                            "GET /api/orders",
+                            "POST /api/orders",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "api_surface" in diffs
+        sd = [d for d in diffs["api_surface"].set_deltas if d.name == "api_endpoints"][0]
+        assert sd.removed == ["DELETE /api/orders/{id}"]
+        assert sd.added == []
+
+    def test_full_s06_scenario(self) -> None:
+        """Fixture B added 3 new proto RPCs, 2 new OpenAPI endpoints,
+        and removed 1 endpoint."""
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 5.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "DELETE /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 9.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "OrderService.UpdateOrder",
+                            "OrderService.DeleteOrder",
+                            "OrderService.ListOrders",
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "GET /api/orders/{id}/status",
+                            "PUT /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "api_surface" in result
+
+        # Count delta: 5 -> 9
+        nd = [
+            d for d in result["api_surface"].numeric_deltas if d.name == "api_endpoint_count"
+        ]
+        assert len(nd) == 1
+        assert nd[0].delta == 4.0
+
+        # Set delta: 3 proto RPCs added + 2 OpenAPI endpoints added, 1 removed
+        sd = [d for d in result["api_surface"].set_deltas if d.name == "api_endpoints"]
+        assert len(sd) == 1
+        assert sorted(sd[0].added) == [
+            "GET /api/orders/{id}/status",
+            "OrderService.DeleteOrder",
+            "OrderService.ListOrders",
+            "OrderService.UpdateOrder",
+            "PUT /api/orders/{id}",
+        ]
+        assert sd[0].removed == ["DELETE /api/orders/{id}"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface", numeric={"api_endpoint_count": 10.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface", numeric={"api_endpoint_count": 10.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"api_endpoint_count": 1.0})
+
+        assert "api_surface" not in result
