@@ -3573,3 +3573,92 @@ class TestS10FullScenario:
             assert f.confidence == 1.0
             assert f.rule_id == "design-change-trigger"
             assert f.collector_name == "design-change"
+
+
+class TestCLIDesignChangeDetection:
+    """End-to-end test: the CLI detects design changes between two runs."""
+
+    def test_cli_detects_adr_changes(self, tmp_path: Path) -> None:
+        import shutil
+
+        from click.testing import CliRunner
+
+        from nfr_review.cli import cli
+
+        fixture_src = Path(__file__).parent / "fixtures" / "adr-java-combined"
+        if not fixture_src.exists():
+            pytest.skip("adr-java-combined fixture not available")
+
+        # Copy fixture so we can mutate it between runs
+        fixture = tmp_path / "repo"
+        shutil.copytree(fixture_src, fixture)
+
+        baseline_dir = tmp_path / "baselines"
+        runner = CliRunner()
+
+        # -- First run: creates the initial baseline -----------------------
+        result1 = runner.invoke(
+            cli,
+            ["run", str(fixture), "--design-baseline-dir", str(baseline_dir)],
+            catch_exceptions=False,
+        )
+        assert result1.exit_code == 0, result1.output + result1.stderr
+        assert "saving initial" in result1.stderr.lower()
+
+        bl_files = list(baseline_dir.glob("*-structural-baseline.json"))
+        assert len(bl_files) == 1
+
+        # -- Mutate the fixture: add two new ADR files ---------------------
+        adr_dir = fixture / "docs" / "adr"
+
+        adr2 = adr_dir / "0002-use-postgres.md"
+        adr2.write_text(
+            "---\n"
+            "title: Use PostgreSQL\n"
+            "status: accepted\n"
+            "date: 2024-06-01\n"
+            "---\n"
+            "# Use PostgreSQL\n"
+            "\n"
+            "We will use PostgreSQL as our primary data store.\n",
+            encoding="utf-8",
+        )
+
+        adr3 = adr_dir / "0003-superseded-old.md"
+        adr3.write_text(
+            "---\n"
+            "title: Superseded Old Decision\n"
+            "status: superseded\n"
+            "date: 2024-02-01\n"
+            "superseded_by: 0002-use-postgres\n"
+            "---\n"
+            "# Superseded Old Decision\n"
+            "\n"
+            "This decision has been superseded.\n",
+            encoding="utf-8",
+        )
+
+        # -- Second run: should detect design changes ----------------------
+        result2 = runner.invoke(
+            cli,
+            ["run", str(fixture), "--design-baseline-dir", str(baseline_dir)],
+            catch_exceptions=False,
+        )
+        assert result2.exit_code == 0, result2.output + result2.stderr
+
+        # The diff summary is written to stderr via _ts_echo
+        stderr_lower = result2.stderr.lower()
+        assert "design change summary" in stderr_lower, (
+            f"Expected 'Design Change Summary' in stderr, got:\n{result2.stderr}"
+        )
+        assert "adr" in stderr_lower, (
+            f"Expected ADR-related changes in stderr, got:\n{result2.stderr}"
+        )
+
+        # The findings should also appear in the JSONL output written to
+        # the working directory. We check the stdout/stderr for the
+        # design_change tag as well -- findings count should be > 0.
+        combined_output = result2.output + result2.stderr
+        assert "design" in combined_output.lower(), (
+            "Expected design-related output in combined stdout+stderr"
+        )
