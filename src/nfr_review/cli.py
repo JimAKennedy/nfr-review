@@ -2406,7 +2406,7 @@ def init_cmd(target: Path, dry_run: bool) -> None:
     "--format",
     "output_formats",
     multiple=True,
-    type=click.Choice(["json", "md", "pdf"]),
+    type=click.Choice(["json", "md", "pdf", "dsl"]),
     help="Output format(s). Repeat for multiple. Default: json + md + pdf.",
 )
 @click.option(

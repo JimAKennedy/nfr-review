@@ -235,6 +235,27 @@ class TestArchCliCommand:
         )
         assert result.exit_code == 0
 
+    def test_arch_dsl_output(self, sample_repo: Path, tmp_path: Path) -> None:
+        out_dir = tmp_path / "out"
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "arch",
+                str(sample_repo),
+                "--no-llm",
+                "--output-dir",
+                str(out_dir),
+                "--format",
+                "dsl",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        dsl_files = list(out_dir.glob("*-architecture.dsl"))
+        assert len(dsl_files) == 1
+        content = dsl_files[0].read_text()
+        assert content.startswith("workspace")
+
     def test_arch_multi_repo(self, tmp_path: Path) -> None:
         repo_a = tmp_path / "repo-a"
         repo_a.mkdir()

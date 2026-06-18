@@ -1117,6 +1117,13 @@ def render_arch_report(
         elif fmt == "pdf":
             path = output_dir / f"{prefix}-architecture-report.pdf"
             results["pdf"] = render_arch_pdf(report, path)
+        elif fmt == "dsl":
+            from nfr_review.output.structurizr_dsl import write_workspace_dsl
+            from nfr_review.structurizr_bridge import build_workspace_from_arch
+
+            workspace = build_workspace_from_arch(report)
+            path = output_dir / f"{prefix}-architecture.dsl"
+            results["dsl"] = write_workspace_dsl(workspace, path)
         else:
             logger.warning("Unknown format %r; skipping", fmt)
             results[fmt] = None
