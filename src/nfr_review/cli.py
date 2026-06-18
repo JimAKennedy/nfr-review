@@ -603,14 +603,16 @@ def run_cmd(
         _save_structural(new_bl, bl_file)
 
     if show_score:
+        from nfr_review.output.classify import partition_findings_by_origin
         from nfr_review.scoring import (
             compute_maturity_score,
             compute_trend,
             load_baseline_score,
         )
 
+        first_party_findings, _dep = partition_findings_by_origin(result.findings)
         score = compute_maturity_score(
-            result.findings,
+            first_party_findings,
             result.run_metadata.rules_run if result.run_metadata else [],
             result.run_metadata.rules_skipped if result.run_metadata else [],
             config.scoring,
@@ -1158,13 +1160,20 @@ def _compute_score(
     nfr_result: RunResult,
     config: Config,
 ) -> str:
-    """Compute maturity score and return the rendered Markdown section."""
+    """Compute maturity score and return the rendered Markdown section.
+
+    Only first-party findings contribute to the score; dependency findings
+    are excluded so that vendored/third-party code does not distort the
+    project's own maturity assessment.
+    """
+    from nfr_review.output.classify import partition_findings_by_origin
     from nfr_review.output.markdown import render_score_section
     from nfr_review.scoring import compute_maturity_score
 
+    first_party, _dep = partition_findings_by_origin(combined_findings)
     nfr_meta = nfr_result.run_metadata
     score = compute_maturity_score(
-        combined_findings,
+        first_party,
         nfr_meta.rules_run if nfr_meta else [],
         nfr_meta.rules_skipped if nfr_meta else [],
         config.scoring,

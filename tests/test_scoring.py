@@ -648,3 +648,48 @@ def test_no_rules_run_or_skipped() -> None:
     score = compute_maturity_score([], [], [], _UNWEIGHTED)
     assert score.rules_coverage == 1.0
     assert score.overall == 100
+
+
+# ---------------------------------------------------------------------------
+# Origin partitioning: scoring uses first-party only
+# ---------------------------------------------------------------------------
+
+
+def test_partition_before_scoring_excludes_deps() -> None:
+    """Dependency findings should not affect the maturity score."""
+    from nfr_review.output.classify import partition_findings_by_origin
+
+    fp = Finding(
+        rule_id="security-leak",
+        rag="red",
+        severity="critical",
+        summary="fp issue",
+        recommendation="fix",
+        evidence_locator="src/main.py",
+        collector_name="c",
+        collector_version="1",
+        confidence=0.9,
+        pattern_tag="t",
+        origin="first_party",
+    )
+    dep = Finding(
+        rule_id="security-leak",
+        rag="red",
+        severity="critical",
+        summary="dep issue",
+        recommendation="fix",
+        evidence_locator="dep:lodash@4.17.20",
+        collector_name="c",
+        collector_version="1",
+        confidence=0.9,
+        pattern_tag="t",
+        origin="dependency",
+    )
+    all_findings = [fp, dep]
+    first_party, dependency = partition_findings_by_origin(all_findings)
+    assert len(first_party) == 1
+    assert len(dependency) == 1
+
+    score_all = compute_maturity_score(all_findings, ["R001"], [], _UNWEIGHTED)
+    score_fp = compute_maturity_score(first_party, ["R001"], [], _UNWEIGHTED)
+    assert score_fp.overall > score_all.overall

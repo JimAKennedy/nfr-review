@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from nfr_review.models import RAG, Finding, Severity
-from nfr_review.output.classify import partition_findings
+from nfr_review.output.classify import partition_findings, partition_findings_by_origin
 from nfr_review.scoring import _extract_category
 
 if TYPE_CHECKING:
@@ -179,6 +179,39 @@ def _suppression_audit_section(
     return "\n".join(lines)
 
 
+def _dependency_findings_section(findings: list[Finding]) -> str:
+    """Render the dependency findings section with its own summary and detail."""
+    lines = [
+        "## Dependency Findings",
+        "",
+        (
+            "The following findings originate from dependency or vendored code."
+            " They are excluded from the Design Maturity Score."
+        ),
+        "",
+    ]
+    lines.append(_category_severity_table(findings, "Dependency Findings Summary"))
+
+    by_rag: dict[RAG, list[Finding]] = {}
+    for f in findings:
+        by_rag.setdefault(f.rag, []).append(f)
+
+    for rag in _RAG_ORDER:
+        group = by_rag.get(rag, [])
+        if not group:
+            continue
+        lines.append(f"### {rag.upper()} ({len(group)})")
+        lines.append("")
+        for f in group:
+            lines.append(f"- **[{f.rule_id}]** {f.summary}")
+            lines.append(f"  - Severity: {f.severity} | Confidence: {f.confidence:.0%}")
+            lines.append(f"  - Location: `{f.evidence_locator}`")
+            lines.append(f"  - Recommendation: {f.recommendation}")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def _methodology_appendix(
     llm_info: tuple[str, str] | None = None,
 ) -> str:
@@ -282,6 +315,26 @@ def _methodology_appendix(
         " means fewer rule categories were applicable to"
         " the scanned repository."
     )
+    _a("")
+    _a("### Finding Origin Classification")
+    _a("")
+    _a(
+        "Findings are classified as **first-party** or **dependency**"
+        " based on their file location. Files in vendor directories,"
+        " minified bundles, and paths matching the configured"
+        " `dependency_paths` patterns are classified as dependency."
+        " Findings from dependency collectors (prefixed `dep:`) are"
+        " also classified as dependency."
+    )
+    _a("")
+    _a(
+        "The main report body and the Design Maturity Score include"
+        " only first-party findings — issues in code the team owns"
+        " and can act on directly. Dependency findings are reported"
+        " in a separate **Dependency Findings** section for"
+        " visibility without inflating the project's maturity score."
+    )
+
     _a("")
     _a("### Category Definitions")
     _a("")
@@ -574,7 +627,8 @@ def render_markdown_report(
     if hygiene_result:
         all_findings.extend(hygiene_result.findings)
 
-    source_findings, test_findings = partition_findings(all_findings)
+    first_party, dependency = partition_findings_by_origin(all_findings)
+    source_findings, test_findings = partition_findings(first_party)
 
     sections: list[str] = []
 
@@ -611,8 +665,8 @@ def render_markdown_report(
         sections.append(f"> **Compliance filter:** {_framework_label(framework)}")
         sections.append("")
 
-    # Summary table
-    sections.append(_category_severity_table(all_findings, "Findings Summary"))
+    # Summary table (first-party only)
+    sections.append(_category_severity_table(first_party, "Findings Summary"))
 
     # Design maturity score
     if score_section:
@@ -635,7 +689,7 @@ def render_markdown_report(
     # Test results
     sections.append(_test_results_section(pytest_result))
 
-    # Findings by region
+    # Findings by region (first-party only)
     sections.append(_findings_section(source_findings, "Source Code Findings"))
     sections.append(_findings_section(test_findings, "Test Code Findings"))
 
@@ -647,6 +701,10 @@ def render_markdown_report(
     # Suppression audit
     if suppressed_findings:
         sections.append(_suppression_audit_section(suppressed_findings))
+
+    # Dependency findings (separate section)
+    if dependency:
+        sections.append(_dependency_findings_section(dependency))
 
     # Architecture Decision Records
     if adr_section:
