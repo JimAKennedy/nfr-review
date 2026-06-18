@@ -588,7 +588,7 @@ nfr-review ships with 147 rules (119 NFR + 28 hygiene) across several domains. A
 
 Rules marked "LLM-assisted" use an optional LLM call for deeper analysis and fall back gracefully when no API key is configured.
 
-Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule.
+Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule. To create your own rules, see the [Custom Rules Guide](docs/custom-rules.md).
 
 ## Output
 
@@ -649,6 +649,10 @@ pytest -n auto --cov
 ruff check src/ tests/
 ruff format --check src/ tests/
 ```
+
+## Extending nfr-review
+
+See the **[Custom Rules Guide](docs/custom-rules.md)** for a step-by-step walkthrough of creating, registering, and testing your own rules. Rules can be added directly to the codebase or distributed as pip-installable plugin packages via the entry-point API.
 
 ## Contributing
 
