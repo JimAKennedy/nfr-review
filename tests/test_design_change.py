@@ -396,6 +396,258 @@ class TestApplyThresholds:
         assert result["structure"].numeric_deltas[0].name == "test_coverage"
 
 
+class TestStructuralSignalsDiff:
+    """S03 demo criterion: diff two baselines where fixture B has 30% more classes,
+    a new JDepend cycle, and 6 new dormant classes — all three signals fire."""
+
+    def test_class_count_delta_fires(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={"structure": _make_category("structure", numeric={"class_count": 100.0})}
+        )
+        curr = _make_baseline(
+            metrics={"structure": _make_category("structure", numeric={"class_count": 130.0})}
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+
+        assert "structure" in result
+        nd = result["structure"].numeric_deltas[0]
+        assert nd.name == "class_count"
+        assert nd.pct_change == pytest.approx(30.0)
+        assert nd.pct_change > 20.0
+
+    def test_jdepend_cycle_introduced_fires(self) -> None:
+        prev = _make_baseline(
+            metrics={"jdepend": _make_category("jdepend", sets={"jdepend_cycles": []})}
+        )
+        curr = _make_baseline(
+            metrics={
+                "jdepend": _make_category(
+                    "jdepend",
+                    sets={"jdepend_cycles": ["com.example.a", "com.example.b"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "jdepend" in diffs
+        sd = diffs["jdepend"].set_deltas[0]
+        assert sd.name == "jdepend_cycles"
+        assert sorted(sd.added) == ["com.example.a", "com.example.b"]
+        assert sd.removed == []
+
+    def test_dormant_class_explosion_fires(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "structure": _make_category("structure", numeric={"dormant_class_count": 2.0})
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "structure": _make_category("structure", numeric={"dormant_class_count": 8.0})
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"dormant_class_count": 25.0})
+
+        assert "structure" in result
+        nd = result["structure"].numeric_deltas[0]
+        assert nd.name == "dormant_class_count"
+        assert nd.pct_change == pytest.approx(300.0)
+        assert nd.pct_change > 25.0
+
+    def test_all_three_signals_fire_together(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 100.0, "dormant_class_count": 2.0},
+                ),
+                "jdepend": _make_category("jdepend", sets={"jdepend_cycles": []}),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 130.0, "dormant_class_count": 8.0},
+                ),
+                "jdepend": _make_category(
+                    "jdepend",
+                    sets={"jdepend_cycles": ["com.example.a", "com.example.b"]},
+                ),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # class_count: 30% > 20% threshold
+        assert "structure" in result
+        structure_numeric_names = {nd.name for nd in result["structure"].numeric_deltas}
+        assert "class_count" in structure_numeric_names
+
+        # dormant_class_count: 300% > 25% threshold
+        assert "dormant_class_count" in structure_numeric_names
+
+        # jdepend_cycles: 2 added > 0 (no threshold means passes through)
+        assert "jdepend" in result
+        set_names = {sd.name for sd in result["jdepend"].set_deltas}
+        assert "jdepend_cycles" in set_names
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={"structure": _make_category("structure", numeric={"class_count": 100.0})}
+        )
+        curr = _make_baseline(
+            metrics={"structure": _make_category("structure", numeric={"class_count": 105.0})}
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+
+        assert result == {}
+
+    def test_jdepend_instability_spike(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "jdepend": _make_category("jdepend", numeric={"jdepend_instability": 0.5})
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "jdepend": _make_category("jdepend", numeric={"jdepend_instability": 0.7})
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"jdepend_instability": 15.0})
+
+        assert "jdepend" in result
+        nd = result["jdepend"].numeric_deltas[0]
+        assert nd.name == "jdepend_instability"
+        assert nd.pct_change == pytest.approx(40.0)
+        assert nd.pct_change > 15.0
+
+
+class TestStructuralExtractors:
+    """Tests that verify extractors work with typed payload evidence."""
+
+    def test_structural_extractor_counts_classes(self) -> None:
+        from nfr_review.collectors.payloads.java_ast import (
+            JavaAstFilePayload,
+            JavaBaseClass,
+            JavaClass,
+        )
+        from nfr_review.design_change.structural_signals import StructuralMetricsExtractor
+
+        def _make_java_class(name: str) -> JavaClass:
+            return JavaClass(
+                name=name,
+                line=1,
+                annotations=[],
+                is_abstract=False,
+                is_interface=False,
+                base_classes=[],
+                fields=[],
+                methods=[],
+                namespace="com.example",
+                outer_class="",
+            )
+
+        # Two classes: OrderService extends BaseService, so they are connected.
+        # A third class Orphan has no connections — it is dormant.
+        base_class_ref = JavaBaseClass(name="BaseService", access="public")
+        order_service = JavaClass(
+            name="OrderService",
+            line=1,
+            annotations=[],
+            is_abstract=False,
+            is_interface=False,
+            base_classes=[base_class_ref],
+            fields=[],
+            methods=[],
+            namespace="com.example",
+            outer_class="",
+        )
+        base_service = _make_java_class("BaseService")
+        orphan = _make_java_class("Orphan")
+
+        payload = JavaAstFilePayload(
+            file_path="/src/main/OrderService.java",
+            package="com.example",
+            classes=[order_service, base_service, orphan],
+            methods=[],
+            catch_blocks=[],
+            imports=[],
+            thread_pool_constructions=[],
+            log_statements=[],
+        )
+
+        ev = Evidence(
+            collector_name="java-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-ast-file",
+            payload=payload,
+        )
+
+        extractor = StructuralMetricsExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "structure"
+        assert "class_count" in category.numeric_metrics
+        assert category.numeric_metrics["class_count"].value == 3.0
+        assert "dormant_class_count" in category.numeric_metrics
+        # Orphan is disconnected; OrderService and BaseService are connected.
+        assert category.numeric_metrics["dormant_class_count"].value == 1.0
+
+    def test_jdepend_extractor_extracts_instability(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.structural_signals import JDependMetricsExtractor
+
+        pkg_low = JDependPackageMetrics(name="com.example.core", i=0.3)
+        pkg_high = JDependPackageMetrics(name="com.example.service", i=0.85)
+
+        payload = JDependPackagesPayload(
+            bytecode_dir="/build/classes",
+            packages=[pkg_low, pkg_high],
+        )
+
+        ev = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=payload,
+        )
+
+        extractor = JDependMetricsExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "jdepend"
+        assert "jdepend_instability" in category.numeric_metrics
+        # Extractor should record the max instability across packages.
+        assert category.numeric_metrics["jdepend_instability"].value == pytest.approx(0.85)
+
+
 class TestCLIDesignBaselineRoundTrip:
     def test_cli_saves_and_diffs_baseline(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
