@@ -174,6 +174,7 @@ DEFAULT_DESIGN_CHANGE_THRESHOLDS: dict[str, float] = {
     "adr_count": 1.0,
     "api_endpoint_count": 1.0,
     "bounded_context_count": 1.0,
+    "integration_point_count": 1.0,
     "deployment_service_count": 1.0,
     "schema_migration_count": 1.0,
 }

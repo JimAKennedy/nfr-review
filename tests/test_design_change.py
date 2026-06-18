@@ -1923,3 +1923,568 @@ class TestApiSurfaceSignalsDiff:
         result = apply_thresholds(diffs, {"api_endpoint_count": 1.0})
 
         assert "api_surface" not in result
+
+
+class TestBoundedContextExtractor:
+    """Tests for the BoundedContextExtractor."""
+
+    def test_extracts_bounded_contexts_from_jdepend(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        payload = JDependPackagesPayload(
+            bytecode_dir="/build/classes",
+            packages=[
+                JDependPackageMetrics(name="com.example.orders.service"),
+                JDependPackageMetrics(name="com.example.orders.repository"),
+                JDependPackageMetrics(name="com.example.users.api"),
+                JDependPackageMetrics(name="com.example.users.service"),
+            ],
+        )
+        ev = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=payload,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics["bounded_context_count"].value == 2.0
+        assert sorted(category.set_metrics["bounded_contexts"].items) == [
+            "orders",
+            "users",
+        ]
+
+    def test_single_package_returns_no_context(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        payload = JDependPackagesPayload(
+            bytecode_dir="/build/classes",
+            packages=[JDependPackageMetrics(name="com.example")],
+        )
+        ev = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=payload,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deduplicates_across_evidence(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        ev1 = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=JDependPackagesPayload(
+                bytecode_dir="/build/a",
+                packages=[
+                    JDependPackageMetrics(name="com.example.orders.service"),
+                ],
+            ),
+        )
+        ev2 = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=JDependPackagesPayload(
+                bytecode_dir="/build/b",
+                packages=[
+                    JDependPackageMetrics(name="com.example.orders.repository"),
+                    JDependPackageMetrics(name="com.example.users.api"),
+                ],
+            ),
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev1, ev2])
+
+        assert category.numeric_metrics["bounded_context_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_jdepend_evidence(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+
+
+class TestIntegrationStyleExtractor:
+    """Tests for the IntegrationStyleExtractor."""
+
+    def test_detects_http_from_go_ast(self) -> None:
+        from nfr_review.collectors.payloads.go_ast import GoAstFilePayload, GoHttpCall
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = GoAstFilePayload(
+            file_path="/src/client.go",
+            package="client",
+            structs=[],
+            catch_blocks=[],
+            log_statements=[],
+            functions=[],
+            error_assignments=[],
+            goroutine_launches=[],
+            http_calls=[
+                GoHttpCall(
+                    call="http.NewRequest", has_timeout=True, line=10, file="client.go"
+                ),
+                GoHttpCall(call="http.Get", has_timeout=False, line=20, file="client.go"),
+            ],
+            defer_statements=[],
+        )
+        ev = Evidence(
+            collector_name="go-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="go-ast-file",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "integration_style"
+        assert "http:direct" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_detects_grpc_from_proto(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/order.proto",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="OrderService",
+                    line=1,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="CreateOrder",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=2,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert "grpc" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 1.0
+
+    def test_detects_service_mesh(self) -> None:
+        from nfr_review.collectors.payloads.service_mesh import (
+            ServiceMeshVirtualServicePayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = ServiceMeshVirtualServicePayload(
+            file_path="k8s/vs.yaml",
+            name="order-vs",
+            hosts=["order-service"],
+            http_routes=[],
+            has_weighted_routing=False,
+            total_routes=3,
+        )
+        ev = Evidence(
+            collector_name="service-mesh",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="service-mesh-virtual-service",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert "service-mesh" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 3.0
+
+    def test_detects_messaging_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="spring-kafka",
+                    declared_version="3.0",
+                    version_constraint="^3.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-amqp",
+                    declared_version="3.0",
+                    version_constraint="^3.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        styles = category.set_metrics["integration_styles"].items
+        assert "messaging:kafka" in styles
+        assert "messaging:amqp" in styles
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_combines_multiple_sources(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        proto_ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=ProtoAnalysisPayload(
+                file_path="api/svc.proto",
+                imports=[],
+                messages=[],
+                services=[
+                    ProtoService(
+                        name="Svc",
+                        line=1,
+                        has_comment=True,
+                        methods=[
+                            ProtoRpcMethod(
+                                name="Do",
+                                request_type="Req",
+                                response_type="Resp",
+                                line=2,
+                                has_comment=True,
+                            ),
+                        ],
+                    ),
+                ],
+                enums=[],
+            ),
+        )
+        deps_ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=DepsPayload(
+                dependencies=[
+                    DependencyItem(
+                        name="spring-kafka",
+                        declared_version="3.0",
+                        version_constraint="^3.0",
+                        source_file="pom.xml",
+                    ),
+                ],
+                manifest_files_found=["pom.xml"],
+                enrichment_errors=[],
+            ),
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([proto_ev, deps_ev])
+
+        styles = category.set_metrics["integration_styles"].items
+        assert "grpc" in styles
+        assert "messaging:kafka" in styles
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "integration_style"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_go_ast_without_http_calls_ignored(self) -> None:
+        from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = GoAstFilePayload(
+            file_path="/src/main.go",
+            package="main",
+            structs=[],
+            catch_blocks=[],
+            log_statements=[],
+            functions=[],
+            error_assignments=[],
+            goroutine_launches=[],
+            http_calls=[],
+            defer_statements=[],
+        )
+        ev = Evidence(
+            collector_name="go-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="go-ast-file",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "integration_style"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestBoundedContextSignalsDiff:
+    """S07 demo criterion: diff two baselines where fixture B introduced a new
+    top-level package cluster with its own dependency subgraph, and replaced
+    HTTP calls with message queue patterns — both signals fire."""
+
+    def test_new_bounded_context_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "bounded_context" in diffs
+        nd = [
+            d
+            for d in diffs["bounded_context"].numeric_deltas
+            if d.name == "bounded_context_count"
+        ][0]
+        assert nd.delta == 1.0
+
+        sd = [d for d in diffs["bounded_context"].set_deltas if d.name == "bounded_contexts"][
+            0
+        ]
+        assert sd.added == ["payments"]
+        assert sd.removed == []
+
+    def test_integration_style_shift_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 5.0},
+                    sets={"integration_styles": ["http:direct"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 4.0},
+                    sets={"integration_styles": ["messaging:kafka", "messaging:rabbitmq"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "integration_style" in diffs
+        sd = [
+            d for d in diffs["integration_style"].set_deltas if d.name == "integration_styles"
+        ][0]
+        assert sorted(sd.added) == ["messaging:kafka", "messaging:rabbitmq"]
+        assert sd.removed == ["http:direct"]
+
+    def test_full_s07_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                ),
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 5.0},
+                    sets={"integration_styles": ["http:direct"]},
+                ),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                ),
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 4.0},
+                    sets={"integration_styles": ["messaging:kafka", "messaging:rabbitmq"]},
+                ),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # Bounded context: 2 -> 3 = +50%, threshold is 1.0
+        assert "bounded_context" in result
+        bc_set = [
+            d for d in result["bounded_context"].set_deltas if d.name == "bounded_contexts"
+        ]
+        assert len(bc_set) == 1
+        assert bc_set[0].added == ["payments"]
+
+        # Integration style: set changed (http:direct removed, messaging added)
+        assert "integration_style" in result
+        style_set = [
+            d for d in result["integration_style"].set_deltas if d.name == "integration_styles"
+        ]
+        assert len(style_set) == 1
+        assert sorted(style_set[0].added) == [
+            "messaging:kafka",
+            "messaging:rabbitmq",
+        ]
+        assert style_set[0].removed == ["http:direct"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context", numeric={"bounded_context_count": 3.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context", numeric={"bounded_context_count": 3.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"bounded_context_count": 1.0})
+
+        assert "bounded_context" not in result
