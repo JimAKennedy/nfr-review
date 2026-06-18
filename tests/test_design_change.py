@@ -1083,3 +1083,2493 @@ class TestDependencyCoverageSignalsDiff:
         result = apply_thresholds(diffs, {"dependency_count": 30.0, "test_coverage": 5.0})
 
         assert result == {}
+
+
+class TestAdrMetricsExtractor:
+    """Tests for the AdrMetricsExtractor."""
+
+    def test_extracts_adr_count_and_titles(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0001-use-spring-boot.md",
+                    title="Use Spring Boot",
+                    status="accepted",
+                ),
+            ),
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0002-use-postgres.md",
+                    title="Use PostgreSQL",
+                    status="accepted",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics["adr_count"].value == 2.0
+        assert sorted(category.set_metrics["adr_titles"].items) == [
+            "Use PostgreSQL",
+            "Use Spring Boot",
+        ]
+        assert category.set_metrics["superseded_adrs"].items == []
+
+    def test_detects_superseded_by_status(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0001-use-mysql.md",
+                    title="Use MySQL",
+                    status="superseded",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Use MySQL"]
+
+    def test_detects_superseded_by_field(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0003-use-redis.md",
+                    title="Use Redis",
+                    status="accepted",
+                    superseded_by="0005-use-memcached.md",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Use Redis"]
+
+    def test_falls_back_to_file_path_when_no_title(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0004-unnamed.md",
+                    title=None,
+                    status="accepted",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["adr_count"].value == 1.0
+        assert category.set_metrics["adr_titles"].items == ["docs/adr/0004-unnamed.md"]
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_adr_evidence(self) -> None:
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deprecated_status_treated_as_superseded(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0005.md",
+                    title="Old Pattern",
+                    status="Deprecated",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Old Pattern"]
+
+
+class TestAdrSignalsDiff:
+    """S05 demo criterion: diff two baselines where fixture B has 2 new ADRs
+    and 1 superseded — signal fires with ADR titles in finding."""
+
+    def test_new_adrs_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 3.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 5.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                            "Event Sourcing for Audit",
+                            "Circuit Breaker Pattern",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "adrs" in diffs
+        nd = [d for d in diffs["adrs"].numeric_deltas if d.name == "adr_count"][0]
+        assert nd.delta == 2.0
+
+        sd = [d for d in diffs["adrs"].set_deltas if d.name == "adr_titles"][0]
+        assert sorted(sd.added) == ["Circuit Breaker Pattern", "Event Sourcing for Audit"]
+        assert sd.removed == []
+
+    def test_superseded_adr_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    sets={"superseded_adrs": []},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    sets={"superseded_adrs": ["REST over gRPC"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "adrs" in diffs
+        sd = [d for d in diffs["adrs"].set_deltas if d.name == "superseded_adrs"][0]
+        assert sd.added == ["REST over gRPC"]
+
+    def test_full_s05_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 3.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                        ],
+                        "superseded_adrs": [],
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 5.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                            "Event Sourcing for Audit",
+                            "Circuit Breaker Pattern",
+                        ],
+                        "superseded_adrs": ["REST over gRPC"],
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # adr_count: 3 -> 5 = +66.7%, threshold is 1.0 (set threshold = min items)
+        assert "adrs" in result
+
+        # New ADR titles visible
+        title_deltas = [d for d in result["adrs"].set_deltas if d.name == "adr_titles"]
+        assert len(title_deltas) == 1
+        assert sorted(title_deltas[0].added) == [
+            "Circuit Breaker Pattern",
+            "Event Sourcing for Audit",
+        ]
+
+        # Superseded ADR visible
+        superseded_deltas = [
+            d for d in result["adrs"].set_deltas if d.name == "superseded_adrs"
+        ]
+        assert len(superseded_deltas) == 1
+        assert superseded_deltas[0].added == ["REST over gRPC"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={"adrs": _make_category("adrs", numeric={"adr_count": 10.0})}
+        )
+        curr = _make_baseline(
+            metrics={"adrs": _make_category("adrs", numeric={"adr_count": 10.0})}
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"adr_count": 1.0})
+
+        assert "adrs" not in result
+
+
+class TestApiSurfaceExtractor:
+    """Tests for the ApiSurfaceExtractor."""
+
+    def test_extracts_proto_rpcs(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/order.proto",
+            syntax="proto3",
+            package="com.example.order",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="OrderService",
+                    line=10,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="CreateOrder",
+                            request_type="CreateOrderRequest",
+                            response_type="CreateOrderResponse",
+                            line=12,
+                            has_comment=True,
+                        ),
+                        ProtoRpcMethod(
+                            name="GetOrder",
+                            request_type="GetOrderRequest",
+                            response_type="GetOrderResponse",
+                            line=14,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics["api_endpoint_count"].value == 2.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "OrderService.CreateOrder",
+            "OrderService.GetOrder",
+        ]
+
+    def test_extracts_openapi_endpoints(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = OpenApiAnalysisPayload(
+            file_path="api/openapi.yaml",
+            openapi_version="3.0.1",
+            title="Order API",
+            endpoints=[
+                OpenApiEndpoint(method="GET", path="/api/orders"),
+                OpenApiEndpoint(method="POST", path="/api/orders"),
+                OpenApiEndpoint(method="DELETE", path="/api/orders/{id}"),
+            ],
+        )
+
+        ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics["api_endpoint_count"].value == 3.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "DELETE /api/orders/{id}",
+            "GET /api/orders",
+            "POST /api/orders",
+        ]
+
+    def test_combines_proto_and_openapi(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        proto_ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=ProtoAnalysisPayload(
+                file_path="api/order.proto",
+                imports=[],
+                messages=[],
+                services=[
+                    ProtoService(
+                        name="OrderService",
+                        line=1,
+                        has_comment=True,
+                        methods=[
+                            ProtoRpcMethod(
+                                name="CreateOrder",
+                                request_type="Req",
+                                response_type="Resp",
+                                line=2,
+                                has_comment=True,
+                            ),
+                        ],
+                    ),
+                ],
+                enums=[],
+            ),
+        )
+        openapi_ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=OpenApiAnalysisPayload(
+                file_path="api/openapi.yaml",
+                endpoints=[
+                    OpenApiEndpoint(method="GET", path="/api/orders"),
+                ],
+            ),
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([proto_ev, openapi_ev])
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 2.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "GET /api/orders",
+            "OrderService.CreateOrder",
+        ]
+
+    def test_normalises_http_method_to_uppercase(self) -> None:
+        from nfr_review.collectors.payloads.openapi import (
+            OpenApiAnalysisPayload,
+            OpenApiEndpoint,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = OpenApiAnalysisPayload(
+            file_path="api/spec.yaml",
+            endpoints=[OpenApiEndpoint(method="get", path="/health")],
+        )
+        ev = Evidence(
+            collector_name="openapi",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="openapi-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.set_metrics["api_endpoints"].items == ["GET /health"]
+
+    def test_multiple_proto_services(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/services.proto",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="UserService",
+                    line=1,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="GetUser",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=2,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+                ProtoService(
+                    name="AuthService",
+                    line=10,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="Login",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=11,
+                            has_comment=True,
+                        ),
+                        ProtoRpcMethod(
+                            name="Logout",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=12,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 3.0
+        assert sorted(category.set_metrics["api_endpoints"].items) == [
+            "AuthService.Login",
+            "AuthService.Logout",
+            "UserService.GetUser",
+        ]
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_api_evidence(self) -> None:
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "api_surface"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deduplicates_across_files(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.api_surface_signals import ApiSurfaceExtractor
+
+        svc = ProtoService(
+            name="OrderService",
+            line=1,
+            has_comment=True,
+            methods=[
+                ProtoRpcMethod(
+                    name="CreateOrder",
+                    request_type="Req",
+                    response_type="Resp",
+                    line=2,
+                    has_comment=True,
+                ),
+            ],
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="proto",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="proto-analysis",
+                payload=ProtoAnalysisPayload(
+                    file_path="api/v1/order.proto",
+                    imports=[],
+                    messages=[],
+                    services=[svc],
+                    enums=[],
+                ),
+            ),
+            Evidence(
+                collector_name="proto",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="proto-analysis",
+                payload=ProtoAnalysisPayload(
+                    file_path="api/v1/order_copy.proto",
+                    imports=[],
+                    messages=[],
+                    services=[svc],
+                    enums=[],
+                ),
+            ),
+        ]
+
+        extractor = ApiSurfaceExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["api_endpoint_count"].value == 1.0
+        assert category.set_metrics["api_endpoints"].items == ["OrderService.CreateOrder"]
+
+
+class TestApiSurfaceSignalsDiff:
+    """S06 demo criterion: diff two baselines where fixture B added 3 new proto RPCs,
+    2 new OpenAPI endpoints, and removed 1 endpoint — finding shows specific
+    additions and removals."""
+
+    def test_new_proto_rpcs_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 2.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 5.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "OrderService.UpdateOrder",
+                            "OrderService.DeleteOrder",
+                            "OrderService.ListOrders",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "api_surface" in diffs
+        nd = [
+            d for d in diffs["api_surface"].numeric_deltas if d.name == "api_endpoint_count"
+        ][0]
+        assert nd.delta == 3.0
+
+        sd = [d for d in diffs["api_surface"].set_deltas if d.name == "api_endpoints"][0]
+        assert sorted(sd.added) == [
+            "OrderService.DeleteOrder",
+            "OrderService.ListOrders",
+            "OrderService.UpdateOrder",
+        ]
+        assert sd.removed == []
+
+    def test_removed_endpoint_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    sets={
+                        "api_endpoints": [
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "DELETE /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    sets={
+                        "api_endpoints": [
+                            "GET /api/orders",
+                            "POST /api/orders",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "api_surface" in diffs
+        sd = [d for d in diffs["api_surface"].set_deltas if d.name == "api_endpoints"][0]
+        assert sd.removed == ["DELETE /api/orders/{id}"]
+        assert sd.added == []
+
+    def test_full_s06_scenario(self) -> None:
+        """Fixture B added 3 new proto RPCs, 2 new OpenAPI endpoints,
+        and removed 1 endpoint."""
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 5.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "DELETE /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface",
+                    numeric={"api_endpoint_count": 9.0},
+                    sets={
+                        "api_endpoints": [
+                            "OrderService.CreateOrder",
+                            "OrderService.GetOrder",
+                            "OrderService.UpdateOrder",
+                            "OrderService.DeleteOrder",
+                            "OrderService.ListOrders",
+                            "GET /api/orders",
+                            "POST /api/orders",
+                            "GET /api/orders/{id}/status",
+                            "PUT /api/orders/{id}",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "api_surface" in result
+
+        # Count delta: 5 -> 9
+        nd = [
+            d for d in result["api_surface"].numeric_deltas if d.name == "api_endpoint_count"
+        ]
+        assert len(nd) == 1
+        assert nd[0].delta == 4.0
+
+        # Set delta: 3 proto RPCs added + 2 OpenAPI endpoints added, 1 removed
+        sd = [d for d in result["api_surface"].set_deltas if d.name == "api_endpoints"]
+        assert len(sd) == 1
+        assert sorted(sd[0].added) == [
+            "GET /api/orders/{id}/status",
+            "OrderService.DeleteOrder",
+            "OrderService.ListOrders",
+            "OrderService.UpdateOrder",
+            "PUT /api/orders/{id}",
+        ]
+        assert sd[0].removed == ["DELETE /api/orders/{id}"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface", numeric={"api_endpoint_count": 10.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "api_surface": _make_category(
+                    "api_surface", numeric={"api_endpoint_count": 10.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"api_endpoint_count": 1.0})
+
+        assert "api_surface" not in result
+
+
+class TestBoundedContextExtractor:
+    """Tests for the BoundedContextExtractor."""
+
+    def test_extracts_bounded_contexts_from_jdepend(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        payload = JDependPackagesPayload(
+            bytecode_dir="/build/classes",
+            packages=[
+                JDependPackageMetrics(name="com.example.orders.service"),
+                JDependPackageMetrics(name="com.example.orders.repository"),
+                JDependPackageMetrics(name="com.example.users.api"),
+                JDependPackageMetrics(name="com.example.users.service"),
+            ],
+        )
+        ev = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=payload,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics["bounded_context_count"].value == 2.0
+        assert sorted(category.set_metrics["bounded_contexts"].items) == [
+            "orders",
+            "users",
+        ]
+
+    def test_single_package_returns_no_context(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        payload = JDependPackagesPayload(
+            bytecode_dir="/build/classes",
+            packages=[JDependPackageMetrics(name="com.example")],
+        )
+        ev = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=payload,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deduplicates_across_evidence(self) -> None:
+        from nfr_review.collectors.payloads.jdepend import (
+            JDependPackageMetrics,
+            JDependPackagesPayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        ev1 = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=JDependPackagesPayload(
+                bytecode_dir="/build/a",
+                packages=[
+                    JDependPackageMetrics(name="com.example.orders.service"),
+                ],
+            ),
+        )
+        ev2 = Evidence(
+            collector_name="jdepend",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jdepend-packages",
+            payload=JDependPackagesPayload(
+                bytecode_dir="/build/b",
+                packages=[
+                    JDependPackageMetrics(name="com.example.orders.repository"),
+                    JDependPackageMetrics(name="com.example.users.api"),
+                ],
+            ),
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([ev1, ev2])
+
+        assert category.numeric_metrics["bounded_context_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_jdepend_evidence(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            BoundedContextExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = BoundedContextExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "bounded_context"
+        assert category.numeric_metrics == {}
+
+
+class TestIntegrationStyleExtractor:
+    """Tests for the IntegrationStyleExtractor."""
+
+    def test_detects_http_from_go_ast(self) -> None:
+        from nfr_review.collectors.payloads.go_ast import GoAstFilePayload, GoHttpCall
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = GoAstFilePayload(
+            file_path="/src/client.go",
+            package="client",
+            structs=[],
+            catch_blocks=[],
+            log_statements=[],
+            functions=[],
+            error_assignments=[],
+            goroutine_launches=[],
+            http_calls=[
+                GoHttpCall(
+                    call="http.NewRequest", has_timeout=True, line=10, file="client.go"
+                ),
+                GoHttpCall(call="http.Get", has_timeout=False, line=20, file="client.go"),
+            ],
+            defer_statements=[],
+        )
+        ev = Evidence(
+            collector_name="go-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="go-ast-file",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "integration_style"
+        assert "http:direct" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_detects_grpc_from_proto(self) -> None:
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = ProtoAnalysisPayload(
+            file_path="api/order.proto",
+            imports=[],
+            messages=[],
+            services=[
+                ProtoService(
+                    name="OrderService",
+                    line=1,
+                    has_comment=True,
+                    methods=[
+                        ProtoRpcMethod(
+                            name="CreateOrder",
+                            request_type="Req",
+                            response_type="Resp",
+                            line=2,
+                            has_comment=True,
+                        ),
+                    ],
+                ),
+            ],
+            enums=[],
+        )
+        ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert "grpc" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 1.0
+
+    def test_detects_service_mesh(self) -> None:
+        from nfr_review.collectors.payloads.service_mesh import (
+            ServiceMeshVirtualServicePayload,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = ServiceMeshVirtualServicePayload(
+            file_path="k8s/vs.yaml",
+            name="order-vs",
+            hosts=["order-service"],
+            http_routes=[],
+            has_weighted_routing=False,
+            total_routes=3,
+        )
+        ev = Evidence(
+            collector_name="service-mesh",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="service-mesh-virtual-service",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert "service-mesh" in category.set_metrics["integration_styles"].items
+        assert category.numeric_metrics["integration_point_count"].value == 3.0
+
+    def test_detects_messaging_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="spring-kafka",
+                    declared_version="3.0",
+                    version_constraint="^3.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-amqp",
+                    declared_version="3.0",
+                    version_constraint="^3.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        styles = category.set_metrics["integration_styles"].items
+        assert "messaging:kafka" in styles
+        assert "messaging:amqp" in styles
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_combines_multiple_sources(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.collectors.payloads.proto import (
+            ProtoAnalysisPayload,
+            ProtoRpcMethod,
+            ProtoService,
+        )
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        proto_ev = Evidence(
+            collector_name="proto",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="proto-analysis",
+            payload=ProtoAnalysisPayload(
+                file_path="api/svc.proto",
+                imports=[],
+                messages=[],
+                services=[
+                    ProtoService(
+                        name="Svc",
+                        line=1,
+                        has_comment=True,
+                        methods=[
+                            ProtoRpcMethod(
+                                name="Do",
+                                request_type="Req",
+                                response_type="Resp",
+                                line=2,
+                                has_comment=True,
+                            ),
+                        ],
+                    ),
+                ],
+                enums=[],
+            ),
+        )
+        deps_ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=DepsPayload(
+                dependencies=[
+                    DependencyItem(
+                        name="spring-kafka",
+                        declared_version="3.0",
+                        version_constraint="^3.0",
+                        source_file="pom.xml",
+                    ),
+                ],
+                manifest_files_found=["pom.xml"],
+                enrichment_errors=[],
+            ),
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([proto_ev, deps_ev])
+
+        styles = category.set_metrics["integration_styles"].items
+        assert "grpc" in styles
+        assert "messaging:kafka" in styles
+        assert category.numeric_metrics["integration_point_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "integration_style"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_go_ast_without_http_calls_ignored(self) -> None:
+        from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+        from nfr_review.design_change.bounded_context_signals import (
+            IntegrationStyleExtractor,
+        )
+
+        payload = GoAstFilePayload(
+            file_path="/src/main.go",
+            package="main",
+            structs=[],
+            catch_blocks=[],
+            log_statements=[],
+            functions=[],
+            error_assignments=[],
+            goroutine_launches=[],
+            http_calls=[],
+            defer_statements=[],
+        )
+        ev = Evidence(
+            collector_name="go-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="go-ast-file",
+            payload=payload,
+        )
+
+        extractor = IntegrationStyleExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "integration_style"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestBoundedContextSignalsDiff:
+    """S07 demo criterion: diff two baselines where fixture B introduced a new
+    top-level package cluster with its own dependency subgraph, and replaced
+    HTTP calls with message queue patterns — both signals fire."""
+
+    def test_new_bounded_context_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "bounded_context" in diffs
+        nd = [
+            d
+            for d in diffs["bounded_context"].numeric_deltas
+            if d.name == "bounded_context_count"
+        ][0]
+        assert nd.delta == 1.0
+
+        sd = [d for d in diffs["bounded_context"].set_deltas if d.name == "bounded_contexts"][
+            0
+        ]
+        assert sd.added == ["payments"]
+        assert sd.removed == []
+
+    def test_integration_style_shift_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 5.0},
+                    sets={"integration_styles": ["http:direct"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 4.0},
+                    sets={"integration_styles": ["messaging:kafka", "messaging:rabbitmq"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "integration_style" in diffs
+        sd = [
+            d for d in diffs["integration_style"].set_deltas if d.name == "integration_styles"
+        ][0]
+        assert sorted(sd.added) == ["messaging:kafka", "messaging:rabbitmq"]
+        assert sd.removed == ["http:direct"]
+
+    def test_full_s07_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                ),
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 5.0},
+                    sets={"integration_styles": ["http:direct"]},
+                ),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                ),
+                "integration_style": _make_category(
+                    "integration_style",
+                    numeric={"integration_point_count": 4.0},
+                    sets={"integration_styles": ["messaging:kafka", "messaging:rabbitmq"]},
+                ),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # Bounded context: 2 -> 3 = +50%, threshold is 1.0
+        assert "bounded_context" in result
+        bc_set = [
+            d for d in result["bounded_context"].set_deltas if d.name == "bounded_contexts"
+        ]
+        assert len(bc_set) == 1
+        assert bc_set[0].added == ["payments"]
+
+        # Integration style: set changed (http:direct removed, messaging added)
+        assert "integration_style" in result
+        style_set = [
+            d for d in result["integration_style"].set_deltas if d.name == "integration_styles"
+        ]
+        assert len(style_set) == 1
+        assert sorted(style_set[0].added) == [
+            "messaging:kafka",
+            "messaging:rabbitmq",
+        ]
+        assert style_set[0].removed == ["http:direct"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context", numeric={"bounded_context_count": 3.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "bounded_context": _make_category(
+                    "bounded_context", numeric={"bounded_context_count": 3.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"bounded_context_count": 1.0})
+
+        assert "bounded_context" not in result
+
+
+class TestDeploymentTopologyExtractor:
+    """Tests for the DeploymentTopologyExtractor."""
+
+    def test_extracts_helm_charts(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = HelmAnalysisPayload(
+            chart_path="/charts/myapp",
+            chart_name="myapp",
+            chart_values={},
+            rendered_manifests=[],
+            template_files=[],
+            helm_available=True,
+        )
+        ev = Evidence(
+            collector_name="helm",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="helm-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "deployment_topology"
+        assert "helm:myapp" in category.set_metrics["deployment_services"].items
+        assert category.numeric_metrics["deployment_service_count"].value == 1.0
+
+    def test_extracts_k8s_resource_kinds(self) -> None:
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = K8sManifestSummaryPayload(
+            resource_counts={"Deployment": 3, "Service": 2, "Ingress": 1},
+            has_network_policy=False,
+            files_parsed=5,
+            files_failed=0,
+        )
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="k8s-manifest-summary",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "k8s:Deployment" in services
+        assert "k8s:Service" in services
+        assert "k8s:Ingress" in services
+        assert category.numeric_metrics["deployment_service_count"].value == 3.0
+
+    def test_extracts_terraform_modules(self) -> None:
+        from nfr_review.collectors.payloads.terraform import (
+            TerraformAnalysisPayload,
+            TerraformModuleBlock,
+        )
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = TerraformAnalysisPayload(
+            file_path="infra/main.tf",
+            terraform_blocks=[],
+            provider_blocks=[],
+            resource_blocks=[],
+            data_blocks=[],
+            variable_blocks=[],
+            module_blocks=[
+                TerraformModuleBlock(name="vpc", source="terraform-aws-modules/vpc/aws"),
+                TerraformModuleBlock(name="rds", source="terraform-aws-modules/rds/aws"),
+            ],
+        )
+        ev = Evidence(
+            collector_name="terraform",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="terraform-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "terraform:rds" in services
+        assert "terraform:vpc" in services
+        assert category.numeric_metrics["deployment_service_count"].value == 2.0
+
+    def test_combines_all_sources(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.collectors.payloads.terraform import (
+            TerraformAnalysisPayload,
+            TerraformModuleBlock,
+        )
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="helm",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="helm-analysis",
+                payload=HelmAnalysisPayload(
+                    chart_path="/charts/app",
+                    chart_name="myapp",
+                    chart_values={},
+                    rendered_manifests=[],
+                    template_files=[],
+                    helm_available=True,
+                ),
+            ),
+            Evidence(
+                collector_name="k8s-manifest",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="k8s-manifest-summary",
+                payload=K8sManifestSummaryPayload(
+                    resource_counts={"Deployment": 2},
+                    has_network_policy=False,
+                    files_parsed=2,
+                    files_failed=0,
+                ),
+            ),
+            Evidence(
+                collector_name="terraform",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="terraform-analysis",
+                payload=TerraformAnalysisPayload(
+                    file_path="main.tf",
+                    terraform_blocks=[],
+                    provider_blocks=[],
+                    resource_blocks=[],
+                    data_blocks=[],
+                    variable_blocks=[],
+                    module_blocks=[TerraformModuleBlock(name="vpc")],
+                ),
+            ),
+        ]
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["deployment_service_count"].value == 3.0
+        services = category.set_metrics["deployment_services"].items
+        assert "helm:myapp" in services
+        assert "k8s:Deployment" in services
+        assert "terraform:vpc" in services
+
+    def test_skips_zero_count_k8s_kinds(self) -> None:
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = K8sManifestSummaryPayload(
+            resource_counts={"Deployment": 2, "CronJob": 0},
+            has_network_policy=False,
+            files_parsed=1,
+            files_failed=0,
+        )
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="k8s-manifest-summary",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "k8s:Deployment" in services
+        assert "k8s:CronJob" not in services
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "deployment_topology"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_helm_without_chart_name_ignored(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = HelmAnalysisPayload(
+            chart_path="/charts/unknown",
+            chart_name=None,
+            chart_values={},
+            rendered_manifests=[],
+            template_files=[],
+            helm_available=True,
+        )
+        ev = Evidence(
+            collector_name="helm",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="helm-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestDeploymentTopologySignalsDiff:
+    """S08 demo criterion: diff two baselines where fixture B added a new Helm
+    subchart, a new K8s Ingress, and a new Terraform module — all three fire."""
+
+    def test_new_helm_subchart_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["helm:myapp"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["helm:myapp", "helm:redis"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["helm:redis"]
+        assert sd.removed == []
+
+    def test_new_k8s_ingress_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["k8s:Deployment", "k8s:Service"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={
+                        "deployment_services": [
+                            "k8s:Deployment",
+                            "k8s:Ingress",
+                            "k8s:Service",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["k8s:Ingress"]
+
+    def test_new_terraform_module_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["terraform:rds"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["terraform:rds", "terraform:vpc"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["terraform:vpc"]
+
+    def test_full_s08_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    numeric={"deployment_service_count": 4.0},
+                    sets={
+                        "deployment_services": [
+                            "helm:myapp",
+                            "k8s:Deployment",
+                            "k8s:Service",
+                            "terraform:rds",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    numeric={"deployment_service_count": 7.0},
+                    sets={
+                        "deployment_services": [
+                            "helm:myapp",
+                            "helm:redis",
+                            "k8s:Deployment",
+                            "k8s:Ingress",
+                            "k8s:Service",
+                            "terraform:rds",
+                            "terraform:vpc",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "deployment_topology" in result
+
+        # Count delta: 4 -> 7
+        nd = [
+            d
+            for d in result["deployment_topology"].numeric_deltas
+            if d.name == "deployment_service_count"
+        ]
+        assert len(nd) == 1
+        assert nd[0].delta == 3.0
+
+        # Set delta: helm:redis + k8s:Ingress + terraform:vpc added
+        sd = [
+            d
+            for d in result["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ]
+        assert len(sd) == 1
+        assert sorted(sd[0].added) == ["helm:redis", "k8s:Ingress", "terraform:vpc"]
+        assert sd[0].removed == []
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology", numeric={"deployment_service_count": 5.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology", numeric={"deployment_service_count": 5.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"deployment_service_count": 1.0})
+
+        assert "deployment_topology" not in result
+
+
+class TestSchemaMigrationExtractor:
+    """Tests for the SchemaMigrationExtractor."""
+
+    def test_detects_flyway_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="flyway-core",
+                    declared_version="9.0",
+                    version_constraint="^9.0",
+                    source_file="pom.xml",
+                ),
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "schema_migration"
+        assert "tool:flyway" in category.set_metrics["schema_migrations"].items
+        assert category.numeric_metrics["schema_migration_count"].value == 1.0
+
+    def test_detects_alembic_from_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="alembic",
+                    declared_version="1.12",
+                    version_constraint=">=1.12",
+                    source_file="requirements.txt",
+                ),
+            ],
+            manifest_files_found=["requirements.txt"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="python-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="python-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert "tool:alembic" in category.set_metrics["schema_migrations"].items
+
+    def test_detects_migration_files_from_ast(self) -> None:
+        from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/001_create_users.py",
+                    module_path="alembic.versions.001_create_users",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/002_add_orders.py",
+                    module_path="alembic.versions.002_add_orders",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="src/app/main.py",
+                    module_path="src.app.main",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+        ]
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract(evidence)
+
+        migrations = category.set_metrics["schema_migrations"].items
+        assert "file:alembic/versions/001_create_users.py" in migrations
+        assert "file:alembic/versions/002_add_orders.py" in migrations
+        assert category.numeric_metrics["schema_migration_count"].value == 2.0
+
+    def test_detects_flyway_java_migrations(self) -> None:
+        from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = JavaAstFilePayload(
+            file_path="src/main/resources/db/migration/V1__create_users.java",
+            package="db.migration",
+            classes=[],
+            methods=[],
+            catch_blocks=[],
+            imports=[],
+            thread_pool_constructions=[],
+            log_statements=[],
+        )
+        ev = Evidence(
+            collector_name="java-ast",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-ast-file",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert (
+            "file:src/main/resources/db/migration/V1__create_users.java"
+            in category.set_metrics["schema_migrations"].items
+        )
+
+    def test_combines_deps_and_files(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="python-deps",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-deps",
+                payload=DepsPayload(
+                    dependencies=[
+                        DependencyItem(
+                            name="alembic",
+                            declared_version="1.12",
+                            version_constraint=">=1.12",
+                            source_file="requirements.txt",
+                        ),
+                    ],
+                    manifest_files_found=["requirements.txt"],
+                    enrichment_errors=[],
+                ),
+            ),
+            Evidence(
+                collector_name="python-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-ast-file",
+                payload=PythonAstFilePayload(
+                    file_path="alembic/versions/001_init.py",
+                    module_path="alembic.versions.001_init",
+                    classes=[],
+                    functions=[],
+                    catch_blocks=[],
+                    imports=[],
+                    log_statements=[],
+                    async_calls=[],
+                ),
+            ),
+        ]
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract(evidence)
+
+        migrations = category.set_metrics["schema_migrations"].items
+        assert "tool:alembic" in migrations
+        assert "file:alembic/versions/001_init.py" in migrations
+        assert category.numeric_metrics["schema_migration_count"].value == 2.0
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "schema_migration"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_migration_deps(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.schema_migration_signals import (
+            SchemaMigrationExtractor,
+        )
+
+        payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                ),
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = SchemaMigrationExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestSchemaMigrationSignalsDiff:
+    """S09 demo criterion: diff two baselines where fixture B has 3 new Flyway
+    migrations and a new Alembic versions directory — signal fires with
+    migration file names."""
+
+    def test_new_flyway_migrations_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 1.0},
+                    sets={"schema_migrations": ["tool:flyway"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 4.0},
+                    sets={
+                        "schema_migrations": [
+                            "file:db/migration/V2__add_orders.java",
+                            "file:db/migration/V3__add_payments.java",
+                            "file:db/migration/V4__add_shipping.java",
+                            "tool:flyway",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "schema_migration" in diffs
+        sd = [
+            d for d in diffs["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ][0]
+        assert sorted(sd.added) == [
+            "file:db/migration/V2__add_orders.java",
+            "file:db/migration/V3__add_payments.java",
+            "file:db/migration/V4__add_shipping.java",
+        ]
+
+    def test_new_alembic_directory_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    sets={"schema_migrations": []},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    sets={
+                        "schema_migrations": [
+                            "file:alembic/versions/001_init.py",
+                            "tool:alembic",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "schema_migration" in diffs
+        sd = [
+            d for d in diffs["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ][0]
+        assert "tool:alembic" in sd.added
+        assert "file:alembic/versions/001_init.py" in sd.added
+
+    def test_full_s09_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 1.0},
+                    sets={"schema_migrations": ["tool:flyway"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration",
+                    numeric={"schema_migration_count": 5.0},
+                    sets={
+                        "schema_migrations": [
+                            "file:db/migration/V2__add_orders.java",
+                            "file:db/migration/V3__add_payments.java",
+                            "file:db/migration/V4__add_shipping.java",
+                            "file:alembic/versions/001_init.py",
+                            "tool:alembic",
+                            "tool:flyway",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "schema_migration" in result
+
+        # 3 new Flyway files + new Alembic tool + Alembic migration file
+        sd = [
+            d for d in result["schema_migration"].set_deltas if d.name == "schema_migrations"
+        ]
+        assert len(sd) == 1
+        assert len(sd[0].added) == 5
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration", numeric={"schema_migration_count": 2.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "schema_migration": _make_category(
+                    "schema_migration", numeric={"schema_migration_count": 2.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"schema_migration_count": 1.0})
+
+        assert "schema_migration" not in result
+
+
+# ---------------------------------------------------------------------------
+# S10: Human Review Trigger Integration
+# ---------------------------------------------------------------------------
+
+
+class TestFindingsFromDiffs:
+    """S10: findings_from_diffs converts CategoryDiff results into Finding objects
+    with design_change:* pattern_tag trigger reasons."""
+
+    def test_numeric_delta_produces_finding(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs, "/baselines/test.json")
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:class_count"
+        assert f.rag == "amber"
+        assert f.confidence == 1.0
+        assert f.collector_name == "design-change"
+        assert "class_count" in f.summary
+        assert "10" in f.summary and "15" in f.summary
+
+    def test_set_delta_produces_finding(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[
+                    SetDelta(
+                        name="api_endpoints",
+                        added=["POST /users", "DELETE /users/{id}"],
+                        removed=["GET /legacy"],
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:api_endpoints"
+        assert "POST /users" in f.summary
+        assert "GET /legacy" in f.summary
+
+    def test_multiple_categories_produce_sorted_findings(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    )
+                ],
+            ),
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[SetDelta(name="api_endpoints", added=["POST /new"], removed=[])],
+            ),
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 2
+        assert findings[0].pattern_tag == "design_change:api_endpoints"
+        assert findings[1].pattern_tag == "design_change:class_count"
+
+    def test_empty_diffs_produce_no_findings(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        findings = findings_from_diffs({})
+        assert findings == []
+
+    def test_severity_scales_with_pct_change(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100.0,
+                        new_value=110.0,
+                        delta=10.0,
+                        pct_change=10.0,
+                    ),
+                    NumericDelta(
+                        name="dormant_class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    ),
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        by_tag = {f.pattern_tag: f for f in findings}
+        assert by_tag["design_change:class_count"].severity == "low"
+        assert by_tag["design_change:dormant_class_count"].severity == "high"
+
+    def test_severity_scales_with_set_size(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[
+                    SetDelta(name="api_endpoints", added=["a"], removed=[]),
+                    SetDelta(
+                        name="jdepend_cycles",
+                        added=["c1", "c2", "c3", "c4", "c5"],
+                        removed=[],
+                    ),
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        by_tag = {f.pattern_tag: f for f in findings}
+        assert by_tag["design_change:api_endpoints"].severity == "low"
+        assert by_tag["design_change:jdepend_cycles"].severity == "high"
+
+    def test_new_metric_from_zero_base(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "bounded_context": CategoryDiff(
+                category="bounded_context",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="bounded_context_count",
+                        old_value=0.0,
+                        new_value=3.0,
+                        delta=3.0,
+                        pct_change=None,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:bounded_context_count"
+        assert f.severity == "high"
+        assert "(new)" in f.summary
+
+    def test_evidence_locator_set_from_baseline_path(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=20.0,
+                        delta=10.0,
+                        pct_change=100.0,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs, "/my/baselines/repo.json")
+
+        assert findings[0].evidence_locator == "/my/baselines/repo.json"
+
+
+class TestS10FullScenario:
+    """S10 demo criterion: Full review run with baseline produces human_review
+    findings where each has a trigger_reason like design_change:class_count_delta
+    or design_change:new_bounded_context."""
+
+    def test_multi_signal_scenario_produces_trigger_findings(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        prev = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 20.0, "dormant_class_count": 2.0},
+                ),
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                ),
+                "integration": _make_category(
+                    "integration",
+                    sets={"integration_styles": ["http:direct"]},
+                ),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 30.0, "dormant_class_count": 8.0},
+                ),
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                ),
+                "integration": _make_category(
+                    "integration",
+                    sets={"integration_styles": ["http:direct", "messaging:kafka"]},
+                ),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        diffs = apply_thresholds(diffs, {"class_count": 20.0})
+        findings = findings_from_diffs(diffs, "/baselines/test.json")
+
+        tags = {f.pattern_tag for f in findings}
+        assert "design_change:class_count" in tags
+        assert "design_change:dormant_class_count" in tags
+        assert "design_change:bounded_context_count" in tags
+        assert "design_change:bounded_contexts" in tags
+        assert "design_change:integration_styles" in tags
+
+        for f in findings:
+            assert f.rag == "amber"
+            assert f.confidence == 1.0
+            assert f.rule_id == "design-change-trigger"
+            assert f.collector_name == "design-change"

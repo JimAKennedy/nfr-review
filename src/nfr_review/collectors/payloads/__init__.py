@@ -149,6 +149,10 @@ from nfr_review.collectors.payloads.nodejs_ast import (
     NodejsPromiseChain,
     NodejsSyncCall,
 )
+from nfr_review.collectors.payloads.openapi import (
+    OpenApiAnalysisPayload,
+    OpenApiEndpoint,
+)
 from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
 from nfr_review.collectors.payloads.otel_trace import OtelTracePayload, OtelTraceSpan
 from nfr_review.collectors.payloads.privacy import PrivacyMatch, PrivacyPayload
@@ -317,6 +321,8 @@ __all__ = [
     "NodejsLogStatement",
     "NodejsPromiseChain",
     "NodejsSyncCall",
+    "OpenApiAnalysisPayload",
+    "OpenApiEndpoint",
     "OtelAnalysisPayload",
     "OtelTracePayload",
     "OtelTraceSpan",

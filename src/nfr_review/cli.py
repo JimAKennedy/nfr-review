@@ -532,6 +532,7 @@ def run_cmd(
     if design_baseline_dir is not None:
         from nfr_review.design_change import (
             apply_thresholds,
+            findings_from_diffs,
             format_diff_summary,
         )
         from nfr_review.design_change import (
@@ -564,6 +565,8 @@ def run_cmd(
 
             if diffs:
                 _ts_echo(format_diff_summary(diffs))
+                dc_findings = findings_from_diffs(diffs, str(bl_file))
+                result.findings.extend(dc_findings)
             else:
                 _ts_echo("No structural changes since last baseline.")
         except FileNotFoundError:
