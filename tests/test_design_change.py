@@ -679,3 +679,407 @@ class TestCLIDesignBaselineRoundTrip:
         )
         assert result2.exit_code == 0, result2.output + result2.stderr
         assert "No structural changes" in result2.stderr
+
+
+class TestDependencyMetricsExtractor:
+    """Tests for the DependencyMetricsExtractor."""
+
+    def test_extracts_dependency_count_and_names(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.dependency_coverage_signals import (
+            DependencyMetricsExtractor,
+        )
+
+        deps = [
+            DependencyItem(
+                name=f"dep-{i}",
+                declared_version="1.0",
+                version_constraint="^1.0",
+                source_file="pom.xml",
+            )
+            for i in range(5)
+        ]
+        payload = DepsPayload(
+            dependencies=deps,
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="java-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="java-deps",
+            payload=payload,
+        )
+
+        extractor = DependencyMetricsExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "dependencies"
+        assert category.numeric_metrics["dependency_count"].value == 5.0
+        assert len(category.set_metrics["dependency_names"].items) == 5
+
+    def test_skips_indirect_dependencies(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.dependency_coverage_signals import (
+            DependencyMetricsExtractor,
+        )
+
+        deps = [
+            DependencyItem(
+                name="direct-dep",
+                declared_version="1.0",
+                version_constraint="^1.0",
+                source_file="go.mod",
+                indirect=False,
+            ),
+            DependencyItem(
+                name="indirect-dep",
+                declared_version="2.0",
+                version_constraint="^2.0",
+                source_file="go.mod",
+                indirect=True,
+            ),
+        ]
+        payload = DepsPayload(
+            dependencies=deps,
+            manifest_files_found=["go.mod"],
+            enrichment_errors=[],
+        )
+        ev = Evidence(
+            collector_name="go-deps",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="go-deps",
+            payload=payload,
+        )
+
+        extractor = DependencyMetricsExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics["dependency_count"].value == 1.0
+        assert category.set_metrics["dependency_names"].items == ["direct-dep"]
+
+    def test_aggregates_across_ecosystems(self) -> None:
+        from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
+        from nfr_review.design_change.dependency_coverage_signals import (
+            DependencyMetricsExtractor,
+        )
+
+        java_payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="spring-core",
+                    declared_version="6.0",
+                    version_constraint="^6.0",
+                    source_file="pom.xml",
+                )
+            ],
+            manifest_files_found=["pom.xml"],
+            enrichment_errors=[],
+        )
+        python_payload = DepsPayload(
+            dependencies=[
+                DependencyItem(
+                    name="requests",
+                    declared_version="2.31",
+                    version_constraint=">=2.31",
+                    source_file="requirements.txt",
+                )
+            ],
+            manifest_files_found=["requirements.txt"],
+            enrichment_errors=[],
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="java-deps",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-deps",
+                payload=java_payload,
+            ),
+            Evidence(
+                collector_name="python-deps",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="python-deps",
+                payload=python_payload,
+            ),
+        ]
+
+        extractor = DependencyMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["dependency_count"].value == 2.0
+        assert sorted(category.set_metrics["dependency_names"].items) == [
+            "requests",
+            "spring-core",
+        ]
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.dependency_coverage_signals import (
+            DependencyMetricsExtractor,
+        )
+
+        extractor = DependencyMetricsExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "dependencies"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestCoverageMetricsExtractor:
+    """Tests for the CoverageMetricsExtractor."""
+
+    def test_extracts_line_coverage(self) -> None:
+        from nfr_review.collectors.payloads.jacoco import (
+            JacocoCoverageMetrics,
+            JacocoReportPayload,
+        )
+        from nfr_review.design_change.dependency_coverage_signals import (
+            CoverageMetricsExtractor,
+        )
+
+        payload = JacocoReportPayload(
+            report_path="/target/site/jacoco/jacoco.xml",
+            report_name="test-project",
+            overall=JacocoCoverageMetrics(
+                line_covered=800,
+                line_missed=200,
+                line_pct=80.0,
+                branch_covered=400,
+                branch_missed=100,
+                branch_pct=80.0,
+                instruction_covered=1600,
+                instruction_missed=400,
+                instruction_pct=80.0,
+            ),
+            packages=[],
+        )
+        ev = Evidence(
+            collector_name="jacoco",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="jacoco-report",
+            payload=payload,
+        )
+
+        extractor = CoverageMetricsExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "coverage"
+        assert category.numeric_metrics["test_coverage"].value == pytest.approx(80.0)
+
+    def test_aggregates_multiple_reports(self) -> None:
+        from nfr_review.collectors.payloads.jacoco import (
+            JacocoCoverageMetrics,
+            JacocoReportPayload,
+        )
+        from nfr_review.design_change.dependency_coverage_signals import (
+            CoverageMetricsExtractor,
+        )
+
+        def _make_report(covered: int, missed: int) -> Evidence:
+            total = covered + missed
+            pct = covered / total * 100.0 if total else 0.0
+            payload = JacocoReportPayload(
+                report_path="/target/jacoco.xml",
+                report_name="module",
+                overall=JacocoCoverageMetrics(
+                    line_covered=covered,
+                    line_missed=missed,
+                    line_pct=pct,
+                    branch_covered=0,
+                    branch_missed=0,
+                    branch_pct=0.0,
+                    instruction_covered=0,
+                    instruction_missed=0,
+                    instruction_pct=0.0,
+                ),
+                packages=[],
+            )
+            return Evidence(
+                collector_name="jacoco",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="jacoco-report",
+                payload=payload,
+            )
+
+        # Module A: 600/200 = 75%, Module B: 400/800 = 33.3%
+        # Combined: 1000/2000 = 50%
+        evidence = [_make_report(600, 200), _make_report(400, 800)]
+
+        extractor = CoverageMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["test_coverage"].value == pytest.approx(50.0)
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.dependency_coverage_signals import (
+            CoverageMetricsExtractor,
+        )
+
+        extractor = CoverageMetricsExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "coverage"
+        assert category.numeric_metrics == {}
+
+
+class TestDependencyCoverageSignalsDiff:
+    """S04 demo criterion: diff two baselines where fixture B added 8 new direct
+    dependencies and coverage dropped 12% — both signals fire."""
+
+    def test_dependency_count_jump_fires(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 20.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 28.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"dependency_count": 30.0})
+
+        assert "dependencies" in result
+        nd = result["dependencies"].numeric_deltas[0]
+        assert nd.name == "dependency_count"
+        assert nd.pct_change == pytest.approx(40.0)
+        assert nd.pct_change > 30.0
+
+    def test_coverage_drop_fires(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={"coverage": _make_category("coverage", numeric={"test_coverage": 80.0})}
+        )
+        curr = _make_baseline(
+            metrics={"coverage": _make_category("coverage", numeric={"test_coverage": 68.0})}
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"test_coverage": 5.0})
+
+        assert "coverage" in result
+        nd = result["coverage"].numeric_deltas[0]
+        assert nd.name == "test_coverage"
+        assert nd.pct_change == pytest.approx(-15.0)
+        assert abs(nd.pct_change) > 5.0
+
+    def test_dependency_names_set_diff(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies",
+                    sets={
+                        "dependency_names": [
+                            "spring-core",
+                            "spring-web",
+                            "guava",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies",
+                    sets={
+                        "dependency_names": [
+                            "spring-core",
+                            "spring-web",
+                            "guava",
+                            "lombok",
+                            "jackson-core",
+                            "slf4j-api",
+                            "spring-data-jpa",
+                            "spring-security",
+                            "micrometer",
+                            "resilience4j",
+                            "caffeine",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "dependencies" in diffs
+        sd = diffs["dependencies"].set_deltas[0]
+        assert sd.name == "dependency_names"
+        assert len(sd.added) == 8
+        assert sd.removed == []
+
+    def test_both_signals_fire_together(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 20.0}
+                ),
+                "coverage": _make_category("coverage", numeric={"test_coverage": 80.0}),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 28.0}
+                ),
+                "coverage": _make_category("coverage", numeric={"test_coverage": 68.0}),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # dependency_count: 40% > 30% threshold
+        assert "dependencies" in result
+        dep_names = {nd.name for nd in result["dependencies"].numeric_deltas}
+        assert "dependency_count" in dep_names
+
+        # test_coverage: -15% > 5% threshold (absolute)
+        assert "coverage" in result
+        cov_names = {nd.name for nd in result["coverage"].numeric_deltas}
+        assert "test_coverage" in cov_names
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 20.0}
+                ),
+                "coverage": _make_category("coverage", numeric={"test_coverage": 80.0}),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "dependencies": _make_category(
+                    "dependencies", numeric={"dependency_count": 21.0}
+                ),
+                "coverage": _make_category("coverage", numeric={"test_coverage": 79.0}),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"dependency_count": 30.0, "test_coverage": 5.0})
+
+        assert result == {}
