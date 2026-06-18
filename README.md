@@ -430,7 +430,7 @@ nfr-review version
 
 nfr-review includes experimental features that are under active development:
 
-- **Architecture documentation** (`nfr-review arch`) — generates technology maps, domain models, component diagrams, and market comparisons for one or more repositories. See [docs/experimental-arch.md](docs/experimental-arch.md).
+- **Architecture documentation** (`nfr-review arch`) — generates technology maps, domain models, component diagrams, and market comparisons for one or more repositories. Use `--format dsl` to produce a [Structurizr DSL](https://docs.structurizr.com/dsl) workspace for version-controllable C4 architecture models. See [docs/experimental-arch.md](docs/experimental-arch.md) and [docs/structurizr-dsl.md](docs/structurizr-dsl.md).
 - **Dynamic analysis** (`nfr-review report --otel-traces` / `--collector`) — analyses OpenTelemetry traces for latency hotspots, N+1 queries, missing correlation, and service topology. See [docs/experimental-dynamic.md](docs/experimental-dynamic.md).
 - **Production monitor** (`nfr-review monitor` / `nfr-review baseline`) — long-lived OTLP receiver that compares production traces against a UAT baseline and emits alerts for novel interactions. See [docs/experimental-dynamic.md](docs/experimental-dynamic.md#production-monitor).
 
