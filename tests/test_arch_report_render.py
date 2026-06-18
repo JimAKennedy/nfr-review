@@ -17,8 +17,10 @@ from nfr_review.arch_models import (
     Component,
     ComponentBoundary,
     ComponentTestCoverage,
+    CrossRepoEdge,
     DomainEntity,
     DomainModelSection,
+    DynamicAnalysisSection,
     DynamicScenario,
     EntityRelationship,
     IntegrationPoint,
@@ -425,8 +427,8 @@ class TestRenderArchMarkdown:
         assert "graph TD" in content
         assert "User-->API" in content
 
-    def test_no_class_diagram_section_in_markdown(self, tmp_path: Path) -> None:
-        """Arch markdown should not contain class diagram sections (moved to experimental)."""
+    def test_class_diagrams_included_in_markdown(self, tmp_path: Path) -> None:
+        """Arch markdown includes class diagrams (consolidated from experimental)."""
         report = ArchReport(
             metadata=_make_metadata(),
             components=[
@@ -458,12 +460,10 @@ class TestRenderArchMarkdown:
         render_arch_markdown(report, out)
         content = out.read_text()
 
-        # The context diagram should be present
         assert "System Context" in content
         assert "User-->API" in content
-        # The class diagram should NOT be rendered
-        assert "classDiagram" not in content
-        assert "Class Diagram" not in content
+        assert "classDiagram" in content
+        assert "Class Diagram" in content
 
     def test_risk_sections_grouped_by_severity(self, tmp_path: Path) -> None:
         report = _make_full_report()
@@ -1013,3 +1013,112 @@ class TestRepoDependencies:
 
         assert "Order Service" in content
         assert "Payment Client" in content
+
+
+# ===================================================================
+# Consolidated experimental features (cross-repo edges, dynamic analysis)
+# ===================================================================
+
+
+class TestConsolidatedFeatures:
+    """Tests for features consolidated from the deprecated experimental command."""
+
+    def _make_report_with_edges(self) -> ArchReport:
+        return ArchReport(
+            metadata=_make_metadata(),
+            cross_repo_edges=[
+                CrossRepoEdge(
+                    source_repo="repo-a",
+                    target_repo="repo-b",
+                    source_class="PluginProcessor",
+                    target_class="AudioProcessor",
+                ),
+                CrossRepoEdge(
+                    source_repo="repo-b",
+                    target_repo="repo-c",
+                    source_class="AudioProcessor",
+                    target_class="BaseNode",
+                ),
+            ],
+        )
+
+    def _make_report_with_dynamic(self) -> ArchReport:
+        return ArchReport(
+            metadata=_make_metadata(),
+            dynamic_analysis=DynamicAnalysisSection(
+                service_count=3,
+                edge_count=2,
+                topology_mermaid="graph TD\n  order --> payment\n  payment --> inventory\n",
+                services=["inventory", "order", "payment"],
+            ),
+        )
+
+    def test_markdown_cross_repo_edges(self, tmp_path: Path) -> None:
+        report = self._make_report_with_edges()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "## Cross-Repository Edges" in content
+        assert "Total cross-repo edges: 2" in content
+        assert "repo-a" in content
+        assert "PluginProcessor" in content
+        assert "AudioProcessor" in content
+
+    def test_markdown_no_edges_omits_section(self, tmp_path: Path) -> None:
+        report = ArchReport(metadata=_make_metadata())
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "Cross-Repository Edges" not in content
+
+    def test_markdown_dynamic_analysis(self, tmp_path: Path) -> None:
+        report = self._make_report_with_dynamic()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "## Dynamic Analysis" in content
+        assert "Services observed:** 3" in content
+        assert "Cross-service edges:** 2" in content
+        assert "order" in content
+        assert "payment" in content
+        assert "inventory" in content
+        assert "```mermaid" in content
+        assert "graph TD" in content
+
+    def test_markdown_no_dynamic_omits_section(self, tmp_path: Path) -> None:
+        report = ArchReport(metadata=_make_metadata())
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "Dynamic Analysis" not in content
+
+    def test_json_cross_repo_edges(self, tmp_path: Path) -> None:
+        report = self._make_report_with_edges()
+        out = tmp_path / "report.json"
+        render_arch_json(report, out)
+        data = json.loads(out.read_text())
+
+        assert len(data["cross_repo_edges"]) == 2
+        assert data["cross_repo_edges"][0]["source_repo"] == "repo-a"
+
+    def test_json_dynamic_analysis(self, tmp_path: Path) -> None:
+        report = self._make_report_with_dynamic()
+        out = tmp_path / "report.json"
+        render_arch_json(report, out)
+        data = json.loads(out.read_text())
+
+        assert data["dynamic_analysis"]["service_count"] == 3
+        assert data["dynamic_analysis"]["services"] == ["inventory", "order", "payment"]
+
+    def test_json_null_dynamic_when_absent(self, tmp_path: Path) -> None:
+        report = ArchReport(metadata=_make_metadata())
+        out = tmp_path / "report.json"
+        render_arch_json(report, out)
+        data = json.loads(out.read_text())
+
+        assert data["dynamic_analysis"] is None
+        assert data["cross_repo_edges"] == []

@@ -16,8 +16,11 @@ from nfr_review import __version__
 from nfr_review.arch_models import (
     ArchReport,
     ArchReportMetadata,
+    CrossRepoEdge,
+    DynamicAnalysisSection,
     RepoInfo,
 )
+from nfr_review.models import Evidence
 
 if TYPE_CHECKING:
     from nfr_review.arch_discovery import DvcPipeline
@@ -115,6 +118,93 @@ def _collect_dvc_pipeline_data(
     return None
 
 
+def _find_cross_repo_edges(class_data: list[dict]) -> list[CrossRepoEdge]:
+    """Identify class references where source repo differs from target repo."""
+    name_to_repo: dict[str, str] = {}
+    for cls in class_data:
+        name = cls.get("name", "")
+        repo = cls.get("repo", "")
+        if name and repo:
+            name_to_repo[name] = repo
+
+    edges: list[CrossRepoEdge] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for cls in class_data:
+        src_name = cls.get("name", "")
+        src_repo = cls.get("repo", "")
+        if not src_name or not src_repo:
+            continue
+
+        for base in cls.get("base_classes", []):
+            base_name = base.get("name", "") if isinstance(base, dict) else str(base)
+            if not base_name:
+                continue
+            tgt_repo = name_to_repo.get(base_name, "")
+            if tgt_repo and tgt_repo != src_repo:
+                key = (src_repo, tgt_repo, src_name, base_name)
+                if key not in seen:
+                    seen.add(key)
+                    edges.append(
+                        CrossRepoEdge(
+                            source_repo=src_repo,
+                            target_repo=tgt_repo,
+                            source_class=src_name,
+                            target_class=base_name,
+                        )
+                    )
+
+        for field in cls.get("fields", []):
+            field_type = field.get("type", "") if isinstance(field, dict) else ""
+            for known_name, known_repo in name_to_repo.items():
+                if known_name in field_type and known_repo != src_repo:
+                    key = (src_repo, known_repo, src_name, known_name)
+                    if key not in seen:
+                        seen.add(key)
+                        edges.append(
+                            CrossRepoEdge(
+                                source_repo=src_repo,
+                                target_repo=known_repo,
+                                source_class=src_name,
+                                target_class=known_name,
+                            )
+                        )
+
+    return edges
+
+
+def _build_dynamic_analysis(
+    evidence: list[Evidence],
+    cb: ProgressCallback,
+) -> DynamicAnalysisSection | None:
+    """Build a dynamic analysis section from OTel trace evidence."""
+    from nfr_review.output.topology import build_topology_graph, render_topology_mermaid
+
+    trace_evidence = [
+        e for e in evidence if e.collector_name == "otel-trace" and e.kind == "otel-trace"
+    ]
+    if not trace_evidence:
+        cb("No OTel trace evidence found — skipping dynamic analysis")
+        return None
+
+    cb(f"Building topology from {len(trace_evidence)} trace evidence item(s)")
+    graph = build_topology_graph(trace_evidence)
+
+    if not graph.services:
+        cb("No services found in trace data")
+        return None
+
+    mermaid = render_topology_mermaid(graph)
+    section = DynamicAnalysisSection(
+        service_count=len(graph.services),
+        edge_count=len(graph.edges),
+        topology_mermaid=mermaid,
+        services=sorted(graph.services),
+    )
+    cb(f"Topology: {section.service_count} services, {section.edge_count} edges")
+    return section
+
+
 def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
     """Collect enriched class data from C++, Java, Python, and Go files."""
     import importlib
@@ -174,6 +264,7 @@ def run_arch_review(
     repo_names: list[str] | None = None,
     skip_llm: bool = False,
     diagram_mode: str = "hierarchical",
+    evidence: list[Evidence] | None = None,
     progress: ProgressCallback | None = None,
 ) -> ArchReport:
     """Run the full architecture review pipeline and return an ArchReport.
@@ -187,6 +278,8 @@ def run_arch_review(
     skip_llm:
         If True, skip LLM-dependent analysis (domain model enhancement,
         market comparison).
+    evidence:
+        Optional pre-collected evidence list (e.g. OTel traces).
     progress:
         Optional callback invoked with status messages.
     """
@@ -287,6 +380,19 @@ def run_arch_review(
     )
     cb(f"Generated {len(diagrams)} diagrams")
 
+    # --- cross-repo edge detection ---
+    cross_repo_edges: list[CrossRepoEdge] = []
+    if class_data and multi:
+        cb("Detecting cross-repo class references...")
+        cross_repo_edges = _find_cross_repo_edges(class_data)
+        if cross_repo_edges:
+            cb(f"Found {len(cross_repo_edges)} cross-repo edge(s)")
+
+    # --- dynamic analysis (from OTel evidence) ---
+    dynamic_analysis: DynamicAnalysisSection | None = None
+    if evidence:
+        dynamic_analysis = _build_dynamic_analysis(evidence, cb)
+
     # --- risk analysis ---
     cb("Analyzing risks...")
     risks = analyze_risks(components, integrations, test_coverage)
@@ -338,6 +444,8 @@ def run_arch_review(
         dynamic_scenarios=[],
         test_coverage=test_coverage,
         diagrams=diagrams,
+        cross_repo_edges=cross_repo_edges,
+        dynamic_analysis=dynamic_analysis,
         risk_findings=risks,
         domain_model=domain_model,
         market_analysis=market_analysis,

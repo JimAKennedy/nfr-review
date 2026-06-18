@@ -2422,6 +2422,12 @@ def init_cmd(target: Path, dry_run: bool) -> None:
     show_default=True,
     help="Component diagram layout: hierarchical (overview + detail) or flat.",
 )
+@click.option(
+    "--evidence-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=None,
+    help="Directory containing evidence JSONL files (e.g. OTel traces).",
+)
 def arch_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -2431,6 +2437,7 @@ def arch_cmd(
     output_formats: tuple[str, ...],
     no_llm: bool,
     diagram_mode: str,
+    evidence_dir: Path | None,
 ) -> None:
     """Generate architecture documentation report."""
     from nfr_review.arch_orchestrator import run_arch_review
@@ -2461,6 +2468,8 @@ def arch_cmd(
     if not no_llm:
         phases.extend(["domain-model", "market"])
     phases.extend(["recommend", "output"])
+    if evidence_dir:
+        phases.insert(0, "evidence")
 
     _banner(
         "arch",
@@ -2474,6 +2483,15 @@ def arch_cmd(
     def _progress(msg: str) -> None:
         _ts_echo(msg, quiet=quiet)
 
+    # Load evidence if provided
+    evidence_list = None
+    if evidence_dir:
+        evidence_list = _load_evidence_from_dir(evidence_dir)
+        _ts_echo(
+            f"[evidence] Loaded {len(evidence_list)} evidence items from {evidence_dir}",
+            quiet=quiet,
+        )
+
     t0 = _phase("Running architecture review", quiet=quiet)
     try:
         report = run_arch_review(
@@ -2481,6 +2499,7 @@ def arch_cmd(
             repo_names=repo_names,
             skip_llm=no_llm,
             diagram_mode=diagram_mode,
+            evidence=evidence_list,
             progress=_progress,
         )
     except Exception as exc:  # noqa: BLE001
@@ -3026,10 +3045,11 @@ def _load_evidence_from_dir(evidence_dir: Path) -> list:
 @cli.command(
     "experimental",
     help=(
-        "[EXPERIMENTAL] Generate a class-diagram-focused report for TARGET"
-        " repository/repositories."
+        "[DEPRECATED] Use 'arch' instead.  Generates a class-diagram-focused"
+        " report for TARGET repository/repositories."
     ),
-    epilog="This command is experimental and its output format may change.",
+    epilog="Deprecated: use 'nfr-review arch' which now includes class diagrams.",
+    deprecated=True,
 )
 @click.argument(
     "targets",
@@ -3084,68 +3104,20 @@ def experimental_cmd(
     output_formats: tuple[str, ...],
     evidence_dir: Path | None,
 ) -> None:
-    """Generate an experimental class-diagram-focused report."""
-    from nfr_review.experimental_orchestrator import run_experimental_review
-    from nfr_review.output.experimental_render import render_experimental_report
+    """Generate an experimental class-diagram-focused report.
 
+    .. deprecated::
+        Use ``nfr-review arch`` instead.  The arch command now includes
+        class diagrams, cross-repo edge detection, and OTel dynamic analysis.
+    """
     click.echo(
-        "WARNING: The experimental command is experimental and subject to change.",
+        "WARNING: 'experimental' is deprecated — use 'nfr-review arch' instead. "
+        "All experimental features are now part of the arch command.",
         err=True,
     )
 
-    if verbose and quiet:
-        raise click.UsageError("--verbose and --quiet are mutually exclusive")
-    _configure_logging(verbose, quiet, log_file)
-
-    target_list = list(targets)
-    repo_names = [_repo_name(t) for t in target_list]
-    primary_repo = repo_names[0] if repo_names else "unknown"
-
-    opts: dict[str, str] = {}
-    if len(target_list) > 1:
-        opts["repos"] = str(len(target_list))
-    if output_formats:
-        opts["formats"] = ",".join(output_formats)
-
-    phases = ["collecting", "filtering", "edges", "diagrams", "output"]
-    if evidence_dir:
-        phases.insert(0, "evidence")
-
-    _banner(
-        "experimental",
-        primary_repo,
-        target_list[0],
-        options=opts or None,
-        phases=phases,
-        quiet=quiet,
-    )
-
-    def _progress(phase: str, detail: str) -> None:
-        _ts_echo(f"[{phase}] {detail}", quiet=quiet)
-
-    # Load evidence if provided
-    evidence_list = None
-    if evidence_dir:
-        evidence_list = _load_evidence_from_dir(evidence_dir)
-        _ts_echo(
-            f"[evidence] Loaded {len(evidence_list)} evidence items from {evidence_dir}",
-            quiet=quiet,
-        )
-
-    t0 = _phase("Running experimental review", quiet=quiet)
-    try:
-        report = run_experimental_review(
-            target_list,
-            evidence=evidence_list,
-            progress_callback=_progress,
-        )
-    except Exception as exc:  # noqa: BLE001
-        click.echo(f"error: experimental review failed: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-    _phase_done("Experimental review", t0, quiet=quiet)
-
-    # Determine formats
-    formats: list[str] | None = None
+    # Translate formats: experimental used "both" => json+md
+    arch_formats: tuple[str, ...] = ()
     if output_formats:
         fmt_set: set[str] = set()
         for f in output_formats:
@@ -3153,25 +3125,22 @@ def experimental_cmd(
                 fmt_set.update(("json", "md"))
             else:
                 fmt_set.add(f)
-        formats = sorted(fmt_set)
+        arch_formats = tuple(sorted(fmt_set))
 
-    t0 = _phase("Rendering output files", quiet=quiet)
-    try:
-        results = render_experimental_report(report, output_dir, formats=formats)
-    except Exception as exc:  # noqa: BLE001
-        click.echo(f"error: report rendering failed: {exc}", err=True)
-        raise click.exceptions.Exit(1) from exc
-    _phase_done("Output rendering", t0, quiet=quiet)
-
-    # Summary
-    produced = {k: v for k, v in results.items() if v is not None}
-    parts = [
-        f"Experimental: {len(report.class_diagrams)} class diagrams,",
-        f"{len(report.cross_repo_edges)} cross-repo edges",
-    ]
-    for fmt, path in produced.items():
-        parts.append(f"{fmt}={path}")
-    _ts_echo(" ".join(parts))
+    # Delegate to the arch command via its click context
+    ctx = click.get_current_context()
+    ctx.invoke(
+        arch_cmd,
+        targets=targets,
+        verbose=verbose,
+        quiet=quiet,
+        log_file=log_file,
+        output_dir=output_dir,
+        output_formats=arch_formats,
+        no_llm=True,
+        diagram_mode="hierarchical",
+        evidence_dir=evidence_dir,
+    )
 
 
 @cli.command("version", help="Print the nfr-review version and exit.")
