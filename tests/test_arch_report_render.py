@@ -31,7 +31,9 @@ from nfr_review.arch_models import (
     TechStackEntry,
 )
 from nfr_review.arch_report_render import (
+    _md_repo_dependencies,
     _pdf_market_analysis_html,
+    _pdf_repo_dependencies_html,
     _pdf_test_coverage_html,
     render_arch_json,
     render_arch_markdown,
@@ -248,6 +250,63 @@ def _make_report_without_llm_sections() -> ArchReport:
         ],
         domain_model=None,
         market_analysis=None,
+    )
+
+
+def _make_multi_repo_report() -> ArchReport:
+    """Construct a multi-repo report with cross-repo integration points."""
+    return ArchReport(
+        metadata=ArchReportMetadata(
+            tool_version="0.1.0",
+            timestamp="2026-06-17T12:00:00Z",
+            repos_analyzed=[
+                RepoInfo(path="/tmp/repo-a", name="repo-a", git_sha="aaa111"),
+                RepoInfo(path="/tmp/repo-b", name="repo-b", git_sha="bbb222"),
+            ],
+            llm_available=False,
+        ),
+        components=[
+            Component(
+                id="comp-order-svc",
+                name="Order Service",
+                description="Handles orders",
+                component_type="service",
+                repo="repo-a",
+            ),
+            Component(
+                id="comp-payment-client",
+                name="Payment Client",
+                description="Payment gateway client",
+                component_type="service",
+                repo="repo-b",
+            ),
+            Component(
+                id="comp-internal-lib",
+                name="Internal Lib",
+                description="Shared library in repo-a",
+                component_type="library",
+                repo="repo-a",
+            ),
+        ],
+        integration_points=[
+            IntegrationPoint(
+                id="int-cross-01",
+                source_component_id="comp-order-svc",
+                target_component_id="comp-payment-client",
+                style="api_call",
+                protocol="HTTP",
+                description="Order service calls payment API",
+                is_cross_repo=True,
+            ),
+            IntegrationPoint(
+                id="int-intra-01",
+                source_component_id="comp-order-svc",
+                target_component_id="comp-internal-lib",
+                style="synchronous",
+                description="Internal dependency",
+                is_cross_repo=False,
+            ),
+        ],
     )
 
 
@@ -866,3 +925,91 @@ class TestEdgeCases:
         content = out.read_text()
         assert "Upstream: identity" in content
         assert "Downstream: billing" in content
+
+
+# ---------------------------------------------------------------------------
+# Repo-to-repo dependency section tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepoDependencies:
+    def test_md_includes_repo_deps_for_multi_repo(self, tmp_path: Path) -> None:
+        report = _make_multi_repo_report()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "## Repository Dependencies" in content
+        assert "```mermaid" in content
+        assert "flowchart LR" in content
+        assert "repo_a" in content
+        assert "repo_b" in content
+
+    def test_md_shows_cross_repo_table(self, tmp_path: Path) -> None:
+        report = _make_multi_repo_report()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "### Cross-Repository Integration Points" in content
+        assert "comp-order-svc" in content
+        assert "comp-payment-client" in content
+        assert "api_call" in content
+
+    def test_md_omits_repo_deps_for_single_repo(self, tmp_path: Path) -> None:
+        report = _make_full_report()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "## Repository Dependencies" not in content
+
+    def test_md_omits_repo_deps_when_no_cross_repo_edges(self, tmp_path: Path) -> None:
+        report = ArchReport(
+            metadata=ArchReportMetadata(
+                tool_version="0.1.0",
+                timestamp="2026-06-17T12:00:00Z",
+                repos_analyzed=[
+                    RepoInfo(path="/tmp/a", name="a"),
+                    RepoInfo(path="/tmp/b", name="b"),
+                ],
+                llm_available=False,
+            ),
+            components=[
+                Component(
+                    id="c1", name="Svc", description="svc", component_type="service", repo="a"
+                ),
+            ],
+            integration_points=[],
+        )
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "## Repository Dependencies" not in content
+
+    def test_md_repo_deps_returns_empty_for_single_repo(self) -> None:
+        report = _make_full_report()
+        assert _md_repo_dependencies(report) == ""
+
+    def test_pdf_repo_deps_returns_empty_for_single_repo(self) -> None:
+        report = _make_full_report()
+        assert _pdf_repo_dependencies_html(report) == ""
+
+    def test_pdf_repo_deps_includes_section_for_multi_repo(self) -> None:
+        report = _make_multi_repo_report()
+        html = _pdf_repo_dependencies_html(report)
+
+        assert "<h2>Repository Dependencies</h2>" in html
+        assert "comp-order-svc" in html
+        assert "comp-payment-client" in html
+        assert "api_call" in html
+
+    def test_edge_annotation_shows_component_names(self, tmp_path: Path) -> None:
+        report = _make_multi_repo_report()
+        out = tmp_path / "report.md"
+        render_arch_markdown(report, out)
+        content = out.read_text()
+
+        assert "Order Service" in content
+        assert "Payment Client" in content

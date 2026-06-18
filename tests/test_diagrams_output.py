@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from nfr_review.arch_models import Component, IntegrationPoint
 from nfr_review.dep_solver import TreeNode
 from nfr_review.deps_analysis import DepUpgradeInfo, EcosystemDepsReport
 from nfr_review.models import Finding
@@ -13,6 +14,7 @@ from nfr_review.output.diagrams import (
     render_jdepend_mermaid,
     render_jdepend_metrics_table,
     render_mermaid_dep_graph,
+    render_mermaid_repo_deps,
     render_mermaid_severity_pie,
     render_mermaid_tech_overview,
 )
@@ -299,3 +301,86 @@ def test_extract_sequence_multiple():
     findings = [_finding(summary=f"{block1}\n\n{block2}")]
     result = extract_sequence_diagrams(findings)
     assert len(result) == 2
+
+
+# ── render_mermaid_repo_deps ────────────────────────────────────────
+
+
+def _comp(cid: str, name: str, repo: str) -> Component:
+    return Component(id=cid, name=name, description=name, component_type="service", repo=repo)
+
+
+def _integ(
+    iid: str, src: str, tgt: str, *, cross: bool = False, style: str = "api_call"
+) -> IntegrationPoint:
+    return IntegrationPoint(
+        id=iid,
+        source_component_id=src,
+        target_component_id=tgt,
+        style=style,
+        description=f"{src} -> {tgt}",
+        is_cross_repo=cross,
+    )
+
+
+def test_repo_deps_returns_none_without_cross_repo():
+    comps = [_comp("a", "A", "repo-x"), _comp("b", "B", "repo-x")]
+    intgs = [_integ("i1", "a", "b")]
+    assert render_mermaid_repo_deps(comps, intgs) is None
+
+
+def test_repo_deps_returns_none_for_empty():
+    assert render_mermaid_repo_deps([], []) is None
+
+
+def test_repo_deps_basic_cross_repo():
+    comps = [_comp("a", "Alpha", "repo-x"), _comp("b", "Beta", "repo-y")]
+    intgs = [_integ("i1", "a", "b", cross=True)]
+    result = render_mermaid_repo_deps(comps, intgs)
+
+    assert result is not None
+    assert "flowchart LR" in result
+    assert "repo_x" in result
+    assert "repo_y" in result
+    assert "Alpha -> Beta" in result
+
+
+def test_repo_deps_deduplicates_annotations():
+    comps = [_comp("a", "A", "rx"), _comp("b", "B", "ry")]
+    intgs = [
+        _integ("i1", "a", "b", cross=True),
+        _integ("i2", "a", "b", cross=True),
+    ]
+    result = render_mermaid_repo_deps(comps, intgs)
+    assert result is not None
+    assert result.count("A -> B") == 1
+
+
+def test_repo_deps_multiple_edges():
+    comps = [
+        _comp("a", "A", "r1"),
+        _comp("b", "B", "r2"),
+        _comp("c", "C", "r2"),
+        _comp("d", "D", "r3"),
+    ]
+    intgs = [
+        _integ("i1", "a", "b", cross=True),
+        _integ("i2", "a", "c", cross=True),
+        _integ("i3", "b", "d", cross=True),
+    ]
+    result = render_mermaid_repo_deps(comps, intgs)
+    assert result is not None
+    assert "r1" in result
+    assert "r2" in result
+    assert "r3" in result
+    assert "-->" in result
+
+
+def test_repo_deps_truncates_many_annotations():
+    comps = [_comp(f"s{i}", f"Src{i}", "rx") for i in range(8)] + [
+        _comp(f"t{i}", f"Tgt{i}", "ry") for i in range(8)
+    ]
+    intgs = [_integ(f"i{i}", f"s{i}", f"t{i}", cross=True) for i in range(8)]
+    result = render_mermaid_repo_deps(comps, intgs)
+    assert result is not None
+    assert "+3 more" in result

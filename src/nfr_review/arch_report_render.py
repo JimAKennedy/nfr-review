@@ -467,6 +467,46 @@ def _md_market_analysis(report: ArchReport) -> str:
     return "\n".join(lines)
 
 
+def _md_repo_dependencies(report: ArchReport) -> str:
+    """Render repo-to-repo dependency diagram for multi-repo analyses."""
+    if not report.metadata.repos_analyzed or len(report.metadata.repos_analyzed) <= 1:
+        return ""
+
+    from nfr_review.output.diagrams import render_mermaid_repo_deps
+
+    mermaid = render_mermaid_repo_deps(report.components, report.integration_points)
+    if not mermaid:
+        return ""
+
+    lines = [
+        "## Repository Dependencies",
+        "",
+        "```mermaid",
+        mermaid.rstrip(),
+        "```",
+        "",
+    ]
+
+    cross_repo = [ip for ip in report.integration_points if ip.is_cross_repo]
+    if cross_repo:
+        lines.extend(
+            [
+                "### Cross-Repository Integration Points",
+                "",
+                "| Source | Target | Style | Description |",
+                "|---|---|---|---|",
+            ]
+        )
+        for ip in cross_repo:
+            lines.append(
+                f"| {ip.source_component_id} | {ip.target_component_id}"
+                f" | {ip.style} | {ip.description} |"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _md_recommendations(report: ArchReport) -> str:
     """Render recommendations grouped by priority."""
     if not report.recommendations:
@@ -501,6 +541,7 @@ def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
         _md_executive_summary(report),
         _md_components(report),
         _md_integrations(report),
+        _md_repo_dependencies(report),
         _md_diagrams(report),
         _md_test_coverage(report),
         _md_risk_findings(report),
@@ -785,6 +826,49 @@ def _pdf_market_analysis_html(report: ArchReport) -> str:
     return "\n".join(parts)
 
 
+def _pdf_repo_dependencies_html(report: ArchReport) -> str:
+    """Render repo-to-repo dependency diagram as HTML for PDF."""
+    if not report.metadata.repos_analyzed or len(report.metadata.repos_analyzed) <= 1:
+        return ""
+
+    from nfr_review.output.diagrams import render_mermaid_repo_deps
+
+    mermaid = render_mermaid_repo_deps(report.components, report.integration_points)
+    if not mermaid:
+        return ""
+
+    parts: list[str] = ['<div class="section-break">', "<h2>Repository Dependencies</h2>"]
+
+    result = _render_mermaid_to_img(mermaid)
+    if result:
+        img_html, is_landscape = result
+        if is_landscape:
+            parts[0] = '<div class="diagram-page-landscape">'
+        parts.append(img_html)
+    else:
+        parts.append(f"<pre><code>{_h(mermaid)}</code></pre>")
+
+    cross_repo = [ip for ip in report.integration_points if ip.is_cross_repo]
+    if cross_repo:
+        rows = []
+        for ip in cross_repo:
+            rows.append(
+                f"<tr><td>{_h(ip.source_component_id)}</td>"
+                f"<td>{_h(ip.target_component_id)}</td>"
+                f"<td>{_h(ip.style)}</td>"
+                f"<td>{_h(ip.description)}</td></tr>"
+            )
+        parts.append("<h3>Cross-Repository Integration Points</h3>")
+        parts.append(
+            '<table class="wide-table"><thead><tr>'
+            "<th>Source</th><th>Target</th><th>Style</th><th>Description</th>"
+            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        )
+
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def _pdf_recommendations_html(report: ArchReport) -> str:
     """Render recommendations grouped by priority as HTML."""
     if not report.recommendations:
@@ -846,6 +930,7 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
         _pdf_executive_summary_html(report),
         _pdf_components_html(report),
         _pdf_integrations_html(report),
+        _pdf_repo_dependencies_html(report),
         _pdf_diagrams_html(report),
         _pdf_test_coverage_html(report),
         _pdf_risk_findings_html(report),

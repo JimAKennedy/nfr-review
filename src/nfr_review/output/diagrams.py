@@ -14,6 +14,7 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from nfr_review.arch_models import Component, IntegrationPoint
     from nfr_review.dep_solver import TreeNode
     from nfr_review.deps_analysis import EcosystemDepsReport
     from nfr_review.models import Evidence, Finding
@@ -333,6 +334,58 @@ def collect_dynamic_diagrams(
     return result
 
 
+def render_mermaid_repo_deps(
+    components: list[Component],
+    integrations: list[IntegrationPoint],
+) -> str | None:
+    """Render a Mermaid flowchart of repo-to-repo dependencies.
+
+    Each edge is annotated with the boundary component names that
+    connect the two repos.  Returns ``None`` when there are no
+    cross-repo edges.
+    """
+    comp_map: dict[str, Component] = {c.id: c for c in components}
+
+    edge_annotations: dict[tuple[str, str], list[str]] = {}
+    for ip in integrations:
+        if not ip.is_cross_repo:
+            continue
+        src = comp_map.get(ip.source_component_id)
+        tgt = comp_map.get(ip.target_component_id)
+        if not src or not tgt or not src.repo or not tgt.repo:
+            continue
+        if src.repo == tgt.repo:
+            continue
+        key = (src.repo, tgt.repo)
+        annotation = f"{src.name} -> {tgt.name}"
+        edge_annotations.setdefault(key, []).append(annotation)
+
+    if not edge_annotations:
+        return None
+
+    repos: set[str] = set()
+    for s, t in edge_annotations:
+        repos.add(s)
+        repos.add(t)
+
+    lines = ["flowchart LR"]
+    for repo in sorted(repos):
+        nid = _MERMAID_ID_RE.sub("_", repo)
+        lines.append(f"    {nid}[{_quote_label(repo)}]")
+
+    for (src_repo, tgt_repo), edge_labels in sorted(edge_annotations.items()):
+        src_id = _MERMAID_ID_RE.sub("_", src_repo)
+        tgt_id = _MERMAID_ID_RE.sub("_", tgt_repo)
+        unique = list(dict.fromkeys(edge_labels))
+        shown = unique[:5]
+        label = " | ".join(shown)
+        if len(unique) > 5:
+            label += f" | +{len(unique) - 5} more"
+        lines.append(f"    {src_id} -->|{_quote_label(label)}| {tgt_id}")
+
+    return "\n".join(lines) + "\n"
+
+
 __all__ = [
     "build_topology_diagram",
     "collect_dynamic_diagrams",
@@ -341,6 +394,7 @@ __all__ = [
     "render_jdepend_mermaid",
     "render_jdepend_metrics_table",
     "render_mermaid_dep_graph",
+    "render_mermaid_repo_deps",
     "render_mermaid_severity_pie",
     "render_mermaid_tech_overview",
 ]
