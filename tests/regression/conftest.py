@@ -52,6 +52,33 @@ def load_manifest() -> list[dict]:
     return data["repos"]
 
 
+def _ensure_checkout(clone_dir: Path, commit_sha: str) -> None:
+    """Verify *clone_dir* is at *commit_sha*, fetching + checking out if needed."""
+    head = subprocess.run(
+        ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if head.returncode == 0 and head.stdout.strip() == commit_sha:
+        return
+    subprocess.run(
+        ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=False,
+    )
+    subprocess.run(
+        ["git", "-C", str(clone_dir), "checkout", commit_sha],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
 def clone_repo(
     name: str,
     url: str,
@@ -60,11 +87,15 @@ def clone_repo(
 ) -> Path:
     clone_dir = repos_dir / name
     if clone_dir.exists():
+        if commit_sha is not None:
+            _ensure_checkout(clone_dir, commit_sha)
         return clone_dir
 
     lock = FileLock(repos_dir / f".{name}.lock", timeout=900)
     with lock:
         if clone_dir.exists():
+            if commit_sha is not None:
+                _ensure_checkout(clone_dir, commit_sha)
             return clone_dir
 
         try:
@@ -81,20 +112,7 @@ def clone_repo(
             pytest.skip(f"clone failed: {exc.stderr.strip()}")
 
         if commit_sha is not None:
-            subprocess.run(
-                ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
-                capture_output=True,
-                text=True,
-                timeout=600,
-                check=False,
-            )
-            subprocess.run(
-                ["git", "-C", str(clone_dir), "checkout", commit_sha],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
-            )
+            _ensure_checkout(clone_dir, commit_sha)
 
     return clone_dir
 
