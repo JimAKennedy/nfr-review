@@ -338,6 +338,12 @@ def cli() -> None:
     default=None,
     help="Directory for structural baseline snapshots (save after scan, diff on rerun).",
 )
+@click.option(
+    "--force-standard-config",
+    is_flag=True,
+    default=False,
+    help="Ignore project design-change threshold overrides; use built-in defaults.",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -355,6 +361,7 @@ def run_cmd(
     collector: bool = False,
     framework: str | None = None,
     design_baseline_dir: Path | None = None,
+    force_standard_config: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -524,13 +531,14 @@ def run_cmd(
 
     if design_baseline_dir is not None:
         from nfr_review.design_change import (
+            apply_thresholds,
+            format_diff_summary,
+        )
+        from nfr_review.design_change import (
             build_baseline as _build_structural,
         )
         from nfr_review.design_change import (
             diff_baselines as _diff_structural,
-        )
-        from nfr_review.design_change import (
-            format_diff_summary,
         )
         from nfr_review.design_change import (
             load_baseline as _load_structural,
@@ -545,6 +553,15 @@ def run_cmd(
         try:
             prev_bl = _load_structural(bl_file)
             diffs = _diff_structural(prev_bl, new_bl)
+
+            if force_standard_config:
+                from nfr_review.config import DesignChangeConfig
+
+                effective_thresholds = DesignChangeConfig().thresholds
+            else:
+                effective_thresholds = config.design_change.thresholds
+            diffs = apply_thresholds(diffs, effective_thresholds)
+
             if diffs:
                 _ts_echo(format_diff_summary(diffs))
             else:

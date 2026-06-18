@@ -8,11 +8,13 @@ from pydantic import ValidationError
 from nfr_review.config import (
     CATEGORY_ALIASES,
     DEFAULT_CATEGORY_WEIGHTS,
+    DEFAULT_DESIGN_CHANGE_THRESHOLDS,
     DEFAULT_SEVERITY_DEDUCTIONS,
     ISO_25010_CATEGORIES,
     CollectorsConfig,
     Config,
     ConfigError,
+    DesignChangeConfig,
     LlmConfig,
     NfrTargetsConfig,
     RulesConfig,
@@ -475,3 +477,46 @@ class TestNfrTargetsConfig:
     def test_nfr_targets_rejects_extra_fields(self) -> None:
         with pytest.raises(ValidationError):
             NfrTargetsConfig(bogus="bad")
+
+
+class TestDesignChangeConfig:
+    def test_default_thresholds(self) -> None:
+        cfg = Config()
+        assert isinstance(cfg.design_change, DesignChangeConfig)
+        assert cfg.design_change.thresholds == DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        assert cfg.design_change.thresholds["class_count"] == 20.0
+
+    def test_yaml_override(self, tmp_path: Path) -> None:
+        p = tmp_path / "nfr-review.yaml"
+        p.write_text(
+            "version: 1\ndesign_change:\n  thresholds:\n    class_count: 50.0\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert cfg.design_change.thresholds["class_count"] == 50.0
+
+    def test_yaml_override_replaces_all(self, tmp_path: Path) -> None:
+        p = tmp_path / "nfr-review.yaml"
+        p.write_text(
+            "version: 1\ndesign_change:\n  thresholds:\n    class_count: 50.0\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(p)
+        assert len(cfg.design_change.thresholds) == 1
+        assert "test_coverage" not in cfg.design_change.thresholds
+
+    def test_absent_in_yaml_uses_defaults(self, tmp_path: Path) -> None:
+        p = tmp_path / "nfr-review.yaml"
+        p.write_text("version: 1\n", encoding="utf-8")
+        cfg = load_config(p)
+        assert cfg.design_change.thresholds == DEFAULT_DESIGN_CHANGE_THRESHOLDS
+
+    def test_rejects_extra_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            DesignChangeConfig(bogus="bad")
+
+    def test_force_standard_config_resets_to_defaults(self) -> None:
+        custom = DesignChangeConfig(thresholds={"class_count": 99.0})
+        assert custom.thresholds != DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        standard = DesignChangeConfig()
+        assert standard.thresholds == DEFAULT_DESIGN_CHANGE_THRESHOLDS

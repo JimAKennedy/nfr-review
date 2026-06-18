@@ -236,6 +236,166 @@ class TestBuildBaseline:
         assert "test_category" in bl.metrics
 
 
+class TestApplyThresholds:
+    def test_filters_numeric_below_threshold(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100,
+                        new_value=110,
+                        delta=10,
+                        pct_change=10.0,
+                    )
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+        assert result == {}
+
+    def test_passes_numeric_above_threshold(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100,
+                        new_value=130,
+                        delta=30,
+                        pct_change=30.0,
+                    )
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+        assert "structure" in result
+        assert len(result["structure"].numeric_deltas) == 1
+
+    def test_passes_numeric_with_no_pct_change(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "m": CategoryDiff(
+                category="m",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=0,
+                        new_value=5,
+                        delta=5,
+                        pct_change=None,
+                    )
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+        assert "m" in result
+
+    def test_passes_metric_without_threshold(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="unknown_metric",
+                        old_value=100,
+                        new_value=101,
+                        delta=1,
+                        pct_change=1.0,
+                    )
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"class_count": 20.0})
+        assert "structure" in result
+
+    def test_filters_set_below_threshold(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "deps": CategoryDiff(
+                category="deps",
+                set_deltas=[
+                    SetDelta(name="adr_count", added=["adr1"], removed=[]),
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"adr_count": 2.0})
+        assert result == {}
+
+    def test_passes_set_above_threshold(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "deps": CategoryDiff(
+                category="deps",
+                set_deltas=[
+                    SetDelta(name="adr_count", added=["adr1", "adr2"], removed=["adr3"]),
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"adr_count": 2.0})
+        assert "deps" in result
+
+    def test_empty_thresholds_passes_all(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100,
+                        new_value=101,
+                        delta=1,
+                        pct_change=1.0,
+                    )
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {})
+        assert "structure" in result
+
+    def test_mixed_filtering(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100,
+                        new_value=105,
+                        delta=5,
+                        pct_change=5.0,
+                    ),
+                    NumericDelta(
+                        name="test_coverage",
+                        old_value=80,
+                        new_value=70,
+                        delta=-10,
+                        pct_change=-12.5,
+                    ),
+                ],
+            ),
+        }
+        result = apply_thresholds(diffs, {"class_count": 20.0, "test_coverage": 5.0})
+        assert "structure" in result
+        assert len(result["structure"].numeric_deltas) == 1
+        assert result["structure"].numeric_deltas[0].name == "test_coverage"
+
+
 class TestCLIDesignBaselineRoundTrip:
     def test_cli_saves_and_diffs_baseline(self, tmp_path: Path) -> None:
         from click.testing import CliRunner
