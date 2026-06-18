@@ -307,15 +307,15 @@ class TestRenderExperimentalReport:
 
 
 class TestExperimentalCli:
-    def test_help_works(self) -> None:
+    def test_help_shows_deprecated(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["experimental", "--help"])
         assert result.exit_code == 0
-        assert "EXPERIMENTAL" in result.output or "experimental" in result.output.lower()
+        assert "DEPRECATED" in result.output or "deprecated" in result.output.lower()
         assert "TARGET" in result.output or "targets" in result.output.lower()
 
-    def test_basic_invocation_with_fixture(self, tmp_path: Path) -> None:
-        """Run the experimental command against the cpp fixture repo."""
+    def test_basic_invocation_delegates_to_arch(self, tmp_path: Path) -> None:
+        """Deprecated experimental command delegates to arch."""
         runner = CliRunner()
         output_dir = tmp_path / "reports"
         result = runner.invoke(
@@ -330,13 +330,9 @@ class TestExperimentalCli:
                 "-q",
             ],
         )
-        # The command should complete (exit_code 0) or at least not crash
-        # with an unhandled exception. If collectors are not available the
-        # report will simply be empty.
         assert result.exit_code == 0, (
             f"CLI failed with exit_code={result.exit_code}\noutput={result.output}\n"
         )
-        # Should have produced at least a JSON file
         json_files = list(output_dir.glob("*.json"))
         assert len(json_files) >= 1
 
@@ -575,6 +571,7 @@ class TestEvidenceDirCli:
         (evidence_dir / "traces.jsonl").write_text(json.dumps(trace_data) + "\n")
 
         runner = CliRunner()
+        out_dir = tmp_path / "out"
         result = runner.invoke(
             cli,
             [
@@ -583,7 +580,7 @@ class TestEvidenceDirCli:
                 "--evidence-dir",
                 str(evidence_dir),
                 "--output-dir",
-                str(tmp_path / "out"),
+                str(out_dir),
                 "--format",
                 "json",
             ],
@@ -591,7 +588,11 @@ class TestEvidenceDirCli:
         assert result.exit_code == 0, result.output + (
             result.stderr if hasattr(result, "stderr") else ""
         )
-        report_path = tmp_path / "out" / "experimental-report.json"
-        data = json.loads(report_path.read_text())
-        assert data["dynamic_analysis"] is not None
+        # Deprecated experimental delegates to arch, which writes *-architecture-report.json
+        json_files = list(out_dir.glob("*-architecture-report.json"))
+        assert len(json_files) >= 1, (
+            f"Expected arch JSON report in {out_dir}: {list(out_dir.iterdir())}"
+        )
+        data = json.loads(json_files[0].read_text())
+        assert data.get("dynamic_analysis") is not None
         assert data["dynamic_analysis"]["service_count"] >= 1

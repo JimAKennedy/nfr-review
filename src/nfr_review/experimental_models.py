@@ -1,34 +1,22 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Pydantic v2 data models for experimental class-focused reports."""
+"""Pydantic v2 data models for experimental class-focused reports.
+
+.. deprecated::
+    The ``experimental`` command is deprecated in favour of ``arch``.
+    Models have moved to :mod:`nfr_review.arch_models`.  This module
+    re-exports them for backward compatibility.
+"""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from nfr_review.arch_models import C4Diagram
-
-
-class CrossRepoEdge(BaseModel):
-    """A relationship between classes in different repositories."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_repo: str
-    target_repo: str
-    source_class: str
-    target_class: str
-
-
-class DynamicAnalysisSection(BaseModel):
-    """Dynamic analysis section built from OTel trace evidence."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    service_count: int = 0
-    edge_count: int = 0
-    topology_mermaid: str = ""
-    services: list[str] = Field(default_factory=list)
+from nfr_review.arch_models import (
+    C4Diagram,
+    CrossRepoEdge,
+    DynamicAnalysisSection,
+)
 
 
 class ExperimentalReport(BaseModel):

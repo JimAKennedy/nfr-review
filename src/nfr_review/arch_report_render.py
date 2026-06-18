@@ -324,9 +324,6 @@ def _md_diagrams(report: ArchReport) -> str:
 
     lines = ["## C4 Diagrams", ""]
     for diagram in report.diagrams:
-        # Skip class diagrams — they are now rendered by the experimental report.
-        if diagram.scope == "classes":
-            continue
         lines.append(f"### {diagram.title}")
         if diagram.scope:
             lines.append(f"\n*Scope: {diagram.scope}*")
@@ -507,6 +504,57 @@ def _md_repo_dependencies(report: ArchReport) -> str:
     return "\n".join(lines)
 
 
+def _md_cross_repo_edges(report: ArchReport) -> str:
+    """Render cross-repository class-level edges as a table."""
+    if not report.cross_repo_edges:
+        return ""
+
+    lines = [
+        "## Cross-Repository Edges",
+        "",
+        f"Total cross-repo edges: {len(report.cross_repo_edges)}",
+        "",
+        "| Source Repo | Source Class | Target Repo | Target Class |",
+        "|-------------|-------------|-------------|--------------|",
+    ]
+    for edge in report.cross_repo_edges:
+        lines.append(
+            f"| {edge.source_repo} | {edge.source_class} "
+            f"| {edge.target_repo} | {edge.target_class} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_dynamic_analysis(report: ArchReport) -> str:
+    """Render dynamic analysis (OTel topology) section."""
+    if not report.dynamic_analysis:
+        return ""
+
+    da = report.dynamic_analysis
+    lines = [
+        "## Dynamic Analysis",
+        "",
+        f"**Services observed:** {da.service_count}  ",
+        f"**Cross-service edges:** {da.edge_count}  ",
+        "",
+    ]
+    if da.services:
+        lines.append("### Observed Services")
+        lines.append("")
+        for svc in da.services:
+            lines.append(f"- {svc}")
+        lines.append("")
+    if da.topology_mermaid:
+        lines.append("### Service Topology")
+        lines.append("")
+        lines.append("```mermaid")
+        lines.append(da.topology_mermaid.rstrip("\n"))
+        lines.append("```")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _md_recommendations(report: ArchReport) -> str:
     """Render recommendations grouped by priority."""
     if not report.recommendations:
@@ -543,6 +591,8 @@ def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
         _md_integrations(report),
         _md_repo_dependencies(report),
         _md_diagrams(report),
+        _md_cross_repo_edges(report),
+        _md_dynamic_analysis(report),
         _md_test_coverage(report),
         _md_risk_findings(report),
         _md_domain_model(report),
@@ -644,9 +694,6 @@ def _pdf_diagrams_html(report: ArchReport) -> str:
         return ""
     parts: list[str] = []
     for diagram in report.diagrams:
-        # Skip class diagrams — they are now rendered by the experimental report.
-        if diagram.scope == "classes":
-            continue
         result = _render_mermaid_to_img(diagram.mermaid)
         if result:
             img_html, is_landscape = result
@@ -869,6 +916,54 @@ def _pdf_repo_dependencies_html(report: ArchReport) -> str:
     return "\n".join(parts)
 
 
+def _pdf_cross_repo_edges_html(report: ArchReport) -> str:
+    """Render cross-repository edges as an HTML table."""
+    if not report.cross_repo_edges:
+        return ""
+    rows = []
+    for edge in report.cross_repo_edges:
+        rows.append(
+            f"<tr><td>{_h(edge.source_repo)}</td><td>{_h(edge.source_class)}</td>"
+            f"<td>{_h(edge.target_repo)}</td><td>{_h(edge.target_class)}</td></tr>"
+        )
+    return (
+        '<div class="section-break">'
+        "<h2>Cross-Repository Edges</h2>"
+        f"<p>Total cross-repo edges: {len(report.cross_repo_edges)}</p>"
+        "<table><thead><tr><th>Source Repo</th><th>Source Class</th>"
+        "<th>Target Repo</th><th>Target Class</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+    )
+
+
+def _pdf_dynamic_analysis_html(report: ArchReport) -> str:
+    """Render dynamic analysis (OTel topology) as HTML."""
+    if not report.dynamic_analysis:
+        return ""
+    da = report.dynamic_analysis
+    parts = [
+        '<div class="section-break">',
+        "<h2>Dynamic Analysis</h2>",
+        f"<p><strong>Services observed:</strong> {da.service_count} &nbsp; "
+        f"<strong>Cross-service edges:</strong> {da.edge_count}</p>",
+    ]
+    if da.services:
+        svc_items = "".join(f"<li>{_h(s)}</li>" for s in da.services)
+        parts.append(f"<h3>Observed Services</h3><ul>{svc_items}</ul>")
+    if da.topology_mermaid:
+        result = _render_mermaid_to_img(da.topology_mermaid)
+        if result:
+            img_html, _ = result
+            parts.append("<h3>Service Topology</h3>")
+            parts.append(img_html)
+        else:
+            parts.append(
+                f"<h3>Service Topology</h3><pre><code>{_h(da.topology_mermaid)}</code></pre>"
+            )
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def _pdf_recommendations_html(report: ArchReport) -> str:
     """Render recommendations grouped by priority as HTML."""
     if not report.recommendations:
@@ -932,6 +1027,8 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
         _pdf_integrations_html(report),
         _pdf_repo_dependencies_html(report),
         _pdf_diagrams_html(report),
+        _pdf_cross_repo_edges_html(report),
+        _pdf_dynamic_analysis_html(report),
         _pdf_test_coverage_html(report),
         _pdf_risk_findings_html(report),
         _pdf_domain_model_html(report),
@@ -1020,6 +1117,13 @@ def render_arch_report(
         elif fmt == "pdf":
             path = output_dir / f"{prefix}-architecture-report.pdf"
             results["pdf"] = render_arch_pdf(report, path)
+        elif fmt == "dsl":
+            from nfr_review.output.structurizr_dsl import write_workspace_dsl
+            from nfr_review.structurizr_bridge import build_workspace_from_arch
+
+            workspace = build_workspace_from_arch(report)
+            path = output_dir / f"{prefix}-architecture.dsl"
+            results["dsl"] = write_workspace_dsl(workspace, path)
         else:
             logger.warning("Unknown format %r; skipping", fmt)
             results[fmt] = None

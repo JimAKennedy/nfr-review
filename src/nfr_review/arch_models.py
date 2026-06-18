@@ -148,6 +148,28 @@ class C4Diagram(BaseModel):
     component_ids: list[str] = Field(default_factory=list)
 
 
+class CrossRepoEdge(BaseModel):
+    """A relationship between classes in different repositories."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_repo: str
+    target_repo: str
+    source_class: str
+    target_class: str
+
+
+class DynamicAnalysisSection(BaseModel):
+    """Dynamic analysis section built from OTel trace evidence."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    service_count: int = 0
+    edge_count: int = 0
+    topology_mermaid: str = ""
+    services: list[str] = Field(default_factory=list)
+
+
 class RiskFinding(BaseModel):
     """An architecture-level risk finding."""
 
@@ -297,6 +319,8 @@ class ArchReport(BaseModel):
     dynamic_scenarios: list[DynamicScenario] = Field(default_factory=list)
     test_coverage: list[ComponentTestCoverage] = Field(default_factory=list)
     diagrams: list[C4Diagram] = Field(default_factory=list)
+    cross_repo_edges: list[CrossRepoEdge] = Field(default_factory=list)
+    dynamic_analysis: DynamicAnalysisSection | None = None
     risk_findings: list[RiskFinding] = Field(default_factory=list)
     domain_model: DomainModelSection | None = None
     market_analysis: MarketAnalysisSection | None = None
@@ -343,10 +367,12 @@ __all__ = [
     "C4Diagram",
     "C4Level",
     "Component",
+    "CrossRepoEdge",
     "ComponentBoundary",
     "CoverageLevel",
     "DomainEntity",
     "DomainModelSection",
+    "DynamicAnalysisSection",
     "DynamicScenario",
     "EntityRelationship",
     "IntegrationPoint",
