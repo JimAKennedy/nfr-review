@@ -919,6 +919,35 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["terraform", "state"],
         ["ISO 25010:Security"],
     ),
+    # --- Package subdivision rules ---
+    "python-package-subdivision": _m(
+        "medium",
+        "maintainability",
+        "Flags Python projects with flat or insufficiently subdivided"
+        " package structures, detecting god packages with excessive"
+        " class counts, single-depth hierarchies, and mixed domain"
+        " concerns within packages.",
+        ["python", "package-structure", "architecture", "domain"],
+        ["ISO 25010:Maintainability"],
+    ),
+    "java-package-subdivision": _m(
+        "medium",
+        "maintainability",
+        "Flags Java projects with flat or insufficiently subdivided"
+        " package hierarchies, detecting god packages, single-depth"
+        " structures, and mixed domain concerns.",
+        ["java", "package-structure", "architecture", "domain"],
+        ["ISO 25010:Maintainability"],
+    ),
+    "go-package-subdivision": _m(
+        "medium",
+        "maintainability",
+        "Flags Go projects with oversized or poorly organized"
+        " packages, detecting god packages and mixed domain concerns"
+        " within Go's flat package convention.",
+        ["go", "package-structure", "architecture", "domain"],
+        ["ISO 25010:Maintainability"],
+    ),
 }
 
 

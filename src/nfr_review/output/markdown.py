@@ -326,10 +326,11 @@ def _methodology_appendix(
             (
                 "**maintainability**",
                 "Containers, K8s, Helm, CI, service-mesh, "
-                "Terraform, build tooling, ADR governance"
-                " *(alias: ops)*",
+                "Terraform, build tooling, ADR governance, "
+                "package subdivision *(alias: ops)*",
                 "Multi-stage Dockerfiles, resource limits, "
-                "network policies, CI gates, current ADRs",
+                "network policies, CI gates, current ADRs, "
+                "well-subdivided packages with no god packages",
             ),
         ],
     )
