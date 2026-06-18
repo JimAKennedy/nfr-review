@@ -331,6 +331,13 @@ def cli() -> None:
     default=None,
     help="Filter findings to rules mapped to a compliance framework.",
 )
+@click.option(
+    "--design-baseline-dir",
+    "design_baseline_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Directory for structural baseline snapshots (save after scan, diff on rerun).",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -347,6 +354,7 @@ def run_cmd(
     otel_traces_path: Path | None = None,
     collector: bool = False,
     framework: str | None = None,
+    design_baseline_dir: Path | None = None,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -513,6 +521,40 @@ def run_cmd(
             warnings=result.warnings,
             evidence=result.evidence,
         )
+
+    if design_baseline_dir is not None:
+        from nfr_review.design_change import (
+            build_baseline as _build_structural,
+        )
+        from nfr_review.design_change import (
+            diff_baselines as _diff_structural,
+        )
+        from nfr_review.design_change import (
+            format_diff_summary,
+        )
+        from nfr_review.design_change import (
+            load_baseline as _load_structural,
+        )
+        from nfr_review.design_change import (
+            save_baseline as _save_structural,
+        )
+
+        bl_file = design_baseline_dir / f"{repo}-structural-baseline.json"
+        new_bl = _build_structural(result.evidence, str(target.resolve()))
+
+        try:
+            prev_bl = _load_structural(bl_file)
+            diffs = _diff_structural(prev_bl, new_bl)
+            if diffs:
+                _ts_echo(format_diff_summary(diffs))
+            else:
+                _ts_echo("No structural changes since last baseline.")
+        except FileNotFoundError:
+            _ts_echo(
+                f"No previous structural baseline found, saving initial: {bl_file}",
+            )
+
+        _save_structural(new_bl, bl_file)
 
     if show_score:
         from nfr_review.scoring import (
