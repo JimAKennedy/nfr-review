@@ -2488,3 +2488,416 @@ class TestBoundedContextSignalsDiff:
         result = apply_thresholds(diffs, {"bounded_context_count": 1.0})
 
         assert "bounded_context" not in result
+
+
+class TestDeploymentTopologyExtractor:
+    """Tests for the DeploymentTopologyExtractor."""
+
+    def test_extracts_helm_charts(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = HelmAnalysisPayload(
+            chart_path="/charts/myapp",
+            chart_name="myapp",
+            chart_values={},
+            rendered_manifests=[],
+            template_files=[],
+            helm_available=True,
+        )
+        ev = Evidence(
+            collector_name="helm",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="helm-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        assert category.category == "deployment_topology"
+        assert "helm:myapp" in category.set_metrics["deployment_services"].items
+        assert category.numeric_metrics["deployment_service_count"].value == 1.0
+
+    def test_extracts_k8s_resource_kinds(self) -> None:
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = K8sManifestSummaryPayload(
+            resource_counts={"Deployment": 3, "Service": 2, "Ingress": 1},
+            has_network_policy=False,
+            files_parsed=5,
+            files_failed=0,
+        )
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="k8s-manifest-summary",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "k8s:Deployment" in services
+        assert "k8s:Service" in services
+        assert "k8s:Ingress" in services
+        assert category.numeric_metrics["deployment_service_count"].value == 3.0
+
+    def test_extracts_terraform_modules(self) -> None:
+        from nfr_review.collectors.payloads.terraform import (
+            TerraformAnalysisPayload,
+            TerraformModuleBlock,
+        )
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = TerraformAnalysisPayload(
+            file_path="infra/main.tf",
+            terraform_blocks=[],
+            provider_blocks=[],
+            resource_blocks=[],
+            data_blocks=[],
+            variable_blocks=[],
+            module_blocks=[
+                TerraformModuleBlock(name="vpc", source="terraform-aws-modules/vpc/aws"),
+                TerraformModuleBlock(name="rds", source="terraform-aws-modules/rds/aws"),
+            ],
+        )
+        ev = Evidence(
+            collector_name="terraform",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="terraform-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "terraform:rds" in services
+        assert "terraform:vpc" in services
+        assert category.numeric_metrics["deployment_service_count"].value == 2.0
+
+    def test_combines_all_sources(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.collectors.payloads.terraform import (
+            TerraformAnalysisPayload,
+            TerraformModuleBlock,
+        )
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        evidence = [
+            Evidence(
+                collector_name="helm",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="helm-analysis",
+                payload=HelmAnalysisPayload(
+                    chart_path="/charts/app",
+                    chart_name="myapp",
+                    chart_values={},
+                    rendered_manifests=[],
+                    template_files=[],
+                    helm_available=True,
+                ),
+            ),
+            Evidence(
+                collector_name="k8s-manifest",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="k8s-manifest-summary",
+                payload=K8sManifestSummaryPayload(
+                    resource_counts={"Deployment": 2},
+                    has_network_policy=False,
+                    files_parsed=2,
+                    files_failed=0,
+                ),
+            ),
+            Evidence(
+                collector_name="terraform",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="terraform-analysis",
+                payload=TerraformAnalysisPayload(
+                    file_path="main.tf",
+                    terraform_blocks=[],
+                    provider_blocks=[],
+                    resource_blocks=[],
+                    data_blocks=[],
+                    variable_blocks=[],
+                    module_blocks=[TerraformModuleBlock(name="vpc")],
+                ),
+            ),
+        ]
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["deployment_service_count"].value == 3.0
+        services = category.set_metrics["deployment_services"].items
+        assert "helm:myapp" in services
+        assert "k8s:Deployment" in services
+        assert "terraform:vpc" in services
+
+    def test_skips_zero_count_k8s_kinds(self) -> None:
+        from nfr_review.collectors.payloads.k8s import K8sManifestSummaryPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = K8sManifestSummaryPayload(
+            resource_counts={"Deployment": 2, "CronJob": 0},
+            has_network_policy=False,
+            files_parsed=1,
+            files_failed=0,
+        )
+        ev = Evidence(
+            collector_name="k8s-manifest",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="k8s-manifest-summary",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        services = category.set_metrics["deployment_services"].items
+        assert "k8s:Deployment" in services
+        assert "k8s:CronJob" not in services
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "deployment_topology"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_helm_without_chart_name_ignored(self) -> None:
+        from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+        from nfr_review.design_change.deployment_topology_signals import (
+            DeploymentTopologyExtractor,
+        )
+
+        payload = HelmAnalysisPayload(
+            chart_path="/charts/unknown",
+            chart_name=None,
+            chart_values={},
+            rendered_manifests=[],
+            template_files=[],
+            helm_available=True,
+        )
+        ev = Evidence(
+            collector_name="helm",
+            collector_version="0.1.0",
+            locator="/test",
+            kind="helm-analysis",
+            payload=payload,
+        )
+
+        extractor = DeploymentTopologyExtractor()
+        category = extractor.extract([ev])
+
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+
+class TestDeploymentTopologySignalsDiff:
+    """S08 demo criterion: diff two baselines where fixture B added a new Helm
+    subchart, a new K8s Ingress, and a new Terraform module — all three fire."""
+
+    def test_new_helm_subchart_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["helm:myapp"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["helm:myapp", "helm:redis"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["helm:redis"]
+        assert sd.removed == []
+
+    def test_new_k8s_ingress_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["k8s:Deployment", "k8s:Service"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={
+                        "deployment_services": [
+                            "k8s:Deployment",
+                            "k8s:Ingress",
+                            "k8s:Service",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["k8s:Ingress"]
+
+    def test_new_terraform_module_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["terraform:rds"]},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    sets={"deployment_services": ["terraform:rds", "terraform:vpc"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "deployment_topology" in diffs
+        sd = [
+            d
+            for d in diffs["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ][0]
+        assert sd.added == ["terraform:vpc"]
+
+    def test_full_s08_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    numeric={"deployment_service_count": 4.0},
+                    sets={
+                        "deployment_services": [
+                            "helm:myapp",
+                            "k8s:Deployment",
+                            "k8s:Service",
+                            "terraform:rds",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology",
+                    numeric={"deployment_service_count": 7.0},
+                    sets={
+                        "deployment_services": [
+                            "helm:myapp",
+                            "helm:redis",
+                            "k8s:Deployment",
+                            "k8s:Ingress",
+                            "k8s:Service",
+                            "terraform:rds",
+                            "terraform:vpc",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        assert "deployment_topology" in result
+
+        # Count delta: 4 -> 7
+        nd = [
+            d
+            for d in result["deployment_topology"].numeric_deltas
+            if d.name == "deployment_service_count"
+        ]
+        assert len(nd) == 1
+        assert nd[0].delta == 3.0
+
+        # Set delta: helm:redis + k8s:Ingress + terraform:vpc added
+        sd = [
+            d
+            for d in result["deployment_topology"].set_deltas
+            if d.name == "deployment_services"
+        ]
+        assert len(sd) == 1
+        assert sorted(sd[0].added) == ["helm:redis", "k8s:Ingress", "terraform:vpc"]
+        assert sd[0].removed == []
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology", numeric={"deployment_service_count": 5.0}
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "deployment_topology": _make_category(
+                    "deployment_topology", numeric={"deployment_service_count": 5.0}
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"deployment_service_count": 1.0})
+
+        assert "deployment_topology" not in result
