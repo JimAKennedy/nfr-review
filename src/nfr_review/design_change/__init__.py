@@ -33,6 +33,9 @@ from nfr_review.design_change.snapshot import (
     load_baseline,
     save_baseline,
 )
+from nfr_review.design_change.triggers import (
+    findings_from_diffs,
+)
 
 __all__ = [
     "CategoryDiff",
@@ -48,6 +51,7 @@ __all__ = [
     "diff_baselines",
     "extract_all_metrics",
     "extractor_registry",
+    "findings_from_diffs",
     "format_diff_summary",
     "load_baseline",
     "save_baseline",

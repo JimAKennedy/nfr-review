@@ -3312,3 +3312,264 @@ class TestSchemaMigrationSignalsDiff:
         result = apply_thresholds(diffs, {"schema_migration_count": 1.0})
 
         assert "schema_migration" not in result
+
+
+# ---------------------------------------------------------------------------
+# S10: Human Review Trigger Integration
+# ---------------------------------------------------------------------------
+
+
+class TestFindingsFromDiffs:
+    """S10: findings_from_diffs converts CategoryDiff results into Finding objects
+    with design_change:* pattern_tag trigger reasons."""
+
+    def test_numeric_delta_produces_finding(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs, "/baselines/test.json")
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:class_count"
+        assert f.rag == "amber"
+        assert f.confidence == 1.0
+        assert f.collector_name == "design-change"
+        assert "class_count" in f.summary
+        assert "10" in f.summary and "15" in f.summary
+
+    def test_set_delta_produces_finding(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[
+                    SetDelta(
+                        name="api_endpoints",
+                        added=["POST /users", "DELETE /users/{id}"],
+                        removed=["GET /legacy"],
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:api_endpoints"
+        assert "POST /users" in f.summary
+        assert "GET /legacy" in f.summary
+
+    def test_multiple_categories_produce_sorted_findings(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    )
+                ],
+            ),
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[SetDelta(name="api_endpoints", added=["POST /new"], removed=[])],
+            ),
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 2
+        assert findings[0].pattern_tag == "design_change:api_endpoints"
+        assert findings[1].pattern_tag == "design_change:class_count"
+
+    def test_empty_diffs_produce_no_findings(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        findings = findings_from_diffs({})
+        assert findings == []
+
+    def test_severity_scales_with_pct_change(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=100.0,
+                        new_value=110.0,
+                        delta=10.0,
+                        pct_change=10.0,
+                    ),
+                    NumericDelta(
+                        name="dormant_class_count",
+                        old_value=10.0,
+                        new_value=15.0,
+                        delta=5.0,
+                        pct_change=50.0,
+                    ),
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        by_tag = {f.pattern_tag: f for f in findings}
+        assert by_tag["design_change:class_count"].severity == "low"
+        assert by_tag["design_change:dormant_class_count"].severity == "high"
+
+    def test_severity_scales_with_set_size(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "api_surface": CategoryDiff(
+                category="api_surface",
+                set_deltas=[
+                    SetDelta(name="api_endpoints", added=["a"], removed=[]),
+                    SetDelta(
+                        name="jdepend_cycles",
+                        added=["c1", "c2", "c3", "c4", "c5"],
+                        removed=[],
+                    ),
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        by_tag = {f.pattern_tag: f for f in findings}
+        assert by_tag["design_change:api_endpoints"].severity == "low"
+        assert by_tag["design_change:jdepend_cycles"].severity == "high"
+
+    def test_new_metric_from_zero_base(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "bounded_context": CategoryDiff(
+                category="bounded_context",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="bounded_context_count",
+                        old_value=0.0,
+                        new_value=3.0,
+                        delta=3.0,
+                        pct_change=None,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs)
+
+        assert len(findings) == 1
+        f = findings[0]
+        assert f.pattern_tag == "design_change:bounded_context_count"
+        assert f.severity == "high"
+        assert "(new)" in f.summary
+
+    def test_evidence_locator_set_from_baseline_path(self) -> None:
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        diffs = {
+            "structure": CategoryDiff(
+                category="structure",
+                numeric_deltas=[
+                    NumericDelta(
+                        name="class_count",
+                        old_value=10.0,
+                        new_value=20.0,
+                        delta=10.0,
+                        pct_change=100.0,
+                    )
+                ],
+            )
+        }
+
+        findings = findings_from_diffs(diffs, "/my/baselines/repo.json")
+
+        assert findings[0].evidence_locator == "/my/baselines/repo.json"
+
+
+class TestS10FullScenario:
+    """S10 demo criterion: Full review run with baseline produces human_review
+    findings where each has a trigger_reason like design_change:class_count_delta
+    or design_change:new_bounded_context."""
+
+    def test_multi_signal_scenario_produces_trigger_findings(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+        from nfr_review.design_change.triggers import findings_from_diffs
+
+        prev = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 20.0, "dormant_class_count": 2.0},
+                ),
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 2.0},
+                    sets={"bounded_contexts": ["orders", "users"]},
+                ),
+                "integration": _make_category(
+                    "integration",
+                    sets={"integration_styles": ["http:direct"]},
+                ),
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "structure": _make_category(
+                    "structure",
+                    numeric={"class_count": 30.0, "dormant_class_count": 8.0},
+                ),
+                "bounded_context": _make_category(
+                    "bounded_context",
+                    numeric={"bounded_context_count": 3.0},
+                    sets={"bounded_contexts": ["orders", "users", "payments"]},
+                ),
+                "integration": _make_category(
+                    "integration",
+                    sets={"integration_styles": ["http:direct", "messaging:kafka"]},
+                ),
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        diffs = apply_thresholds(diffs, {"class_count": 20.0})
+        findings = findings_from_diffs(diffs, "/baselines/test.json")
+
+        tags = {f.pattern_tag for f in findings}
+        assert "design_change:class_count" in tags
+        assert "design_change:dormant_class_count" in tags
+        assert "design_change:bounded_context_count" in tags
+        assert "design_change:bounded_contexts" in tags
+        assert "design_change:integration_styles" in tags
+
+        for f in findings:
+            assert f.rag == "amber"
+            assert f.confidence == 1.0
+            assert f.rule_id == "design-change-trigger"
+            assert f.collector_name == "design-change"
