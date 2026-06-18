@@ -1083,3 +1083,318 @@ class TestDependencyCoverageSignalsDiff:
         result = apply_thresholds(diffs, {"dependency_count": 30.0, "test_coverage": 5.0})
 
         assert result == {}
+
+
+class TestAdrMetricsExtractor:
+    """Tests for the AdrMetricsExtractor."""
+
+    def test_extracts_adr_count_and_titles(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0001-use-spring-boot.md",
+                    title="Use Spring Boot",
+                    status="accepted",
+                ),
+            ),
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0002-use-postgres.md",
+                    title="Use PostgreSQL",
+                    status="accepted",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics["adr_count"].value == 2.0
+        assert sorted(category.set_metrics["adr_titles"].items) == [
+            "Use PostgreSQL",
+            "Use Spring Boot",
+        ]
+        assert category.set_metrics["superseded_adrs"].items == []
+
+    def test_detects_superseded_by_status(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0001-use-mysql.md",
+                    title="Use MySQL",
+                    status="superseded",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Use MySQL"]
+
+    def test_detects_superseded_by_field(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0003-use-redis.md",
+                    title="Use Redis",
+                    status="accepted",
+                    superseded_by="0005-use-memcached.md",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Use Redis"]
+
+    def test_falls_back_to_file_path_when_no_title(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0004-unnamed.md",
+                    title=None,
+                    status="accepted",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.numeric_metrics["adr_count"].value == 1.0
+        assert category.set_metrics["adr_titles"].items == ["docs/adr/0004-unnamed.md"]
+
+    def test_empty_evidence_returns_empty_category(self) -> None:
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract([])
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_ignores_non_adr_evidence(self) -> None:
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="java-ast",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="java-ast-file",
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.category == "adrs"
+        assert category.numeric_metrics == {}
+        assert category.set_metrics == {}
+
+    def test_deprecated_status_treated_as_superseded(self) -> None:
+        from nfr_review.collectors.payloads.adr import AdrDocumentPayload
+        from nfr_review.design_change.adr_signals import AdrMetricsExtractor
+
+        evidence = [
+            Evidence(
+                collector_name="adr",
+                collector_version="0.1.0",
+                locator="/test",
+                kind="adr-document",
+                payload=AdrDocumentPayload(
+                    file_path="docs/adr/0005.md",
+                    title="Old Pattern",
+                    status="Deprecated",
+                ),
+            ),
+        ]
+
+        extractor = AdrMetricsExtractor()
+        category = extractor.extract(evidence)
+
+        assert category.set_metrics["superseded_adrs"].items == ["Old Pattern"]
+
+
+class TestAdrSignalsDiff:
+    """S05 demo criterion: diff two baselines where fixture B has 2 new ADRs
+    and 1 superseded — signal fires with ADR titles in finding."""
+
+    def test_new_adrs_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 3.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                        ]
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 5.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                            "Event Sourcing for Audit",
+                            "Circuit Breaker Pattern",
+                        ]
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "adrs" in diffs
+        nd = [d for d in diffs["adrs"].numeric_deltas if d.name == "adr_count"][0]
+        assert nd.delta == 2.0
+
+        sd = [d for d in diffs["adrs"].set_deltas if d.name == "adr_titles"][0]
+        assert sorted(sd.added) == ["Circuit Breaker Pattern", "Event Sourcing for Audit"]
+        assert sd.removed == []
+
+    def test_superseded_adr_detected(self) -> None:
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    sets={"superseded_adrs": []},
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    sets={"superseded_adrs": ["REST over gRPC"]},
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+
+        assert "adrs" in diffs
+        sd = [d for d in diffs["adrs"].set_deltas if d.name == "superseded_adrs"][0]
+        assert sd.added == ["REST over gRPC"]
+
+    def test_full_s05_scenario(self) -> None:
+        from nfr_review.config import DEFAULT_DESIGN_CHANGE_THRESHOLDS
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 3.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                        ],
+                        "superseded_adrs": [],
+                    },
+                )
+            }
+        )
+        curr = _make_baseline(
+            metrics={
+                "adrs": _make_category(
+                    "adrs",
+                    numeric={"adr_count": 5.0},
+                    sets={
+                        "adr_titles": [
+                            "Use Spring Boot",
+                            "Use PostgreSQL",
+                            "REST over gRPC",
+                            "Event Sourcing for Audit",
+                            "Circuit Breaker Pattern",
+                        ],
+                        "superseded_adrs": ["REST over gRPC"],
+                    },
+                )
+            }
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, DEFAULT_DESIGN_CHANGE_THRESHOLDS)
+
+        # adr_count: 3 -> 5 = +66.7%, threshold is 1.0 (set threshold = min items)
+        assert "adrs" in result
+
+        # New ADR titles visible
+        title_deltas = [d for d in result["adrs"].set_deltas if d.name == "adr_titles"]
+        assert len(title_deltas) == 1
+        assert sorted(title_deltas[0].added) == [
+            "Circuit Breaker Pattern",
+            "Event Sourcing for Audit",
+        ]
+
+        # Superseded ADR visible
+        superseded_deltas = [
+            d for d in result["adrs"].set_deltas if d.name == "superseded_adrs"
+        ]
+        assert len(superseded_deltas) == 1
+        assert superseded_deltas[0].added == ["REST over gRPC"]
+
+    def test_below_threshold_filtered(self) -> None:
+        from nfr_review.design_change.diff import apply_thresholds
+
+        prev = _make_baseline(
+            metrics={"adrs": _make_category("adrs", numeric={"adr_count": 10.0})}
+        )
+        curr = _make_baseline(
+            metrics={"adrs": _make_category("adrs", numeric={"adr_count": 10.0})}
+        )
+
+        diffs = diff_baselines(prev, curr)
+        result = apply_thresholds(diffs, {"adr_count": 1.0})
+
+        assert "adrs" not in result
