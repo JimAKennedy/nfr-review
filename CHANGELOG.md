@@ -7,18 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-19
+
 ### Added
 
+- **Finding origin classification** — findings are automatically classified as
+  `first_party` or `dependency` based on file path matching against configurable
+  `dependency_paths` patterns (vendor dirs, `.min.js`, bundled data, etc.).
+  New `--origin {first_party,dependency}` flag on `run` and `report` commands
+  filters output to a single origin.
+- **Origin-partitioned reports** — unfiltered reports now show first-party
+  findings in the main sections and dependency findings in a separate
+  "Dependency Findings" appendix. Maturity score is computed from first-party
+  findings only, giving an accurate picture of the code you control.
+- **CI workflow origin filtering** — nightly and PR workflows default to
+  `--origin first_party`, focusing CI feedback on actionable issues.
+- **Design change detection** — `nfr-review design-change` compares baseline
+  and current snapshots to surface structural drift, dependency changes, ADR
+  lifecycle events, API surface mutations, deployment topology changes, and
+  schema migration signals. Includes `snapshot` and `diff` subcommands.
+- **Structurizr DSL output** — `report` command generates a Structurizr DSL
+  workspace file (`*.dsl`) describing the system's software architecture,
+  derived from collected evidence.
+- **Experimental architecture report** — `nfr-review report --experimental`
+  produces an extended report with class diagrams, cross-repo dependency
+  views, and dynamic analysis integration.
+- **Cross-repo dependency detection** — manifest-based dependency resolution
+  across multiple repositories with repo-to-repo dependency view in
+  architecture reports.
 - **`--framework` compliance filter** — `nfr-review run` and `report` accept
   `--framework {soc2,iso27001,pci-dss,nist-800-53}` to restrict findings to
   rules mapped to the specified compliance framework. Unmapped rules are
   excluded from all output formats. Report header shows the active filter.
 - **External rule plugin API** — third-party packages can register custom rules
   and hygiene rules via `nfr_review.rules` and `nfr_review.hygiene_rules`
-  entry-point groups. See `CONTRIBUTING.md` for authoring guide.
-- **Compliance mapping module** — `src/nfr_review/compliance_mapping.py`
-  provides structured rule-to-framework mapping data extracted from
-  `docs/continuous-compliance.md`.
+  entry-point groups. See `docs/custom-rules.md` for authoring guide.
+- **Compliance mapping module** — structured rule-to-framework mapping data
+  extracted from `docs/continuous-compliance.md`.
+- **Custom rules documentation** — `docs/custom-rules.md` with end-to-end
+  guide for authoring and distributing third-party rules.
+- **Structurizr DSL documentation** — `docs/structurizr-dsl.md` with worked
+  examples and rendering guide.
+- **External dependency catalog** — `docs/dependencies.md` for adopters to
+  understand runtime and optional dependencies.
 
 ### Changed
 
@@ -28,6 +59,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a summary line is printed across all output paths (not just verbose mode).
 - **`all` command LLM cost warning** — the `all` command now prints a note
   when LLM-based features are active, warning about potential cost and time.
+- **BasePayload dict-compat shim** — made permanent API; all evidence payloads
+  support dict-style access alongside typed attributes.
+- **Codebase refactoring** — BaseASTCollector with pkgutil auto-discovery,
+  centralised `make_green_finding` helper, decomposed report pipeline into
+  focused stages, extracted shared arch helpers and strategy modules,
+  shared `_BaseSdkClient` with retry/timeout for LLM backends.
+
+### Fixed
+
+- Regression nightly workflow now verifies repo checkout SHA on cache restore.
+- Class diagrams re-enabled in architecture reports with updated test
+  assertions.
 
 ## [0.2.0] - 2026-06-12
 
