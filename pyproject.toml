@@ -137,6 +137,8 @@ module = [
     "openai.*",
     "opentelemetry.*",
     "aiohttp.*",
+    "graphifyy.*",
+    "networkx.*",
 ]
 ignore_missing_imports = true
 
