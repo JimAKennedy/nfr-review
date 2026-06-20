@@ -30,6 +30,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Graphify
+        run: pip install "graphifyy>=0.8"
+
+      - name: Run Graphify extraction
+        run: |
+          graphify update . --no-cluster
+          graphify cluster-only . --no-viz --no-label
+
       - name: Run NFR Review
         id: nfr
         uses: ./
@@ -57,6 +65,26 @@ jobs:
           path: ${{ steps.nfr.outputs.sarif-path }}
           retention-days: 365
 
+      - name: Count structural findings
+        id: structure
+        if: always() && steps.nfr.outputs.jsonl-path != ''
+        run: |
+          JSONL_PATH="${{ steps.nfr.outputs.jsonl-path }}"
+          if [ -f "$JSONL_PATH" ]; then
+            STRUCT_COUNT=$(python3 -c "
+          import json
+          from pathlib import Path
+          count = sum(1 for line in Path('${JSONL_PATH}').read_text().splitlines()
+                      if line.strip()
+                      and json.loads(line).get('record_type') == 'finding'
+                      and json.loads(line).get('rule_id', '').startswith('structure-'))
+          print(count)
+          ")
+            echo "count=${STRUCT_COUNT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=0" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Summary
         if: always()
         run: |
@@ -68,6 +96,7 @@ jobs:
           echo "| Red | ${{ steps.nfr.outputs.red-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Amber | ${{ steps.nfr.outputs.amber-count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Green | ${{ steps.nfr.outputs.green-count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Structural | ${{ steps.structure.outputs.count || '0' }} |" >> $GITHUB_STEP_SUMMARY
 
   # ── Regression: snapshot tests against public corpus repos ───────────────
   regression:
@@ -107,7 +136,7 @@ jobs:
           version: 'latest'
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,graphify]"
 
       - name: Run regression tests
         run: pytest -n auto -m regression --timeout=600 -v --junitxml=regression-results.xml
