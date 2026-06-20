@@ -167,12 +167,12 @@ class FieldRule(Generic[P]):
                     rule_id=self.id,
                     ev=relevant[0],
                     pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
                     hit=Hit(
                         rag="green",
                         summary=self.all_clear_summary,
                         recommendation=self.all_clear_recommendation,
                         locator="project-wide",
-                        confidence=0.9,
                     ),
                 )
             )
