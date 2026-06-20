@@ -55,6 +55,7 @@ def load_manifest() -> list[dict]:
 
 def _ensure_checkout(clone_dir: Path, commit_sha: str, url: str) -> None:
     """Verify *clone_dir* is at *commit_sha*, re-cloning if the SHA is unreachable."""
+    name = clone_dir.name
     head = subprocess.run(
         ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
         capture_output=True,
@@ -62,8 +63,16 @@ def _ensure_checkout(clone_dir: Path, commit_sha: str, url: str) -> None:
         timeout=30,
         check=False,
     )
-    if head.returncode == 0 and head.stdout.strip() == commit_sha:
+    current = head.stdout.strip() if head.returncode == 0 else "<unknown>"
+    if current == commit_sha:
+        print(f"[checkout] {name}: HEAD={current[:12]} matches pin", flush=True)
+        _reset_working_tree(clone_dir, name)
         return
+
+    print(
+        f"[checkout] {name}: HEAD={current[:12]} != pin={commit_sha[:12]}, fixing",
+        flush=True,
+    )
 
     fetch = subprocess.run(
         ["git", "-C", str(clone_dir), "fetch", "origin", commit_sha],
@@ -81,8 +90,10 @@ def _ensure_checkout(clone_dir: Path, commit_sha: str, url: str) -> None:
             check=False,
         )
         if checkout.returncode == 0:
+            _verify_head(clone_dir, commit_sha, name)
             return
 
+    print(f"[checkout] {name}: fetch/checkout failed, re-cloning blobless", flush=True)
     shutil.rmtree(clone_dir, ignore_errors=True)
     subprocess.run(
         [
@@ -104,6 +115,54 @@ def _ensure_checkout(clone_dir: Path, commit_sha: str, url: str) -> None:
         timeout=60,
         check=True,
     )
+    _verify_head(clone_dir, commit_sha, name)
+
+
+def _verify_head(clone_dir: Path, expected_sha: str, name: str) -> None:
+    """Hard-fail if HEAD doesn't match the expected SHA after checkout."""
+    actual = subprocess.run(
+        ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    ).stdout.strip()
+    if actual != expected_sha:
+        raise RuntimeError(
+            f"[checkout] {name}: HEAD={actual} after checkout, expected {expected_sha}"
+        )
+    _reset_working_tree(clone_dir, name)
+
+
+def _reset_working_tree(clone_dir: Path, name: str) -> None:
+    """Reset the working tree to HEAD, discarding any stale modifications."""
+    status = subprocess.run(
+        ["git", "-C", str(clone_dir), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if status.returncode == 0 and status.stdout.strip():
+        dirty_count = len(status.stdout.strip().splitlines())
+        print(
+            f"[checkout] {name}: working tree dirty ({dirty_count} files), resetting",
+            flush=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(clone_dir), "checkout", "--", "."],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "-C", str(clone_dir), "clean", "-fd"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
 
 
 def clone_repo(

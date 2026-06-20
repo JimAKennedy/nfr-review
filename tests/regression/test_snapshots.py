@@ -21,6 +21,30 @@ from tests.regression.conftest import (
     normalize_findings,
 )
 
+
+def _pair_field_diffs(
+    added: list[dict], removed: list[dict]
+) -> list[tuple[dict, dict, list[tuple[str, object, object]]]]:
+    """Pair added/removed findings by (rule_id, summary) and return field diffs."""
+    results = []
+    used: set[int] = set()
+    for a in added:
+        for i, r in enumerate(removed):
+            if i in used:
+                continue
+            if a.get("rule_id") == r.get("rule_id") and a.get("summary") == r.get("summary"):
+                diffs = [
+                    (k, a.get(k), r.get(k))
+                    for k in sorted(set(a) | set(r))
+                    if a.get(k) != r.get(k)
+                ]
+                if diffs:
+                    results.append((a, r, diffs))
+                    used.add(i)
+                    break
+    return results
+
+
 _MANIFEST = load_manifest()
 _REPO_NAMES = [entry["name"] for entry in _MANIFEST]
 _REPO_MAP = {entry["name"]: entry for entry in _MANIFEST}
@@ -118,5 +142,14 @@ def test_regression_snapshot(
             parts.append(f"  -{len(removed_stable)} removed finding(s):")
             for f in removed_stable[:5]:
                 parts.append(f"    - {f.get('rule_id')}: {f.get('summary', '')[:80]}")
+
+        paired = _pair_field_diffs(added_stable, removed_stable)
+        if paired:
+            parts.append("  Field-level diffs (first 3):")
+            for a, _r, diffs in paired[:3]:
+                parts.append(f"    {a.get('rule_id')}/{a.get('summary', '')[:40]}:")
+                for k, av, rv in diffs:
+                    parts.append(f"      {k}: {rv!r} -> {av!r}")
+
         parts.append("Run with --update-snapshots to accept the new baseline.")
         pytest.fail("\n".join(parts))
