@@ -201,6 +201,16 @@ class DesignChangeConfig(BaseModel):
     )
 
 
+class GraphifyConfig(BaseModel):
+    """Configuration for Graphify structural analysis integration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    query_enabled: bool = True
+    mcp_enabled: bool = False
+    graph_path: str | None = None
+
+
 class Config(BaseModel):
     """Validated nfr-review.yaml configuration.
 
@@ -221,6 +231,7 @@ class Config(BaseModel):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)
     design_change: DesignChangeConfig = Field(default_factory=DesignChangeConfig)
+    graphify: GraphifyConfig = Field(default_factory=GraphifyConfig)
     nfr_targets: NfrTargetsConfig = Field(default_factory=NfrTargetsConfig)
     dependency_paths: list[str] = Field(
         default_factory=lambda: list(DEFAULT_DEPENDENCY_PATHS),

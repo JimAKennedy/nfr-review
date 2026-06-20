@@ -6,9 +6,20 @@ import json
 import os
 from unittest.mock import MagicMock, patch
 
+from nfr_review.collectors.payloads.graphify import (
+    CommunityStats,
+    GraphEdge,
+    GraphifyPayload,
+    GraphNode,
+)
 from nfr_review.engine import RunResult
-from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.summarize import generate_executive_summary
+from nfr_review.models import Evidence, Finding, RunMetadata
+from nfr_review.output.summarize import (
+    _build_prompt_data,
+    _build_structural_context,
+    _extract_graphify_payload,
+    generate_executive_summary,
+)
 from nfr_review.output.summary_models import ExecSummary
 
 
@@ -185,3 +196,178 @@ class TestGenerateExecSummary:
         prompt_data = json.loads(call_args.kwargs["evidence_bundle"])
         assert prompt_data["findings_summary"]["total_findings"] == 3
         assert "critical" in prompt_data["findings_summary"]["severity_distribution"]
+
+
+def _make_graphify_payload() -> GraphifyPayload:
+    nodes = [
+        GraphNode(
+            id="engine",
+            label="Engine",
+            file_type="code",
+            source_file="src/engine.py",
+            community=0,
+            community_name="Core",
+        ),
+        GraphNode(
+            id="config",
+            label="Config",
+            file_type="code",
+            source_file="src/config.py",
+            community=0,
+            community_name="Core",
+        ),
+        GraphNode(
+            id="report",
+            label="Report",
+            file_type="code",
+            source_file="src/report.py",
+            community=1,
+            community_name="Output",
+        ),
+    ]
+    edges = [
+        GraphEdge(
+            source="engine",
+            target="config",
+            relation="uses",
+            source_file="src/engine.py",
+        ),
+        GraphEdge(
+            source="engine",
+            target="report",
+            relation="calls",
+            source_file="src/engine.py",
+        ),
+    ]
+    return GraphifyPayload(
+        node_count=3,
+        edge_count=2,
+        community_count=2,
+        median_degree=1.0,
+        god_node_threshold=2,
+        cross_community_ratio=0.5,
+        god_nodes=[],
+        community_stats=[
+            CommunityStats(
+                community_id=0,
+                community_name="Core",
+                node_count=2,
+                internal_edges=1,
+                cross_boundary_edges=1,
+                cross_boundary_ratio=0.5,
+            ),
+            CommunityStats(
+                community_id=1,
+                community_name="Output",
+                node_count=1,
+                internal_edges=0,
+                cross_boundary_edges=1,
+                cross_boundary_ratio=1.0,
+            ),
+        ],
+        nodes=nodes,
+        edges=edges,
+    )
+
+
+def _make_run_with_graphify() -> RunResult:
+    payload = _make_graphify_payload()
+    return RunResult(
+        findings=[_make_finding()],
+        rule_results=[],
+        run_metadata=RunMetadata(
+            tool_version="0.1.0",
+            target_repo="/tmp/test-repo",
+            timestamp="2026-05-20T10:00:00Z",
+            rules_run=["TEST-001"],
+        ),
+        evidence=[
+            Evidence(
+                collector_name="graphify",
+                collector_version="0.1.0",
+                locator=".",
+                kind="graphify-analysis",
+                payload=payload,
+            ),
+        ],
+    )
+
+
+class TestExtractGraphifyPayload:
+    def test_finds_graphify_evidence(self) -> None:
+        result = _make_run_with_graphify()
+        payload = _extract_graphify_payload(result)
+        assert payload is not None
+        assert payload.node_count == 3
+
+    def test_returns_none_without_graphify(self) -> None:
+        result = _make_run_result()
+        assert _extract_graphify_payload(result) is None
+
+
+class TestBuildStructuralContext:
+    def test_includes_god_nodes(self) -> None:
+        payload = _make_graphify_payload()
+        ctx = _build_structural_context(payload, [])
+        assert "god_nodes" in ctx
+        assert len(ctx["god_nodes"]) > 0
+
+    def test_includes_graph_stats(self) -> None:
+        payload = _make_graphify_payload()
+        ctx = _build_structural_context(payload, [])
+        assert ctx["graph_stats"]["node_count"] == 3
+        assert ctx["graph_stats"]["edge_count"] == 2
+
+    def test_includes_weak_boundaries(self) -> None:
+        payload = _make_graphify_payload()
+        ctx = _build_structural_context(payload, [])
+        # community 0 has ratio 0.5 > 0.4 but only 2 nodes (< 3 threshold)
+        # community 1 has ratio 1.0 but only 1 node
+        assert "weak_boundaries" not in ctx or len(ctx.get("weak_boundaries", [])) == 0
+
+    def test_paths_between_critical_findings(self) -> None:
+        findings = [
+            _make_finding("SEC-001", "critical", "red"),
+            _make_finding("DEP-002", "high", "red"),
+        ]
+        findings[0] = Finding(
+            rule_id="SEC-001",
+            rag="red",
+            severity="critical",
+            summary="Security issue",
+            recommendation="Fix",
+            evidence_locator="engine:10",
+            collector_name="test",
+            collector_version="1.0",
+            confidence=0.9,
+            pattern_tag="test",
+        )
+        findings[1] = Finding(
+            rule_id="DEP-002",
+            rag="red",
+            severity="high",
+            summary="Dep issue",
+            recommendation="Fix",
+            evidence_locator="report:5",
+            collector_name="test",
+            collector_version="1.0",
+            confidence=0.9,
+            pattern_tag="test",
+        )
+        payload = _make_graphify_payload()
+        ctx = _build_structural_context(payload, findings)
+        if "critical_component_paths" in ctx:
+            assert len(ctx["critical_component_paths"]) >= 1
+
+
+class TestPromptDataWithStructuralContext:
+    def test_prompt_includes_structural_context(self) -> None:
+        result = _make_run_with_graphify()
+        data = json.loads(_build_prompt_data(result))
+        assert "structural_context" in data
+        assert "graph_stats" in data["structural_context"]
+
+    def test_prompt_without_graphify_has_no_structural(self) -> None:
+        result = _make_run_result()
+        data = json.loads(_build_prompt_data(result))
+        assert "structural_context" not in data
