@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -52,8 +53,8 @@ def load_manifest() -> list[dict]:
     return data["repos"]
 
 
-def _ensure_checkout(clone_dir: Path, commit_sha: str) -> None:
-    """Verify *clone_dir* is at *commit_sha*, fetching + checking out if needed."""
+def _ensure_checkout(clone_dir: Path, commit_sha: str, url: str) -> None:
+    """Verify *clone_dir* is at *commit_sha*, re-cloning if the SHA is unreachable."""
     head = subprocess.run(
         ["git", "-C", str(clone_dir), "rev-parse", "HEAD"],
         capture_output=True,
@@ -63,19 +64,45 @@ def _ensure_checkout(clone_dir: Path, commit_sha: str) -> None:
     )
     if head.returncode == 0 and head.stdout.strip() == commit_sha:
         return
-    subprocess.run(
-        ["git", "-C", str(clone_dir), "fetch", "--depth", "1", "origin", commit_sha],
+
+    fetch = subprocess.run(
+        ["git", "-C", str(clone_dir), "fetch", "origin", commit_sha],
         capture_output=True,
         text=True,
         timeout=600,
         check=False,
+    )
+    if fetch.returncode == 0:
+        checkout = subprocess.run(
+            ["git", "-C", str(clone_dir), "checkout", commit_sha],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if checkout.returncode == 0:
+            return
+
+    shutil.rmtree(clone_dir, ignore_errors=True)
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--filter=blob:none",
+            url,
+            str(clone_dir),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        check=True,
     )
     subprocess.run(
         ["git", "-C", str(clone_dir), "checkout", commit_sha],
         capture_output=True,
         text=True,
         timeout=60,
-        check=False,
+        check=True,
     )
 
 
@@ -88,19 +115,25 @@ def clone_repo(
     clone_dir = repos_dir / name
     if clone_dir.exists():
         if commit_sha is not None:
-            _ensure_checkout(clone_dir, commit_sha)
+            _ensure_checkout(clone_dir, commit_sha, url)
         return clone_dir
 
     lock = FileLock(repos_dir / f".{name}.lock", timeout=900)
     with lock:
         if clone_dir.exists():
             if commit_sha is not None:
-                _ensure_checkout(clone_dir, commit_sha)
+                _ensure_checkout(clone_dir, commit_sha, url)
             return clone_dir
 
         try:
             subprocess.run(
-                ["git", "clone", "--depth", "1", url, str(clone_dir)],
+                [
+                    "git",
+                    "clone",
+                    "--filter=blob:none",
+                    url,
+                    str(clone_dir),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=600,
@@ -112,7 +145,7 @@ def clone_repo(
             pytest.skip(f"clone failed: {exc.stderr.strip()}")
 
         if commit_sha is not None:
-            _ensure_checkout(clone_dir, commit_sha)
+            _ensure_checkout(clone_dir, commit_sha, url)
 
     return clone_dir
 
