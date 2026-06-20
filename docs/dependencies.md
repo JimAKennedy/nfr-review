@@ -139,7 +139,8 @@ Only needed for the experimental production monitor feature.
 
 Requires the `graphify` CLI binary (installed automatically with `graphifyy`).
 When the binary is not available, the GraphifyCollector skips gracefully and
-structural rules produce no findings.
+structural rules produce no findings. See the
+[Graphify usage guide](graphify-guide.md) for a complete walkthrough.
 
 ### `[full]` — Convenience aggregate
 

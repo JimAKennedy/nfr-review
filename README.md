@@ -178,7 +178,7 @@ These are **not** Python packages — they are standalone binaries that some col
 | [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
 | [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install "nfr-review[graphify]"` (provides both the `graphify` CLI and `networkx`) |
 
-Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully.
+Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
 
 ### Optional: LLM features
 
@@ -203,7 +203,7 @@ pip install nfr-review
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
 | `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
 | `[monitor]` | [aiohttp](https://docs.aiohttp.org/) for the `nfr-review monitor` production interaction server. |
-| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). |
+| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [usage guide](docs/graphify-guide.md). |
 | `[full]` | All of the above (excluding `[dev]`). |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
