@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+
 from nfr_review.collectors.payloads.graphify import (
     CommunityStats,
     GraphEdge,
