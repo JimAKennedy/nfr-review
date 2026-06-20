@@ -47,6 +47,9 @@ package-lock.json
 reports/
 docs/research/
 
+# ── Graphify output (generated, 20+ MB) ──
+graphify-out/
+
 # ── Vendored skills (installed via skills-lock.json, not tracked) ──
 .agents/skills/docx/
 .agents/skills/pdf/

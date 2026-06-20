@@ -104,6 +104,7 @@ DEFAULT_CATEGORY_WEIGHTS: dict[str, float] = {
     "performance": 1.0,
     "maintainability": 1.0,
     "OTEL": 1.0,
+    "structure": 1.0,
 }
 
 DEFAULT_SEVERITY_DEDUCTIONS: dict[str, int] = {

@@ -385,6 +385,14 @@ def _methodology_appendix(
                 "network policies, CI gates, current ADRs, "
                 "well-subdivided packages with no god packages",
             ),
+            (
+                "**structure**",
+                "Graph topology, community boundaries, "
+                "coupling hotspots, blast radius "
+                "*(requires graphify)*",
+                "No god nodes, strong community boundaries, "
+                "low cross-module coupling, contained blast radius",
+            ),
         ],
     )
 
