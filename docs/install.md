@@ -453,7 +453,7 @@ pip install nfr-review
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
 | `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [Graphify usage guide](graphify-guide.md). |
 | `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor` + `graphify`. |
-| `[dev]` | pytest, ruff, pytest-cov, and test dependencies for development and CI. |
+| `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, anthropic, and build — everything needed for development and CI. |
 
 Install extras individually or combine them:
 
@@ -524,6 +524,21 @@ nfr-review issues sync findings.jsonl --repo owner/repo
 
 # Run architecture + NFR reports across multiple repos
 nfr-review all /path/to/repo1 /path/to/repo2
+
+# Create an interaction baseline from OTel traces
+nfr-review baseline create traces.ndjson --output baseline.json
+
+# Diff current traces against a baseline
+nfr-review baseline diff baseline.json --traces new-traces.ndjson
+
+# List all registered rules
+nfr-review list-rules
+
+# Get detailed info about a specific rule
+nfr-review explain ci-test-stage-missing
+
+# Print version
+nfr-review version
 ```
 
 > **Dynamic analysis:** The `--otel-traces` and `--collector` flags enable

@@ -67,10 +67,10 @@ cd /path/to/target-repo
 graphify update . --no-cluster
 
 # 2. Run nfr-review — it auto-detects graphify-out/graph.json
-nfr-review scan .
+nfr-review run .
 
-# 3. View the report
-open nfr-report.md
+# 3. View the findings (CSV + JSONL output by default)
+ls *-nfr-review.csv *-nfr-review.jsonl
 ```
 
 The `structure` category appears in the maturity score and findings table
@@ -87,7 +87,7 @@ target repo
 graphify update ──► graphify-out/graph.json
                         │
                         ▼
-nfr-review scan ──► GraphifyCollector
+nfr-review run  ──► GraphifyCollector
                         │
                         ├── computes degree metrics
                         ├── computes community boundary stats
@@ -165,10 +165,10 @@ echo "graphify-out/" >> .gitignore
 
 ## 5. Running nfr-review with structural analysis
 
-Once Graphify has run (or will be run by the collector), scan as usual:
+Once Graphify has run (or will be run by the collector), run as usual:
 
 ```bash
-nfr-review scan /path/to/repo
+nfr-review run /path/to/repo
 ```
 
 The collector:
@@ -395,7 +395,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -406,7 +406,7 @@ jobs:
         run: graphify update . --no-cluster
 
       - name: Run nfr-review
-        run: nfr-review scan . --format markdown --output nfr-report.md
+        run: nfr-review run . --sarif findings.sarif
 ```
 
 ### Nightly regression
@@ -418,7 +418,7 @@ For nightly CI, run with full clustering for richer community analysis:
   run: graphify update .
 
 - name: Run nfr-review
-  run: nfr-review scan . --format markdown --output nfr-report.md
+  run: nfr-review run . --sarif findings.sarif
 ```
 
 ---
@@ -481,7 +481,7 @@ pip install "nfr-review[graphify]"
 graphify update . --no-cluster
 
 # Run the structural review
-nfr-review scan . --format markdown --output structural-review.md
+nfr-review run .
 ```
 
 ### Expected report output
