@@ -198,10 +198,10 @@ def test_weighted_score_dilutes_single_category_findings() -> None:
     """A critical finding in one category is diluted by clean categories."""
     findings = [_finding(rule_id="security-check", severity="critical")]
     score = compute_maturity_score(findings, ["R001"], [])
-    # security: 85, reliability: 100, performance: 100, maintainability: 100, OTEL: 100
-    # (85 + 100 + 100 + 100 + 100) / 5 = 97
+    # security: 85, all others: 100
+    # (85 + 100*5) / 6 = 97.5 → 98
     assert score.category_scores["security"] == 85
-    assert score.overall == 97
+    assert score.overall == 98
     assert score.grade == "A"
 
 

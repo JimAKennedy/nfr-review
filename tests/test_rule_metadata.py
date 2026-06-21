@@ -23,7 +23,7 @@ def _ensure_rules_registered() -> None:
             importlib.reload(sys.modules[mod_name])
 
 
-VALID_CATEGORIES = {"security", "reliability", "performance", "maintainability"}
+VALID_CATEGORIES = {"security", "reliability", "performance", "maintainability", "structure"}
 VALID_SEVERITIES = {"critical", "high", "medium", "low", "info"}
 
 

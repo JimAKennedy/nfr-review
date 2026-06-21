@@ -4,65 +4,37 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
+from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+from nfr_review.models import Evidence
 from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class PythonStarImportRule:
+class PythonStarImportRule(FieldRule[PythonAstFilePayload]):
     """Flag wildcard imports that obscure dependencies."""
 
     id = "python-star-import"
-    band: Band = 1
-    required_collectors: list[str] = ["python-ast"]
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "star-import"
+    default_confidence = 0.95
+    all_clear_summary = "No wildcard imports detected."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        py_evidence = filter_evidence(evidence, "python-ast", "python-ast-file")
-        if not py_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no python-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in py_evidence:
-            file_path = ev.payload.file_path
-            for imp in ev.payload.imports:
-                if imp.get("is_star"):
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=f"Star import from {imp['module']}",
-                            recommendation=(
-                                "Use explicit imports to make dependencies"
-                                " visible and avoid namespace pollution."
-                            ),
-                            evidence_locator=f"{file_path}:{imp['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.95,
-                            pattern_tag="star-import",
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "star-import",
-                    py_evidence[0],
-                    summary="No wildcard imports detected.",
-                    confidence=0.95,
+    def check(self, payload: PythonAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for imp in payload.imports:
+            if imp.is_star:
+                yield Hit(
+                    rag="amber",
+                    summary=f"Star import from {imp.module}",
+                    recommendation=(
+                        "Use explicit imports to make dependencies"
+                        " visible and avoid namespace pollution."
+                    ),
+                    locator=f"{payload.file_path}:{imp.line}",
                 )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
 
 
 def _register() -> None:

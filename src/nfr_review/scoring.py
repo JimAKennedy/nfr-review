@@ -130,6 +130,8 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
     "dyn-call-sequence": "OTEL",
     "dyn-adr-drift": "OTEL",
     "package-subdivision": "maintainability",
+    "structure-": "structure",
+    "graphify": "structure",
 }
 
 

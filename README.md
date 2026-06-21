@@ -18,7 +18,7 @@ Contributions — new rules, new collectors, compliance framework mappings — a
 
 ## Automated non-functional design reviews for software projects.
 
-`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++/Node.js source, gRPC proto files, APIM policies, and more) and evaluates 147 rules covering resilience, observability, security, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
+`nfr-review` scans a repository for architectural evidence (Spring configs, K8s manifests, CI pipelines, Dockerfiles, Helm charts, Terraform modules, Istio configs, ADRs, Java/Go/Python/C#/C++/Node.js source, gRPC proto files, APIM policies, knowledge graphs, and more) and evaluates 153 rules covering resilience, observability, security, structural quality, operational readiness, deployment patching, and repository hygiene. Hygiene audits cover documentation, CI automation, community standards, build readiness, privacy, and license compliance. Findings are emitted as CSV, JSONL, SARIF, Markdown, and PDF for integration into review workflows.
 
 ## How it works
 
@@ -59,6 +59,7 @@ nfr-review uses a three-stage pipeline:
 | **Performance** | Gatling | `gatling` | -- | Performance threshold validation |
 | **Code quality** | JaCoCo | `jacoco_report` | -- | Coverage thresholds, actual coverage reporting |
 | | JDepend | `jdepend` | -- | Package cycles, instability, distance from main sequence |
+| **Structural analysis** | Graphify | `graphify` | -- | God nodes (coupling hotspots), weak module boundaries, coupling clusters |
 
 Technologies are auto-detected (18 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
 
@@ -113,6 +114,7 @@ pip install "nfr-review[llm-openai]"     # LLM via OpenAI-compatible APIs (Ollam
 pip install "nfr-review[pdf]"            # PDF report generation
 pip install "nfr-review[scancode]"       # license compliance scanning
 pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
+pip install "nfr-review[graphify]"       # structural analysis (god nodes, weak boundaries)
 ```
 
 ### Docker
@@ -174,8 +176,9 @@ These are **not** Python packages — they are standalone binaries that some col
 | Tool | Used by | Install |
 |------|---------|---------|
 | [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
+| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install "nfr-review[graphify]"` (provides both the `graphify` CLI and `networkx`) |
 
-Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped.
+Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
 
 ### Optional: LLM features
 
@@ -200,6 +203,7 @@ pip install nfr-review
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
 | `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
 | `[monitor]` | [aiohttp](https://docs.aiohttp.org/) for the `nfr-review monitor` production interaction server. |
+| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [usage guide](docs/graphify-guide.md). |
 | `[full]` | All of the above (excluding `[dev]`). |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
@@ -547,7 +551,7 @@ exclude_test_paths: true
 
 ## Rules
 
-nfr-review ships with 147 rules (119 NFR + 28 hygiene) across several domains. A selection:
+nfr-review ships with 153 rules (125 NFR + 28 hygiene) across several domains. A selection:
 
 | Rule ID | Domain | Description |
 |---------|--------|-------------|
@@ -584,11 +588,16 @@ nfr-review ships with 147 rules (119 NFR + 28 hygiene) across several domains. A
 | `dep-freshness` | Dependencies | Flag packages with updates available |
 | `dyn-latency-p95` | Dynamic | Flag P95 latency hotspots from OTel traces |
 | `dyn-n-plus-1` | Dynamic | Detect N+1 query patterns in runtime traces |
+| `structure-god-node` | Structure | Flag nodes with excessive coupling (degree far above median) |
+| `structure-weak-boundary` | Structure | Detect modules where >40% of edges cross community boundaries |
+| `structure-coupling-cluster` | Structure | Identify disproportionately coupled component pairs |
 | `PATCH-*` (22 rules) | Patching | Deployment and infrastructure patching readiness analysis |
 
 Rules marked "LLM-assisted" use an optional LLM call for deeper analysis and fall back gracefully when no API key is configured.
 
-Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule. To create your own rules, see the [Custom Rules Guide](docs/custom-rules.md).
+Rules are typed against collector payloads using the `FieldRule[P]` framework, which provides static typing at the rule-payload boundary and eliminates boilerplate. See [docs/rule-framework.md](docs/rule-framework.md) for the design and [docs/custom-rules.md](docs/custom-rules.md) for the authoring guide.
+
+Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule.
 
 ## Output
 

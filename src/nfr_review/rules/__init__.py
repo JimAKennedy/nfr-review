@@ -10,7 +10,9 @@ import pkgutil
 from nfr_review.plugin_discovery import RULES_GROUP, discover_plugins
 from nfr_review.registry import rule_registry
 
-_EXCLUDE = frozenset({"__init__", "ast_common", "rule_helpers", "_cross_language"})
+_EXCLUDE = frozenset(
+    {"__init__", "ast_common", "rule_helpers", "_cross_language", "framework"}
+)
 
 _discovered: list[str] = []
 for _info in pkgutil.iter_modules(__path__):

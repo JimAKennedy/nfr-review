@@ -47,6 +47,7 @@ def _populate() -> None:
         GatlingSummaryPayload,
     )
     from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+    from nfr_review.collectors.payloads.graphify import GraphifyPayload
     from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
     from nfr_review.collectors.payloads.istio import IstioAnalysisPayload
     from nfr_review.collectors.payloads.jacoco import JacocoReportPayload
@@ -140,6 +141,7 @@ def _populate() -> None:
         ("telemetry-config", "telemetry-synthetic-config"): TelemetrySyntheticConfigPayload,
         ("telemetry-config", "telemetry-config-summary"): TelemetryConfigSummaryPayload,
         ("terraform", "terraform-analysis"): TerraformAnalysisPayload,
+        ("graphify", "graphify-analysis"): GraphifyPayload,
         # Hygiene collectors
         ("build-readiness", "build-readiness-analysis"): BuildReadinessPayload,
         ("ci-automation", "ci-automation-analysis"): CiAutomationPayload,

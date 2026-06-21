@@ -15,6 +15,7 @@ from nfr_review.llm_client import LlmUnavailableError, create_llm_client, extrac
 from nfr_review.output.summary_models import ExecSummary
 
 if TYPE_CHECKING:
+    from nfr_review.collectors.payloads.graphify import GraphifyPayload
     from nfr_review.engine import RunResult
     from nfr_review.models import Finding
     from nfr_review.output.pytest_runner import PytestResult
@@ -41,13 +42,23 @@ object matching this exact schema — no markdown, no commentary, no code fences
   ],
   "production_risks": "paragraph on production deployment risks",
   "open_source_readiness": "paragraph on open-source readiness",
-  "overall_score": 0-100
+  "overall_score": 0-100,
+  "structural_risks": ["risk 1", ...],
+  "coupling_hotspots": [
+    {"component_a": "...", "component_b": "...", "description": "..."}, ...
+  ]
 }
 
 Verdict criteria:
 - "fit": No critical/high findings, adequate test coverage, dependencies managed
 - "conditional": Some high findings but all have clear remediation paths
 - "unfit": Critical security/licensing issues or fundamental architectural problems
+
+If structural_context is provided, use the graph analysis data (god nodes, \
+community coupling, shortest paths) to identify architectural risks. Populate \
+structural_risks with graph-backed observations and coupling_hotspots with \
+component pairs that show disproportionate coupling. If no structural data is \
+provided, return empty arrays for these fields.
 
 Focus on actionable specifics, not generic advice. Reference actual rule IDs and \
 finding counts from the data provided."""
@@ -98,6 +109,93 @@ def _build_findings_summary(findings: list[Finding]) -> dict:
     }
 
 
+def _extract_graphify_payload(
+    nfr_result: RunResult,
+) -> GraphifyPayload | None:
+    """Find graphify-analysis evidence in the run result."""
+    for ev in nfr_result.evidence:
+        if ev.kind == "graphify-analysis" and ev.payload is not None:
+            return ev.payload  # type: ignore[return-value]
+    return None
+
+
+def _build_structural_context(
+    payload: GraphifyPayload,
+    findings: list[Finding],
+) -> dict:
+    """Build structural context from graphify data for the LLM prompt."""
+    from nfr_review.graph_query import GraphQueryClient
+
+    client = GraphQueryClient(payload)
+    context: dict = {}
+
+    god_nodes = client.god_nodes(top_n=10)
+    if god_nodes:
+        context["god_nodes"] = [
+            {
+                "label": g["label"],
+                "source_file": g["source_file"],
+                "total_degree": g["total_degree"],
+            }
+            for g in god_nodes
+        ]
+
+    stats = client.stats()
+    context["graph_stats"] = {
+        "node_count": stats.node_count,
+        "edge_count": stats.edge_count,
+        "community_count": stats.community_count,
+        "density": round(stats.density, 6),
+        "avg_degree": round(stats.avg_degree, 2),
+    }
+
+    weak_communities = [
+        cs
+        for cs in payload.community_stats
+        if cs.cross_boundary_ratio > 0.4 and cs.node_count >= 3
+    ]
+    if weak_communities:
+        context["weak_boundaries"] = [
+            {
+                "community_id": cs.community_id,
+                "community_name": cs.community_name,
+                "node_count": cs.node_count,
+                "cross_boundary_ratio": cs.cross_boundary_ratio,
+            }
+            for cs in weak_communities[:10]
+        ]
+
+    critical_high = [
+        f for f in findings if f.severity in ("critical", "high") and f.evidence_locator
+    ]
+    if critical_high and len(critical_high) >= 2:
+        paths = []
+        seen_pairs: set[tuple[str, str]] = set()
+        for i, f1 in enumerate(critical_high[:5]):
+            for f2 in critical_high[i + 1 : 6]:
+                loc1 = f1.evidence_locator.split(":")[0]
+                loc2 = f2.evidence_locator.split(":")[0]
+                pair = (min(loc1, loc2), max(loc1, loc2))
+                if pair in seen_pairs or pair[0] == pair[1]:
+                    continue
+                seen_pairs.add(pair)
+                result = client.shortest_path(loc1, loc2)
+                if result and result.hop_count > 0:
+                    paths.append(
+                        {
+                            "from": result.source,
+                            "to": result.target,
+                            "hops": result.hop_count,
+                            "via": result.path,
+                            "relations": result.edge_relations,
+                        }
+                    )
+        if paths:
+            context["critical_component_paths"] = paths[:5]
+
+    return context
+
+
 def _build_prompt_data(
     nfr_result: RunResult,
     hygiene_result: RunResult | None = None,
@@ -132,6 +230,15 @@ def _build_prompt_data(
 
     if deps_summary:
         data["dependency_analysis"] = deps_summary
+
+    graphify_payload = _extract_graphify_payload(nfr_result)
+    if graphify_payload is not None:
+        try:
+            structural = _build_structural_context(graphify_payload, all_findings)
+            if structural:
+                data["structural_context"] = structural
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to build structural context", exc_info=True)
 
     return json.dumps(data, indent=2)
 

@@ -120,7 +120,7 @@ class TestMutableDefaultRule:
     def test_skipped_without_python_evidence(self) -> None:
         result = self.rule.evaluate(_non_python_evidence(), None)
         assert result.skipped
-        assert "no python-ast evidence" in (result.skip_reason or "")
+        assert "no python-ast-file evidence" in (result.skip_reason or "")
 
     def test_r007_fields(self) -> None:
         ev = _make_evidence(

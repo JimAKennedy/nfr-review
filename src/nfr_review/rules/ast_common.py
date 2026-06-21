@@ -17,6 +17,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
+from nfr_review.rules.framework import Hit, make_finding
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,20 +88,25 @@ class GenericASTRule(ABC):
                 ),
                 None,
             )
+            sentinel = first_ev or Evidence(
+                collector_name=first_cfg.collector_name,
+                collector_version="0.0.0",
+                locator="project-wide",
+                kind=first_cfg.evidence_kind,
+                payload={},
+            )
             findings.append(
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="green",
-                    severity="info",
-                    summary=f"No {self.pattern_tag} issues detected.",
-                    recommendation="No action required.",
-                    evidence_locator="project-wide",
-                    collector_name=first_ev.collector_name
-                    if first_ev
-                    else first_cfg.collector_name,
-                    collector_version=first_ev.collector_version if first_ev else "0.0.0",
-                    confidence=0.85,
+                    hit=Hit(
+                        rag="green",
+                        summary=f"No {self.pattern_tag} issues detected.",
+                        recommendation="No action required.",
+                        locator="project-wide",
+                    ),
+                    ev=sentinel,
                     pattern_tag=self.pattern_tag,
+                    default_confidence=0.85,
                 )
             )
 

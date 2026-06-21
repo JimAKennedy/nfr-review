@@ -451,7 +451,8 @@ pip install nfr-review
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
 | `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
-| `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor`. |
+| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [Graphify usage guide](graphify-guide.md). |
+| `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor` + `graphify`. |
 | `[dev]` | pytest, ruff, pytest-cov, and test dependencies for development and CI. |
 
 Install extras individually or combine them:

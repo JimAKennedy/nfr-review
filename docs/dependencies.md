@@ -130,11 +130,23 @@ lighter alternative. Requires native libraries.
 
 Only needed for the experimental production monitor feature.
 
+### `[graphify]` — Structural knowledge-graph analysis
+
+| Package | Constraint | Purpose |
+|---------|-----------|---------|
+| graphifyy | `>=0.8` | Tree-sitter-based codebase knowledge graph extraction and querying |
+| networkx | `>=3.0` | In-process graph analysis (shortest path, degree metrics, community queries) |
+
+Requires the `graphify` CLI binary (installed automatically with `graphifyy`).
+When the binary is not available, the GraphifyCollector skips gracefully and
+structural rules produce no findings. See the
+[Graphify usage guide](graphify-guide.md) for a complete walkthrough.
+
 ### `[full]` — Convenience aggregate
 
 Installs: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` +
-`monitor`. Does **not** include `scancode` (too heavy) or `dev` (test
-dependencies).
+`monitor` + `graphify`. Does **not** include `scancode` (too heavy) or `dev`
+(test dependencies).
 
 ### `[dev]` — Development and testing
 
@@ -269,6 +281,7 @@ required — features degrade gracefully when missing.
 | **docker** | Container execution mode and CI Docker jobs | Container mode fails; pip mode works | Pre-installed on GitHub-hosted runners |
 | **otelcol-contrib** | Managed OTel Collector for dynamic analysis | Must use `--otel-traces` with pre-collected traces instead | `scripts/setup-all.sh` or manual download |
 | **graphviz** (dot) | DOT diagram rendering for architecture reports | Diagram output skipped | System package (`apt install graphviz`) |
+| **graphify** | Codebase knowledge-graph extraction for structural analysis rules | GraphifyCollector skips; structural rules produce no findings | `pip install "nfr-review[graphify]"` (installed with the Python package) |
 
 ---
 
@@ -300,7 +313,7 @@ The pre-built Docker image is published to GHCR on each tagged release.
 | **Base image** | `python:3.14-slim` |
 | **Architecture** | `linux/amd64` only |
 | **User** | Non-root `nfr` (UID 1000) |
-| **Python extras** | `pdf`, `diagrams`, `llm-anthropic`, `llm-openai` |
+| **Python extras** | `pdf`, `diagrams`, `llm-anthropic`, `llm-openai` (excludes `graphify` — add manually if needed) |
 
 **System packages in the image:** libpango, libpangocairo, libpangoft2,
 libharfbuzz, libcairo2, libgdk-pixbuf, libffi, shared-mime-info,

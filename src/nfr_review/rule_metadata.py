@@ -948,6 +948,33 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["go", "package-structure", "architecture", "domain"],
         ["ISO 25010:Maintainability"],
     ),
+    # --- Structure rules (Graphify) ---
+    "structure-god-node": _m(
+        "medium",
+        "structure",
+        "Flags entities whose total degree (in + out edges) exceeds 2x"
+        " the median, indicating coupling hotspots that are difficult"
+        " to change safely.",
+        ["graphify", "coupling", "architecture"],
+        ["ISO 25010:Maintainability"],
+    ),
+    "structure-weak-boundary": _m(
+        "medium",
+        "structure",
+        "Flags Leiden communities where cross-boundary edges exceed 40%"
+        " of total edges, indicating leaky module boundaries.",
+        ["graphify", "boundaries", "architecture"],
+        ["ISO 25010:Maintainability"],
+    ),
+    "structure-coupling-cluster": _m(
+        "low",
+        "structure",
+        "Flags pairs of communities with disproportionate inter-community"
+        " coupling edges (calls, imports), suggesting hidden dependencies"
+        " between modules.",
+        ["graphify", "coupling", "architecture"],
+        ["ISO 25010:Maintainability"],
+    ),
 }
 
 

@@ -83,8 +83,12 @@ scancode = [
 monitor = [
     "aiohttp>=3.9",
 ]
+graphify = [
+    "graphifyy>=0.8",
+    "networkx>=3.0",
+]
 full = [
-    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,otel,monitor]",
+    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,otel,monitor,graphify]",
 ]
 
 [project.scripts]
@@ -133,6 +137,8 @@ module = [
     "openai.*",
     "opentelemetry.*",
     "aiohttp.*",
+    "graphifyy.*",
+    "networkx.*",
 ]
 ignore_missing_imports = true
 
