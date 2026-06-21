@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from nfr_review.collectors.payloads.graphify import (
     CommunityStats,
@@ -21,6 +24,11 @@ from nfr_review.output.summarize import (
     generate_executive_summary,
 )
 from nfr_review.output.summary_models import ExecSummary
+
+_needs_networkx = pytest.mark.skipif(
+    importlib.util.find_spec("networkx") is None,
+    reason="networkx not installed",
+)
 
 
 def _make_finding(
@@ -305,6 +313,7 @@ class TestExtractGraphifyPayload:
         assert _extract_graphify_payload(result) is None
 
 
+@_needs_networkx
 class TestBuildStructuralContext:
     def test_includes_god_nodes(self) -> None:
         payload = _make_graphify_payload()
@@ -360,6 +369,7 @@ class TestBuildStructuralContext:
             assert len(ctx["critical_component_paths"]) >= 1
 
 
+@_needs_networkx
 class TestPromptDataWithStructuralContext:
     def test_prompt_includes_structural_context(self) -> None:
         result = _make_run_with_graphify()
