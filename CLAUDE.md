@@ -14,3 +14,9 @@ After writing or modifying any `.py` file, run `ruff format <file>` before finis
 task. This prevents pre-commit hook reformatting from creating dirty working-tree state
 after git commits. This applies to all agents and subagents — format is not a git command
 and is safe to run during task execution.
+
+## Branch Discipline
+
+One branch per milestone/PR. Never stack multiple milestones on a single branch — squash-
+merge of one milestone causes all remaining commits to conflict on rebase. After any rebase
+with conflict resolution, run `pre-commit run --all-files` before pushing.
