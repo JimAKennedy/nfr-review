@@ -281,6 +281,32 @@ class TestCliFlag:
         assert len(sarif["runs"]) == 1
 
 
+class TestOriginTagging:
+    """Test that dependency-origin findings get a properties.origin tag."""
+
+    def test_dependency_finding_tagged(self, tmp_path: Path) -> None:
+        finding = _make_finding(
+            evidence_locator="dep:pypi:requests:2.25.0",
+            origin="dependency",
+        )
+        result = _make_result(findings=[finding])
+        out = tmp_path / "out.sarif.json"
+        write_sarif(result, out)
+
+        sarif = json.loads(out.read_text(encoding="utf-8"))
+        props = sarif["runs"][0]["results"][0].get("properties", {})
+        assert props.get("origin") == "dependency"
+
+    def test_first_party_finding_no_properties(self, tmp_path: Path) -> None:
+        finding = _make_finding(origin="first_party")
+        result = _make_result(findings=[finding])
+        out = tmp_path / "out.sarif.json"
+        write_sarif(result, out)
+
+        sarif = json.loads(out.read_text(encoding="utf-8"))
+        assert "properties" not in sarif["runs"][0]["results"][0]
+
+
 class TestOutputError:
     """Test that writing to invalid path raises OutputError."""
 

@@ -532,13 +532,14 @@ def render_pdf(
     Returns the output path on success. Raises ``ImportError`` if weasyprint
     is not installed.
     """
-    from nfr_review.output.classify import partition_findings
+    from nfr_review.output.classify import partition_findings, partition_findings_by_origin
 
     all_findings: list[Finding] = list(nfr_result.findings)
     if hygiene_result:
         all_findings.extend(hygiene_result.findings)
 
-    source_findings, test_findings = partition_findings(all_findings)
+    first_party, dependency = partition_findings_by_origin(all_findings)
+    source_findings, test_findings = partition_findings(first_party)
 
     sections: list[str] = []
 
@@ -554,7 +555,7 @@ def render_pdf(
         sections.append(_exec_summary_html(exec_summary))
 
     sections.append('<div class="section-flow"></div>')
-    sections.append(_category_severity_table_html(all_findings, "Findings Summary"))
+    sections.append(_category_severity_table_html(first_party, "Findings Summary"))
 
     if score_section_md:
         sections.append('<div class="section-flow"></div>')
@@ -585,6 +586,19 @@ def render_pdf(
 
     sections.append('<div class="section-flow"></div>')
     sections.append(_findings_html(test_findings, "Test Code Findings"))
+
+    if dependency:
+        sections.append('<div class="section-break"></div>')
+        sections.append(
+            "<h2>Dependency Findings</h2>"
+            '<p style="font-size:9pt;color:#666">'
+            "The following findings originate from dependency or vendored code."
+            " They are excluded from the Design Maturity Score.</p>"
+        )
+        sections.append(
+            _category_severity_table_html(dependency, "Dependency Findings Summary")
+        )
+        sections.append(_findings_html(dependency, "Dependency Findings Detail"))
 
     if adr_section_md:
         sections.append('<div class="section-flow"></div>')
