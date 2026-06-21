@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import urllib.error
@@ -16,6 +17,8 @@ from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 @pytest.fixture(autouse=True)
 def _clear_cache() -> None:
     deps_dev_client._shared_cache.clear()
+    deps_dev_client._cache_dirty = False
+    deps_dev_client._cache_file = None
 
 
 @pytest.fixture()
@@ -308,3 +311,93 @@ class TestPickLatestVersion:
         ]
         result = pick_latest_version(versions)
         assert result["versionKey"]["version"] == "2.0.0"
+
+
+# ── file-backed cache ──────────────────────────────────────────────────
+
+
+class TestFileCache:
+    def test_load_populates_shared_cache(self, tmp_path):
+        cache_file = tmp_path / "cache.json.gz"
+        data = {"systems/pypi/packages/requests": {"versions": [{"v": "2.31.0"}]}}
+        with gzip.open(cache_file, "wt", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        deps_dev_client._load_file_cache(cache_file)
+        assert "systems/pypi/packages/requests" in deps_dev_client._shared_cache
+        assert (
+            deps_dev_client._shared_cache["systems/pypi/packages/requests"]["versions"][0]["v"]
+            == "2.31.0"
+        )
+
+    def test_load_nonexistent_file_starts_empty(self, tmp_path):
+        cache_file = tmp_path / "missing.json.gz"
+        deps_dev_client._load_file_cache(cache_file)
+        assert deps_dev_client._cache_file == cache_file
+        assert len(deps_dev_client._shared_cache) == 0
+
+    def test_load_corrupt_file_starts_empty(self, tmp_path):
+        cache_file = tmp_path / "bad.json.gz"
+        cache_file.write_bytes(b"not valid gzip")
+        deps_dev_client._load_file_cache(cache_file)
+        assert len(deps_dev_client._shared_cache) == 0
+
+    def test_save_writes_cache_to_disk(self, tmp_path):
+        cache_file = tmp_path / "cache.json.gz"
+        deps_dev_client._cache_file = cache_file
+        deps_dev_client._cache_dirty = True
+        deps_dev_client._shared_cache["systems/pypi/packages/flask"] = {"versions": []}
+
+        deps_dev_client._save_file_cache()
+
+        with gzip.open(cache_file, "rt", encoding="utf-8") as f:
+            saved = json.load(f)
+        assert "systems/pypi/packages/flask" in saved
+
+    def test_save_skipped_when_not_dirty(self, tmp_path):
+        cache_file = tmp_path / "cache.json.gz"
+        deps_dev_client._cache_file = cache_file
+        deps_dev_client._cache_dirty = False
+        deps_dev_client._shared_cache["key"] = {"data": True}
+
+        deps_dev_client._save_file_cache()
+        assert not cache_file.exists()
+
+    def test_save_creates_parent_dirs(self, tmp_path):
+        cache_file = tmp_path / "sub" / "dir" / "cache.json.gz"
+        deps_dev_client._cache_file = cache_file
+        deps_dev_client._cache_dirty = True
+        deps_dev_client._shared_cache["k"] = None
+
+        deps_dev_client._save_file_cache()
+        assert cache_file.exists()
+        with gzip.open(cache_file, "rt", encoding="utf-8") as f:
+            assert json.load(f)["k"] is None
+
+    def test_round_trip(self, tmp_path):
+        cache_file = tmp_path / "rt.json.gz"
+        deps_dev_client._cache_file = cache_file
+        deps_dev_client._cache_dirty = True
+        deps_dev_client._shared_cache["path/a"] = {"result": 1}
+        deps_dev_client._shared_cache["path/b"] = None
+
+        deps_dev_client._save_file_cache()
+
+        deps_dev_client._shared_cache.clear()
+        deps_dev_client._load_file_cache(cache_file)
+
+        assert deps_dev_client._shared_cache["path/a"] == {"result": 1}
+        assert deps_dev_client._shared_cache["path/b"] is None
+
+    @patch("nfr_review.deps_dev_client.urllib.request.urlopen")
+    def test_get_sets_dirty_flag(self, mock_urlopen):
+        payload = {"versions": []}
+        mock_urlopen.return_value.__enter__ = lambda s: _mock_response(
+            json.dumps(payload).encode()
+        )
+        mock_urlopen.return_value.__exit__ = lambda s, *a: None
+
+        assert deps_dev_client._cache_dirty is False
+        client = DepsDevClient(timeout=5)
+        client.get_package_versions("pypi", "requests")
+        assert deps_dev_client._cache_dirty is True

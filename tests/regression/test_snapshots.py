@@ -8,6 +8,7 @@ regenerate baselines after intentional changes.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,8 @@ from tests.regression.conftest import (
     load_manifest,
     normalize_findings,
 )
+
+_API_CACHE_DIR = Path(__file__).resolve().parent / "api_cache"
 
 
 def _pair_field_diffs(
@@ -72,6 +75,9 @@ def test_regression_snapshot(
     jsonl_out = tmp_path / "output.jsonl"
     csv_out = tmp_path / "output.csv"
 
+    api_cache_file = _API_CACHE_DIR / f"{repo_name}.json.gz"
+    env = {**os.environ, "NFR_DEPS_DEV_CACHE": str(api_cache_file)}
+
     result = subprocess.run(
         [
             sys.executable,
@@ -90,6 +96,7 @@ def test_regression_snapshot(
         capture_output=True,
         text=True,
         timeout=600,
+        env=env,
     )
 
     assert result.returncode in (0, 2), (

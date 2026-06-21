@@ -10,13 +10,17 @@ failure — so callers never need to handle exceptions from this module.
 
 from __future__ import annotations
 
+import atexit
+import gzip
 import json
 import logging
+import os
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +29,47 @@ _BASE_URL = "https://api.deps.dev/v3alpha"
 
 _SENTINEL = object()
 _shared_cache: dict[str, dict | None] = {}
+_cache_dirty = False
+_cache_file: Path | None = None
+
+
+def _load_file_cache(path: Path) -> None:
+    """Load a gzipped JSON cache file into ``_shared_cache``."""
+    global _cache_file
+    _cache_file = path
+    if not path.exists():
+        logger.info("deps.dev file cache: %s does not exist yet, starting empty", path)
+        return
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            data = json.load(f)
+        _shared_cache.update(data)
+        logger.info("deps.dev file cache: loaded %d entries from %s", len(data), path)
+    except (json.JSONDecodeError, gzip.BadGzipFile, OSError) as exc:
+        logger.warning("deps.dev file cache: failed to load %s: %s", path, exc)
+
+
+def _save_file_cache() -> None:
+    """Write ``_shared_cache`` to the configured cache file (atexit handler)."""
+    if _cache_file is None or not _cache_dirty:
+        return
+    try:
+        _cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(_cache_file, "wt", encoding="utf-8") as f:
+            json.dump(_shared_cache, f, ensure_ascii=False, sort_keys=True)
+        logger.info(
+            "deps.dev file cache: saved %d entries to %s",
+            len(_shared_cache),
+            _cache_file,
+        )
+    except OSError as exc:
+        logger.warning("deps.dev file cache: failed to save %s: %s", _cache_file, exc)
+
+
+_cache_path_env = os.environ.get("NFR_DEPS_DEV_CACHE")
+if _cache_path_env:
+    _load_file_cache(Path(_cache_path_env))
+    atexit.register(_save_file_cache)
 
 
 class DepsDevClient:
@@ -34,6 +79,8 @@ class DepsDevClient:
         self._timeout = timeout
 
     def _get(self, path: str) -> dict | None:
+        global _cache_dirty
+
         cached = _shared_cache.get(path, _SENTINEL)
         if cached is not _SENTINEL:
             logger.debug("deps.dev API: cache hit for %s", path)
@@ -50,6 +97,7 @@ class DepsDevClient:
             logger.info("deps.dev API: %s responded in %.2fs", path, elapsed)
             result = json.loads(body)
             _shared_cache[path] = result
+            _cache_dirty = True
             return result
         except urllib.error.HTTPError as exc:
             elapsed = time.monotonic() - t0
@@ -66,6 +114,7 @@ class DepsDevClient:
         except Exception as exc:  # noqa: BLE001
             logger.debug("deps.dev lookup failed for %s: %s", path, exc)
         _shared_cache[path] = None
+        _cache_dirty = True
         return None
 
     def get_package_versions(self, ecosystem: str, package_name: str) -> dict | None:
