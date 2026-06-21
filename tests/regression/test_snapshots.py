@@ -137,6 +137,7 @@ def test_regression_snapshot(
             "dep-freshness",
             "dep-upgrade-path",
             "structure-coupling-cluster",
+            "structure-god-node",
             "structure-weak-boundary",
         }
         added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]

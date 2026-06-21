@@ -14,6 +14,7 @@ exit code; this module never calls ``sys.exit`` directly.
 from __future__ import annotations
 
 import io
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -22,6 +23,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from ruamel.yaml import YAML, YAMLError
 
 from nfr_review.models import Origin, Severity
+
+logger = logging.getLogger(__name__)
 
 
 # nfr-review:skip(python-dormant-classes) reason: caught by cli.py run/report commands
@@ -73,6 +76,13 @@ class LlmConfig(BaseModel):
         overrides: dict[str, Any] = {}
         if v := os.environ.get("NFR_LLM_PROVIDER", "").strip():
             overrides["provider"] = v
+        elif v := os.environ.get("NFR_LLM_BACKEND", "").strip():
+            mapped = "anthropic" if v == "api" else v
+            logger.warning(
+                "NFR_LLM_BACKEND is deprecated; use NFR_LLM_PROVIDER=%s instead",
+                mapped,
+            )
+            overrides["provider"] = mapped
         if v := os.environ.get("NFR_LLM_MODEL", "").strip():
             overrides["model"] = v
         if v := os.environ.get("NFR_LLM_BASE_URL", "").strip():

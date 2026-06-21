@@ -127,8 +127,10 @@ class PiiInLogStatementsRule:
             response_text = self._llm.analyze(_LLM_PROMPT, bundle)
             logger.info("LLM PII confirmation received (%d chars)", len(response_text))
             return self._parse_llm_response(response_text, len(hits))
-        except LlmUnavailableError:
-            logger.warning("LLM unavailable for PII confirmation; falling back to regex-only")
+        except LlmUnavailableError as exc:
+            logger.warning(
+                "LLM unavailable for PII confirmation; falling back to regex-only: %s", exc
+            )
             return None
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM PII confirmation failed: %s", exc)

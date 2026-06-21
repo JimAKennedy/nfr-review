@@ -268,7 +268,8 @@ def generate_executive_summary(
             evidence_bundle=prompt_data,
             max_tokens=2048,
         )
-    except LlmUnavailableError:
+    except LlmUnavailableError as exc:
+        logger.warning("LLM unavailable for executive summary: %s", exc)
         return None
     except Exception:  # noqa: BLE001
         logger.exception("LLM call failed during executive summary generation")

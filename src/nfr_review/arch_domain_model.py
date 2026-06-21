@@ -607,8 +607,8 @@ def enhance_domain_model_with_llm(
             evidence_bundle=bundle,
             max_tokens=2048,
         )
-    except LlmUnavailableError:
-        logger.warning("LLM unavailable; returning structural model only")
+    except LlmUnavailableError as exc:
+        logger.warning("LLM unavailable; returning structural model only: %s", exc)
         mermaid = generate_context_map_mermaid(contexts)
         return DomainModelSection(
             entities=entities,
