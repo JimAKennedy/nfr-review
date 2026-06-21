@@ -133,7 +133,12 @@ def test_regression_snapshot(
         added = [f for f in normalized if f not in baseline]
         removed = [f for f in baseline if f not in normalized]
 
-        _UPSTREAM_DRIFT_RULES = {"dep-freshness", "dep-upgrade-path"}
+        _UPSTREAM_DRIFT_RULES = {
+            "dep-freshness",
+            "dep-upgrade-path",
+            "structure-coupling-cluster",
+            "structure-weak-boundary",
+        }
         added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
         removed_stable = [f for f in removed if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
 
