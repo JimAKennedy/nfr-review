@@ -245,7 +245,7 @@ jobs:
   render:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install nfr-review
         run: pip install nfr-review
@@ -261,7 +261,7 @@ jobs:
           plantuml -tsvg diagrams/*.puml
 
       - name: Upload diagrams
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: architecture-diagrams
           path: diagrams/*.svg

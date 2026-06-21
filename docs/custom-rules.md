@@ -214,19 +214,19 @@ Run `nfr-review list-rules --format json | python -c "import json,sys; print('\n
 | Collector | Evidence kind(s) | What it provides |
 |-----------|-----------------|------------------|
 | `repo-structure` | `repo-structure-summary` | README presence, file tree, tech markers |
-| `ci-artifact` | `ci-pipeline` | CI workflow definitions, stages, actions |
-| `k8s-manifest` | `k8s-resource` | Kubernetes deployments, services, pods |
-| `dockerfile` | `dockerfile-instruction` | Dockerfile instructions, base images |
-| `java-ast` | `ast-class`, `ast-method` | Java AST nodes (classes, methods, annotations) |
-| `python-ast` | `ast-class`, `ast-method` | Python AST nodes |
-| `go-ast` | `ast-class`, `ast-method` | Go AST nodes |
-| `cpp-ast` | `ast-class`, `ast-method` | C++ AST nodes |
-| `helm` | `helm-chart`, `helm-values` | Helm chart metadata and values |
-| `terraform` | `terraform-resource` | Terraform resources and providers |
-| `spring-config` | `spring-property` | Spring Boot configuration properties |
-| `adr` | `adr-record` | Architecture Decision Records |
-| `otel` | `otel-config` | OpenTelemetry configuration |
-| `proto` | `proto-service` | gRPC/Protobuf service definitions |
+| `ci-artifact` | `ci-pipeline`, `ci-summary` | CI workflow definitions, stages, actions |
+| `k8s-manifest` | `k8s-resource`, `k8s-pdb`, `k8s-manifest-summary` | Kubernetes deployments, services, pods |
+| `dockerfile` | `dockerfile-analysis` | Dockerfile instructions, base images |
+| `java-ast` | `java-ast-file` | Java AST nodes (classes, methods, annotations) |
+| `python-ast` | `python-ast-file` | Python AST nodes |
+| `go-ast` | `go-ast-file` | Go AST nodes |
+| `cpp-ast` | `cpp-ast-file` | C++ AST nodes |
+| `helm` | `helm-analysis` | Helm chart metadata and values |
+| `terraform` | `terraform-analysis` | Terraform resources and providers |
+| `spring-config` | `spring-config-file` | Spring Boot configuration properties |
+| `adr` | `adr-document`, `adr-summary` | Architecture Decision Records |
+| `otel` | `otel-analysis`, `otel-sdk-config` | OpenTelemetry configuration |
+| `proto` | `proto-analysis` | gRPC/Protobuf service definitions |
 
 For a complete list, run `nfr-review run --help` or inspect
 `src/nfr_review/collectors/`.
@@ -381,6 +381,7 @@ not rules):
 - `ast_common`
 - `rule_helpers`
 - `_cross_language`
+- `framework`
 
 If your module name starts with `_`, it will still be auto-imported unless you
 add it to the exclude list in `src/nfr_review/rules/__init__.py`.
@@ -804,7 +805,8 @@ class Finding(BaseModel):
     collector_version: str
     confidence: float     # 0.0 to 1.0
     pattern_tag: str
-    content_hash: str     # optional, for stable baseline diffing
+    content_hash: str = ""                  # optional, for stable baseline diffing
+    origin: Origin = "first_party"          # "first_party" or "dependency"
 ```
 
 ### RuleResult model
