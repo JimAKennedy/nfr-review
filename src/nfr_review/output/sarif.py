@@ -92,13 +92,16 @@ def _finding_to_result(
 ) -> dict[str, Any]:
     """Convert a Finding to a SARIF result object."""
     text = f"{finding.summary}\nRecommendation: {finding.recommendation}"
-    return {
+    result: dict[str, Any] = {
         "ruleId": finding.rule_id,
         "ruleIndex": rule_index_map[finding.rule_id],
         "level": _map_severity(finding.severity),
         "message": {"text": text},
         "locations": [_parse_location(finding.evidence_locator)],
     }
+    if finding.origin == "dependency":
+        result["properties"] = {"origin": "dependency"}
+    return result
 
 
 def _skipped_to_result(rule_id: str, skip_reason: str | None) -> dict[str, Any]:

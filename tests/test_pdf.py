@@ -647,3 +647,38 @@ class TestRenderPdfContentIntegration:
         derived_pos = html.index("Derived Architecture Decision Records")
         deps_pos = html.index("Appendix A")
         assert adr_pos < jdepend_pos < derived_pos < deps_pos
+
+    def test_dependency_findings_separated(self, tmp_path: Path) -> None:
+        """Dependency-origin findings appear in a separate section, not in source/test."""
+        first_party = _make_finding("SEC-001", "high", "red", "src/app.py:10")
+        dep_finding = Finding(
+            rule_id="dep-freshness",
+            rag="amber",
+            severity="medium",
+            summary="Outdated dependency",
+            recommendation="Upgrade to latest",
+            evidence_locator="dep:pypi:requests:2.25.0",
+            collector_name="dep-collector",
+            collector_version="1.0",
+            confidence=0.95,
+            pattern_tag="dep",
+            origin="dependency",
+        )
+        nfr = _make_run_result([first_party, dep_finding])
+        html_out = _capture_pdf_html(tmp_path, nfr_result=nfr)
+
+        assert "Dependency Findings" in html_out
+        assert "excluded from the Design Maturity Score" in html_out
+
+        dep_section_pos = html_out.index("Dependency Findings")
+        source_section_pos = html_out.index("Source Code Findings")
+        assert dep_section_pos > source_section_pos
+
+        source_section = html_out[source_section_pos:dep_section_pos]
+        assert "SEC-001" in source_section
+        assert "dep-freshness" not in source_section
+
+    def test_no_dependency_section_when_none(self, tmp_path: Path) -> None:
+        """When all findings are first-party, no Dependency Findings section appears."""
+        html_out = _capture_pdf_html(tmp_path)
+        assert "Dependency Findings" not in html_out
