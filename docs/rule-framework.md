@@ -1,6 +1,6 @@
 # Typed Rule Framework — Analysis & Phased Implementation Plan
 
-Status: **proposal / ready to implement** · Owner: TBD · Created 2026-06-16
+Status: **implemented (Phase 0–1)** · Created 2026-06-16 · Implemented 2026-06-20
 
 This document is the design and step-by-step plan for introducing a **typed,
 embedded rule framework** to nfr-review. It reconciles and supersedes the

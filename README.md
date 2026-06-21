@@ -595,7 +595,9 @@ nfr-review ships with 153 rules (125 NFR + 28 hygiene) across several domains. A
 
 Rules marked "LLM-assisted" use an optional LLM call for deeper analysis and fall back gracefully when no API key is configured.
 
-Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule. To create your own rules, see the [Custom Rules Guide](docs/custom-rules.md).
+Rules are typed against collector payloads using the `FieldRule[P]` framework, which provides static typing at the rule-payload boundary and eliminates boilerplate. See [docs/rule-framework.md](docs/rule-framework.md) for the design and [docs/custom-rules.md](docs/custom-rules.md) for the authoring guide.
+
+Use `nfr-review list-rules` to see the full list of registered rules, or `nfr-review explain <rule-id>` for details on any rule.
 
 ## Output
 

@@ -12,16 +12,13 @@ evidence, emits findings, and appears in `nfr-review list-rules`.
 
 1. [Overview](#1-overview)
 2. [Prerequisites](#2-prerequisites)
-3. [Step 1 — Choose a collector dependency](#step-1--choose-a-collector-dependency)
-4. [Step 2 — Create the rule module](#step-2--create-the-rule-module)
-5. [Step 3 — Register the rule](#step-3--register-the-rule)
-6. [Step 4 — Add rule metadata](#step-4--add-rule-metadata)
-7. [Step 5 — Add scoring integration](#step-5--add-scoring-integration)
-8. [Step 6 — Write tests](#step-6--write-tests)
-9. [Step 7 — Run it](#step-7--run-it)
-10. [Complete example](#complete-example)
-11. [External rule packs (plugin API)](#external-rule-packs-plugin-api)
-12. [Reference](#reference)
+3. [FieldRule — the recommended approach](#fieldrule--the-recommended-approach)
+4. [Imperative rules — the escape hatch](#imperative-rules--the-escape-hatch)
+5. [Registration, metadata, scoring, tests, and running](#step-3--register-the-rule)
+6. [Complete example (FieldRule)](#complete-example-fieldrule)
+7. [Complete example (imperative)](#complete-example-imperative)
+8. [External rule packs (plugin API)](#external-rule-packs-plugin-api)
+9. [Reference](#reference)
 
 ---
 
@@ -63,7 +60,151 @@ pip install -e ".[dev]"
 
 ---
 
-## Step 1 — Choose a collector dependency
+## FieldRule — the recommended approach
+
+For most Band-1 rules (deterministic, single-collector), subclass
+`FieldRule[P]` from `nfr_review.rules.framework`. It handles evidence
+selection, skip-if-empty, payload coercion, the green all-clear finding, and
+`Finding` construction — you write only the detection logic.
+
+See [docs/rule-framework.md](rule-framework.md) for the full design rationale.
+
+### Step 1 — Identify the evidence and payload type
+
+Find the collector you depend on and its typed payload in
+`src/nfr_review/collectors/payloads/`. For example, for Python AST rules:
+collector `python-ast`, evidence kind `python-ast-file`, payload
+`PythonAstFilePayload`.
+
+### Step 2 — Subclass `FieldRule[YourPayload]`
+
+```python
+# src/nfr_review/rules/python_mutable_default.py
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule, Hit
+
+_MUTABLE = frozenset({"list", "dict", "set"})
+
+
+class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
+    id = "python-mutable-default"
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "mutable-default"
+    all_clear_summary = "No mutable default arguments detected."
+
+    def check(self, p: PythonAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for func in p.functions:                 # typed — mypy knows .functions
+            for d in func.default_args:           # typed — .default_type, .line
+                if d.default_type in _MUTABLE:
+                    yield Hit(
+                        rag="amber",
+                        summary=f"Mutable default argument ({d.default_type}) in {func.name}()",
+                        recommendation=(
+                            "Use None as default and initialize in the body:"
+                            " if arg is None: arg = []"
+                        ),
+                        locator=f"{p.file_path}:{d.line}",
+                    )
+
+
+def _register() -> None:
+    if "python-mutable-default" not in rule_registry:
+        rule_registry.register("python-mutable-default", PythonMutableDefaultRule())
+
+
+_register()
+```
+
+### What you do *not* write
+
+- No evidence-selection list comprehension (base handles it from
+  `collector_name` / `evidence_kind`).
+- No skip-if-empty branch.
+- No green/all-clear `Finding`.
+- No `collector_name` / `collector_version` / `severity` plumbing on each
+  finding (severity defaults from `rag`; override per `Hit` only when needed).
+
+### FieldRule class attributes
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `id` | `str` | Unique rule identifier (lowercase-kebab-case) |
+| `collector_name` | `str` | The collector to consume evidence from |
+| `evidence_kind` | `str` | Filter evidence to this kind |
+| `payload_type` | `type[P]` | The typed payload class for coercion |
+| `pattern_tag` | `str` | Default pattern tag for findings |
+| `band` | `Band` | Default `1` (deterministic) |
+| `required_tech` | `list[str]` | Technology gates (optional, default `[]`) |
+| `default_confidence` | `float` | Default confidence (default `0.9`) |
+| `all_clear_summary` | `str` | Summary for the green finding when no issues detected |
+| `all_clear_recommendation` | `str` | Recommendation for the green finding |
+
+`required_collectors` is set automatically from `collector_name` — you do not
+need to declare it.
+
+### The `Hit` dataclass
+
+`Hit` is what you yield from `check()`. The framework fills everything else.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `rag` | `RAG` | — | `"red"` / `"amber"` / `"green"` |
+| `summary` | `str` | — | What was found |
+| `recommendation` | `str` | — | Remediation guidance |
+| `locator` | `str` | — | File path or resource (e.g. `f"{p.file_path}:{line}"`) |
+| `severity` | `Severity \| None` | `None` | Override; defaults to `red→high`, `amber→medium`, `green→info` |
+| `confidence` | `float \| None` | `None` | Override; defaults to `default_confidence` |
+| `pattern_tag` | `str \| None` | `None` | Override; defaults to rule's `pattern_tag` |
+| `content_hash` | `str` | `""` | For stable baseline diffing |
+
+### `make_finding` — standalone builder
+
+Even imperative rules can use `make_finding` to avoid inline `Finding`
+construction and severity hardcoding:
+
+```python
+from nfr_review.rules.framework import Hit, make_finding
+
+finding = make_finding(
+    rule_id=self.id,
+    hit=Hit(rag="amber", summary="...", recommendation="...", locator="..."),
+    ev=evidence_obj,
+    pattern_tag="my-pattern",
+)
+```
+
+**Severity precedence:** `Hit.severity` (explicit) → `_RAG_SEVERITY[rag]`
+(`red→high`, `amber→medium`, `green→info`).
+
+### When *not* to use `FieldRule`
+
+Use a plain `evaluate()` class when the rule:
+
+- Joins **multiple** collectors or evidence kinds
+- Needs LLM orchestration (Band 2)
+- Does cross-record aggregation (Band 3)
+- Needs custom skip logic beyond "no evidence of this kind"
+
+Even in these cases, use `make_finding` / `Hit` to avoid inline `Finding`
+boilerplate.
+
+---
+
+## Imperative rules — the escape hatch
+
+For rules that don't fit `FieldRule` (multi-collector joins, LLM calls,
+aggregation), implement `evaluate()` directly. This is the original rule
+pattern and remains a first-class, permanent API.
+
+### Step 1 — Choose a collector dependency
 
 Every rule declares which collectors it needs via `required_collectors`. The
 engine skips rules whose collectors did not run.
@@ -394,9 +535,76 @@ rules:
 
 ---
 
-## Complete example
+## Complete example (FieldRule)
 
-Here is a minimal but complete rule file. Copy this as a starting template:
+Here is a minimal but complete FieldRule. Copy this as a starting template:
+
+```python
+# src/nfr_review/rules/python_mutable_default.py
+# Copyright 2026 nfr-review contributors
+# SPDX-License-Identifier: Apache-2.0
+"""Rule: flag mutable default arguments in Python functions."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule, Hit
+
+_MUTABLE = frozenset({"list", "dict", "set"})
+
+
+class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
+    id = "python-mutable-default"
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "mutable-default"
+    all_clear_summary = "No mutable default arguments detected."
+
+    def check(self, p: PythonAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for func in p.functions:
+            for d in func.default_args:
+                if d.default_type in _MUTABLE:
+                    yield Hit(
+                        rag="amber",
+                        summary=f"Mutable default argument ({d.default_type}) in {func.name}()",
+                        recommendation=(
+                            "Use None as default and initialize in the body:"
+                            " if arg is None: arg = []"
+                        ),
+                        locator=f"{p.file_path}:{d.line}",
+                    )
+
+
+def _register() -> None:
+    if "python-mutable-default" not in rule_registry:
+        rule_registry.register("python-mutable-default", PythonMutableDefaultRule())
+
+
+_register()
+```
+
+### FieldRule checklist
+
+- [ ] Rule module in `src/nfr_review/rules/`
+- [ ] Subclass `FieldRule[YourPayload]` with `id`, `collector_name`, `evidence_kind`, `payload_type`, `pattern_tag`
+- [ ] `check()` yields `Hit` objects
+- [ ] `_register()` function at module scope
+- [ ] Entry in `RULE_METADATA` (`src/nfr_review/rule_metadata.py`)
+- [ ] Scoring keyword if prefix is non-standard (`src/nfr_review/scoring.py`)
+- [ ] Tests with positive and negative cases
+- [ ] Verify with `nfr-review list-rules` and `nfr-review explain`
+
+---
+
+## Complete example (imperative)
+
+Here is a minimal but complete imperative rule file for cases that don't fit
+`FieldRule` (multi-collector, LLM, aggregation):
 
 ```python
 # src/nfr_review/rules/ci_coverage_gate.py
@@ -479,7 +687,7 @@ def _register() -> None:
 _register()
 ```
 
-### Checklist
+### Imperative checklist
 
 - [ ] Rule module in `src/nfr_review/rules/`
 - [ ] Class with `id`, `band`, `required_collectors`, `evaluate()`
@@ -637,6 +845,7 @@ class RuleResult(BaseModel):
 
 ### Further reading
 
+- [docs/rule-framework.md](rule-framework.md) — typed rule framework design and phased rollout plan
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — module responsibility map and data flow
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — development setup and PR expectations
 - [docs/install.md](install.md) — full install guide
