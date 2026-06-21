@@ -101,7 +101,7 @@ def _compute_metrics(
     god_threshold = max(int(median_deg * _GOD_NODE_MULTIPLIER), 1)
 
     god_nodes: list[GodNodeEntry] = []
-    for nid, deg in sorted(total_degrees.items(), key=lambda x: -x[1]):
+    for nid, deg in sorted(total_degrees.items(), key=lambda x: (-x[1], x[0])):
         if deg <= god_threshold:
             break
         n = node_map[nid]

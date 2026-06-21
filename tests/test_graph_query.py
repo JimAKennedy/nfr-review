@@ -8,6 +8,7 @@ import pytest
 
 pytest.importorskip("networkx", reason="networkx not installed")
 
+
 from nfr_review.collectors.payloads.graphify import (
     GraphEdge,
     GraphifyPayload,

@@ -260,6 +260,7 @@ class GraphQueryClient:
                     source_file=self._node_files.get(source, ""),
                 )
             )
+        results.sort(key=lambda e: (e.direction, e.label, e.relation))
         return results
 
     def community_members(self, community_id: int) -> CommunityDetail | None:
@@ -278,6 +279,9 @@ class GraphQueryClient:
 
         if not members:
             return None
+
+        paired = sorted(zip(members, labels, strict=True), key=lambda p: p[0])
+        members, labels = ([p[0] for p in paired], [p[1] for p in paired])
 
         return CommunityDetail(
             community_id=community_id,
