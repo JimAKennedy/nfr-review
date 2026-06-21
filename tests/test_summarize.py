@@ -103,7 +103,7 @@ class TestGenerateExecSummary:
         with (
             patch.dict(
                 os.environ,
-                {"ANTHROPIC_API_KEY": "", "NFR_LLM_BACKEND": "api"},
+                {"ANTHROPIC_API_KEY": "", "NFR_LLM_PROVIDER": "anthropic"},
                 clear=False,
             ),
             patch.object(_lc, "_ENV_LOADED", True),

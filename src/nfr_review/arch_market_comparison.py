@@ -283,8 +283,8 @@ def generate_market_comparison(
 
     try:
         raw_response = llm.analyze(prompt, evidence, max_tokens=2048)
-    except LlmUnavailableError:
-        logger.warning("LLM became unavailable during market comparison")
+    except LlmUnavailableError as exc:
+        logger.warning("LLM became unavailable during market comparison: %s", exc)
         return MarketAnalysisSection()
     except Exception:
         logger.exception("Unexpected error during LLM market comparison")

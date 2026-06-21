@@ -130,8 +130,8 @@ class ArchitecturalDriftFromAdrRule:
                 len(response_text),
             )
             return self._parse_response(response_text, adr_evidence)
-        except LlmUnavailableError:
-            logger.warning("LLM unavailable for architectural drift analysis")
+        except LlmUnavailableError as exc:
+            logger.warning("LLM unavailable for architectural drift analysis: %s", exc)
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
