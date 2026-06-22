@@ -9,13 +9,19 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      refresh_snapshots:
+        description: "Regenerate regression snapshots from CI environment and open a PR"
+        type: boolean
+        default: false
 
 concurrency:
   group: nfr-review-nightly
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
   security-events: write
 
 jobs:
@@ -139,10 +145,49 @@ jobs:
         run: pip install -e ".[dev,graphify]"
 
       - name: Run regression tests
+        if: ${{ github.event.inputs.refresh_snapshots != 'true' }}
         run: pytest -n auto -m regression --timeout=600 -v --junitxml=regression-results.xml
 
+      - name: Refresh snapshots
+        if: ${{ github.event.inputs.refresh_snapshots == 'true' }}
+        run: |
+          pytest -n auto -m regression --timeout=600 -v --update-snapshots
+          echo "snapshot_changed=$(git diff --quiet tests/regression/snapshots/ && echo false || echo true)" >> "$GITHUB_ENV"
+
+      - name: Open snapshot PR
+        if: ${{ github.event.inputs.refresh_snapshots == 'true' && env.snapshot_changed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="chore/refresh-regression-snapshots-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git add tests/regression/snapshots/
+          git commit -m "chore(regression): refresh snapshots from CI environment
+
+          Regenerated on ubuntu-latest / Python ${{ matrix.python-version }}.
+          Snapshots must be generated on the CI platform to avoid
+          tree-sitter cross-platform parsing differences."
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore(regression): refresh snapshots from CI" \
+            --body "$(cat <<EOF
+          ## Summary
+          - Regenerated regression snapshots on ubuntu-latest / Python ${{ matrix.python-version }}
+          - Ensures baselines match the CI environment where nightly tests run
+
+          Snapshots generated locally (macOS) diverge from CI (Ubuntu) due to
+          tree-sitter cross-platform parsing differences. This PR aligns the
+          baselines with the CI environment.
+
+          Triggered via: Actions > Nightly > Run workflow > refresh_snapshots=true
+          EOF
+          )" \
+            --base main
+
       - name: Upload test results
-        if: always()
+        if: always() && github.event.inputs.refresh_snapshots != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: regression-results
@@ -154,7 +199,13 @@ jobs:
         run: |
           echo "## Regression Tests (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f regression-results.xml ]; then
+          if [ "${{ github.event.inputs.refresh_snapshots }}" = "true" ]; then
+            if [ "${{ env.snapshot_changed }}" = "true" ]; then
+              echo "Snapshots refreshed and PR opened." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Snapshots unchanged — no PR needed." >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ -f regression-results.xml ]; then
             echo "Results uploaded as artifact." >> $GITHUB_STEP_SUMMARY
           else
             echo "No results file generated." >> $GITHUB_STEP_SUMMARY
