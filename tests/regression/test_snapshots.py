@@ -139,6 +139,12 @@ def test_regression_snapshot(
             "structure-coupling-cluster",
             "structure-god-node",
             "structure-weak-boundary",
+            # Cross-platform: tree-sitter parses different class counts on
+            # macOS vs Ubuntu.  Remove after regenerating snapshots on CI
+            # (Actions → Nightly → refresh_snapshots=true).
+            "actuator-exposure-risk",
+            "java-dormant-classes",
+            "java-package-subdivision",
         }
         added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
         removed_stable = [f for f in removed if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
