@@ -8,7 +8,6 @@ from collections.abc import Iterable
 
 from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
 from nfr_review.models import Evidence
-from nfr_review.registry import rule_registry
 from nfr_review.rules.framework import FieldRule, Hit
 
 _MUTABLE_TYPES = frozenset({"list", "dict", "set"})
@@ -42,12 +41,5 @@ class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
                         locator=f"{payload.file_path}:{default.line}",
                     )
 
-
-def _register() -> None:
-    if "python-mutable-default" not in rule_registry:
-        rule_registry.register("python-mutable-default", PythonMutableDefaultRule())
-
-
-_register()
 
 __all__ = ["PythonMutableDefaultRule"]
