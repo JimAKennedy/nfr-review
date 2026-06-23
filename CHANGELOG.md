@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-23
+
+### Added
+
+- **Graphify structural analysis** — `GraphifyCollector` builds dependency
+  graphs via tree-sitter AST parsing and `graph_query.py` identifies coupling
+  clusters, god nodes, and weak module boundaries. Three new rules:
+  `structure_coupling_cluster`, `structure_god_node`,
+  `structure_weak_boundary`. Includes MCP structural query integration and
+  self-scan regression test.
+- **Typed rule framework** — `FieldRule[P]` generic base class with typed
+  `Hit` dataclass and `make_finding` helper for declarative rule authoring.
+  Three Python rules migrated as exemplars. See `docs/rule-framework.md`.
+- **Regression test determinism** — deps.dev API response caching
+  (`tests/regression/api_cache/`), unified snapshot refresh script
+  (`scripts/refresh_snapshots.py`), sorted graph query outputs, and
+  community-rule drift tolerance in snapshot comparisons.
+- **CI snapshot refresh workflow** — `workflow_dispatch` input on nightly
+  workflow to regenerate regression baselines on the CI platform, eliminating
+  cross-platform snapshot drift.
+- **Graphify usage guide** — `docs/graphify-guide.md` with worked examples.
+
+### Changed
+
+- **PDF origin partitioning** — dependency findings are separated into a
+  dedicated PDF section with a disclaimer that they are excluded from the
+  Design Maturity Score.
+- **SARIF origin tagging** — dependency-origin findings carry
+  `properties.origin: "dependency"` so SARIF consumers can filter them.
+- **CI graphify integration** — `[graphify]` extra installed in test jobs so
+  graph-related tests run in CI.
+
+### Fixed
+
+- Blobless clones and fail-forward checkout in regression tests.
+- Regression working-tree reset and checkout diagnostics.
+- Nightly regression failures from cross-platform snapshot mismatch.
+- Documentation accuracy: corrected nonexistent `scan` command references,
+  wrong evidence kinds, missing CLI commands, and stale action versions
+  across 6 docs files.
+
+### Dependencies
+
+- Bump `actions/checkout` from 6.0.3 to 7.0.0.
+- Bump `softprops/action-gh-release` from 3.0.0 to 3.0.1.
+- Bump pip-minor dev dependency group (6 packages).
+- Pre-commit hooks autoupdated.
+
 ## [0.3.0] - 2026-06-19
 
 ### Added
