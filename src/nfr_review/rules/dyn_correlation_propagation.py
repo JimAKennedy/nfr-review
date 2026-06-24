@@ -7,26 +7,34 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Literal
 
+from nfr_review.collectors.payloads.otel_trace import OtelTracePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule
+from nfr_review.rules.rule_helpers import make_green_finding
 
 CORRELATION_KEYS = ("correlation.id", "baggage.correlation.id", "X-Correlation-ID")
 
 
-@register
-class DynCorrelationPropagationRule:
+class DynCorrelationPropagationRule(FieldRule[OtelTracePayload]):
     """Verify correlation/trace attribute consistency across trace spans."""
 
     id = "dyn-correlation-propagation"
-    band: Band = 3
-    required_collectors: list[str] = ["otel-trace"]
+    band = 3
+    collector_name = "otel-trace"
+    evidence_kind = "otel-trace"
+    payload_type = OtelTracePayload
+    pattern_tag = "dyn-correlation-propagation"
     required_tech: list[str] = []
+    default_confidence = 0.8
+    all_clear_summary = "Correlation-ID propagation consistent across all configured traces."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
-        if not trace_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -34,7 +42,7 @@ class DynCorrelationPropagationRule:
             )
 
         traces: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for ev in trace_ev:
+        for ev in relevant:
             for span in ev.payload.spans:
                 tid = span.get("trace_id", "")
                 if tid:
@@ -47,7 +55,7 @@ class DynCorrelationPropagationRule:
                 skip_reason="no traces found in otel-trace evidence",
             )
 
-        first = trace_ev[0]
+        first = relevant[0]
         good = 0
         broken = 0
         unconfigured = 0

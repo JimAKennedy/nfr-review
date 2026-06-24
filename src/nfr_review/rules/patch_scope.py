@@ -21,9 +21,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _PATCH_CONFIG_FILE_PATTERNS = [
@@ -75,13 +75,14 @@ def _find_config_files(ev: Evidence) -> list[str]:
     return matched
 
 
-@register
-class PatchClassSoakConfigRule:
-    """PATCH-SCOPE-001: detect patch class soak configuration."""
-
+class PatchClassSoakConfigRule(FieldRule[RepoStructureSummaryPayload]):
     id = "PATCH-SCOPE-001"
-    band: Band = 2
-    required_collectors: list[str] = ["repo-structure"]
+    band = 2
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "patch-scope-soak-config"
+    default_confidence = 0.80
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         summaries = _repo_summary_evidence(evidence)
@@ -182,13 +183,14 @@ class PatchClassSoakConfigRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
-@register
-class AcceleratedCadenceRule:
-    """PATCH-SCOPE-002: detect accelerated cadence for critical-security patches."""
-
+class AcceleratedCadenceRule(FieldRule[RepoStructureSummaryPayload]):
     id = "PATCH-SCOPE-002"
-    band: Band = 2
-    required_collectors: list[str] = ["repo-structure"]
+    band = 2
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "patch-scope-accelerated"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         summaries = _repo_summary_evidence(evidence)

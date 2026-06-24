@@ -26,9 +26,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.telemetry import TelemetryPipelinePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOLDEN_SIGNAL_TYPES = frozenset({"metrics", "traces"})
@@ -64,13 +64,14 @@ def _check_label_present(attrs: dict[str, Any], label: str) -> bool:
     return any(a in attrs for a in aliases)
 
 
-@register
-class GoldenSignalEmissionRule:
-    """PATCH-TELEM-001: detect golden signal emission coverage via OTel pipeline config."""
-
+class GoldenSignalEmissionRule(FieldRule[TelemetryPipelinePayload]):
     id = "PATCH-TELEM-001"
-    band: Band = 2
-    required_collectors: list[str] = ["telemetry-config"]
+    band = 2
+    collector_name = "telemetry-config"
+    evidence_kind = "telemetry-pipeline"
+    payload_type = TelemetryPipelinePayload
+    pattern_tag = "patch-telem-golden-signals"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         telem = _telemetry_evidence(evidence)
@@ -162,13 +163,14 @@ class GoldenSignalEmissionRule:
         )
 
 
-@register
-class MandatoryLabelPresenceRule:
-    """PATCH-TELEM-002: detect mandatory label presence in resource attributes."""
-
+class MandatoryLabelPresenceRule(FieldRule[TelemetryPipelinePayload]):
     id = "PATCH-TELEM-002"
-    band: Band = 2
-    required_collectors: list[str] = ["telemetry-config"]
+    band = 2
+    collector_name = "telemetry-config"
+    evidence_kind = "telemetry-pipeline"
+    payload_type = TelemetryPipelinePayload
+    pattern_tag = "patch-telem-labels"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         telem = _telemetry_evidence(evidence)
@@ -262,13 +264,14 @@ class MandatoryLabelPresenceRule:
         )
 
 
-@register
-class SyntheticTransactionConfigRule:
-    """PATCH-TELEM-003: detect synthetic transaction configuration."""
-
+class SyntheticTransactionConfigRule(FieldRule[TelemetryPipelinePayload]):
     id = "PATCH-TELEM-003"
-    band: Band = 2
-    required_collectors: list[str] = ["telemetry-config"]
+    band = 2
+    collector_name = "telemetry-config"
+    evidence_kind = "telemetry-pipeline"
+    payload_type = TelemetryPipelinePayload
+    pattern_tag = "patch-telem-synthetic"
+    default_confidence = 0.80
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         telem = _telemetry_evidence(evidence)

@@ -13,10 +13,10 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 20
 _MIXED_CONCERN_GROUP_THRESHOLD = 3
@@ -88,17 +88,25 @@ def _extract_domain_words(struct_name: str) -> set[str]:
     return words - _INFRA_WORDS
 
 
-@register
-class GoPackageSubdivisionRule:
+class GoPackageSubdivisionRule(FieldRule[GoAstFilePayload]):
     """Detect god packages and mixed concerns in Go projects."""
 
     id = "go-package-subdivision"
-    band: Band = 2
-    required_collectors: list[str] = ["go-ast"]
+    band = 2
+    collector_name = "go-ast"
+    evidence_kind = "go-ast-file"
+    payload_type = GoAstFilePayload
+    pattern_tag = "go-god-package"
+    default_confidence = 0.85
+    all_clear_summary = "Go package structure is well-subdivided."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        go_evidence = filter_evidence(evidence, "go-ast", "go-ast-file")
-        if not go_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -107,9 +115,10 @@ class GoPackageSubdivisionRule:
 
         # Group structs by package.
         package_structs: dict[str, list[str]] = defaultdict(list)
-        for ev in go_evidence:
-            pkg = ev.payload.package
-            for struct in ev.payload.structs:
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            pkg = payload.package
+            for struct in payload.structs:
                 package_structs[pkg].append(struct.name)
 
         if not package_structs:
@@ -119,7 +128,7 @@ class GoPackageSubdivisionRule:
                     make_green_finding(
                         self.id,
                         "go-pkg-subdivision-ok",
-                        go_evidence[0],
+                        relevant[0],
                         summary="No Go structs found to analyse for package subdivision.",
                         confidence=0.80,
                     )
@@ -127,31 +136,32 @@ class GoPackageSubdivisionRule:
             )
 
         findings: list[Finding] = []
-        ref_ev = go_evidence[0]
+        ref_ev = relevant[0]
 
         # 1. God-package detection (higher threshold for Go).
         for pkg, structs in sorted(package_structs.items()):
             if len(structs) > _GOD_PACKAGE_THRESHOLD:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            f"God package '{pkg}' contains {len(structs)} structs"
-                            f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                f"God package '{pkg}' contains {len(structs)} structs"
+                                f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                            ),
+                            recommendation=(
+                                f"Decompose '{pkg}' into smaller packages grouped"
+                                " by domain concern. Even in Go's flat package"
+                                " convention, packages with many structs become"
+                                " difficult to maintain and navigate."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Decompose '{pkg}' into smaller packages grouped"
-                            " by domain concern. Even in Go's flat package"
-                            " convention, packages with many structs become"
-                            " difficult to maintain and navigate."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.90,
+                        ev=ref_ev,
                         pattern_tag="go-god-package",
+                        default_confidence=0.90,
                     )
                 )
 
@@ -164,25 +174,26 @@ class GoPackageSubdivisionRule:
             if len(domain_groups) > _MIXED_CONCERN_GROUP_THRESHOLD:
                 sample = sorted(domain_groups)[:5]
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Package '{pkg}' has structs spanning"
-                            f" {len(domain_groups)} domain concepts"
-                            f" ({', '.join(sample)})."
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                f"Package '{pkg}' has structs spanning"
+                                f" {len(domain_groups)} domain concepts"
+                                f" ({', '.join(sample)})."
+                            ),
+                            recommendation=(
+                                f"Split '{pkg}' so each package addresses a"
+                                " single domain concern. Go packages should be"
+                                " small and focused with a clear purpose."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Split '{pkg}' so each package addresses a"
-                            " single domain concern. Go packages should be"
-                            " small and focused with a clear purpose."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.75,
+                        ev=ref_ev,
                         pattern_tag="go-mixed-concerns",
+                        default_confidence=0.75,
                     )
                 )
 

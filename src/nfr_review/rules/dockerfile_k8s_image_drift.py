@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.dockerfile import DockerfileAnalysisPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
@@ -46,14 +46,15 @@ def _images_same_service(df_image: str, k8s_image: str) -> bool:
     return df_base == k8s_base
 
 
-@register
-class DockerfileK8sImageDriftRule:
-    """Flag mismatches between Dockerfile base image tags and K8s container image tags."""
-
+class DockerfileK8sImageDriftRule(FieldRule[DockerfileAnalysisPayload]):
     id = "dockerfile-k8s-image-drift"
-    band: Band = 1
-    required_collectors: list[str] = ["dockerfile", "k8s-manifest"]
-    required_tech: list[str] = ["dockerfile", "kubernetes"]
+    collector_name = "dockerfile"
+    evidence_kind = "dockerfile-analysis"
+    payload_type = DockerfileAnalysisPayload
+    pattern_tag = "dockerfile-k8s-image-drift"
+    required_tech = ["dockerfile", "kubernetes"]
+    required_collectors = ["dockerfile", "k8s-manifest"]
+    default_confidence = 0.8
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
@@ -72,9 +73,7 @@ class DockerfileK8sImageDriftRule:
                 skip_reason="no k8s-manifest evidence available",
             )
 
-        # Collect final-stage images from all Dockerfiles
-        # The final stage is the last entry in the stages list
-        df_final_images: list[tuple[str, str, str]] = []  # (file_path, base_image, base_tag)
+        df_final_images: list[tuple[str, str, str]] = []
         for ev in df_evidence:
             stages = ev.payload.stages
             if not stages:
@@ -103,9 +102,8 @@ class DockerfileK8sImageDriftRule:
                     if not _images_same_service(df_base_image, k8s_image):
                         continue
 
-                    # Same service detected — compare tags
                     if df_base_tag is None or k8s_tag is None:
-                        continue  # can't compare without both tags
+                        continue
 
                     if df_base_tag != k8s_tag:
                         findings.append(

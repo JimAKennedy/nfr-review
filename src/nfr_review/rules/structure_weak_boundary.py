@@ -6,70 +6,79 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.graphify import GraphifyPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _CROSS_BOUNDARY_THRESHOLD = 0.40
 _MIN_EDGES_FOR_SIGNAL = 5
 _MAX_FINDINGS = 10
 
 
-@register
-class StructureWeakBoundaryRule:
+class StructureWeakBoundaryRule(FieldRule[GraphifyPayload]):
     """Flag communities where cross-boundary edges exceed 40% of total."""
 
     id = "structure-weak-boundary"
-    band: Band = 1
-    required_collectors: list[str] = ["graphify"]
+    collector_name = "graphify"
+    evidence_kind = "graphify-analysis"
+    payload_type = GraphifyPayload
+    pattern_tag = "structure-weak-boundary"
     required_tech: list[str] = []
+    default_confidence = 0.75
+    all_clear_summary = (
+        "All communities have strong boundaries — "
+        "cross-boundary edge ratio is within threshold."
+    )
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        gf_evidence = filter_evidence(evidence, "graphify", "graphify-analysis")
-        if not gf_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no graphify-analysis evidence available",
             )
 
-        ev = gf_evidence[0]
-        stats = ev.payload.get("community_stats", [])
+        ev = relevant[0]
+        payload = self._coerce(ev.payload)
+        stats = payload.community_stats
 
         findings: list[Finding] = []
         for cs in stats:
-            internal = cs.get("internal_edges", 0)
-            cross = cs.get("cross_boundary_edges", 0)
-            total = internal + cross
+            total = cs.internal_edges + cs.cross_boundary_edges
             if total < _MIN_EDGES_FOR_SIGNAL:
                 continue
-            ratio = cs.get("cross_boundary_ratio", 0.0)
-            if ratio <= _CROSS_BOUNDARY_THRESHOLD:
+            if cs.cross_boundary_ratio <= _CROSS_BOUNDARY_THRESHOLD:
                 continue
 
-            cid = cs.get("community_id", "?")
-            cname = cs.get("community_name") or f"Community {cid}"
-            pct = round(ratio * 100, 1)
+            cname = cs.community_name or f"Community {cs.community_id}"
+            pct = round(cs.cross_boundary_ratio * 100, 1)
             findings.append(
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"'{cname}' has {pct}% cross-boundary edges "
-                        f"({cross}/{total}) — weak module boundary."
+                    ev=ev,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            f"'{cname}' has {pct}% cross-boundary edges "
+                            f"({cs.cross_boundary_edges}/{total}) — weak module boundary."
+                        ),
+                        recommendation=(
+                            f"Review the cross-boundary dependencies of "
+                            f"'{cname}' and consider extracting a clearer "
+                            f"interface or merging tightly-coupled clusters."
+                        ),
+                        locator=f"community:{cs.community_id}",
+                        confidence=0.75,
                     ),
-                    recommendation=(
-                        f"Review the cross-boundary dependencies of "
-                        f"'{cname}' and consider extracting a clearer "
-                        f"interface or merging tightly-coupled clusters."
-                    ),
-                    evidence_locator=f"community:{cid}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.75,
-                    pattern_tag="structure-weak-boundary",
                 )
             )
 

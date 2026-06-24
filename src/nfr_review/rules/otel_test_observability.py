@@ -6,14 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelSdkConfigPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 
-@register
-class OTelTestObservabilityRule:
+class OTelTestObservabilityRule(FieldRule[OtelSdkConfigPayload]):
     """Flag test configs that don't produce OTel traces.
 
     Bridges S01 (agent exists) and S02 (tests exercise endpoints) by
@@ -21,13 +19,27 @@ class OTelTestObservabilityRule:
     """
 
     id = "otel-test-observability"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-sdk-config"
+    payload_type = OtelSdkConfigPayload
+    pattern_tag = "otel-test-observability"
     required_tech: list[str] = []
+    default_confidence = 0.8
+    all_clear_summary = (
+        "Test configurations include OTel agent attachment. "
+        "Test runs will produce traces for dynamic analysis."
+    )
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_evidence = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
-        sdk_evidence = filter_evidence(evidence, "otel", "otel-sdk-config")
+        ci_evidence = [
+            e
+            for e in evidence
+            if e.collector_name == "ci-artifact" and e.kind == "ci-pipeline"
+        ]
+        sdk_evidence = [
+            e for e in evidence if e.collector_name == "otel" and e.kind == "otel-sdk-config"
+        ]
 
         if not ci_evidence and not sdk_evidence:
             return RuleResult(
@@ -52,16 +64,20 @@ class OTelTestObservabilityRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-test-observability",
-                        first,
-                        summary=(
-                            "Test configurations include OTel agent attachment. "
-                            "Test runs will produce traces for dynamic analysis."
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="green",
+                            summary=(
+                                "Test configurations include OTel agent attachment. "
+                                "Test runs will produce traces for dynamic analysis."
+                            ),
+                            recommendation="No action required.",
+                            locator=first.locator,
                         ),
-                        confidence=0.8,
-                        evidence_locator=first.locator,
                     )
                 ],
             )
@@ -69,27 +85,29 @@ class OTelTestObservabilityRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "Tests exist but OTel agent is not wired into the test "
-                        "runner. Test runs will not produce traces for Band 3 "
-                        "dynamic analysis."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.75,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "Tests exist but OTel agent is not wired into the test "
+                            "runner. Test runs will not produce traces for Band 3 "
+                            "dynamic analysis."
+                        ),
+                        recommendation=(
+                            "Wire OTel into test configurations: add "
+                            "-javaagent:opentelemetry-javaagent.jar to Maven "
+                            "surefire/failsafe argLine, set OTEL_TRACES_EXPORTER=otlp "
+                            "and OTEL_SERVICE_NAME in CI test step env vars, or add "
+                            "opentelemetry-instrumentation to Python test deps."
+                        ),
+                        locator=first.locator,
+                        confidence=0.75,
                     ),
-                    recommendation=(
-                        "Wire OTel into test configurations: add "
-                        "-javaagent:opentelemetry-javaagent.jar to Maven "
-                        "surefire/failsafe argLine, set OTEL_TRACES_EXPORTER=otlp "
-                        "and OTEL_SERVICE_NAME in CI test step env vars, or add "
-                        "opentelemetry-instrumentation to Python test deps."
-                    ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.75,
-                    pattern_tag="otel-test-observability",
                 )
             ],
         )

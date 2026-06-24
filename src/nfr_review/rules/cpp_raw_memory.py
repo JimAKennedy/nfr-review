@@ -13,9 +13,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from nfr_review.collectors.payloads.cpp_ast import CppAstFilePayload
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _OWNERSHIP_TRANSFER_RE = re.compile(
@@ -40,16 +40,21 @@ def _is_ownership_suppressed(expr: dict[str, Any]) -> bool:
     return False
 
 
-@register
-class CppRawMemoryRule:
+class CppRawMemoryRule(FieldRule[CppAstFilePayload]):
     id = "cpp-raw-memory"
-    band: Band = 1
-    required_collectors: list[str] = ["cpp-ast"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "cpp-ast"
+    evidence_kind = "cpp-ast-file"
+    payload_type = CppAstFilePayload
+    pattern_tag = "cpp-raw-new"
+    required_tech = ["cpp"]
+    default_confidence = 0.9
+    all_clear_summary = (
+        "No raw memory management patterns detected — RAII and smart pointers used."
+    )
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cpp_ev = [e for e in evidence if e.kind == "cpp-ast-file"]
-        if not cpp_ev:
+        relevant = [e for e in evidence if e.kind == self.evidence_kind]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -58,87 +63,92 @@ class CppRawMemoryRule:
 
         findings: list[Finding] = []
         has_smart_ptrs = False
-        for ev in cpp_ev:
-            if ev.payload.smart_pointers:
+        for ev in relevant:
+            payload = ev.payload
+            if payload.smart_pointers:
                 has_smart_ptrs = True
 
-            for expr in ev.payload.new_expressions:
+            for expr in payload.new_expressions:
                 if _is_ownership_suppressed(expr):
                     findings.append(
-                        Finding(
+                        make_finding(
                             rule_id=self.id,
-                            rag="green",
-                            severity="info",
-                            summary=(
-                                "Raw new expression suppressed — "
-                                "ownership-transfer or REFCOUNT-SAFE annotation."
+                            hit=Hit(
+                                rag="green",
+                                severity="info",
+                                summary=(
+                                    "Raw new expression suppressed — "
+                                    "ownership-transfer or REFCOUNT-SAFE annotation."
+                                ),
+                                recommendation="No action required.",
+                                locator=f"{expr['file']}:{expr['line']}",
+                                content_hash=compute_content_hash(expr.get("expression", "")),
                             ),
-                            recommendation="No action required.",
-                            evidence_locator=f"{expr['file']}:{expr['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
+                            ev=ev,
                             pattern_tag="cpp-raw-new-suppressed",
-                            content_hash=compute_content_hash(expr.get("expression", "")),
+                            default_confidence=self.default_confidence,
                         )
                     )
                     continue
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber" if has_smart_ptrs else "red",
-                        severity="medium" if has_smart_ptrs else "high",
-                        summary="Raw new expression detected",
-                        recommendation=(
-                            "Use std::make_unique or std::make_shared instead of raw new."
+                        hit=Hit(
+                            rag="amber" if has_smart_ptrs else "red",
+                            severity="medium" if has_smart_ptrs else "high",
+                            summary="Raw new expression detected",
+                            recommendation=(
+                                "Use std::make_unique or std::make_shared instead of raw new."
+                            ),
+                            locator=f"{expr['file']}:{expr['line']}",
+                            content_hash=compute_content_hash(expr.get("expression", "")),
                         ),
-                        evidence_locator=f"{expr['file']}:{expr['line']}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
+                        ev=ev,
                         pattern_tag="cpp-raw-new",
-                        content_hash=compute_content_hash(expr.get("expression", "")),
+                        default_confidence=self.default_confidence,
                     )
                 )
 
-            for expr in ev.payload.delete_expressions:
+            for expr in payload.delete_expressions:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary="Raw delete expression detected",
-                        recommendation=(
-                            "Use smart pointers (unique_ptr/shared_ptr) "
-                            "for automatic lifetime management."
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary="Raw delete expression detected",
+                            recommendation=(
+                                "Use smart pointers (unique_ptr/shared_ptr) "
+                                "for automatic lifetime management."
+                            ),
+                            locator=f"{expr['file']}:{expr['line']}",
+                            content_hash=compute_content_hash(expr.get("expression", "")),
                         ),
-                        evidence_locator=f"{expr['file']}:{expr['line']}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
+                        ev=ev,
                         pattern_tag="cpp-raw-delete",
-                        content_hash=compute_content_hash(expr.get("expression", "")),
+                        default_confidence=self.default_confidence,
                     )
                 )
 
-            for call in ev.payload.malloc_calls:
+            for call in payload.malloc_calls:
                 if call["call"] in ("malloc", "calloc", "realloc"):
                     findings.append(
-                        Finding(
+                        make_finding(
                             rule_id=self.id,
-                            rag="red",
-                            severity="high",
-                            summary=f"{call['call']}() usage detected",
-                            recommendation=(
-                                "Use C++ allocation (new/make_unique) "
-                                "instead of C-style malloc."
+                            hit=Hit(
+                                rag="red",
+                                severity="high",
+                                summary=f"{call['call']}() usage detected",
+                                recommendation=(
+                                    "Use C++ allocation (new/make_unique) "
+                                    "instead of C-style malloc."
+                                ),
+                                locator=f"{call['file']}:{call['line']}",
+                                content_hash=compute_content_hash(call.get("call", "")),
                             ),
-                            evidence_locator=f"{call['file']}:{call['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
+                            ev=ev,
                             pattern_tag="cpp-malloc-usage",
-                            content_hash=compute_content_hash(call.get("call", "")),
+                            default_confidence=self.default_confidence,
                         )
                     )
 
@@ -147,7 +157,7 @@ class CppRawMemoryRule:
                 make_green_finding(
                     self.id,
                     "cpp-raii-only",
-                    cpp_ev[0],
+                    relevant[0],
                     summary=(
                         "No raw memory management patterns "
                         "detected — RAII and smart pointers used."

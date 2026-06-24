@@ -6,62 +6,74 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _ALL_SIGNAL_TYPES = frozenset({"traces", "metrics", "logs"})
 
 
-@register
-class OTelPipelineCompletenessRule:
+class OTelPipelineCompletenessRule(FieldRule[OtelAnalysisPayload]):
     """Flag OTel Collector configs where not all signal types have pipelines."""
 
     id = "otel-pipeline-completeness"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
-    required_tech: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-analysis"
+    payload_type = OtelAnalysisPayload
+    pattern_tag = "otel-pipeline-completeness"
+    required_tech = ["otel"]
+    default_confidence = 0.9
+    all_clear_summary = (
+        "All three signal types (traces, metrics, logs) have pipelines configured."
+    )
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        otel_evidence = filter_evidence(evidence, "otel", "otel-analysis")
-        if not otel_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no otel-analysis evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        first = otel_evidence[0]
+        first = relevant[0]
 
         all_pipelines: dict[str, Any] = {}
         all_receivers: set[str] = set()
         all_exporters: set[str] = set()
-        for ev in otel_evidence:
-            pipelines = ev.payload.pipelines
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            pipelines = payload.pipelines
             if isinstance(pipelines, dict):
                 all_pipelines.update(pipelines)
-            all_receivers.update(ev.payload.receivers)
-            all_exporters.update(ev.payload.exporters)
+            all_receivers.update(payload.receivers)
+            all_exporters.update(payload.exporters)
 
         if not all_pipelines:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary="No pipelines defined in OTel Collector configuration.",
-                        recommendation=(
-                            "Define pipelines under service.pipelines for traces,"
-                            " metrics, and logs to route telemetry data."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.95,
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary="No pipelines defined in OTel Collector configuration.",
+                            recommendation=(
+                                "Define pipelines under service.pipelines for traces,"
+                                " metrics, and logs to route telemetry data."
+                            ),
+                            locator=first.locator,
+                            confidence=0.95,
                         ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.95,
-                        pattern_tag="otel-pipeline-completeness",
                     )
                 ],
             )
@@ -73,25 +85,26 @@ class OTelPipelineCompletenessRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            "Pipeline references undefined components: "
-                            + ", ".join(sorted(undefined_refs))
-                            + "."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.9,
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                "Pipeline references undefined components: "
+                                + ", ".join(sorted(undefined_refs))
+                                + "."
+                            ),
+                            recommendation=(
+                                "Ensure all receivers, processors, and exporters"
+                                " referenced in pipelines are defined in the"
+                                " corresponding top-level sections."
+                            ),
+                            locator=first.locator,
                         ),
-                        recommendation=(
-                            "Ensure all receivers, processors, and exporters"
-                            " referenced in pipelines are defined in the"
-                            " corresponding top-level sections."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.9,
-                        pattern_tag="otel-pipeline-completeness",
                     )
                 ],
             )
@@ -107,24 +120,26 @@ class OTelPipelineCompletenessRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            "Incomplete signal coverage. Missing pipelines for: "
-                            + ", ".join(sorted(missing))
-                            + "."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                "Incomplete signal coverage. Missing pipelines for: "
+                                + ", ".join(sorted(missing))
+                                + "."
+                            ),
+                            recommendation=(
+                                "Add pipelines for all three signal types (traces,"
+                                " metrics, logs) for comprehensive observability."
+                            ),
+                            locator=first.locator,
+                            confidence=0.85,
                         ),
-                        recommendation=(
-                            "Add pipelines for all three signal types (traces,"
-                            " metrics, logs) for comprehensive observability."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.85,
-                        pattern_tag="otel-pipeline-completeness",
                     )
                 ],
             )
@@ -132,16 +147,20 @@ class OTelPipelineCompletenessRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                make_green_finding(
-                    self.id,
-                    "otel-pipeline-completeness",
-                    first,
-                    summary=(
-                        "All three signal types (traces, metrics, logs)"
-                        " have pipelines configured."
+                make_finding(
+                    rule_id=self.id,
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.9,
+                    hit=Hit(
+                        rag="green",
+                        summary=(
+                            "All three signal types (traces, metrics, logs)"
+                            " have pipelines configured."
+                        ),
+                        recommendation="No action required.",
+                        locator=first.locator,
                     ),
-                    confidence=0.9,
-                    evidence_locator=first.locator,
                 )
             ],
         )

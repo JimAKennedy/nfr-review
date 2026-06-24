@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _PRODUCTION_EXPORTERS = frozenset(
     {
@@ -31,28 +30,37 @@ _PRODUCTION_EXPORTERS = frozenset(
 _DEV_ONLY_EXPORTERS = frozenset({"logging", "debug", "nop", "file"})
 
 
-@register
-class OTelExporterConfigRule:
+class OTelExporterConfigRule(FieldRule[OtelAnalysisPayload]):
     """Flag OTel Collector configs where no production exporter is configured."""
 
     id = "otel-exporter-config"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
-    required_tech: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-analysis"
+    payload_type = OtelAnalysisPayload
+    pattern_tag = "otel-exporter-config"
+    required_tech = ["otel"]
+    default_confidence = 0.9
+    all_clear_summary = "Production exporters configured."
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        otel_evidence = filter_evidence(evidence, "otel", "otel-analysis")
-        if not otel_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no otel-analysis evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        first = otel_evidence[0]
+        first = relevant[0]
         all_exporters: set[str] = set()
-        for ev in otel_evidence:
-            all_exporters.update(ev.payload.exporters)
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            all_exporters.update(payload.exporters)
 
         base_names = {e.split("/")[0] for e in all_exporters}
 
@@ -63,27 +71,28 @@ class OTelExporterConfigRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            "No production exporter configured."
-                            " Only dev/debug exporters found: "
-                            + ", ".join(sorted(dev_exporters))
-                            + "."
-                            if dev_exporters
-                            else "No production exporter configured. No exporters found."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.9,
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                "No production exporter configured."
+                                " Only dev/debug exporters found: "
+                                + ", ".join(sorted(dev_exporters))
+                                + "."
+                                if dev_exporters
+                                else "No production exporter configured. No exporters found."
+                            ),
+                            recommendation=(
+                                "Add a production exporter (otlp, jaeger, zipkin,"
+                                " prometheus) to send telemetry data to a backend."
+                            ),
+                            locator=first.locator,
                         ),
-                        recommendation=(
-                            "Add a production exporter (otlp, jaeger, zipkin,"
-                            " prometheus) to send telemetry data to a backend."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.9,
-                        pattern_tag="otel-exporter-config",
                     )
                 ],
             )
@@ -92,24 +101,26 @@ class OTelExporterConfigRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            "Production exporter configured ("
-                            + ", ".join(sorted(prod_exporters))
-                            + ") but no fallback/redundancy."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.8,
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                "Production exporter configured ("
+                                + ", ".join(sorted(prod_exporters))
+                                + ") but no fallback/redundancy."
+                            ),
+                            recommendation=(
+                                "Consider adding a secondary exporter for redundancy"
+                                " in case the primary backend is unavailable."
+                            ),
+                            locator=first.locator,
+                            confidence=0.8,
                         ),
-                        recommendation=(
-                            "Consider adding a secondary exporter for redundancy"
-                            " in case the primary backend is unavailable."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.8,
-                        pattern_tag="otel-exporter-config",
                     )
                 ],
             )
@@ -117,17 +128,21 @@ class OTelExporterConfigRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                make_green_finding(
-                    self.id,
-                    "otel-exporter-config",
-                    first,
-                    summary=(
-                        "Production exporters configured: "
-                        + ", ".join(sorted(prod_exporters))
-                        + "."
+                make_finding(
+                    rule_id=self.id,
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.9,
+                    hit=Hit(
+                        rag="green",
+                        summary=(
+                            "Production exporters configured: "
+                            + ", ".join(sorted(prod_exporters))
+                            + "."
+                        ),
+                        recommendation="No action required.",
+                        locator=first.locator,
                     ),
-                    confidence=0.9,
-                    evidence_locator=first.locator,
                 )
             ],
         )

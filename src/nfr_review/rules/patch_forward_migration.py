@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _MIGRATION_DIRS = {
@@ -47,13 +47,14 @@ _ROLLBACK_FILES_LOWER = {
 _ROLLBACK_KEYWORDS = ("rollback", "revert", "undo", "down_revision")
 
 
-@register
-class ForwardOnlyMigrationRule:
-    """Detect migration tooling without rollback evidence."""
-
+class ForwardOnlyMigrationRule(FieldRule[RepoStructureSummaryPayload]):
     id = "PATCH-ROLL-003"
-    band: Band = 2
-    required_collectors: list[str] = ["repo-structure"]
+    band = 2
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "patch-forward-migration"
+    default_confidence = 0.80
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")

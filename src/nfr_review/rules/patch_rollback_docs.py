@@ -17,9 +17,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.rules.framework import register
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROLLBACK_FILES = {"rollback.md", "disaster-recovery.md"}
@@ -34,13 +34,13 @@ def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
     )
 
 
-@register
-class RollbackDocsMissingRule:
-    """Check for rollback / disaster-recovery documentation in repo root."""
-
+class RollbackDocsMissingRule(FieldRule[RepoStructureSummaryPayload]):
     id = "PATCH-ROLL-001"
-    band: Band = 1
-    required_collectors: list[str] = ["repo-structure"]
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "patch-rollback-docs"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")
