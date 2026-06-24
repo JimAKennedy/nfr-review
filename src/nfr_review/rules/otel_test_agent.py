@@ -8,10 +8,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class OTelTestAgentRule:
     """Flag repos where test profiles lack OTel agent attachment."""
 
@@ -70,12 +71,5 @@ class OTelTestAgentRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-test-agent" not in rule_registry:
-        rule_registry.register("otel-test-agent", OTelTestAgentRule())
-
-
-_register()
 
 __all__ = ["OTelTestAgentRule"]

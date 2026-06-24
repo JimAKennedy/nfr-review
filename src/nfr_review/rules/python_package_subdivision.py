@@ -12,7 +12,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 15
@@ -89,6 +89,7 @@ def _package_from_module_path(module_path: str) -> str:
     return module_path
 
 
+@register
 class PythonPackageSubdivisionRule:
     """Detect god packages, flat structures, and mixed concerns in Python."""
 
@@ -229,12 +230,5 @@ class PythonPackageSubdivisionRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "python-package-subdivision" not in rule_registry:
-        rule_registry.register("python-package-subdivision", PythonPackageSubdivisionRule())
-
-
-_register()
 
 __all__ = ["PythonPackageSubdivisionRule"]

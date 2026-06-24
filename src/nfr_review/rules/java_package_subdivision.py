@@ -12,7 +12,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 15
@@ -81,6 +81,7 @@ def _extract_domain_words(class_name: str) -> set[str]:
     return words - _INFRA_WORDS
 
 
+@register
 class JavaPackageSubdivisionRule:
     """Detect god packages, flat structures, and mixed concerns in Java."""
 
@@ -220,12 +221,5 @@ class JavaPackageSubdivisionRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "java-package-subdivision" not in rule_registry:
-        rule_registry.register("java-package-subdivision", JavaPackageSubdivisionRule())
-
-
-_register()
 
 __all__ = ["JavaPackageSubdivisionRule"]

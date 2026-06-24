@@ -17,8 +17,8 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
 from nfr_review.rules._cross_language import ALL_LANGUAGES
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _BROAD_TYPES: dict[str, frozenset[str]] = {
@@ -30,6 +30,7 @@ _BROAD_TYPES: dict[str, frozenset[str]] = {
 }
 
 
+@register
 class BareExceptCatchAllRule:
     """Flag bare except blocks and broad exception catch-alls across languages."""
 
@@ -118,12 +119,5 @@ class BareExceptCatchAllRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "bare-except-catch-all" not in rule_registry:
-        rule_registry.register("bare-except-catch-all", BareExceptCatchAllRule())
-
-
-_register()
 
 __all__ = ["BareExceptCatchAllRule"]

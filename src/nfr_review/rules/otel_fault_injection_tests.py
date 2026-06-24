@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _RESILIENCE_CONFIG_KEYS = frozenset(
@@ -48,6 +48,7 @@ _FAULT_TEST_PATTERNS = frozenset(
 )
 
 
+@register
 class OTelFaultInjectionTestsRule:
     """Flag repos with resilience patterns but no fault-injection tests."""
 
@@ -168,12 +169,5 @@ class OTelFaultInjectionTestsRule:
                     return True
         return False
 
-
-def _register() -> None:
-    if "otel-fault-injection-tests" not in rule_registry:
-        rule_registry.register("otel-fault-injection-tests", OTelFaultInjectionTestsRule())
-
-
-_register()
 
 __all__ = ["OTelFaultInjectionTestsRule"]

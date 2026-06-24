@@ -9,12 +9,13 @@ from typing import Any, Literal
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 DEFAULT_THRESHOLD = 5
 
 
+@register
 class DynNPlus1Rule:
     """Detect N+1 query patterns by counting child DB spans per request span."""
 
@@ -141,12 +142,5 @@ def _db_identity(span: dict[str, Any]) -> str:
         return stmt
     return span.get("name", "unknown-db-op")
 
-
-def _register() -> None:
-    if "dyn-n-plus-1" not in rule_registry:
-        rule_registry.register("dyn-n-plus-1", DynNPlus1Rule())
-
-
-_register()
 
 __all__ = ["DynNPlus1Rule"]

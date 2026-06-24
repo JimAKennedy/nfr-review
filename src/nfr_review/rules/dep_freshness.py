@@ -12,7 +12,7 @@ from packaging.version import InvalidVersion, Version
 
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _CONSTRAINT_RE = re.compile(r"^[><=!~^]+\s*")
@@ -50,6 +50,7 @@ def _months_since(iso_date: str, now: datetime) -> float | None:
     return delta.days / 30.44
 
 
+@register
 class DepFreshnessRule:
     """Graduated staleness and dead library detection across all dependency ecosystems."""
 
@@ -189,12 +190,5 @@ class DepFreshnessRule:
             return ("green", "info", "stale-dep-patch", "patch")
         return None
 
-
-def _register() -> None:
-    if "dep-freshness" not in rule_registry:
-        rule_registry.register("dep-freshness", DepFreshnessRule())
-
-
-_register()
 
 __all__ = ["DepFreshnessRule"]

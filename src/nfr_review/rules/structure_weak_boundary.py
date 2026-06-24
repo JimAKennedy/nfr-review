@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _CROSS_BOUNDARY_THRESHOLD = 0.40
@@ -16,6 +16,7 @@ _MIN_EDGES_FOR_SIGNAL = 5
 _MAX_FINDINGS = 10
 
 
+@register
 class StructureWeakBoundaryRule:
     """Flag communities where cross-boundary edges exceed 40% of total."""
 
@@ -91,12 +92,5 @@ class StructureWeakBoundaryRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "structure-weak-boundary" not in rule_registry:
-        rule_registry.register("structure-weak-boundary", StructureWeakBoundaryRule())
-
-
-_register()
 
 __all__ = ["StructureWeakBoundaryRule"]

@@ -14,7 +14,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
@@ -253,6 +253,7 @@ def _detect_orphans(
     return RuleResult(rule_id=rule_id, findings=findings)
 
 
+@register
 class JavaDormantClassesRule:
     id = "java-dormant-classes"
     band: Band = 2
@@ -270,6 +271,7 @@ class JavaDormantClassesRule:
         )
 
 
+@register
 class PythonDormantClassesRule:
     id = "python-dormant-classes"
     band: Band = 2
@@ -287,6 +289,7 @@ class PythonDormantClassesRule:
         )
 
 
+@register
 class GoDormantClassesRule:
     id = "go-dormant-classes"
     band: Band = 2
@@ -303,20 +306,5 @@ class GoDormantClassesRule:
             pattern_tag_prefix="go",
         )
 
-
-def _register() -> None:
-    _rules: list[
-        type[JavaDormantClassesRule | PythonDormantClassesRule | GoDormantClassesRule]
-    ] = [
-        JavaDormantClassesRule,
-        PythonDormantClassesRule,
-        GoDormantClassesRule,
-    ]
-    for cls in _rules:
-        if cls.id not in rule_registry:
-            rule_registry.register(cls.id, cls())
-
-
-_register()
 
 __all__ = ["JavaDormantClassesRule", "PythonDormantClassesRule", "GoDormantClassesRule"]

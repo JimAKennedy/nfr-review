@@ -9,12 +9,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _NAMED_VALUE_RE = re.compile(r"\{\{.+?\}\}")
 
 
+@register
 class ApimHardcodedBackendUrlRule:
     """Flag when APIM policies use hardcoded backend URLs instead of named values."""
 
@@ -93,12 +94,5 @@ class ApimHardcodedBackendUrlRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "apim-hardcoded-backend-url" not in rule_registry:
-        rule_registry.register("apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule())
-
-
-_register()
 
 __all__ = ["ApimHardcodedBackendUrlRule"]

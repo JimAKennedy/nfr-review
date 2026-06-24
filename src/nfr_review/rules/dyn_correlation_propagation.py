@@ -9,12 +9,13 @@ from typing import Any, Literal
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 CORRELATION_KEYS = ("correlation.id", "baggage.correlation.id", "X-Correlation-ID")
 
 
+@register
 class DynCorrelationPropagationRule:
     """Verify correlation/trace attribute consistency across trace spans."""
 
@@ -146,12 +147,5 @@ def _get_correlation(span: dict[str, Any]) -> str:
             return val
     return ""
 
-
-def _register() -> None:
-    if "dyn-correlation-propagation" not in rule_registry:
-        rule_registry.register("dyn-correlation-propagation", DynCorrelationPropagationRule())
-
-
-_register()
 
 __all__ = ["DynCorrelationPropagationRule"]

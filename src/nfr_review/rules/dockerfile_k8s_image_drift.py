@@ -9,7 +9,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
@@ -46,6 +46,7 @@ def _images_same_service(df_image: str, k8s_image: str) -> bool:
     return df_base == k8s_base
 
 
+@register
 class DockerfileK8sImageDriftRule:
     """Flag mismatches between Dockerfile base image tags and K8s container image tags."""
 
@@ -149,12 +150,5 @@ class DockerfileK8sImageDriftRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dockerfile-k8s-image-drift" not in rule_registry:
-        rule_registry.register("dockerfile-k8s-image-drift", DockerfileK8sImageDriftRule())
-
-
-_register()
 
 __all__ = ["DockerfileK8sImageDriftRule"]

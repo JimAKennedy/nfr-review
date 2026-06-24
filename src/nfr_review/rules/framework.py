@@ -108,6 +108,8 @@ class FieldRule(Generic[P]):
     all_clear_summary: str = "No issues detected."
     all_clear_recommendation: str = "No action required."
 
+    all_clear_tag: str = ""
+    skip_evidence_kind: str = ""
     required_collectors: list[str] = []
 
     def __init_subclass__(cls, **kw: object) -> None:
@@ -147,6 +149,25 @@ class FieldRule(Generic[P]):
             if e.collector_name == self.collector_name and e.kind == self.evidence_kind
         ]
         if not relevant:
+            # If the collector emitted skip evidence, propagate its reason.
+            if self.skip_evidence_kind:
+                for ev in evidence:
+                    if (
+                        ev.collector_name == self.collector_name
+                        and ev.kind == self.skip_evidence_kind
+                    ):
+                        payload = ev.payload
+                        reason = (
+                            payload.get("reason", "")
+                            if hasattr(payload, "get")
+                            else getattr(payload, "reason", "")
+                        )
+                        if reason:
+                            return RuleResult(
+                                rule_id=self.id,
+                                skipped=True,
+                                skip_reason=reason,
+                            )
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -172,7 +193,7 @@ class FieldRule(Generic[P]):
                 make_finding(
                     rule_id=self.id,
                     ev=relevant[0],
-                    pattern_tag=self.pattern_tag,
+                    pattern_tag=self.all_clear_tag or self.pattern_tag,
                     default_confidence=self.default_confidence,
                     hit=Hit(
                         rag="green",

@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.csharp_ast import CSharpAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _DISPOSABLE_TYPES = frozenset(
     {
@@ -28,63 +27,30 @@ _DISPOSABLE_TYPES = frozenset(
 )
 
 
-class CSharpDisposableNoUsingRule:
+class CSharpDisposableNoUsingRule(FieldRule[CSharpAstFilePayload]):
     """Flag IDisposable object creation not wrapped in a using statement."""
 
     id = "csharp-disposable-no-using"
-    band: Band = 1
-    required_collectors: list[str] = ["csharp-ast"]
+    collector_name = "csharp-ast"
+    evidence_kind = "csharp-ast-file"
+    payload_type = CSharpAstFilePayload
+    pattern_tag = "csharp-disposable-no-using"
+    default_confidence = 0.85
+    all_clear_summary = "All IDisposable objects properly wrapped in using."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cs_evidence = filter_evidence(evidence, "csharp-ast", "csharp-ast-file")
-        if not cs_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no csharp-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in cs_evidence:
-            file_path = ev.payload.file_path
-            for creation in ev.payload.object_creations:
-                if creation["type_name"] in _DISPOSABLE_TYPES and not creation["in_using"]:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=f"{creation['type_name']} created without using statement",
-                            recommendation=(
-                                "Wrap IDisposable objects in a using statement or"
-                                " using declaration to ensure proper resource cleanup."
-                            ),
-                            evidence_locator=f"{file_path}:{creation['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="csharp-disposable-no-using",
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "csharp-disposable-no-using",
-                    cs_evidence[0],
-                    summary="All IDisposable objects properly wrapped in using.",
+    def check(self, payload: CSharpAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for creation in payload.object_creations:
+            if creation.type_name in _DISPOSABLE_TYPES and not creation.in_using:
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary=f"{creation.type_name} created without using statement",
+                    recommendation=(
+                        "Wrap IDisposable objects in a using statement or"
+                        " using declaration to ensure proper resource cleanup."
+                    ),
+                    locator=f"{payload.file_path}:{creation.line}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "csharp-disposable-no-using" not in rule_registry:
-        rule_registry.register("csharp-disposable-no-using", CSharpDisposableNoUsingRule())
-
-
-_register()
 
 __all__ = ["CSharpDisposableNoUsingRule"]

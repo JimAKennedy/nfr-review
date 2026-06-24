@@ -1,50 +1,81 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: terraform-state-backend — flags repos with no remote state backend."""
+"""Rule: terraform-state-backend -- flags repos with no remote state backend."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.terraform import TerraformAnalysisPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 
-class TerraformStateBackendRule:
+class TerraformStateBackendRule(FieldRule[TerraformAnalysisPayload]):
     """Flag Terraform repos that store state locally instead of using a remote backend."""
 
     id = "terraform-state-backend"
-    band: Band = 1
-    required_collectors: list[str] = ["terraform"]
-    required_tech: list[str] = ["terraform"]
+    collector_name = "terraform"
+    evidence_kind = "terraform-analysis"
+    payload_type = TerraformAnalysisPayload
+    required_tech = ["terraform"]
+    pattern_tag = "terraform-state-backend"
+    default_confidence = 0.95
+    all_clear_summary = "Remote state backend is configured."
+    all_clear_recommendation = "No action required."
+
+    def check(self, payload: TerraformAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        return ()
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        tf_evidence = filter_evidence(evidence, "terraform", "terraform-analysis")
-        if not tf_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no terraform-analysis evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        has_backend = False
-        for ev in tf_evidence:
-            for tb in ev.payload.terraform_blocks:
-                if tb.get("backend_type") is not None:
-                    has_backend = True
-                    break
-            if has_backend:
-                break
+        has_backend = any(
+            tb.backend_type is not None
+            for ev in relevant
+            for tb in self._coerce(ev.payload).terraform_blocks
+        )
 
-        first = tf_evidence[0]
-        if not has_backend:
+        first = relevant[0]
+        if has_backend:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=self.default_confidence,
+                        hit=Hit(
+                            rag="green",
+                            summary=self.all_clear_summary,
+                            recommendation=self.all_clear_recommendation,
+                            locator=first.locator,
+                        ),
+                    )
+                ],
+            )
+
+        return RuleResult(
+            rule_id=self.id,
+            findings=[
+                make_finding(
+                    rule_id=self.id,
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
+                    hit=Hit(
                         rag="red",
                         severity="high",
                         summary=(
@@ -56,35 +87,11 @@ class TerraformStateBackendRule:
                             " in a terraform { backend ... } block to enable"
                             " team collaboration and state locking."
                         ),
-                        evidence_locator="all-tf-files",
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.95,
-                        pattern_tag="terraform-state-backend",
-                    )
-                ],
-            )
-
-        return RuleResult(
-            rule_id=self.id,
-            findings=[
-                make_green_finding(
-                    self.id,
-                    "terraform-state-backend",
-                    first,
-                    summary="Remote state backend is configured.",
-                    confidence=0.95,
-                    evidence_locator="all-tf-files",
+                        locator="all-tf-files",
+                    ),
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "terraform-state-backend" not in rule_registry:
-        rule_registry.register("terraform-state-backend", TerraformStateBackendRule())
-
-
-_register()
 
 __all__ = ["TerraformStateBackendRule"]

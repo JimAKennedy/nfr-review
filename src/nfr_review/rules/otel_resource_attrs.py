@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _REQUIRED_ATTRS = frozenset({"service.name", "service.version"})
 
 
+@register
 class OTelResourceAttrsRule:
     """Flag repos without required OTel resource attributes (service.name, service.version)."""
 
@@ -85,12 +86,5 @@ class OTelResourceAttrsRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-resource-attrs" not in rule_registry:
-        rule_registry.register("otel-resource-attrs", OTelResourceAttrsRule())
-
-
-_register()
 
 __all__ = ["OTelResourceAttrsRule"]

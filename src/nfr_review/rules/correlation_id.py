@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 # Exact artifact names and prefixes that satisfy the correlation-ID / tracing requirement.
@@ -33,6 +33,7 @@ def _is_tracing_dep(name: str) -> bool:
     return any(name.startswith(prefix) for prefix in _TRACING_PREFIXES)
 
 
+@register
 class CorrelationIdMissingRule:
     """Flag Java projects that have no distributed tracing / correlation-ID library."""
 
@@ -102,12 +103,5 @@ class CorrelationIdMissingRule:
             ],
         )
 
-
-def _register() -> None:
-    if "correlation-id-missing" not in rule_registry:
-        rule_registry.register("correlation-id-missing", CorrelationIdMissingRule())
-
-
-_register()
 
 __all__ = ["CorrelationIdMissingRule"]

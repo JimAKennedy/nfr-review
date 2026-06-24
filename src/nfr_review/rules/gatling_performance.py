@@ -5,15 +5,14 @@ against performance thresholds for error rate and response time percentiles."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence
+from nfr_review.collectors.payloads.gatling import GatlingResultPayload
+from nfr_review.models import RAG, Evidence, Severity
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class GatlingPerformanceThresholdsRule:
+class GatlingPerformanceThresholdsRule(FieldRule[GatlingResultPayload]):
     """Evaluate Gatling evidence against performance thresholds.
 
     Thresholds:
@@ -25,94 +24,70 @@ class GatlingPerformanceThresholdsRule:
     """
 
     id = "gatling-performance-thresholds"
-    band: Band = 2
-    required_collectors: list[str] = ["gatling"]
+    band = 2
+    collector_name = "gatling"
+    evidence_kind = "gatling-result"
+    payload_type = GatlingResultPayload
+    pattern_tag = "gatling-performance"
+    default_confidence = 0.85
+    all_clear_summary = "All performance thresholds pass."
+    all_clear_recommendation = "No action required — performance is within thresholds."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        gatling_evidence = filter_evidence(evidence, "gatling", "gatling-result")
-        if not gatling_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no gatling-result evidence available",
+    def check(self, payload: GatlingResultPayload, ev: Evidence) -> Iterable[Hit]:
+        error_rate = payload.error_rate
+        p95 = payload.p95_response_time_ms
+        p99 = payload.p99_response_time_ms
+        sim_dir = payload.simulation_dir
+
+        worst_rag: RAG = "green"
+        worst_severity: Severity = "info"
+        issues: list[str] = []
+
+        # Check error rate
+        if error_rate > 5.0:
+            worst_rag = "red"
+            worst_severity = "high"
+            issues.append(f"error rate {error_rate}% exceeds 5% threshold")
+        elif error_rate > 1.0:
+            if worst_rag != "red":
+                worst_rag = "amber"
+                worst_severity = "medium"
+            issues.append(f"error rate {error_rate}% exceeds 1% threshold")
+
+        # Check p99 response time
+        if p99 > 5000:
+            worst_rag = "red"
+            worst_severity = "high"
+            issues.append(f"p99 response time {p99}ms exceeds 5000ms threshold")
+
+        # Check p95 response time
+        if p95 > 2000:
+            if worst_rag != "red":
+                worst_rag = "amber"
+                worst_severity = "medium"
+            issues.append(f"p95 response time {p95}ms exceeds 2000ms threshold")
+
+        if issues:
+            summary = f"Performance issues in {sim_dir}: {'; '.join(issues)}"
+            recommendation = (
+                "Investigate and address performance bottlenecks. "
+                "Consider optimising slow endpoints, adding caching, "
+                "or tuning resource limits."
             )
-
-        findings: list[Finding] = []
-
-        for ev in gatling_evidence:
-            error_rate = ev.payload.error_rate
-            p95 = ev.payload.p95_response_time_ms
-            p99 = ev.payload.p99_response_time_ms
-            sim_dir = ev.payload.simulation_dir
-
-            worst_rag: RAG = "green"
-            worst_severity: Severity = "info"
-            issues: list[str] = []
-
-            # Check error rate
-            if error_rate > 5.0:
-                worst_rag = "red"
-                worst_severity = "high"
-                issues.append(f"error rate {error_rate}% exceeds 5% threshold")
-            elif error_rate > 1.0:
-                if worst_rag != "red":
-                    worst_rag = "amber"
-                    worst_severity = "medium"
-                issues.append(f"error rate {error_rate}% exceeds 1% threshold")
-
-            # Check p99 response time
-            if p99 > 5000:
-                worst_rag = "red"
-                worst_severity = "high"
-                issues.append(f"p99 response time {p99}ms exceeds 5000ms threshold")
-
-            # Check p95 response time
-            if p95 > 2000:
-                if worst_rag != "red":
-                    worst_rag = "amber"
-                    worst_severity = "medium"
-                issues.append(f"p95 response time {p95}ms exceeds 2000ms threshold")
-
-            if issues:
-                summary = f"Performance issues in {sim_dir}: {'; '.join(issues)}"
-                recommendation = (
-                    "Investigate and address performance bottlenecks. "
-                    "Consider optimising slow endpoints, adding caching, "
-                    "or tuning resource limits."
-                )
-            else:
-                summary = (
-                    f"All performance thresholds pass for {sim_dir}: "
-                    f"error rate {error_rate}%, p95 {p95}ms, p99 {p99}ms"
-                )
-                recommendation = "No action required — performance is within thresholds."
-
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag=worst_rag,
-                    severity=worst_severity,
-                    summary=summary,
-                    recommendation=recommendation,
-                    evidence_locator=ev.locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="gatling-performance",
-                )
+        else:
+            summary = (
+                f"All performance thresholds pass for {sim_dir}: "
+                f"error rate {error_rate}%, p95 {p95}ms, p99 {p99}ms"
             )
+            recommendation = "No action required — performance is within thresholds."
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "gatling-performance-thresholds" not in rule_registry:
-        rule_registry.register(
-            "gatling-performance-thresholds",
-            GatlingPerformanceThresholdsRule(),
+        yield Hit(
+            rag=worst_rag,
+            severity=worst_severity,
+            summary=summary,
+            recommendation=recommendation,
+            locator=ev.locator,
         )
 
-
-_register()
 
 __all__ = ["GatlingPerformanceThresholdsRule"]

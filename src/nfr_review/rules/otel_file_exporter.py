@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _FILE_EXPORTER_KEYWORDS = frozenset({"file", "otlp/file", "file/traces"})
 
 
+@register
 class OTelFileExporterRule:
     """Flag repos without an OTel file exporter configured for CI trace capture."""
 
@@ -91,12 +92,5 @@ class OTelFileExporterRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-file-exporter" not in rule_registry:
-        rule_registry.register("otel-file-exporter", OTelFileExporterRule())
-
-
-_register()
 
 __all__ = ["OTelFileExporterRule"]

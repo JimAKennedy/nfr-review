@@ -9,12 +9,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEFAULT_MAX_DIAGRAMS = 10
 
 
+@register
 class DynCallSequenceRule:
     """Generate Mermaid sequenceDiagram blocks from trace span trees."""
 
@@ -172,12 +173,5 @@ def _build_sequence_diagram(trace_id: str, spans: list[dict[str, Any]]) -> str:
     lines.extend(messages)
     return "\n".join(lines)
 
-
-def _register() -> None:
-    if "dyn-call-sequence" not in rule_registry:
-        rule_registry.register("dyn-call-sequence", DynCallSequenceRule())
-
-
-_register()
 
 __all__ = ["DynCallSequenceRule"]

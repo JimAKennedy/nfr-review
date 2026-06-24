@@ -8,10 +8,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class OTelIntegrationTestCoverageRule:
     """Flag repos where API endpoints lack corresponding integration tests."""
 
@@ -144,14 +145,5 @@ class OTelIntegrationTestCoverageRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-integration-test-coverage" not in rule_registry:
-        rule_registry.register(
-            "otel-integration-test-coverage", OTelIntegrationTestCoverageRule()
-        )
-
-
-_register()
 
 __all__ = ["OTelIntegrationTestCoverageRule"]

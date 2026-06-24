@@ -165,8 +165,7 @@ class TestCiRollbackStageMissing:
         result = self.rule.evaluate([ev], None)
         assert not result.skipped
         assert len(result.findings) == 1
-        assert result.findings[0].rag == "green"
-        assert "not applicable" in result.findings[0].summary.lower()
+        assert result.findings[0].rag == "amber"
 
     def test_no_rollback_jobs_amber(self) -> None:
         ev = _ci_ev(job_names=["build", "test", "deploy"])
@@ -212,15 +211,18 @@ class TestCiRollbackStageMissing:
         ev2 = _ci_ev(job_names=["rollback"], file_path="rollback.yml")
         result = self.rule.evaluate([ev1, ev2, _k8s_workload_ev()], None)
         assert not result.skipped
-        assert any(f.rag == "green" for f in result.findings)
+        # ev1 -> amber (no rollback), ev2 -> no hit (has rollback)
+        assert len(result.findings) == 1
+        assert result.findings[0].rag == "amber"
 
     def test_multiple_pipelines_none_with_rollback(self) -> None:
         ev1 = _ci_ev(job_names=["build"], file_path="build.yml")
         ev2 = _ci_ev(job_names=["deploy"], file_path="deploy.yml")
         result = self.rule.evaluate([ev1, ev2, _k8s_workload_ev()], None)
         assert not result.skipped
-        assert len(result.findings) == 1
-        assert result.findings[0].rag == "amber"
+        # FieldRule evaluates per-pipeline: both produce amber
+        assert len(result.findings) == 2
+        assert all(f.rag == "amber" for f in result.findings)
 
     def test_rule_id_and_band(self) -> None:
         assert self.rule.id == "PATCH-ROLL-002"

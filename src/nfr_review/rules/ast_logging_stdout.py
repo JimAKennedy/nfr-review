@@ -15,8 +15,8 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
 from nfr_review.rules._cross_language import ALL_LANGUAGES
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _STDOUT_METHODS: dict[str, frozenset[str]] = {
@@ -52,6 +52,7 @@ _STDOUT_METHODS: dict[str, frozenset[str]] = {
 }
 
 
+@register
 class LoggingToStdoutRule:
     """Flag direct stdout/stderr writes that should use a logging framework."""
 
@@ -117,12 +118,5 @@ class LoggingToStdoutRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "logging-to-stdout" not in rule_registry:
-        rule_registry.register("logging-to-stdout", LoggingToStdoutRule())
-
-
-_register()
 
 __all__ = ["LoggingToStdoutRule"]

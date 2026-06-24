@@ -11,10 +11,11 @@ from typing import Any
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 
+@register
 class AdrGapRule:
     """Compare derived ADR candidates against existing ADR evidence to
     surface undocumented decisions and superseded-but-still-used contradictions.
@@ -144,12 +145,5 @@ class AdrGapRule:
 
         return None
 
-
-def _register() -> None:
-    if "adr-gap" not in rule_registry:
-        rule_registry.register("adr-gap", AdrGapRule())
-
-
-_register()
 
 __all__ = ["AdrGapRule"]

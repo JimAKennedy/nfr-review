@@ -19,7 +19,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROLLBACK_FILES = {"rollback.md", "disaster-recovery.md"}
@@ -34,6 +34,7 @@ def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
     )
 
 
+@register
 class RollbackDocsMissingRule:
     """Check for rollback / disaster-recovery documentation in repo root."""
 
@@ -121,12 +122,5 @@ class RollbackDocsMissingRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "PATCH-ROLL-001" not in rule_registry:
-        rule_registry.register("PATCH-ROLL-001", RollbackDocsMissingRule())
-
-
-_register()
 
 __all__ = ["RollbackDocsMissingRule"]

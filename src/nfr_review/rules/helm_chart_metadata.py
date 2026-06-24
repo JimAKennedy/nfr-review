@@ -5,12 +5,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.helm import HelmAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -20,124 +19,68 @@ _SEMVER_RE = re.compile(
 )
 
 
-class HelmChartMetadataRule:
+class HelmChartMetadataRule(FieldRule[HelmAnalysisPayload]):
     """Flag Helm charts with incomplete Chart.yaml metadata."""
 
     id = "helm-chart-metadata"
-    band: Band = 1
-    required_collectors: list[str] = ["helm"]
-    required_tech: list[str] = ["helm"]
+    collector_name = "helm"
+    evidence_kind = "helm-analysis"
+    payload_type = HelmAnalysisPayload
+    pattern_tag = "helm-chart-metadata"
+    required_tech = ["helm"]
+    default_confidence = 0.9
+    all_clear_summary = "All Helm charts have complete Chart.yaml metadata."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        helm_evidence = filter_evidence(evidence, "helm", "helm-analysis")
-        if not helm_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no helm-analysis evidence available",
+    def check(self, payload: HelmAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        chart_path = payload.chart_path
+
+        if not payload.description:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary="Helm chart is missing a description in Chart.yaml.",
+                recommendation="Add a meaningful 'description' field to Chart.yaml.",
+                locator=f"{chart_path}/Chart.yaml",
             )
 
-        findings: list[Finding] = []
-        for ev in helm_evidence:
-            chart_path = ev.payload.chart_path
-
-            if not ev.payload.description:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary="Helm chart is missing a description in Chart.yaml.",
-                        recommendation="Add a meaningful 'description' field to Chart.yaml.",
-                        evidence_locator=f"{chart_path}/Chart.yaml",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="helm-chart-metadata",
-                    )
-                )
-
-            if not ev.payload.app_version:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary="Helm chart is missing 'appVersion' in Chart.yaml.",
-                        recommendation=(
-                            "Add an 'appVersion' field to Chart.yaml to track"
-                            " the application version deployed by this chart."
-                        ),
-                        evidence_locator=f"{chart_path}/Chart.yaml",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="helm-chart-metadata",
-                    )
-                )
-
-            chart_version = ev.payload.chart_version
-            if chart_version and not _SEMVER_RE.match(str(chart_version)):
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Helm chart version '{chart_version}' does not follow SemVer."
-                        ),
-                        recommendation=(
-                            "Use Semantic Versioning (e.g. 1.2.3) for the"
-                            " chart 'version' field in Chart.yaml."
-                        ),
-                        evidence_locator=f"{chart_path}/Chart.yaml",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="helm-chart-metadata",
-                    )
-                )
-
-            maintainers = ev.payload.maintainers
-            if not maintainers:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="low",
-                        summary="Helm chart has no maintainers listed in Chart.yaml.",
-                        recommendation=(
-                            "Add a 'maintainers' section to Chart.yaml with"
-                            " at least one contact."
-                        ),
-                        evidence_locator=f"{chart_path}/Chart.yaml",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.8,
-                        pattern_tag="helm-chart-metadata",
-                    )
-                )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "helm-chart-metadata",
-                    helm_evidence[0],
-                    summary="All Helm charts have complete Chart.yaml metadata.",
-                    confidence=0.9,
-                    evidence_locator="all-helm-charts",
-                )
+        if not payload.app_version:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary="Helm chart is missing 'appVersion' in Chart.yaml.",
+                recommendation=(
+                    "Add an 'appVersion' field to Chart.yaml to track"
+                    " the application version deployed by this chart."
+                ),
+                locator=f"{chart_path}/Chart.yaml",
             )
 
-        return RuleResult(rule_id=self.id, findings=findings)
+        chart_version = payload.chart_version
+        if chart_version and not _SEMVER_RE.match(str(chart_version)):
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=(f"Helm chart version '{chart_version}' does not follow SemVer."),
+                recommendation=(
+                    "Use Semantic Versioning (e.g. 1.2.3) for the"
+                    " chart 'version' field in Chart.yaml."
+                ),
+                locator=f"{chart_path}/Chart.yaml",
+            )
 
+        maintainers = payload.maintainers
+        if not maintainers:
+            yield Hit(
+                rag="amber",
+                severity="low",
+                summary="Helm chart has no maintainers listed in Chart.yaml.",
+                recommendation=(
+                    "Add a 'maintainers' section to Chart.yaml with at least one contact."
+                ),
+                locator=f"{chart_path}/Chart.yaml",
+                confidence=0.8,
+            )
 
-def _register() -> None:
-    if "helm-chart-metadata" not in rule_registry:
-        rule_registry.register("helm-chart-metadata", HelmChartMetadataRule())
-
-
-_register()
 
 __all__ = ["HelmChartMetadataRule"]

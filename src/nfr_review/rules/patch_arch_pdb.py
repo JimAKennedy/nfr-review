@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
@@ -21,6 +21,7 @@ def _labels_overlap(pdb_match_labels: dict | None, workload_labels: dict | None)
     return all(workload_labels.get(k) == v for k, v in pdb_match_labels.items())
 
 
+@register
 class PdbCoverageRule:
     """Flag multi-replica Deployments/StatefulSets with no matching PodDisruptionBudget."""
 
@@ -137,12 +138,5 @@ class PdbCoverageRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "PATCH-ARCH-004" not in rule_registry:
-        rule_registry.register("PATCH-ARCH-004", PdbCoverageRule())
-
-
-_register()
 
 __all__ = ["PdbCoverageRule"]

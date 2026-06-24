@@ -20,7 +20,7 @@ from typing import Any
 from nfr_review.arch_diagrams import _CPP_TYPE_NOISE
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
@@ -37,6 +37,7 @@ def _type_refs(type_str: str, known: set[str]) -> set[str]:
     }
 
 
+@register
 class CppDormantClassesRule:
     id = "cpp-dormant-classes"
     band: Band = 2
@@ -140,12 +141,5 @@ class CppDormantClassesRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "cpp-dormant-classes" not in rule_registry:
-        rule_registry.register("cpp-dormant-classes", CppDormantClassesRule())
-
-
-_register()
 
 __all__ = ["CppDormantClassesRule"]

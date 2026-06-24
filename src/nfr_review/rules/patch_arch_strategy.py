@@ -1,16 +1,16 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: PATCH-ARCH-003 — checks K8s workloads for safe update strategy."""
+"""Rule: PATCH-ARCH-003 -- checks K8s workloads for safe update strategy."""
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.k8s import K8sResourcePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _SKIP_KINDS = {"DaemonSet"}
 
@@ -42,111 +42,66 @@ def _parse_max_unavailable(value: Any) -> tuple[bool, str]:
     return False, str(value)
 
 
-class UpdateStrategyRule:
+class UpdateStrategyRule(FieldRule[K8sResourcePayload]):
     """Flag workloads with missing or unsafe update/rollout strategy."""
 
     id = "PATCH-ARCH-003"
-    band: Band = 1
-    required_collectors: list[str] = ["k8s-manifest"]
+    collector_name = "k8s-manifest"
+    evidence_kind = "k8s-resource"
+    payload_type = K8sResourcePayload
+    pattern_tag = "update-strategy"
+    default_confidence = 0.90
+    all_clear_summary = "No Deployment/StatefulSet update strategy issues found."
+    all_clear_recommendation = "No action required -- update strategy is safe."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
-        if not k8s_resources:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no k8s-manifest evidence available",
-            )
+    def check(self, payload: K8sResourcePayload, ev: Evidence) -> Iterable[Hit]:
+        # DaemonSets have their own update patterns -- skip.
+        if payload.kind in _SKIP_KINDS:
+            return
 
-        findings: list[Finding] = []
-        for ev in k8s_resources:
-            resource_kind = ev.payload.kind
-            resource_name = ev.payload.name
-            file_path = ev.payload.file_path
-
-            # DaemonSets have their own update patterns — skip.
-            if resource_kind in _SKIP_KINDS:
-                continue
-
-            if resource_kind == "Deployment":
-                self._check_deployment(ev, resource_name, file_path, findings)
-            elif resource_kind == "StatefulSet":
-                self._check_statefulset(ev, resource_name, file_path, findings)
-
-        if not findings:
-            first = k8s_resources[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "update-strategy",
-                    first,
-                    summary="No Deployment/StatefulSet update strategy issues found.",
-                    confidence=0.90,
-                    evidence_locator="all-workloads",
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
+        if payload.kind == "Deployment":
+            yield from self._check_deployment(payload)
+        elif payload.kind == "StatefulSet":
+            yield from self._check_statefulset(payload)
 
     # ------------------------------------------------------------------
     # Deployment checks
     # ------------------------------------------------------------------
 
-    def _check_deployment(
-        self,
-        ev: Evidence,
-        resource_name: str,
-        file_path: str,
-        findings: list[Finding],
-    ) -> None:
-        strategy = ev.payload.strategy
+    def _check_deployment(self, payload: K8sResourcePayload) -> Iterable[Hit]:
+        strategy = payload.strategy
 
         if strategy is None:
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"Deployment '{resource_name}' has no explicit strategy"
-                        " (defaults to RollingUpdate)."
-                    ),
-                    recommendation=(
-                        "Explicitly set spec.strategy.type to RollingUpdate with"
-                        " appropriate maxUnavailable / maxSurge values."
-                    ),
-                    evidence_locator=f"{file_path}:{resource_name}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="update-strategy",
-                )
+            yield Hit(
+                rag="amber",
+                summary=(
+                    f"Deployment '{payload.name}' has no explicit strategy"
+                    " (defaults to RollingUpdate)."
+                ),
+                recommendation=(
+                    "Explicitly set spec.strategy.type to RollingUpdate with"
+                    " appropriate maxUnavailable / maxSurge values."
+                ),
+                locator=f"{payload.file_path}:{payload.name}",
+                confidence=0.85,
             )
             return
 
         strategy_type = strategy.get("type") if isinstance(strategy, dict) else strategy
 
         if strategy_type == "Recreate":
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"Deployment '{resource_name}' uses Recreate strategy,"
-                        " which causes downtime during updates."
-                    ),
-                    recommendation=(
-                        "Switch to RollingUpdate strategy to avoid downtime"
-                        " during deployments unless Recreate is intentional"
-                        " (e.g. for exclusive resource access)."
-                    ),
-                    evidence_locator=f"{file_path}:{resource_name}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.90,
-                    pattern_tag="update-strategy",
-                )
+            yield Hit(
+                rag="amber",
+                summary=(
+                    f"Deployment '{payload.name}' uses Recreate strategy,"
+                    " which causes downtime during updates."
+                ),
+                recommendation=(
+                    "Switch to RollingUpdate strategy to avoid downtime"
+                    " during deployments unless Recreate is intentional"
+                    " (e.g. for exclusive resource access)."
+                ),
+                locator=f"{payload.file_path}:{payload.name}",
             )
             return
 
@@ -155,79 +110,42 @@ class UpdateStrategyRule:
             max_unavailable = rolling.get("maxUnavailable") if rolling else None
             is_safe, desc = _parse_max_unavailable(max_unavailable)
 
-            if is_safe:
-                findings.append(
-                    make_green_finding(
-                        self.id,
-                        "update-strategy",
-                        ev,
-                        summary=(
-                            f"Deployment '{resource_name}' uses RollingUpdate"
-                            f" with maxUnavailable={desc}."
-                        ),
-                        recommendation="No action required — update strategy is safe.",
-                        confidence=0.90,
-                        evidence_locator=f"{file_path}:{resource_name}",
-                    )
-                )
-            else:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Deployment '{resource_name}' uses RollingUpdate"
-                            f" but maxUnavailable={desc} is high."
-                        ),
-                        recommendation=(
-                            "Reduce maxUnavailable to 25% or 1 to limit"
-                            " disruption during rolling updates."
-                        ),
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="update-strategy",
-                    )
+            if not is_safe:
+                yield Hit(
+                    rag="amber",
+                    summary=(
+                        f"Deployment '{payload.name}' uses RollingUpdate"
+                        f" but maxUnavailable={desc} is high."
+                    ),
+                    recommendation=(
+                        "Reduce maxUnavailable to 25% or 1 to limit"
+                        " disruption during rolling updates."
+                    ),
+                    locator=f"{payload.file_path}:{payload.name}",
+                    confidence=0.85,
                 )
 
     # ------------------------------------------------------------------
     # StatefulSet checks
     # ------------------------------------------------------------------
 
-    def _check_statefulset(
-        self,
-        ev: Evidence,
-        resource_name: str,
-        file_path: str,
-        findings: list[Finding],
-    ) -> None:
-        update_strategy = getattr(ev.payload, "updateStrategy", None) or getattr(
-            ev.payload, "update_strategy", None
-        )
+    def _check_statefulset(self, payload: K8sResourcePayload) -> Iterable[Hit]:
+        update_strategy = payload.strategy
 
         if update_strategy is None:
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"StatefulSet '{resource_name}' has no explicit"
-                        " updateStrategy (defaults to RollingUpdate)."
-                    ),
-                    recommendation=(
-                        "Explicitly set spec.updateStrategy.type to RollingUpdate"
-                        " for clarity and to avoid unexpected OnDelete behaviour"
-                        " in older API versions."
-                    ),
-                    evidence_locator=f"{file_path}:{resource_name}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.80,
-                    pattern_tag="update-strategy",
-                )
+            yield Hit(
+                rag="amber",
+                summary=(
+                    f"StatefulSet '{payload.name}' has no explicit"
+                    " updateStrategy (defaults to RollingUpdate)."
+                ),
+                recommendation=(
+                    "Explicitly set spec.updateStrategy.type to RollingUpdate"
+                    " for clarity and to avoid unexpected OnDelete behaviour"
+                    " in older API versions."
+                ),
+                locator=f"{payload.file_path}:{payload.name}",
+                confidence=0.80,
             )
             return
 
@@ -238,46 +156,20 @@ class UpdateStrategyRule:
         )
 
         if strategy_type == "OnDelete":
-            findings.append(
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"StatefulSet '{resource_name}' uses OnDelete strategy,"
-                        " requiring manual pod deletion to apply updates."
-                    ),
-                    recommendation=(
-                        "Switch to RollingUpdate strategy for automated, ordinal"
-                        " rolling updates unless OnDelete is intentional for"
-                        " manual rollout control."
-                    ),
-                    evidence_locator=f"{file_path}:{resource_name}",
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="update-strategy",
-                )
-            )
-        elif strategy_type == "RollingUpdate":
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "update-strategy",
-                    ev,
-                    summary=(f"StatefulSet '{resource_name}' uses RollingUpdate strategy."),
-                    recommendation="No action required — update strategy is safe.",
-                    confidence=0.90,
-                    evidence_locator=f"{file_path}:{resource_name}",
-                )
+            yield Hit(
+                rag="amber",
+                summary=(
+                    f"StatefulSet '{payload.name}' uses OnDelete strategy,"
+                    " requiring manual pod deletion to apply updates."
+                ),
+                recommendation=(
+                    "Switch to RollingUpdate strategy for automated, ordinal"
+                    " rolling updates unless OnDelete is intentional for"
+                    " manual rollout control."
+                ),
+                locator=f"{payload.file_path}:{payload.name}",
+                confidence=0.85,
             )
 
-
-def _register() -> None:
-    if "PATCH-ARCH-003" not in rule_registry:
-        rule_registry.register("PATCH-ARCH-003", UpdateStrategyRule())
-
-
-_register()
 
 __all__ = ["UpdateStrategyRule"]

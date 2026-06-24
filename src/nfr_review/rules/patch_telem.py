@@ -28,7 +28,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOLDEN_SIGNAL_TYPES = frozenset({"metrics", "traces"})
@@ -64,6 +64,7 @@ def _check_label_present(attrs: dict[str, Any], label: str) -> bool:
     return any(a in attrs for a in aliases)
 
 
+@register
 class GoldenSignalEmissionRule:
     """PATCH-TELEM-001: detect golden signal emission coverage via OTel pipeline config."""
 
@@ -161,6 +162,7 @@ class GoldenSignalEmissionRule:
         )
 
 
+@register
 class MandatoryLabelPresenceRule:
     """PATCH-TELEM-002: detect mandatory label presence in resource attributes."""
 
@@ -260,6 +262,7 @@ class MandatoryLabelPresenceRule:
         )
 
 
+@register
 class SyntheticTransactionConfigRule:
     """PATCH-TELEM-003: detect synthetic transaction configuration."""
 
@@ -382,19 +385,6 @@ class SyntheticTransactionConfigRule:
             ],
         )
 
-
-def _register() -> None:
-    for rule_cls in (
-        GoldenSignalEmissionRule,
-        MandatoryLabelPresenceRule,
-        SyntheticTransactionConfigRule,
-    ):
-        rule = rule_cls()
-        if rule.id not in rule_registry:
-            rule_registry.register(rule.id, rule)
-
-
-_register()
 
 __all__ = [
     "GoldenSignalEmissionRule",

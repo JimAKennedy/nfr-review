@@ -59,7 +59,7 @@ class TestResourceLimitsMissingRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no k8s-manifest evidence available"
+        assert result.skip_reason == "no k8s-resource evidence available"
 
     def test_container_without_limits_amber(self) -> None:
         ev = _k8s_resource_evidence(
@@ -160,7 +160,7 @@ class TestProbesMissingRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no k8s-manifest evidence available"
+        assert result.skip_reason == "no k8s-resource evidence available"
 
     def test_container_without_probes_amber(self) -> None:
         ev = _k8s_resource_evidence(
@@ -238,7 +238,7 @@ class TestNonRootContainerViolationRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no k8s-manifest evidence available"
+        assert result.skip_reason == "no k8s-resource evidence available"
 
     def test_container_without_security_context_amber(self) -> None:
         ev = _k8s_resource_evidence(
@@ -313,7 +313,7 @@ class TestNetworkPolicyMissingRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no k8s-manifest evidence available"
+        assert result.skip_reason == "no k8s-manifest-summary evidence available"
 
     def test_no_network_policy_amber(self) -> None:
         ev = _k8s_summary_evidence(has_network_policy=False)

@@ -120,7 +120,7 @@ class TestBasePinningRule:
         )
         result = DockerfileBasePinningRule().evaluate([ev], context=None)
         assert result.skipped
-        assert "no dockerfile evidence" in (result.skip_reason or "")
+        assert "no dockerfile-analysis evidence" in (result.skip_reason or "")
 
 
 # ── User Directive Rule ───────────────────────────────────────────

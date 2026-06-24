@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _MAX_FINDINGS = 10
 
 
+@register
 class StructureGodNodeRule:
     """Flag nodes whose total degree far exceeds the median (coupling hotspots)."""
 
@@ -78,12 +79,5 @@ class StructureGodNodeRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "structure-god-node" not in rule_registry:
-        rule_registry.register("structure-god-node", StructureGodNodeRule())
-
-
-_register()
 
 __all__ = ["StructureGodNodeRule"]

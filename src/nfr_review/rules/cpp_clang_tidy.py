@@ -8,10 +8,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class CppClangTidyRule:
     id = "cpp-clang-tidy"
     band: Band = 1
@@ -70,12 +71,5 @@ class CppClangTidyRule:
             ],
         )
 
-
-def _register() -> None:
-    if "cpp-clang-tidy" not in rule_registry:
-        rule_registry.register("cpp-clang-tidy", CppClangTidyRule())
-
-
-_register()
 
 __all__ = ["CppClangTidyRule"]

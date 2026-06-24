@@ -1,95 +1,68 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: health-endpoint-missing — checks for health endpoint in Spring controllers."""
+"""Rule: health-endpoint-missing -- checks for health endpoint in Spring controllers."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _HEALTH_PATHS = frozenset({"/health", "/actuator/health"})
 
 
-class HealthEndpointMissingRule:
+class HealthEndpointMissingRule(FieldRule[JavaAstFilePayload]):
     """Flag when no @RestController exposes a health-check endpoint."""
 
     id = "health-endpoint-missing"
-    band: Band = 1
-    required_collectors: list[str] = ["java-ast"]
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "health-endpoint"
+    default_confidence = 0.9
+    all_clear_summary = (
+        "No health endpoint (/health or /actuator/health) detected in any @RestController."
+    )
+    all_clear_recommendation = (
+        "Add a health-check endpoint (e.g. Spring"
+        " Boot Actuator /actuator/health) to enable"
+        " liveness/readiness probes."
+    )
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
-        if not java_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no java-ast evidence available",
-            )
+    def check(self, payload: JavaAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for cls in payload.classes:
+            if "RestController" not in cls.annotations:
+                continue
+            for method in cls.methods:
+                for path in method.mapping_paths:
+                    if path in _HEALTH_PATHS:
+                        yield Hit(
+                            rag="green",
+                            summary=f"Health endpoint found: {path} in {cls.name}",
+                            recommendation="No action required -- health endpoint is present.",
+                            locator=f"{payload.file_path}:{cls.name}",
+                        )
+                        return
 
-        for ev in java_evidence:
-            for cls in ev.payload.classes:
-                if "RestController" not in cls.get("annotations", []):
-                    continue
-                for method in cls.get("methods", []):
-                    for path in method.get("mapping_paths", []):
-                        if path in _HEALTH_PATHS:
-                            file_ref = ev.payload.file_path
-                            locator = f"{file_ref}:{cls['name']}"
-                            return RuleResult(
-                                rule_id=self.id,
-                                findings=[
-                                    make_green_finding(
-                                        self.id,
-                                        "health-endpoint",
-                                        ev,
-                                        summary=(
-                                            f"Health endpoint found: {path} in {cls['name']}"
-                                        ),
-                                        recommendation=(
-                                            "No action required — health endpoint is present."
-                                        ),
-                                        confidence=0.9,
-                                        evidence_locator=locator,
-                                    )
-                                ],
-                            )
-
-        return RuleResult(
-            rule_id=self.id,
-            findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "No health endpoint (/health or"
-                        " /actuator/health) detected in any"
-                        " @RestController."
-                    ),
-                    recommendation=(
-                        "Add a health-check endpoint (e.g. Spring"
-                        " Boot Actuator /actuator/health) to enable"
-                        " liveness/readiness probes."
-                    ),
-                    evidence_locator="project-wide",
-                    collector_name=java_evidence[0].collector_name,
-                    collector_version=java_evidence[0].collector_version,
-                    confidence=0.9,
-                    pattern_tag="health-endpoint",
-                )
-            ],
+        # No health endpoint found across all classes in this file --
+        # yield an amber hit so the framework aggregates across files.
+        yield Hit(
+            rag="amber",
+            severity="medium",
+            summary=(
+                "No health endpoint (/health or"
+                " /actuator/health) detected in any"
+                " @RestController."
+            ),
+            recommendation=(
+                "Add a health-check endpoint (e.g. Spring"
+                " Boot Actuator /actuator/health) to enable"
+                " liveness/readiness probes."
+            ),
+            locator="project-wide",
         )
 
-
-def _register() -> None:
-    if "health-endpoint-missing" not in rule_registry:
-        rule_registry.register("health-endpoint-missing", HealthEndpointMissingRule())
-
-
-_register()
 
 __all__ = ["HealthEndpointMissingRule"]

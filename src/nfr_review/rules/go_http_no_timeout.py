@@ -4,99 +4,54 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+from nfr_review.models import Evidence, compute_content_hash
+from nfr_review.rules.framework import FieldRule, Hit
 
 _DEFAULT_CLIENT_CALLS = frozenset({"http.Get", "http.Post", "http.Head", "http.PostForm"})
 
 
-class GoHttpNoTimeoutRule:
+class GoHttpNoTimeoutRule(FieldRule[GoAstFilePayload]):
     """Flag HTTP calls using DefaultClient or Client without Timeout."""
 
     id = "go-http-no-timeout"
-    band: Band = 1
-    required_collectors: list[str] = ["go-ast"]
+    collector_name = "go-ast"
+    evidence_kind = "go-ast-file"
+    payload_type = GoAstFilePayload
+    pattern_tag = "go-http-no-timeout"
+    default_confidence = 0.9
+    all_clear_summary = "No HTTP calls without timeouts detected."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        go_evidence = filter_evidence(evidence, "go-ast", "go-ast-file")
-        if not go_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no go-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in go_evidence:
-            file_path = ev.payload.file_path
-            for call in ev.payload.http_calls:
-                call_name = call["call"]
-                if call_name in _DEFAULT_CLIENT_CALLS:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="red",
-                            severity="high",
-                            summary=(f"{call_name}() uses DefaultClient with no timeout"),
-                            recommendation=(
-                                "Use an http.Client with an explicit Timeout"
-                                " instead of the package-level convenience functions."
-                            ),
-                            evidence_locator=f"{file_path}:{call['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.95,
-                            pattern_tag="go-http-no-timeout",
-                            content_hash=compute_content_hash(
-                                call.get("source_line", call_name)
-                            ),
-                        )
-                    )
-                elif call_name == "http.Client" and not call["has_timeout"]:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary="http.Client without Timeout",
-                            recommendation=(
-                                "Set an explicit Timeout on the http.Client"
-                                " to prevent indefinite hangs."
-                            ),
-                            evidence_locator=f"{file_path}:{call['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
-                            pattern_tag="go-http-no-timeout",
-                            content_hash=compute_content_hash(
-                                call.get("source_line", call_name)
-                            ),
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "go-http-no-timeout",
-                    go_evidence[0],
-                    summary="No HTTP calls without timeouts detected.",
-                    confidence=0.9,
+    def check(self, payload: GoAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for call in payload.http_calls:
+            call_name = call.call
+            if call_name in _DEFAULT_CLIENT_CALLS:
+                yield Hit(
+                    rag="red",
+                    severity="high",
+                    summary=f"{call_name}() uses DefaultClient with no timeout",
+                    recommendation=(
+                        "Use an http.Client with an explicit Timeout"
+                        " instead of the package-level convenience functions."
+                    ),
+                    locator=f"{payload.file_path}:{call.line}",
+                    confidence=0.95,
+                    content_hash=compute_content_hash(getattr(call, "source_line", call_name)),
                 )
-            )
+            elif call_name == "http.Client" and not call.has_timeout:
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary="http.Client without Timeout",
+                    recommendation=(
+                        "Set an explicit Timeout on the http.Client"
+                        " to prevent indefinite hangs."
+                    ),
+                    locator=f"{payload.file_path}:{call.line}",
+                    content_hash=compute_content_hash(getattr(call, "source_line", call_name)),
+                )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "go-http-no-timeout" not in rule_registry:
-        rule_registry.register("go-http-no-timeout", GoHttpNoTimeoutRule())
-
-
-_register()
 
 __all__ = ["GoHttpNoTimeoutRule"]

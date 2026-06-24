@@ -13,7 +13,7 @@ from nfr_review.dep_solver import ResolveResult, resolve_dependencies
 from nfr_review.deps_dev_client import DepsDevClient
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ _KIND_TO_ECOSYSTEM: dict[str, str] = {
 }
 
 
+@register
 class DepUpgradePathRule:
     """N-1 ceiling detection with upgrade path recommendations via constraint solving."""
 
@@ -211,12 +212,5 @@ class DepUpgradePathRule:
             )
         ]
 
-
-def _register() -> None:
-    if "dep-upgrade-path" not in rule_registry:
-        rule_registry.register("dep-upgrade-path", DepUpgradePathRule())
-
-
-_register()
 
 __all__ = ["DepUpgradePathRule"]

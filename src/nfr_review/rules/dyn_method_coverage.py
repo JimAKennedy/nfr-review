@@ -9,10 +9,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class DynMethodCoverageRule:
     """Aggregate observed code.namespace + code.function spans."""
 
@@ -103,12 +104,5 @@ class DynMethodCoverageRule:
             ],
         )
 
-
-def _register() -> None:
-    if "dyn-method-coverage" not in rule_registry:
-        rule_registry.register("dyn-method-coverage", DynMethodCoverageRule())
-
-
-_register()
 
 __all__ = ["DynMethodCoverageRule"]

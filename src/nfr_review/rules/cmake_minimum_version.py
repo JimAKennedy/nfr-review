@@ -1,103 +1,66 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: CMAKE-001 — checks cmake_minimum_required version is present and modern."""
+"""Rule: cmake-minimum-version -- checks cmake_minimum_required is present and modern."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
 from packaging.version import InvalidVersion, Version
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import make_green_finding
+from nfr_review.collectors.payloads.cmake import CmakeConfigPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _MODERN_CMAKE_VERSION = Version("3.14")
 
 
-class CmakeMinimumVersionRule:
+class CmakeMinimumVersionRule(FieldRule[CmakeConfigPayload]):
+    """Check cmake_minimum_required is present and modern."""
+
     id = "cmake-minimum-version"
-    band: Band = 1
-    required_collectors: list[str] = ["cmake"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "cmake"
+    evidence_kind = "cmake-config"
+    payload_type = CmakeConfigPayload
+    pattern_tag = "cmake-minimum-version"
+    required_tech = ["cpp"]
+    default_confidence = 0.95
+    all_clear_summary = "cmake_minimum_required is present and modern."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cmake_ev = [e for e in evidence if e.kind == "cmake-config"]
-        if not cmake_ev:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no cmake evidence available",
+    def check(self, payload: CmakeConfigPayload, ev: Evidence) -> Iterable[Hit]:
+        version_str = payload.cmake_minimum_required
+        if version_str is None:
+            yield Hit(
+                rag="red",
+                severity="high",
+                summary="cmake_minimum_required is missing",
+                recommendation=(
+                    "Add cmake_minimum_required(VERSION 3.21) or later "
+                    "to ensure reproducible builds."
+                ),
+                locator=payload.file_path,
+                confidence=0.95,
+                pattern_tag="cmake-no-minimum-version",
             )
-
-        findings: list[Finding] = []
-        for ev in cmake_ev:
-            file_path = ev.payload.file_path
-            version_str = ev.payload.cmake_minimum_required
-            if version_str is None:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary="cmake_minimum_required is missing",
-                        recommendation=(
-                            "Add cmake_minimum_required(VERSION 3.21) or later "
-                            "to ensure reproducible builds."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.95,
-                        pattern_tag="cmake-no-minimum-version",
-                    )
+        else:
+            try:
+                ver = Version(version_str)
+            except InvalidVersion:
+                ver = Version("0.0")
+            if ver < _MODERN_CMAKE_VERSION:
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary=(f"cmake_minimum_required is {version_str} -- pre-modern CMake"),
+                    recommendation=(
+                        "Upgrade to cmake_minimum_required(VERSION 3.14) "
+                        "or later for modern CMake target-based workflow."
+                    ),
+                    locator=payload.file_path,
+                    confidence=0.85,
+                    pattern_tag="cmake-old-minimum-version",
                 )
-            else:
-                try:
-                    ver = Version(version_str)
-                except InvalidVersion:
-                    ver = Version("0.0")
-                if ver < _MODERN_CMAKE_VERSION:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=(
-                                f"cmake_minimum_required is {version_str} — pre-modern CMake"
-                            ),
-                            recommendation=(
-                                "Upgrade to cmake_minimum_required(VERSION 3.14) "
-                                "or later for modern CMake target-based workflow."
-                            ),
-                            evidence_locator=file_path,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="cmake-old-minimum-version",
-                        )
-                    )
 
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "cmake-minimum-version-ok",
-                    cmake_ev[0],
-                    summary="cmake_minimum_required is present and modern.",
-                    confidence=0.95,
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "cmake-minimum-version" not in rule_registry:
-        rule_registry.register("cmake-minimum-version", CmakeMinimumVersionRule())
-
-
-_register()
 
 __all__ = ["CmakeMinimumVersionRule"]

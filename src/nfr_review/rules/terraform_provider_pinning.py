@@ -1,101 +1,60 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: terraform-provider-pinning — flags providers without version constraints."""
+"""Rule: terraform-provider-pinning -- flags providers without version constraints."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.terraform import TerraformAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class TerraformProviderPinningRule:
+class TerraformProviderPinningRule(FieldRule[TerraformAnalysisPayload]):
     """Flag Terraform providers that lack version constraints."""
 
     id = "terraform-provider-pinning"
-    band: Band = 1
-    required_collectors: list[str] = ["terraform"]
-    required_tech: list[str] = ["terraform"]
+    collector_name = "terraform"
+    evidence_kind = "terraform-analysis"
+    payload_type = TerraformAnalysisPayload
+    required_tech = ["terraform"]
+    pattern_tag = "terraform-provider-pinning"
+    default_confidence = 0.9
+    all_clear_summary = "All Terraform providers have version constraints."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        tf_evidence = filter_evidence(evidence, "terraform", "terraform-analysis")
-        if not tf_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no terraform-analysis evidence available",
-            )
-
+    def check(self, payload: TerraformAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
         provider_versions: dict[str, str | None] = {}
 
-        for ev in tf_evidence:
-            for pb in ev.payload.provider_blocks:
-                name = pb.get("name", "")
-                if not name:
+        for pb in payload.provider_blocks:
+            if not pb.name:
+                continue
+            if pb.name not in provider_versions or pb.version is not None:
+                provider_versions[pb.name] = pb.version
+
+        for tb in payload.terraform_blocks:
+            for rp in tb.required_providers:
+                if not rp.name:
                     continue
-                version = pb.get("version")
-                if name not in provider_versions or version is not None:
-                    provider_versions[name] = version
-
-            for tb in ev.payload.terraform_blocks:
-                for rp in tb.get("required_providers", []):
-                    name = rp.get("name", "")
-                    if not name:
-                        continue
-                    vc = rp.get("version_constraint")
-                    if name not in provider_versions or vc:
-                        provider_versions[name] = vc
-
-        findings: list[Finding] = []
-        first = tf_evidence[0]
+                if rp.name not in provider_versions or rp.version_constraint:
+                    provider_versions[rp.name] = rp.version_constraint
 
         for name, version in sorted(provider_versions.items()):
             if not version:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Provider '{name}' has no version constraint."
-                            " Upgrades may introduce breaking changes."
-                        ),
-                        recommendation=(
-                            f"Pin provider '{name}' to a version range in"
-                            ' required_providers (e.g. "~> 5.0") to prevent'
-                            " unexpected breaking changes."
-                        ),
-                        evidence_locator=f"provider:{name}",
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.9,
-                        pattern_tag="terraform-provider-pinning",
-                    )
+                yield Hit(
+                    rag="amber",
+                    summary=(
+                        f"Provider '{name}' has no version constraint."
+                        " Upgrades may introduce breaking changes."
+                    ),
+                    recommendation=(
+                        f"Pin provider '{name}' to a version range in"
+                        ' required_providers (e.g. "~> 5.0") to prevent'
+                        " unexpected breaking changes."
+                    ),
+                    locator=f"provider:{name}",
                 )
 
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "terraform-provider-pinning",
-                    first,
-                    summary="All Terraform providers have version constraints.",
-                    confidence=0.9,
-                    evidence_locator="all-tf-files",
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "terraform-provider-pinning" not in rule_registry:
-        rule_registry.register("terraform-provider-pinning", TerraformProviderPinningRule())
-
-
-_register()
 
 __all__ = ["TerraformProviderPinningRule"]

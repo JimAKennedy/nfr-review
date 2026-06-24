@@ -9,10 +9,11 @@ from typing import Any
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class AdrLifecycleGapRule:
     """Flag when ADRs exist but lack lifecycle status tracking."""
 
@@ -112,12 +113,5 @@ class AdrLifecycleGapRule:
             ],
         )
 
-
-def _register() -> None:
-    if "adr-lifecycle-gap" not in rule_registry:
-        rule_registry.register("adr-lifecycle-gap", AdrLifecycleGapRule())
-
-
-_register()
 
 __all__ = ["AdrLifecycleGapRule"]

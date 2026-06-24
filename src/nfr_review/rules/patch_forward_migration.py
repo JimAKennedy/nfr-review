@@ -18,7 +18,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _MIGRATION_DIRS = {
@@ -47,6 +47,7 @@ _ROLLBACK_FILES_LOWER = {
 _ROLLBACK_KEYWORDS = ("rollback", "revert", "undo", "down_revision")
 
 
+@register
 class ForwardOnlyMigrationRule:
     """Detect migration tooling without rollback evidence."""
 
@@ -142,12 +143,5 @@ class ForwardOnlyMigrationRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "PATCH-ROLL-003" not in rule_registry:
-        rule_registry.register("PATCH-ROLL-003", ForwardOnlyMigrationRule())
-
-
-_register()
 
 __all__ = ["ForwardOnlyMigrationRule"]

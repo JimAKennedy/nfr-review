@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _PRODUCTION_EXPORTERS = frozenset(
@@ -31,6 +31,7 @@ _PRODUCTION_EXPORTERS = frozenset(
 _DEV_ONLY_EXPORTERS = frozenset({"logging", "debug", "nop", "file"})
 
 
+@register
 class OTelExporterConfigRule:
     """Flag OTel Collector configs where no production exporter is configured."""
 
@@ -131,12 +132,5 @@ class OTelExporterConfigRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-exporter-config" not in rule_registry:
-        rule_registry.register("otel-exporter-config", OTelExporterConfigRule())
-
-
-_register()
 
 __all__ = ["OTelExporterConfigRule"]

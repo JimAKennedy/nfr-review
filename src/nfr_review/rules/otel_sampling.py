@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _SAMPLING_PROCESSORS = frozenset(
@@ -26,6 +26,7 @@ _RATE_LIMITING_PROCESSORS = frozenset(
 )
 
 
+@register
 class OTelSamplingRule:
     """Flag OTel Collector configs without sampling or rate-limiting processors."""
 
@@ -113,12 +114,5 @@ class OTelSamplingRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-sampling" not in rule_registry:
-        rule_registry.register("otel-sampling", OTelSamplingRule())
-
-
-_register()
 
 __all__ = ["OTelSamplingRule"]

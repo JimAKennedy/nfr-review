@@ -4,71 +4,35 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.nodejs_ast import NodejsAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class NodejsSyncFsApiRule:
+class NodejsSyncFsApiRule(FieldRule[NodejsAstFilePayload]):
     """Flag synchronous filesystem and child_process calls that block the event loop."""
 
     id = "nodejs-sync-fs-api"
-    band: Band = 1
-    required_collectors: list[str] = ["nodejs-ast"]
+    collector_name = "nodejs-ast"
+    evidence_kind = "nodejs-ast-file"
+    payload_type = NodejsAstFilePayload
+    pattern_tag = "nodejs-sync-fs-api"
+    all_clear_summary = "No synchronous blocking calls detected."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        js_evidence = filter_evidence(evidence, "nodejs-ast", "nodejs-ast-file")
-        if not js_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no nodejs-ast evidence available",
+    def check(self, payload: NodejsAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for call in payload.sync_calls:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=f"Synchronous call {call.method}()",
+                recommendation=(
+                    "Use the async equivalent to avoid blocking the"
+                    " event loop in production code."
+                ),
+                locator=f"{payload.file_path}:{call.line}",
             )
 
-        findings: list[Finding] = []
-        for ev in js_evidence:
-            file_path = ev.payload.file_path
-            for call in ev.payload.sync_calls:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=f"Synchronous call {call['method']}()",
-                        recommendation=(
-                            "Use the async equivalent to avoid blocking the"
-                            " event loop in production code."
-                        ),
-                        evidence_locator=f"{file_path}:{call['line']}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="nodejs-sync-fs-api",
-                    )
-                )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "nodejs-sync-fs-api",
-                    js_evidence[0],
-                    summary="No synchronous blocking calls detected.",
-                    confidence=0.9,
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "nodejs-sync-fs-api" not in rule_registry:
-        rule_registry.register("nodejs-sync-fs-api", NodejsSyncFsApiRule())
-
-
-_register()
 
 __all__ = ["NodejsSyncFsApiRule"]

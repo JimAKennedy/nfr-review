@@ -9,7 +9,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
@@ -21,6 +21,7 @@ def _p95(values: list[float]) -> float:
     return s[max(idx, 0)]
 
 
+@register
 class DynLatencyP95Rule:
     """Compare p95 latency per HTTP route against declared nfr_targets."""
 
@@ -149,12 +150,5 @@ class DynLatencyP95Rule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dyn-latency-p95" not in rule_registry:
-        rule_registry.register("dyn-latency-p95", DynLatencyP95Rule())
-
-
-_register()
 
 __all__ = ["DynLatencyP95Rule"]

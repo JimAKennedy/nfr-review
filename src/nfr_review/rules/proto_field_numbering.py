@@ -1,98 +1,60 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: proto-field-numbering — flags field numbering gaps
+"""Rule: proto-field-numbering -- flags field numbering gaps
 not covered by reserved declarations."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.proto import ProtoAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class ProtoFieldNumberingRule:
+class ProtoFieldNumberingRule(FieldRule[ProtoAnalysisPayload]):
     """Flag messages where field number gaps exist without matching reserved declarations."""
 
     id = "proto-field-numbering"
-    band: Band = 1
-    required_collectors: list[str] = ["proto"]
-    required_tech: list[str] = ["grpc"]
+    collector_name = "proto"
+    evidence_kind = "proto-analysis"
+    payload_type = ProtoAnalysisPayload
+    pattern_tag = "proto-field-numbering"
+    required_tech = ["grpc"]
+    default_confidence = 0.85
+    all_clear_summary = (
+        "All proto messages have clean field numbering with no unexplained gaps."
+    )
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        proto_evidence = filter_evidence(evidence, "proto", "proto-analysis")
-        if not proto_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no proto evidence available",
-            )
+    def check(self, payload: ProtoAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        for msg in payload.messages:
+            if not msg.fields:
+                continue
 
-        findings: list[Finding] = []
-        for ev in proto_evidence:
-            file_path = ev.payload.file_path
-            for msg in ev.payload.messages:
-                msg_name = msg.get("name", "Unknown")
-                fields = msg.get("fields", [])
-                if not fields:
-                    continue
+            field_numbers = sorted({f.number for f in msg.fields})
+            reserved_numbers = set(msg.reserved_numbers)
 
-                field_numbers = sorted({f["number"] for f in fields})
-                reserved_numbers = set(msg.get("reserved_numbers", []))
+            expected = set(range(field_numbers[0], field_numbers[-1] + 1))
+            actual = set(field_numbers) | reserved_numbers
+            gaps = expected - actual
 
-                expected = set(range(field_numbers[0], field_numbers[-1] + 1))
-                actual = set(field_numbers) | reserved_numbers
-                gaps = expected - actual
-
-                if gaps:
-                    gap_list = ", ".join(str(n) for n in sorted(gaps))
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=(
-                                f"Message '{msg_name}' in {file_path} has field"
-                                f" numbering gaps [{gap_list}] not covered by"
-                                " reserved declarations."
-                            ),
-                            recommendation=(
-                                "Add 'reserved' declarations for removed field"
-                                " numbers to preserve backward compatibility."
-                            ),
-                            evidence_locator=f"{file_path}:{msg.get('line', 0)}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="proto-field-numbering",
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "proto-field-numbering",
-                    proto_evidence[0],
+            if gaps:
+                gap_list = ", ".join(str(n) for n in sorted(gaps))
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
                     summary=(
-                        "All proto messages have clean field numbering"
-                        " with no unexplained gaps."
+                        f"Message '{msg.name}' in {payload.file_path} has field"
+                        f" numbering gaps [{gap_list}] not covered by"
+                        " reserved declarations."
                     ),
-                    confidence=0.9,
-                    evidence_locator="all-protos",
+                    recommendation=(
+                        "Add 'reserved' declarations for removed field"
+                        " numbers to preserve backward compatibility."
+                    ),
+                    locator=f"{payload.file_path}:{msg.line}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "proto-field-numbering" not in rule_registry:
-        rule_registry.register("proto-field-numbering", ProtoFieldNumberingRule())
-
-
-_register()
 
 __all__ = ["ProtoFieldNumberingRule"]

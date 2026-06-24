@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ALL_SIGNAL_TYPES = frozenset({"traces", "metrics", "logs"})
 
 
+@register
 class OTelPipelineCompletenessRule:
     """Flag OTel Collector configs where not all signal types have pipelines."""
 
@@ -163,12 +164,5 @@ class OTelPipelineCompletenessRule:
                     undefined.add(f"exporter:{exporter}")
         return undefined
 
-
-def _register() -> None:
-    if "otel-pipeline-completeness" not in rule_registry:
-        rule_registry.register("otel-pipeline-completeness", OTelPipelineCompletenessRule())
-
-
-_register()
 
 __all__ = ["OTelPipelineCompletenessRule"]

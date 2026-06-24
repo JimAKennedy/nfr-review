@@ -14,9 +14,9 @@ class SkaffoldAnalysisPayload(BasePayload):
 
     file_path: str
     api_version: str
-    build: dict[str, Any]
-    deploy: dict[str, Any]
-    profiles: list[dict[str, Any]]
+    build: dict[str, Any] | None = None
+    deploy: dict[str, Any] = {}
+    profiles: list[dict[str, Any]] = []
 
 
 __all__ = ["SkaffoldAnalysisPayload"]

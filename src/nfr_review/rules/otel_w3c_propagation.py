@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _W3C_PROPAGATOR_NAMES = frozenset({"tracecontext", "w3c", "traceparent"})
 
 
+@register
 class OTelW3CPropagationRule:
     """Flag repos without W3C trace-context propagation configured."""
 
@@ -103,12 +104,5 @@ class OTelW3CPropagationRule:
             ],
         )
 
-
-def _register() -> None:
-    if "otel-w3c-propagation" not in rule_registry:
-        rule_registry.register("otel-w3c-propagation", OTelW3CPropagationRule())
-
-
-_register()
 
 __all__ = ["OTelW3CPropagationRule"]

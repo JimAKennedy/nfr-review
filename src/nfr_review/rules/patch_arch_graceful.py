@@ -1,124 +1,73 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: PATCH-ARCH-002 — checks K8s workloads for graceful shutdown configuration."""
+"""Rule: PATCH-ARCH-002 -- checks K8s workloads for graceful shutdown configuration."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.k8s import K8sResourcePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _MIN_GRACE_PERIOD = 30
 
 
-class GracefulShutdownMissingRule:
+class GracefulShutdownMissingRule(FieldRule[K8sResourcePayload]):
     """Flag workloads missing preStop hooks or insufficient grace period."""
 
     id = "PATCH-ARCH-002"
-    band: Band = 1
-    required_collectors: list[str] = ["k8s-manifest"]
+    collector_name = "k8s-manifest"
+    evidence_kind = "k8s-resource"
+    payload_type = K8sResourcePayload
+    pattern_tag = "graceful-shutdown"
+    default_confidence = 0.9
+    all_clear_summary = (
+        "All containers have preStop hooks and"
+        f" terminationGracePeriodSeconds >= {_MIN_GRACE_PERIOD}."
+    )
+    all_clear_recommendation = "No action required -- graceful shutdown is configured."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
-        if not k8s_resources:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no k8s-manifest evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in k8s_resources:
-            resource_name = ev.payload.name
-            file_path = ev.payload.file_path
-
-            # Check each container for preStop lifecycle hook
-            for container in ev.payload.containers:
-                container_name = container.get("name", "")
-                has_pre_stop = container.get("pre_stop") is not None
-
-                if not has_pre_stop:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=(
-                                f"Container '{container_name}' in"
-                                f" {resource_name} is missing a"
-                                f" preStop lifecycle hook."
-                            ),
-                            recommendation=(
-                                "Define a preStop lifecycle hook (e.g. an exec"
-                                " command or HTTP GET) to allow in-flight"
-                                " requests to drain before SIGTERM is sent."
-                            ),
-                            evidence_locator=f"{file_path}:{resource_name}:{container_name}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
-                            pattern_tag="graceful-shutdown",
-                        )
-                    )
-
-            # Check terminationGracePeriodSeconds at the workload level
-            grace_period = ev.payload.termination_grace_period
-            if grace_period is None or grace_period < _MIN_GRACE_PERIOD:
-                period_display = (
-                    "not set (defaults to 30s)" if grace_period is None else f"{grace_period}s"
-                )
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Workload {resource_name} has"
-                            f" terminationGracePeriodSeconds {period_display},"
-                            f" which may be insufficient for graceful shutdown."
-                        ),
-                        recommendation=(
-                            "Set terminationGracePeriodSeconds to at least"
-                            f" {_MIN_GRACE_PERIOD} to give running requests"
-                            " time to complete before the pod is killed."
-                        ),
-                        evidence_locator=f"{file_path}:{resource_name}",
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="graceful-shutdown",
-                    )
-                )
-
-        if not findings:
-            first = k8s_resources[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "graceful-shutdown",
-                    first,
+    def check(self, payload: K8sResourcePayload, ev: Evidence) -> Iterable[Hit]:
+        # Check each container for preStop lifecycle hook
+        for container in payload.containers:
+            if container.pre_stop is None:
+                yield Hit(
+                    rag="amber",
                     summary=(
-                        "All containers have preStop hooks and"
-                        " terminationGracePeriodSeconds >= "
-                        f"{_MIN_GRACE_PERIOD}."
+                        f"Container '{container.name}' in"
+                        f" {payload.name} is missing a"
+                        f" preStop lifecycle hook."
                     ),
-                    recommendation="No action required — graceful shutdown is configured.",
-                    confidence=0.9,
-                    evidence_locator="all-workloads",
+                    recommendation=(
+                        "Define a preStop lifecycle hook (e.g. an exec"
+                        " command or HTTP GET) to allow in-flight"
+                        " requests to drain before SIGTERM is sent."
+                    ),
+                    locator=f"{payload.file_path}:{payload.name}:{container.name}",
                 )
+
+        # Check terminationGracePeriodSeconds at the workload level
+        grace_period = payload.termination_grace_period
+        if grace_period is None or grace_period < _MIN_GRACE_PERIOD:
+            period_display = (
+                "not set (defaults to 30s)" if grace_period is None else f"{grace_period}s"
+            )
+            yield Hit(
+                rag="amber",
+                summary=(
+                    f"Workload {payload.name} has"
+                    f" terminationGracePeriodSeconds {period_display},"
+                    f" which may be insufficient for graceful shutdown."
+                ),
+                recommendation=(
+                    "Set terminationGracePeriodSeconds to at least"
+                    f" {_MIN_GRACE_PERIOD} to give running requests"
+                    " time to complete before the pod is killed."
+                ),
+                locator=f"{payload.file_path}:{payload.name}",
+                confidence=0.85,
             )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "PATCH-ARCH-002" not in rule_registry:
-        rule_registry.register("PATCH-ARCH-002", GracefulShutdownMissingRule())
-
-
-_register()
 
 __all__ = ["GracefulShutdownMissingRule"]

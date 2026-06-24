@@ -15,7 +15,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _OWNERSHIP_TRANSFER_RE = re.compile(
@@ -40,6 +40,7 @@ def _is_ownership_suppressed(expr: dict[str, Any]) -> bool:
     return False
 
 
+@register
 class CppRawMemoryRule:
     id = "cpp-raw-memory"
     band: Band = 1
@@ -157,12 +158,5 @@ class CppRawMemoryRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "cpp-raw-memory" not in rule_registry:
-        rule_registry.register("cpp-raw-memory", CppRawMemoryRule())
-
-
-_register()
 
 __all__ = ["CppRawMemoryRule"]

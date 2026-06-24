@@ -23,7 +23,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _PATCH_CONFIG_FILE_PATTERNS = [
@@ -75,6 +75,7 @@ def _find_config_files(ev: Evidence) -> list[str]:
     return matched
 
 
+@register
 class PatchClassSoakConfigRule:
     """PATCH-SCOPE-001: detect patch class soak configuration."""
 
@@ -181,6 +182,7 @@ class PatchClassSoakConfigRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
+@register
 class AcceleratedCadenceRule:
     """PATCH-SCOPE-002: detect accelerated cadence for critical-security patches."""
 
@@ -327,14 +329,5 @@ class AcceleratedCadenceRule:
             return RuleResult(rule_id=self.id, findings=findings)
         return None
 
-
-def _register() -> None:
-    for rule_cls in (PatchClassSoakConfigRule, AcceleratedCadenceRule):
-        rule = rule_cls()
-        if rule.id not in rule_registry:
-            rule_registry.register(rule.id, rule)
-
-
-_register()
 
 __all__ = ["PatchClassSoakConfigRule", "AcceleratedCadenceRule"]

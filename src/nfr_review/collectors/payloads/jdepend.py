@@ -4,22 +4,32 @@
 
 from __future__ import annotations
 
+from pydantic import AliasChoices, ConfigDict, Field
+
 from nfr_review.models import BasePayload
 
 
 class JDependPackageMetrics(BasePayload):
-    """Metrics for a single Java package."""
+    """Metrics for a single Java package.
+
+    JDepend XML uses uppercase tags (Ca, Ce, A, I, D, V) but the model
+    stores them as lowercase.  ``AliasChoices`` lets both forms pass
+    validation so raw collector dicts (lowercase) and test/XML dicts
+    (uppercase) are accepted.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     name: str
     total_classes: int = 0
     concrete_classes: int = 0
     abstract_classes: int = 0
-    ca: int = 0
-    ce: int = 0
-    a: float = 0.0
-    i: float = 0.0
-    d: float = 0.0
-    v: int = 0
+    ca: int = Field(default=0, validation_alias=AliasChoices("ca", "Ca"))
+    ce: int = Field(default=0, validation_alias=AliasChoices("ce", "Ce"))
+    a: float = Field(default=0.0, validation_alias=AliasChoices("a", "A"))
+    i: float = Field(default=0.0, validation_alias=AliasChoices("i", "I"))
+    d: float = Field(default=0.0, validation_alias=AliasChoices("d", "D"))
+    v: int = Field(default=0, validation_alias=AliasChoices("v", "V"))
 
 
 class JDependPackagesPayload(BasePayload):
@@ -27,6 +37,7 @@ class JDependPackagesPayload(BasePayload):
 
     bytecode_dir: str
     packages: list[JDependPackageMetrics]
+    cycle_groups: list[list[str]] = []
 
 
 class JDependSummaryPayload(BasePayload):

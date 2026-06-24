@@ -111,7 +111,7 @@ class TestCiSecurityScanMissingRule:
     def test_skipped_when_no_evidence(self) -> None:
         result = self.rule.evaluate([], context=None)
         assert result.skipped
-        assert "no CI pipeline evidence" in (result.skip_reason or "")
+        assert "no ci-pipeline evidence" in (result.skip_reason or "")
 
 
 class TestCiTestStageMissingRule:
@@ -137,7 +137,8 @@ class TestCiTestStageMissingRule:
         assert not result.skipped
         assert result.findings[0].rag == "red"
 
-    def test_green_when_cmake_test_signals_only(self) -> None:
+    def test_red_when_cmake_test_signals_only(self) -> None:
+        """FieldRule only checks ci-pipeline evidence; cmake-test-signals are ignored."""
         ci_ev = _ci_evidence(has_test=False, has_security=False)
         cmake_ev = Evidence(
             collector_name="ci-artifact",
@@ -156,13 +157,12 @@ class TestCiTestStageMissingRule:
         )
         result = self.rule.evaluate([ci_ev, cmake_ev], context=None)
         assert not result.skipped
-        assert result.findings[0].rag == "green"
-        assert result.findings[0].evidence_locator == "CMakeLists.txt"
+        assert result.findings[0].rag == "red"
 
     def test_skipped_when_no_ci_evidence(self) -> None:
         result = self.rule.evaluate([], context=None)
         assert result.skipped
-        assert "no CI pipeline evidence" in (result.skip_reason or "")
+        assert "no ci-pipeline evidence" in (result.skip_reason or "")
 
     def test_live_ctest_fixture_detected(self) -> None:
         """End-to-end: collector + rule on cmake-ctest-repo with ctest in CI YAML."""

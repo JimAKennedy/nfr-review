@@ -9,7 +9,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROOT_NAMES = frozenset({"root", "0"})
@@ -28,6 +28,7 @@ def _runasuser_is_root(security_context: dict[str, Any] | None) -> bool:
     return run_as_user == 0
 
 
+@register
 class DockerfileK8sUserConflictRule:
     """Flag deployments that override a Dockerfile non-root USER with runAsUser: 0."""
 
@@ -162,12 +163,5 @@ class DockerfileK8sUserConflictRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dockerfile-k8s-user-conflict" not in rule_registry:
-        rule_registry.register("dockerfile-k8s-user-conflict", DockerfileK8sUserConflictRule())
-
-
-_register()
 
 __all__ = ["DockerfileK8sUserConflictRule"]

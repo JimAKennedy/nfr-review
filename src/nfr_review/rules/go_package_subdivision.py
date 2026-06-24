@@ -15,7 +15,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 20
@@ -88,6 +88,7 @@ def _extract_domain_words(struct_name: str) -> set[str]:
     return words - _INFRA_WORDS
 
 
+@register
 class GoPackageSubdivisionRule:
     """Detect god packages and mixed concerns in Go projects."""
 
@@ -198,12 +199,5 @@ class GoPackageSubdivisionRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "go-package-subdivision" not in rule_registry:
-        rule_registry.register("go-package-subdivision", GoPackageSubdivisionRule())
-
-
-_register()
 
 __all__ = ["GoPackageSubdivisionRule"]

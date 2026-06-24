@@ -354,6 +354,7 @@ class TestCppIncludeGuards:
                 "has_pragma_once": True,
                 "has_include_guard": False,
             },
+            collector_name="cpp-ast",
         )
         result = rule.evaluate([ev], context=None)
         assert result.findings[0].rag == "green"
@@ -368,6 +369,7 @@ class TestCppIncludeGuards:
                 "has_pragma_once": False,
                 "has_include_guard": False,
             },
+            collector_name="cpp-ast",
         )
         result = rule.evaluate([ev], context=None)
         assert result.skipped
@@ -393,6 +395,7 @@ class TestCppExceptionSafety:
                     {"caught_type": "...", "rethrows": False, "line": 42, "file": "bad.cpp"},
                 ],
             },
+            collector_name="cpp-ast",
         )
         result = rule.evaluate([ev], context=None)
         assert result.findings[0].pattern_tag == "cpp-catch-all-silent"
@@ -408,6 +411,7 @@ class TestCppExceptionSafety:
                     {"caught_type": "...", "rethrows": True, "line": 10, "file": "ok.cpp"},
                 ],
             },
+            collector_name="cpp-ast",
         )
         result = rule.evaluate([ev], context=None)
         assert result.findings[0].rag == "green"
@@ -418,6 +422,7 @@ class TestCppExceptionSafety:
         ev = _make_evidence(
             "cpp-ast-file",
             {"file_path": "clean.cpp", "catch_blocks": []},
+            collector_name="cpp-ast",
         )
         result = rule.evaluate([ev], context=None)
         assert result.findings[0].rag == "green"

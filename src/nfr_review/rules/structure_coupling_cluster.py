@@ -11,7 +11,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _COUPLING_RELATIONS = frozenset({"calls", "imports_from", "imports", "uses"})
@@ -19,6 +19,7 @@ _MIN_COUPLING_EDGES = 10
 _MAX_FINDINGS = 10
 
 
+@register
 class StructureCouplingClusterRule:
     """Flag community pairs with disproportionate coupling edges."""
 
@@ -115,15 +116,5 @@ class StructureCouplingClusterRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "structure-coupling-cluster" not in rule_registry:
-        rule_registry.register(
-            "structure-coupling-cluster",
-            StructureCouplingClusterRule(),
-        )
-
-
-_register()
 
 __all__ = ["StructureCouplingClusterRule"]

@@ -8,7 +8,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _SANITIZER_KEYWORDS = frozenset(
@@ -25,6 +25,7 @@ _SANITIZER_KEYWORDS = frozenset(
 )
 
 
+@register
 class CppSanitizerCiRule:
     id = "cpp-sanitizer-ci"
     band: Band = 1
@@ -87,12 +88,5 @@ class CppSanitizerCiRule:
             ],
         )
 
-
-def _register() -> None:
-    if "cpp-sanitizer-ci" not in rule_registry:
-        rule_registry.register("cpp-sanitizer-ci", CppSanitizerCiRule())
-
-
-_register()
 
 __all__ = ["CppSanitizerCiRule"]

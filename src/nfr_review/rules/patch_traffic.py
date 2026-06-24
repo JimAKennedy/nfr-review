@@ -24,10 +24,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
+@register
 class ProgressiveTrafficShiftingRule:
     """PATCH-TRAFFIC-001: detect progressive traffic shifting config."""
 
@@ -166,6 +167,7 @@ def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
     )
 
 
+@register
 class FailoverDocumentationRule:
     """PATCH-TRAFFIC-002: detect failover/DR documentation in repo root."""
 
@@ -255,6 +257,7 @@ class FailoverDocumentationRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
+@register
 class ConnectionDrainingRule:
     """PATCH-TRAFFIC-003: detect connection draining configuration."""
 
@@ -337,19 +340,6 @@ class ConnectionDrainingRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    for rule_cls in (
-        ProgressiveTrafficShiftingRule,
-        FailoverDocumentationRule,
-        ConnectionDrainingRule,
-    ):
-        rule = rule_cls()
-        if rule.id not in rule_registry:
-            rule_registry.register(rule.id, rule)
-
-
-_register()
 
 __all__ = [
     "ProgressiveTrafficShiftingRule",

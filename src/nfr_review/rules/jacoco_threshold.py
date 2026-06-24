@@ -8,12 +8,13 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _JACOCO_GROUP = "org.jacoco"
 
 
+@register
 class JacocoThresholdRule:
     """Flag Java projects that have no JaCoCo dependency/plugin configured."""
 
@@ -83,12 +84,5 @@ class JacocoThresholdRule:
             ],
         )
 
-
-def _register() -> None:
-    if "jacoco-threshold-missing" not in rule_registry:
-        rule_registry.register("jacoco-threshold-missing", JacocoThresholdRule())
-
-
-_register()
 
 __all__ = ["JacocoThresholdRule"]
