@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelAnalysisPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _SAMPLING_PROCESSORS = frozenset(
     {
@@ -26,30 +25,40 @@ _RATE_LIMITING_PROCESSORS = frozenset(
 )
 
 
-class OTelSamplingRule:
+class OTelSamplingRule(FieldRule[OtelAnalysisPayload]):
     """Flag OTel Collector configs without sampling or rate-limiting processors."""
 
     id = "otel-sampling"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
-    required_tech: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-analysis"
+    payload_type = OtelAnalysisPayload
+    pattern_tag = "otel-sampling"
+    required_tech = ["otel"]
+    default_confidence = 0.9
+    all_clear_summary = "Sampling/rate-limiting processor configured."
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        otel_evidence = filter_evidence(evidence, "otel", "otel-analysis")
-        if not otel_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no otel-analysis evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        first = otel_evidence[0]
+        first = relevant[0]
 
         all_processors: set[str] = set()
         pipeline_processors: set[str] = set()
-        for ev in otel_evidence:
-            all_processors.update(ev.payload.processors)
-            for _name, cfg in ev.payload.pipelines.items():
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            all_processors.update(payload.processors)
+            for _name, cfg in payload.pipelines.items():
                 if isinstance(cfg, dict):
                     pipeline_processors.update(cfg.get("processors", []))
 
@@ -59,9 +68,10 @@ class OTelSamplingRule:
 
         has_rate_limiting = False
         if "memory_limiter" in processor_base_names:
-            for ev in otel_evidence:
+            for ev in relevant:
+                payload = self._coerce(ev.payload)
                 processors_config = {}
-                for p in ev.payload.processors:
+                for p in payload.processors:
                     processors_config[p] = True
             has_rate_limiting = True
 
@@ -74,16 +84,21 @@ class OTelSamplingRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-sampling",
-                        first,
-                        summary=(
-                            "Sampling/rate-limiting processor configured: "
-                            + ", ".join(found)
-                            + "."
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="green",
+                            summary=(
+                                "Sampling/rate-limiting processor configured: "
+                                + ", ".join(found)
+                                + "."
+                            ),
+                            recommendation="No action required.",
+                            locator=first.locator,
                         ),
-                        evidence_locator=first.locator,
                     )
                 ],
             )
@@ -91,34 +106,29 @@ class OTelSamplingRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "No sampling or rate-limiting processor configured."
-                        " Risk of telemetry data volume explosion in production."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.8,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "No sampling or rate-limiting processor configured."
+                            " Risk of telemetry data volume explosion in production."
+                        ),
+                        recommendation=(
+                            "Add a sampling processor (probabilistic_sampler,"
+                            " tail_sampling) or rate-limiting processor"
+                            " (memory_limiter) to control data volume."
+                        ),
+                        locator=first.locator,
+                        confidence=0.8,
                     ),
-                    recommendation=(
-                        "Add a sampling processor (probabilistic_sampler,"
-                        " tail_sampling) or rate-limiting processor"
-                        " (memory_limiter) to control data volume."
-                    ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.8,
-                    pattern_tag="otel-sampling",
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "otel-sampling" not in rule_registry:
-        rule_registry.register("otel-sampling", OTelSamplingRule())
-
-
-_register()
 
 __all__ = ["OTelSamplingRule"]

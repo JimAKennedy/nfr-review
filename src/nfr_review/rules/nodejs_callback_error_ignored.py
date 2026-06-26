@@ -4,75 +4,37 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.nodejs_ast import NodejsAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class NodejsCallbackErrorIgnoredRule:
+class NodejsCallbackErrorIgnoredRule(FieldRule[NodejsAstFilePayload]):
     """Flag Node.js callbacks that receive an error parameter but never check it."""
 
     id = "nodejs-callback-error-ignored"
-    band: Band = 1
-    required_collectors: list[str] = ["nodejs-ast"]
+    collector_name = "nodejs-ast"
+    evidence_kind = "nodejs-ast-file"
+    payload_type = NodejsAstFilePayload
+    pattern_tag = "nodejs-callback-error-ignored"
+    default_confidence = 0.85
+    all_clear_summary = "No ignored callback errors detected."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        js_evidence = filter_evidence(evidence, "nodejs-ast", "nodejs-ast-file")
-        if not js_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no nodejs-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in js_evidence:
-            file_path = ev.payload.file_path
-            for cb in ev.payload.callback_patterns:
-                if not cb["checks_error"]:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=(
-                                f"Callback ignores error parameter '{cb['callback_param']}'"
-                            ),
-                            recommendation=(
-                                "Check the error parameter and handle or propagate"
-                                " it. Ignored errors cause silent failures."
-                            ),
-                            evidence_locator=f"{file_path}:{cb['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="nodejs-callback-error-ignored",
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "nodejs-callback-error-ignored",
-                    js_evidence[0],
-                    summary="No ignored callback errors detected.",
+    def check(self, payload: NodejsAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for cb in payload.callback_patterns:
+            if not cb.checks_error:
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary=f"Callback ignores error parameter '{cb.callback_param}'",
+                    recommendation=(
+                        "Check the error parameter and handle or propagate"
+                        " it. Ignored errors cause silent failures."
+                    ),
+                    locator=f"{payload.file_path}:{cb.line}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "nodejs-callback-error-ignored" not in rule_registry:
-        rule_registry.register(
-            "nodejs-callback-error-ignored", NodejsCallbackErrorIgnoredRule()
-        )
-
-
-_register()
 
 __all__ = ["NodejsCallbackErrorIgnoredRule"]

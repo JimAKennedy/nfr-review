@@ -10,10 +10,10 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 15
 _MIXED_CONCERN_GROUP_THRESHOLD = 3
@@ -81,16 +81,25 @@ def _extract_domain_words(class_name: str) -> set[str]:
     return words - _INFRA_WORDS
 
 
-class JavaPackageSubdivisionRule:
+class JavaPackageSubdivisionRule(FieldRule[JavaAstFilePayload]):
     """Detect god packages, flat structures, and mixed concerns in Java."""
 
     id = "java-package-subdivision"
-    band: Band = 2
-    required_collectors: list[str] = ["java-ast"]
+    band = 2
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "java-god-package"
+    default_confidence = 0.85
+    all_clear_summary = "Java package structure is well-subdivided."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
-        if not java_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -99,9 +108,10 @@ class JavaPackageSubdivisionRule:
 
         # Group classes by package.
         package_classes: dict[str, list[str]] = defaultdict(list)
-        for ev in java_evidence:
-            pkg = ev.payload.package
-            for cls in ev.payload.classes:
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            pkg = payload.package
+            for cls in payload.classes:
                 package_classes[pkg].append(cls.name)
 
         if not package_classes:
@@ -111,7 +121,7 @@ class JavaPackageSubdivisionRule:
                     make_green_finding(
                         self.id,
                         "java-pkg-subdivision-ok",
-                        java_evidence[0],
+                        relevant[0],
                         summary="No Java classes found to analyse for package subdivision.",
                         confidence=0.80,
                     )
@@ -119,31 +129,32 @@ class JavaPackageSubdivisionRule:
             )
 
         findings: list[Finding] = []
-        ref_ev = java_evidence[0]
+        ref_ev = relevant[0]
 
         # 1. God-package detection.
         for pkg, classes in sorted(package_classes.items()):
             if len(classes) > _GOD_PACKAGE_THRESHOLD:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            f"God package '{pkg}' contains {len(classes)} classes"
-                            f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                f"God package '{pkg}' contains {len(classes)} classes"
+                                f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                            ),
+                            recommendation=(
+                                f"Decompose '{pkg}' into smaller sub-packages grouped"
+                                " by domain concern. Large Java packages increase"
+                                " cognitive load, slow IDE navigation, and often hide"
+                                " mixed responsibilities."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Decompose '{pkg}' into smaller sub-packages grouped"
-                            " by domain concern. Large Java packages increase"
-                            " cognitive load, slow IDE navigation, and often hide"
-                            " mixed responsibilities."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.90,
+                        ev=ref_ev,
                         pattern_tag="java-god-package",
+                        default_confidence=0.90,
                     )
                 )
 
@@ -153,25 +164,26 @@ class JavaPackageSubdivisionRule:
             depths.add(pkg.count(".") + 1)
         if len(package_classes) > 1 and max(depths) <= 1:
             findings.append(
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "Flat package structure detected: all"
-                        f" {len(package_classes)} packages are at depth 1."
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "Flat package structure detected: all"
+                            f" {len(package_classes)} packages are at depth 1."
+                        ),
+                        recommendation=(
+                            "Consider introducing sub-packages to group related"
+                            " classes by domain or layer (e.g. com.example.order,"
+                            " com.example.payment). Flat Java packages become"
+                            " unwieldy as the project grows."
+                        ),
+                        locator="project-wide",
                     ),
-                    recommendation=(
-                        "Consider introducing sub-packages to group related"
-                        " classes by domain or layer (e.g. com.example.order,"
-                        " com.example.payment). Flat Java packages become"
-                        " unwieldy as the project grows."
-                    ),
-                    evidence_locator="project-wide",
-                    collector_name=ref_ev.collector_name,
-                    collector_version=ref_ev.collector_version,
-                    confidence=0.80,
+                    ev=ref_ev,
                     pattern_tag="java-flat-structure",
+                    default_confidence=0.80,
                 )
             )
 
@@ -184,26 +196,27 @@ class JavaPackageSubdivisionRule:
             if len(domain_groups) > _MIXED_CONCERN_GROUP_THRESHOLD:
                 sample = sorted(domain_groups)[:5]
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Package '{pkg}' has classes spanning"
-                            f" {len(domain_groups)} domain concepts"
-                            f" ({', '.join(sample)})."
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                f"Package '{pkg}' has classes spanning"
+                                f" {len(domain_groups)} domain concepts"
+                                f" ({', '.join(sample)})."
+                            ),
+                            recommendation=(
+                                f"Split '{pkg}' so each sub-package addresses a"
+                                " single domain concern. Mixed concerns increase"
+                                " coupling and make the package harder to reason"
+                                " about."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Split '{pkg}' so each sub-package addresses a"
-                            " single domain concern. Mixed concerns increase"
-                            " coupling and make the package harder to reason"
-                            " about."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.75,
+                        ev=ref_ev,
                         pattern_tag="java-mixed-concerns",
+                        default_confidence=0.75,
                     )
                 )
 
@@ -220,12 +233,5 @@ class JavaPackageSubdivisionRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "java-package-subdivision" not in rule_registry:
-        rule_registry.register("java-package-subdivision", JavaPackageSubdivisionRule())
-
-
-_register()
 
 __all__ = ["JavaPackageSubdivisionRule"]

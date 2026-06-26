@@ -1,16 +1,15 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: dockerfile-secret-leakage — flags potential secrets copied or set in Dockerfiles."""
+"""Rule: dockerfile-secret-leakage -- flags potential secrets copied or set in Dockerfiles."""
 
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.dockerfile import DockerfileAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _SECRET_FILE_PATTERNS = [
     re.compile(r"\.env$", re.IGNORECASE),
@@ -55,104 +54,56 @@ def _matches_secret_env(name: str) -> bool:
     return any(pat.search(name) for pat in _SECRET_ENV_PATTERNS)
 
 
-class DockerfileSecretLeakageRule:
+class DockerfileSecretLeakageRule(FieldRule[DockerfileAnalysisPayload]):
     """Flag Dockerfiles that COPY/ADD secret files or expose secrets via ARG/ENV."""
 
     id = "dockerfile-secret-leakage"
-    band: Band = 1
-    required_collectors: list[str] = ["dockerfile"]
+    collector_name = "dockerfile"
+    evidence_kind = "dockerfile-analysis"
+    payload_type = DockerfileAnalysisPayload
+    pattern_tag = "dockerfile-secret-leakage"
     required_tech: list[str] = ["dockerfile"]
+    default_confidence = 0.8
+    all_clear_summary = "No potential secret leakage detected in Dockerfiles."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
-        if not df_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no dockerfile evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in df_evidence:
-            file_path = ev.payload.file_path
-
-            for cmd in ev.payload.copy_add_commands:
-                line = cmd.get("line", 0)
-                instruction = cmd.get("instruction", "COPY")
-                for src in cmd.get("sources", []):
-                    if _matches_secret_file(src):
-                        findings.append(
-                            Finding(
-                                rule_id=self.id,
-                                rag="red",
-                                severity="critical",
-                                summary=(
-                                    f"{instruction} of suspected secret file"
-                                    f" '{src}' in {file_path}:{line}."
-                                ),
-                                recommendation=(
-                                    "Use Docker BuildKit secrets"
-                                    " (--mount=type=secret) instead of"
-                                    f" {instruction} for sensitive files."
-                                ),
-                                evidence_locator=f"{file_path}:{line}",
-                                collector_name=ev.collector_name,
-                                collector_version=ev.collector_version,
-                                confidence=0.8,
-                                pattern_tag="dockerfile-secret-leakage",
-                            )
-                        )
-
-            for entry in ev.payload.env_args:
-                name = entry.get("name", "")
-                line = entry.get("line", 0)
-                instruction = entry.get("instruction", "ARG")
-                if _matches_secret_env(name):
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="red",
-                            severity="critical",
-                            summary=(
-                                f"{instruction} '{name}' in"
-                                f" {file_path}:{line} may expose a secret"
-                                " in the image layer."
-                            ),
-                            recommendation=(
-                                "Use Docker BuildKit secrets or runtime"
-                                " environment injection instead of baking"
-                                " secrets into the image via"
-                                f" {instruction}."
-                            ),
-                            evidence_locator=f"{file_path}:{line}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.8,
-                            pattern_tag="dockerfile-secret-leakage",
-                        )
+    def check(self, payload: DockerfileAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        for cmd in payload.copy_add_commands:
+            for src in cmd.sources:
+                if _matches_secret_file(src):
+                    yield Hit(
+                        rag="red",
+                        severity="critical",
+                        summary=(
+                            f"{cmd.instruction} of suspected secret file"
+                            f" '{src}' in {payload.file_path}:{cmd.line}."
+                        ),
+                        recommendation=(
+                            "Use Docker BuildKit secrets"
+                            " (--mount=type=secret) instead of"
+                            f" {cmd.instruction} for sensitive files."
+                        ),
+                        locator=f"{payload.file_path}:{cmd.line}",
                     )
 
-        if not findings:
-            first = df_evidence[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "dockerfile-secret-leakage",
-                    first,
-                    summary="No potential secret leakage detected in Dockerfiles.",
-                    confidence=0.8,
-                    evidence_locator="all-dockerfiles",
+        for entry in payload.env_args:
+            if _matches_secret_env(entry.name):
+                yield Hit(
+                    rag="red",
+                    severity="critical",
+                    summary=(
+                        f"{entry.instruction} '{entry.name}' in"
+                        f" {payload.file_path}:{entry.line} may expose a secret"
+                        " in the image layer."
+                    ),
+                    recommendation=(
+                        "Use Docker BuildKit secrets or runtime"
+                        " environment injection instead of baking"
+                        " secrets into the image via"
+                        f" {entry.instruction}."
+                    ),
+                    locator=f"{payload.file_path}:{entry.line}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "dockerfile-secret-leakage" not in rule_registry:
-        rule_registry.register("dockerfile-secret-leakage", DockerfileSecretLeakageRule())
-
-
-_register()
 
 __all__ = ["DockerfileSecretLeakageRule"]

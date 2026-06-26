@@ -33,7 +33,7 @@ class TestHealthEndpointMissingRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no java-ast evidence available"
+        assert result.skip_reason == "no java-ast-file evidence available"
 
     def test_health_endpoint_present_green(self) -> None:
         ev = _java_evidence(

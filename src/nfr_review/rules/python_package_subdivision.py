@@ -10,10 +10,10 @@ import re
 from collections import defaultdict
 from typing import Any
 
+from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _GOD_PACKAGE_THRESHOLD = 15
 _MIXED_CONCERN_GROUP_THRESHOLD = 3
@@ -89,16 +89,25 @@ def _package_from_module_path(module_path: str) -> str:
     return module_path
 
 
-class PythonPackageSubdivisionRule:
+class PythonPackageSubdivisionRule(FieldRule[PythonAstFilePayload]):
     """Detect god packages, flat structures, and mixed concerns in Python."""
 
     id = "python-package-subdivision"
-    band: Band = 2
-    required_collectors: list[str] = ["python-ast"]
+    band = 2
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "python-god-package"
+    default_confidence = 0.85
+    all_clear_summary = "Python package structure is well-subdivided."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        py_evidence = filter_evidence(evidence, "python-ast", "python-ast-file")
-        if not py_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -107,10 +116,11 @@ class PythonPackageSubdivisionRule:
 
         # Group classes by package.
         package_classes: dict[str, list[str]] = defaultdict(list)
-        for ev in py_evidence:
-            module_path = ev.payload.module_path
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            module_path = payload.module_path
             pkg = _package_from_module_path(module_path)
-            for cls in ev.payload.classes:
+            for cls in payload.classes:
                 package_classes[pkg].append(cls.name)
 
         if not package_classes:
@@ -120,7 +130,7 @@ class PythonPackageSubdivisionRule:
                     make_green_finding(
                         self.id,
                         "python-pkg-subdivision-ok",
-                        py_evidence[0],
+                        relevant[0],
                         summary="No Python classes found to analyse for package subdivision.",
                         confidence=0.80,
                     )
@@ -128,31 +138,32 @@ class PythonPackageSubdivisionRule:
             )
 
         findings: list[Finding] = []
-        ref_ev = py_evidence[0]
+        ref_ev = relevant[0]
 
         # 1. God-package detection.
         for pkg, classes in sorted(package_classes.items()):
             if len(classes) > _GOD_PACKAGE_THRESHOLD:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            f"God package '{pkg}' contains {len(classes)} classes"
-                            f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                f"God package '{pkg}' contains {len(classes)} classes"
+                                f" (threshold: {_GOD_PACKAGE_THRESHOLD})."
+                            ),
+                            recommendation=(
+                                f"Decompose '{pkg}' into smaller sub-packages grouped"
+                                " by domain concern. Large packages increase cognitive"
+                                " load, slow navigation, and often hide mixed"
+                                " responsibilities."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Decompose '{pkg}' into smaller sub-packages grouped"
-                            " by domain concern. Large packages increase cognitive"
-                            " load, slow navigation, and often hide mixed"
-                            " responsibilities."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.90,
+                        ev=ref_ev,
                         pattern_tag="python-god-package",
+                        default_confidence=0.90,
                     )
                 )
 
@@ -162,25 +173,26 @@ class PythonPackageSubdivisionRule:
             depths.add(pkg.count(".") + 1)
         if len(package_classes) > 1 and max(depths) <= 1:
             findings.append(
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "Flat package structure detected: all"
-                        f" {len(package_classes)} packages are at depth 1."
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "Flat package structure detected: all"
+                            f" {len(package_classes)} packages are at depth 1."
+                        ),
+                        recommendation=(
+                            "Consider introducing sub-packages to group related"
+                            " modules by domain or layer (e.g. models, services,"
+                            " api). Flat structures become unwieldy as the"
+                            " project grows."
+                        ),
+                        locator="project-wide",
                     ),
-                    recommendation=(
-                        "Consider introducing sub-packages to group related"
-                        " modules by domain or layer (e.g. models, services,"
-                        " api). Flat structures become unwieldy as the"
-                        " project grows."
-                    ),
-                    evidence_locator="project-wide",
-                    collector_name=ref_ev.collector_name,
-                    collector_version=ref_ev.collector_version,
-                    confidence=0.80,
+                    ev=ref_ev,
                     pattern_tag="python-flat-structure",
+                    default_confidence=0.80,
                 )
             )
 
@@ -193,26 +205,27 @@ class PythonPackageSubdivisionRule:
             if len(domain_groups) > _MIXED_CONCERN_GROUP_THRESHOLD:
                 sample = sorted(domain_groups)[:5]
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Package '{pkg}' has classes spanning"
-                            f" {len(domain_groups)} domain concepts"
-                            f" ({', '.join(sample)})."
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                f"Package '{pkg}' has classes spanning"
+                                f" {len(domain_groups)} domain concepts"
+                                f" ({', '.join(sample)})."
+                            ),
+                            recommendation=(
+                                f"Split '{pkg}' so each sub-package addresses a"
+                                " single domain concern. Mixed concerns increase"
+                                " coupling and make the package harder to reason"
+                                " about."
+                            ),
+                            locator="project-wide",
                         ),
-                        recommendation=(
-                            f"Split '{pkg}' so each sub-package addresses a"
-                            " single domain concern. Mixed concerns increase"
-                            " coupling and make the package harder to reason"
-                            " about."
-                        ),
-                        evidence_locator="project-wide",
-                        collector_name=ref_ev.collector_name,
-                        collector_version=ref_ev.collector_version,
-                        confidence=0.75,
+                        ev=ref_ev,
                         pattern_tag="python-mixed-concerns",
+                        default_confidence=0.75,
                     )
                 )
 
@@ -229,12 +242,5 @@ class PythonPackageSubdivisionRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "python-package-subdivision" not in rule_registry:
-        rule_registry.register("python-package-subdivision", PythonPackageSubdivisionRule())
-
-
-_register()
 
 __all__ = ["PythonPackageSubdivisionRule"]

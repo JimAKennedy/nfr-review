@@ -1,84 +1,45 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: dockerfile-user-directive — flags Dockerfiles running as root."""
+"""Rule: dockerfile-user-directive -- flags Dockerfiles running as root."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.dockerfile import DockerfileAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class DockerfileUserDirectiveRule:
+class DockerfileUserDirectiveRule(FieldRule[DockerfileAnalysisPayload]):
     """Flag Dockerfiles that lack a USER directive (running as root)."""
 
     id = "dockerfile-user-directive"
-    band: Band = 1
-    required_collectors: list[str] = ["dockerfile"]
+    collector_name = "dockerfile"
+    evidence_kind = "dockerfile-analysis"
+    payload_type = DockerfileAnalysisPayload
+    pattern_tag = "dockerfile-user-directive"
     required_tech: list[str] = ["dockerfile"]
+    default_confidence = 0.95
+    all_clear_summary = "All Dockerfiles specify a USER directive."
+    all_clear_recommendation = "No action required -- non-root user configured."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
-        if not df_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no dockerfile evidence available",
+    def check(self, payload: DockerfileAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        if not payload.has_user_directive:
+            yield Hit(
+                rag="amber",
+                severity="high",
+                summary=(
+                    f"Dockerfile '{payload.file_path}' has no USER directive --"
+                    " container runs as root."
+                ),
+                recommendation=(
+                    "Add a USER directive to run the container as a"
+                    " non-root user, reducing the blast radius of"
+                    " container escapes."
+                ),
+                locator=payload.file_path,
             )
 
-        findings: list[Finding] = []
-        for ev in df_evidence:
-            file_path = ev.payload.file_path
-            has_user = ev.payload.has_user_directive
-
-            if not has_user:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="high",
-                        summary=(
-                            f"Dockerfile '{file_path}' has no USER directive —"
-                            " container runs as root."
-                        ),
-                        recommendation=(
-                            "Add a USER directive to run the container as a"
-                            " non-root user, reducing the blast radius of"
-                            " container escapes."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.95,
-                        pattern_tag="dockerfile-user-directive",
-                    )
-                )
-
-        if not findings:
-            first = df_evidence[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "dockerfile-user-directive",
-                    first,
-                    summary="All Dockerfiles specify a USER directive.",
-                    recommendation="No action required — non-root user configured.",
-                    confidence=0.95,
-                    evidence_locator="all-dockerfiles",
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "dockerfile-user-directive" not in rule_registry:
-        rule_registry.register("dockerfile-user-directive", DockerfileUserDirectiveRule())
-
-
-_register()
 
 __all__ = ["DockerfileUserDirectiveRule"]

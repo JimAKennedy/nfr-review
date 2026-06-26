@@ -1,89 +1,50 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: non-root-container-violation — checks containers enforce runAsNonRoot."""
+"""Rule: non-root-container-violation -- checks containers enforce runAsNonRoot."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.k8s import K8sResourcePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class NonRootContainerViolationRule:
+class NonRootContainerViolationRule(FieldRule[K8sResourcePayload]):
     """Flag containers without securityContext.runAsNonRoot=true."""
 
     id = "non-root-container-violation"
-    band: Band = 1
+    collector_name = "k8s-manifest"
+    evidence_kind = "k8s-resource"
+    payload_type = K8sResourcePayload
+    pattern_tag = "k8s-non-root"
     required_tech: list[str] = ["kubernetes"]
-    required_collectors: list[str] = ["k8s-manifest"]
+    default_confidence = 0.9
+    all_clear_summary = "All containers enforce runAsNonRoot."
+    all_clear_recommendation = "No action required -- non-root is enforced."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
-        if not k8s_resources:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no k8s-manifest evidence available",
+    def check(self, payload: K8sResourcePayload, ev: Evidence) -> Iterable[Hit]:
+        for container in payload.containers:
+            sec_ctx = container.security_context
+            runs_as_non_root = (
+                isinstance(sec_ctx, dict) and sec_ctx.get("runAsNonRoot") is True
             )
-
-        findings: list[Finding] = []
-        for ev in k8s_resources:
-            resource_name = ev.payload.name
-            file_path = ev.payload.file_path
-            for container in ev.payload.containers:
-                container_name = container.get("name", "")
-                sec_ctx = container.get("security_context")
-                runs_as_non_root = (
-                    isinstance(sec_ctx, dict) and sec_ctx.get("runAsNonRoot") is True
+            if not runs_as_non_root:
+                yield Hit(
+                    rag="amber",
+                    summary=(
+                        f"Container '{container.name}' in"
+                        f" {payload.name} does not set"
+                        f" runAsNonRoot=true."
+                    ),
+                    recommendation=(
+                        "Set securityContext.runAsNonRoot: true to"
+                        " prevent the container from running as the"
+                        " root user, reducing attack surface."
+                    ),
+                    locator=f"{payload.file_path}:{payload.name}:{container.name}",
                 )
-                if not runs_as_non_root:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary=(
-                                f"Container '{container_name}' in"
-                                f" {resource_name} does not set"
-                                f" runAsNonRoot=true."
-                            ),
-                            recommendation=(
-                                "Set securityContext.runAsNonRoot: true to"
-                                " prevent the container from running as the"
-                                " root user, reducing attack surface."
-                            ),
-                            evidence_locator=(f"{file_path}:{resource_name}:{container_name}"),
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
-                            pattern_tag="k8s-non-root",
-                        )
-                    )
 
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "k8s-non-root",
-                    k8s_resources[0],
-                    summary="All containers enforce runAsNonRoot.",
-                    recommendation="No action required — non-root is enforced.",
-                    confidence=0.9,
-                    evidence_locator="all-workloads",
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "non-root-container-violation" not in rule_registry:
-        rule_registry.register("non-root-container-violation", NonRootContainerViolationRule())
-
-
-_register()
 
 __all__ = ["NonRootContainerViolationRule"]

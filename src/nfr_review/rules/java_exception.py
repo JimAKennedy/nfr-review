@@ -1,82 +1,48 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: exception-handling-antipattern — catches broad Exception/Throwable without rethrow."""
+"""Rule: exception-handling-antipattern.
+
+Catches broad Exception/Throwable without rethrow.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult, compute_content_hash
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+from nfr_review.models import Evidence, compute_content_hash
+from nfr_review.rules.framework import FieldRule, Hit
 
 _BROAD_TYPES = frozenset({"Exception", "Throwable"})
 
 
-class ExceptionHandlingAntipatternRule:
+class ExceptionHandlingAntipatternRule(FieldRule[JavaAstFilePayload]):
     """Flag catch blocks that swallow Exception/Throwable without rethrowing."""
 
     id = "exception-handling-antipattern"
-    band: Band = 1
-    required_collectors: list[str] = ["java-ast"]
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "exception-handling"
+    default_confidence = 0.85
+    all_clear_summary = "No broad exception swallowing detected."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
-        if not java_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no java-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in java_evidence:
-            file_path = ev.payload.file_path
-            for block in ev.payload.catch_blocks:
-                if block["caught_type"] in _BROAD_TYPES and not block["rethrows"]:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="red",
-                            severity="high",
-                            summary=(f"Broad catch({block['caught_type']}) without rethrow"),
-                            recommendation=(
-                                "Catch specific exception types or"
-                                " rethrow to preserve stack trace"
-                                " visibility."
-                            ),
-                            evidence_locator=(f"{file_path}:{block['line']}"),
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="exception-handling",
-                            content_hash=compute_content_hash(
-                                block.get("body_text", block["caught_type"])
-                            ),
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "exception-handling",
-                    java_evidence[0],
-                    summary="No broad exception swallowing detected.",
+    def check(self, payload: JavaAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for block in payload.catch_blocks:
+            if block.caught_type in _BROAD_TYPES and not block.rethrows:
+                yield Hit(
+                    rag="red",
+                    severity="high",
+                    summary=f"Broad catch({block.caught_type}) without rethrow",
+                    recommendation=(
+                        "Catch specific exception types or"
+                        " rethrow to preserve stack trace"
+                        " visibility."
+                    ),
+                    locator=f"{payload.file_path}:{block.line}",
+                    content_hash=compute_content_hash(block.caught_type),
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "exception-handling-antipattern" not in rule_registry:
-        rule_registry.register(
-            "exception-handling-antipattern", ExceptionHandlingAntipatternRule()
-        )
-
-
-_register()
 
 __all__ = ["ExceptionHandlingAntipatternRule"]

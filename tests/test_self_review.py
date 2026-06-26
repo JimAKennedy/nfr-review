@@ -7,32 +7,15 @@ and included with --include-tests.
 
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-import nfr_review.collectors  # noqa: F401
-import nfr_review.rules  # noqa: F401
 from nfr_review.cli import cli
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-@pytest.fixture(autouse=True)
-def _ensure_registries_populated() -> None:
-    """Re-register rules/collectors if test_registry's autouse fixture cleared them."""
-    for name in nfr_review.rules.__all__:
-        mod_name = f"nfr_review.rules.{name}"
-        if mod_name in sys.modules:
-            importlib.reload(sys.modules[mod_name])
-    for name in nfr_review.collectors.__all__:
-        mod_name = f"nfr_review.collectors.{name}"
-        if mod_name in sys.modules:
-            importlib.reload(sys.modules[mod_name])
 
 
 def _parse_findings(jsonl_path: Path) -> list[dict]:

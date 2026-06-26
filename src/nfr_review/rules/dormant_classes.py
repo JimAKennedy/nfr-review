@@ -12,9 +12,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
@@ -253,11 +255,15 @@ def _detect_orphans(
     return RuleResult(rule_id=rule_id, findings=findings)
 
 
-class JavaDormantClassesRule:
+class JavaDormantClassesRule(FieldRule[JavaAstFilePayload]):
     id = "java-dormant-classes"
-    band: Band = 2
-    required_collectors: list[str] = ["java-ast"]
-    required_tech: list[str] = ["java"]
+    band = 2
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "java-dormant-class"
+    required_tech = ["java"]
+    default_confidence = 0.7
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         return _detect_orphans(
@@ -270,11 +276,15 @@ class JavaDormantClassesRule:
         )
 
 
-class PythonDormantClassesRule:
+class PythonDormantClassesRule(FieldRule[PythonAstFilePayload]):
     id = "python-dormant-classes"
-    band: Band = 2
-    required_collectors: list[str] = ["python-ast"]
-    required_tech: list[str] = ["python"]
+    band = 2
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "python-dormant-class"
+    required_tech = ["python"]
+    default_confidence = 0.7
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         return _detect_orphans(
@@ -287,11 +297,15 @@ class PythonDormantClassesRule:
         )
 
 
-class GoDormantClassesRule:
+class GoDormantClassesRule(FieldRule[GoAstFilePayload]):
     id = "go-dormant-classes"
-    band: Band = 2
-    required_collectors: list[str] = ["go-ast"]
-    required_tech: list[str] = ["go"]
+    band = 2
+    collector_name = "go-ast"
+    evidence_kind = "go-ast-file"
+    payload_type = GoAstFilePayload
+    pattern_tag = "go-dormant-class"
+    required_tech = ["go"]
+    default_confidence = 0.7
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         return _detect_orphans(
@@ -303,20 +317,5 @@ class GoDormantClassesRule:
             pattern_tag_prefix="go",
         )
 
-
-def _register() -> None:
-    _rules: list[
-        type[JavaDormantClassesRule | PythonDormantClassesRule | GoDormantClassesRule]
-    ] = [
-        JavaDormantClassesRule,
-        PythonDormantClassesRule,
-        GoDormantClassesRule,
-    ]
-    for cls in _rules:
-        if cls.id not in rule_registry:
-            rule_registry.register(cls.id, cls())
-
-
-_register()
 
 __all__ = ["JavaDormantClassesRule", "PythonDormantClassesRule", "GoDormantClassesRule"]

@@ -13,10 +13,11 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 
+@register
 class ReadmeExistsRule:
     """Verify a README exists at the repo root.
 
@@ -72,14 +73,6 @@ class ReadmeExistsRule:
             )
 
         return RuleResult(rule_id=self.id, findings=[finding])
-
-
-def _register() -> None:
-    if "sample-readme-exists" not in rule_registry:
-        rule_registry.register("sample-readme-exists", ReadmeExistsRule())
-
-
-_register()
 
 
 __all__ = ["ReadmeExistsRule"]

@@ -7,10 +7,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from nfr_review.collectors.payloads.otel_trace import OtelTracePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
 def _p95(values: list[float]) -> float:
@@ -21,17 +21,26 @@ def _p95(values: list[float]) -> float:
     return s[max(idx, 0)]
 
 
-class DynLatencyP95Rule:
+class DynLatencyP95Rule(FieldRule[OtelTracePayload]):
     """Compare p95 latency per HTTP route against declared nfr_targets."""
 
     id = "dyn-latency-p95"
-    band: Band = 3
-    required_collectors: list[str] = ["otel-trace"]
+    band = 3
+    collector_name = "otel-trace"
+    evidence_kind = "otel-trace"
+    payload_type = OtelTracePayload
+    pattern_tag = "dyn-latency-p95"
     required_tech: list[str] = []
+    default_confidence = 0.85
+    all_clear_summary = "All routes within declared latency targets."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
-        if not trace_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -39,8 +48,9 @@ class DynLatencyP95Rule:
             )
 
         route_durations: dict[str, list[float]] = {}
-        for ev in trace_ev:
-            for span in ev.payload.spans:
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            for span in payload.spans:
                 if span.get("kind") != 2:
                     continue
                 route = span.get("attributes", {}).get("http.route", "")
@@ -64,7 +74,7 @@ class DynLatencyP95Rule:
             if targets is None:
                 targets = {}
 
-        first = trace_ev[0]
+        first = relevant[0]
         findings: list[Finding] = []
 
         for route, durations in sorted(route_durations.items()):
@@ -105,56 +115,53 @@ class DynLatencyP95Rule:
                 )
             elif p95_val <= 2 * target_ms:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Route {route}: p95={p95_val:.0f}ms exceeds target "
-                            f"{target_ms}ms but within 2x (sample={sample_size})."
-                        ),
-                        recommendation=(
-                            f"Investigate latency on {route}. The p95 is between "
-                            f"1x and 2x the declared target of {target_ms}ms."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.85,
+                        ev=first,
                         pattern_tag=f"dyn-latency-p95-amber:{route}",
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                f"Route {route}: p95={p95_val:.0f}ms exceeds target "
+                                f"{target_ms}ms but within 2x (sample={sample_size})."
+                            ),
+                            recommendation=(
+                                f"Investigate latency on {route}. The p95 is between "
+                                f"1x and 2x the declared target of {target_ms}ms."
+                            ),
+                            locator=first.locator,
+                            confidence=0.85,
+                        ),
                     )
                 )
             else:
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            f"Route {route}: p95={p95_val:.0f}ms exceeds 2x target "
-                            f"{target_ms}ms (sample={sample_size})."
-                        ),
-                        recommendation=(
-                            f"Route {route} latency is critically above the "
-                            f"declared target of {target_ms}ms. Profile the "
-                            "endpoint to identify bottlenecks."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.85,
+                        ev=first,
                         pattern_tag=f"dyn-latency-p95-red:{route}",
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="red",
+                            severity="high",
+                            summary=(
+                                f"Route {route}: p95={p95_val:.0f}ms exceeds 2x target "
+                                f"{target_ms}ms (sample={sample_size})."
+                            ),
+                            recommendation=(
+                                f"Route {route} latency is critically above the "
+                                f"declared target of {target_ms}ms. Profile the "
+                                "endpoint to identify bottlenecks."
+                            ),
+                            locator=first.locator,
+                            confidence=0.85,
+                        ),
                     )
                 )
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dyn-latency-p95" not in rule_registry:
-        rule_registry.register("dyn-latency-p95", DynLatencyP95Rule())
-
-
-_register()
 
 __all__ = ["DynLatencyP95Rule"]

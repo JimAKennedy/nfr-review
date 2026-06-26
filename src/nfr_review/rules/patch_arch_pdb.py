@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.k8s import K8sResourcePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
@@ -21,12 +21,13 @@ def _labels_overlap(pdb_match_labels: dict | None, workload_labels: dict | None)
     return all(workload_labels.get(k) == v for k, v in pdb_match_labels.items())
 
 
-class PdbCoverageRule:
-    """Flag multi-replica Deployments/StatefulSets with no matching PodDisruptionBudget."""
-
+class PdbCoverageRule(FieldRule[K8sResourcePayload]):
     id = "PATCH-ARCH-004"
-    band: Band = 1
-    required_collectors: list[str] = ["k8s-manifest"]
+    collector_name = "k8s-manifest"
+    evidence_kind = "k8s-resource"
+    payload_type = K8sResourcePayload
+    pattern_tag = "pdb-coverage"
+    default_confidence = 0.90
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
@@ -48,7 +49,6 @@ class PdbCoverageRule:
 
             replicas = ev.payload.replicas
             if replicas is None or replicas <= 1:
-                # Singleton or unset — PDB is not the concern here (PATCH-ARCH-001 covers it).
                 continue
 
             resource_name = ev.payload.name
@@ -56,12 +56,9 @@ class PdbCoverageRule:
             file_path = ev.payload.file_path
             workload_labels = ev.payload.labels
 
-            # Find PDBs that are namespace-compatible and whose matchLabels
-            # are a subset of this workload's pod template labels.
             matching_pdb: str | None = None
             for pdb_ev in pdb_evidence:
                 pdb_namespace = pdb_ev.payload.namespace
-                # Namespace must match (both None counts as same namespace).
                 if pdb_namespace != namespace:
                     continue
                 match_labels = pdb_ev.payload.match_labels
@@ -70,8 +67,6 @@ class PdbCoverageRule:
                     break
 
             if matching_pdb is None:
-                # Attempt a namespace-presence fallback when no label data is available.
-                # If workload has no labels captured, fall back to namespace-scoped presence.
                 if not workload_labels:
                     ns_pdbs = [
                         pdb_ev
@@ -122,7 +117,6 @@ class PdbCoverageRule:
                 )
 
         if not findings:
-            # No multi-replica workloads to check.
             first = k8s_resources[0]
             findings.append(
                 make_green_finding(
@@ -137,12 +131,5 @@ class PdbCoverageRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "PATCH-ARCH-004" not in rule_registry:
-        rule_registry.register("PATCH-ARCH-004", PdbCoverageRule())
-
-
-_register()
 
 __all__ = ["PdbCoverageRule"]

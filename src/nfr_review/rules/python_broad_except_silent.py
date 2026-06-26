@@ -8,7 +8,6 @@ from collections.abc import Iterable
 
 from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
 from nfr_review.models import Evidence, compute_content_hash
-from nfr_review.registry import rule_registry
 from nfr_review.rules.framework import FieldRule, Hit
 
 _BROAD_TYPES = frozenset({"Exception", "BaseException"})
@@ -43,12 +42,5 @@ class PythonBroadExceptSilentRule(FieldRule[PythonAstFilePayload]):
                     content_hash=compute_content_hash(block.caught_type),
                 )
 
-
-def _register() -> None:
-    if "python-broad-except-silent" not in rule_registry:
-        rule_registry.register("python-broad-except-silent", PythonBroadExceptSilentRule())
-
-
-_register()
 
 __all__ = ["PythonBroadExceptSilentRule"]

@@ -273,7 +273,7 @@ class TestHealthProbeSeparationRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no k8s-manifest evidence available"
+        assert result.skip_reason == "no k8s-resource evidence available"
 
     def test_wrong_kind_skipped(self) -> None:
         ev = Evidence(

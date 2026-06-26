@@ -28,7 +28,7 @@ from typing import Any
 
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _DEPENDENCY_ANNOTATION_PREFIXES = (
@@ -84,6 +84,7 @@ def _has_dependency_annotation(annotations: dict[str, str] | None) -> list[str]:
     return matched
 
 
+@register
 class DependencyDeclarationRule:
     """PATCH-DEPS-001: detect dependency declaration annotations on workloads."""
 
@@ -166,6 +167,7 @@ class DependencyDeclarationRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
+@register
 class SharedFateIndicatorRule:
     """PATCH-DEPS-002: detect shared-fate indicators across workloads."""
 
@@ -313,6 +315,7 @@ def _extract_service_refs(containers: list[dict[str, Any]]) -> list[str]:
     return refs
 
 
+@register
 class CrossRingDependencyRule:
     """PATCH-DEPS-003: detect cross-ring dependency direction violations."""
 
@@ -432,19 +435,6 @@ class CrossRingDependencyRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    for rule_cls in (
-        DependencyDeclarationRule,
-        SharedFateIndicatorRule,
-        CrossRingDependencyRule,
-    ):
-        rule = rule_cls()
-        if rule.id not in rule_registry:
-            rule_registry.register(rule.id, rule)
-
-
-_register()
 
 __all__ = [
     "DependencyDeclarationRule",

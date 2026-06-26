@@ -1,178 +1,77 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: PATCH-HEALTH-003 — startup probe presence for patching safety.
+"""Rule: PATCH-HEALTH-003 -- startup probe presence for patching safety.
 
 Checks that workloads with multiple replicas have a startupProbe configured.
 
-* DaemonSet resources: always GREEN — startup probes are less critical for DaemonSets
+* DaemonSet resources: skipped -- startup probes are less critical for DaemonSets
   because they do not participate in rolling-update traffic shifting the same way.
-* Multi-replica workloads (replicas > 1): AMBER if startup probe missing — slow-starting
+* Multi-replica workloads (replicas > 1): AMBER if startup probe missing -- slow-starting
   containers without a startup probe risk being killed by liveness probes before reaching
   readiness during a rolling update.
-* Singleton workloads (replicas <= 1): GREEN with informational note — lower risk.
-* GREEN if startup probe is present.
+* Singleton workloads (replicas <= 1): no hit -- lower risk.
+* No hit if startup probe is present (base class handles all-clear).
 * SKIPPED when no k8s-resource evidence is available.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.k8s import K8sResourcePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _WORKLOAD_KINDS = {"Deployment", "StatefulSet"}
 
 
-class StartupProbeMissingRule:
+class StartupProbeMissingRule(FieldRule[K8sResourcePayload]):
     """Check startup probe presence in the context of patching safety."""
 
     id = "PATCH-HEALTH-003"
-    band: Band = 1
-    required_collectors: list[str] = ["k8s-manifest"]
+    collector_name = "k8s-manifest"
+    evidence_kind = "k8s-resource"
+    payload_type = K8sResourcePayload
+    pattern_tag = "patch-health-startup"
+    default_confidence = 0.85
+    all_clear_summary = "All containers have startup probes for patching safety."
+    all_clear_recommendation = "No action required -- startup probes are present."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        k8s_resources = filter_evidence(evidence, "k8s-manifest", "k8s-resource")
-        if not k8s_resources:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no k8s-manifest evidence available",
-            )
+    def check(self, payload: K8sResourcePayload, ev: Evidence) -> Iterable[Hit]:
+        # DaemonSets -- startup probes less critical; skip.
+        if payload.kind == "DaemonSet":
+            return
 
-        findings: list[Finding] = []
+        if payload.kind not in _WORKLOAD_KINDS:
+            return
 
-        for ev in k8s_resources:
-            resource_kind = ev.payload.kind
-            resource_name = ev.payload.name
-            file_path = ev.payload.file_path
+        is_multi_replica = payload.replicas is not None and payload.replicas > 1
 
-            # DaemonSets are explicitly GREEN — startup probes less critical
-            if resource_kind == "DaemonSet":
-                findings.append(
-                    make_green_finding(
-                        self.id,
-                        "patch-health-startup",
-                        ev,
-                        summary=(
-                            f"DaemonSet '{resource_name}' — startup probe check"
-                            " not applicable for DaemonSets."
-                        ),
-                        recommendation=(
-                            "No action required — DaemonSets do not participate"
-                            " in replica-based rolling updates."
-                        ),
-                        confidence=0.95,
-                        evidence_locator=f"{file_path}:{resource_name}",
-                    )
-                )
-                continue
+        for container in payload.containers:
+            has_startup_probe = container.startup_probe is not None
 
-            if resource_kind not in _WORKLOAD_KINDS:
-                continue
-
-            replicas = ev.payload.replicas
-            is_multi_replica = replicas is not None and replicas > 1
-
-            for container in ev.payload.containers:
-                container_name = container.get("name", "")
-                has_startup_probe = container.get("startup_probe") is not None
-                locator = f"{file_path}:{resource_name}:{container_name}"
-
-                if has_startup_probe:
-                    findings.append(
-                        make_green_finding(
-                            self.id,
-                            "patch-health-startup",
-                            ev,
-                            summary=(
-                                f"Container '{container_name}' in"
-                                f" {resource_kind} '{resource_name}'"
-                                " has a startupProbe configured."
-                            ),
-                            recommendation="No action required — startup probe is present.",
-                            confidence=0.95,
-                            evidence_locator=locator,
-                        )
-                    )
-                elif is_multi_replica:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="high",
-                            summary=(
-                                f"Container '{container_name}' in"
-                                f" {resource_kind} '{resource_name}'"
-                                f" ({replicas} replicas) has no startupProbe."
-                                " Slow-starting containers risk being killed by"
-                                " liveness probes before reaching readiness"
-                                " during rolling updates."
-                            ),
-                            recommendation=(
-                                "Add a startupProbe to protect slow-starting"
-                                " containers from premature liveness-probe"
-                                " termination. The kubelet will not run liveness"
-                                " or readiness checks until the startup probe"
-                                " succeeds, giving the container time to"
-                                " initialise safely during rolling updates."
-                            ),
-                            evidence_locator=locator,
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.85,
-                            pattern_tag="patch-health-startup",
-                        )
-                    )
-                else:
-                    # Singleton workload — lower risk, informational green
-                    findings.append(
-                        make_green_finding(
-                            self.id,
-                            "patch-health-startup",
-                            ev,
-                            summary=(
-                                f"Container '{container_name}' in"
-                                f" {resource_kind} '{resource_name}'"
-                                " (singleton) has no startupProbe. Lower risk"
-                                " for single-replica workloads."
-                            ),
-                            recommendation=(
-                                "Consider adding a startupProbe if the container"
-                                " has a slow initialisation phase, to prevent"
-                                " premature liveness-probe termination."
-                            ),
-                            confidence=0.80,
-                            evidence_locator=locator,
-                        )
-                    )
-
-        if not findings:
-            first = k8s_resources[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "patch-health-startup",
-                    first,
+            if not has_startup_probe and is_multi_replica:
+                yield Hit(
+                    rag="amber",
+                    severity="high",
                     summary=(
-                        "No Deployment/StatefulSet/DaemonSet workloads to check"
-                        " for startup probes."
+                        f"Container '{container.name}' in"
+                        f" {payload.kind} '{payload.name}'"
+                        f" ({payload.replicas} replicas) has no startupProbe."
+                        " Slow-starting containers risk being killed by"
+                        " liveness probes before reaching readiness"
+                        " during rolling updates."
                     ),
-                    confidence=0.90,
-                    evidence_locator="all-workloads",
+                    recommendation=(
+                        "Add a startupProbe to protect slow-starting"
+                        " containers from premature liveness-probe"
+                        " termination. The kubelet will not run liveness"
+                        " or readiness checks until the startup probe"
+                        " succeeds, giving the container time to"
+                        " initialise safely during rolling updates."
+                    ),
+                    locator=f"{payload.file_path}:{payload.name}:{container.name}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "PATCH-HEALTH-003" not in rule_registry:
-        rule_registry.register("PATCH-HEALTH-003", StartupProbeMissingRule())
-
-
-_register()
 
 __all__ = ["StartupProbeMissingRule"]

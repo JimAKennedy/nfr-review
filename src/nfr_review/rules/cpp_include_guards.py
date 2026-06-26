@@ -4,85 +4,76 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import make_green_finding
+from nfr_review.collectors.payloads.cpp_ast import CppAstFilePayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit
 
 _HEADER_EXTENSIONS = frozenset({".h", ".hpp", ".hxx"})
 
 
-class CppIncludeGuardsRule:
+class CppIncludeGuardsRule(FieldRule[CppAstFilePayload]):
     id = "cpp-include-guards"
-    band: Band = 1
-    required_collectors: list[str] = ["cpp-ast"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "cpp-ast"
+    evidence_kind = "cpp-ast-file"
+    payload_type = CppAstFilePayload
+    pattern_tag = "cpp-missing-include-guard"
+    required_tech = ["cpp"]
+    default_confidence = 0.95
+    all_clear_summary = "All headers have include guards."
+    all_clear_tag = "cpp-include-guards-ok"
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cpp_ev = [e for e in evidence if e.kind == "cpp-ast-file"]
-        if not cpp_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no cpp-ast evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
-
         headers = [
             e
-            for e in cpp_ev
-            if any(e.payload.file_path.endswith(ext) for ext in _HEADER_EXTENSIONS)
+            for e in relevant
+            if any(
+                self._coerce(e.payload).file_path.endswith(ext) for ext in _HEADER_EXTENSIONS
+            )
         ]
         if not headers:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no C++ header files found",
+                skip_reason="no C++ header files in evidence",
+            )
+        return super().evaluate(evidence, context)
+
+    def check(self, payload: CppAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        if not any(payload.file_path.endswith(ext) for ext in _HEADER_EXTENSIONS):
+            return
+        if payload.has_pragma_once or payload.has_include_guard:
+            yield Hit(
+                rag="green",
+                severity="info",
+                summary="Header has include guard or #pragma once",
+                recommendation="No action required.",
+                locator=payload.file_path,
+                pattern_tag="cpp-include-guards-ok",
+            )
+        else:
+            yield Hit(
+                rag="red",
+                severity="medium",
+                summary="Header missing include guard or #pragma once",
+                recommendation=(
+                    "Add #pragma once or traditional #ifndef/#define include guards."
+                ),
+                locator=payload.file_path,
             )
 
-        findings: list[Finding] = []
-        for ev in headers:
-            file_path = ev.payload.file_path
-            has_pragma = ev.payload.has_pragma_once
-            has_guard = ev.payload.has_include_guard
-            if not has_pragma and not has_guard:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="red",
-                        severity="medium",
-                        summary="Header missing include guard or #pragma once",
-                        recommendation=(
-                            "Add #pragma once or traditional #ifndef/#define include guards."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.95,
-                        pattern_tag="cpp-missing-include-guard",
-                    )
-                )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "cpp-include-guards-ok",
-                    headers[0],
-                    summary="All headers have include guards.",
-                    confidence=0.95,
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "cpp-include-guards" not in rule_registry:
-        rule_registry.register("cpp-include-guards", CppIncludeGuardsRule())
-
-
-_register()
 
 __all__ = ["CppIncludeGuardsRule"]

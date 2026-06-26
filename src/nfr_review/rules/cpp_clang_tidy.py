@@ -6,33 +6,40 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
-class CppClangTidyRule:
+class CppClangTidyRule(FieldRule[RepoStructureSummaryPayload]):
     id = "cpp-clang-tidy"
-    band: Band = 1
-    required_collectors: list[str] = ["repo-structure"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "cpp-clang-tidy-missing"
+    required_tech = ["cpp"]
+    default_confidence = 0.9
+    all_clear_summary = ".clang-tidy config found — static analysis configured."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        repo_ev = filter_evidence(evidence, "repo-structure")
-        if not repo_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no repo-structure evidence available",
+                skip_reason="no repo-structure-summary evidence available",
             )
 
         all_files: set[str] = set()
-        for ev in repo_ev:
-            for f in getattr(ev.payload, "files", []):
-                all_files.add(f if isinstance(f, str) else f.get("path", ""))
-            for f in getattr(ev.payload, "top_level_files", []):
-                all_files.add(f if isinstance(f, str) else f.get("path", ""))
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            for f in payload.top_level_files:
+                all_files.add(f if isinstance(f, str) else "")
 
         has_tidy = any(f.endswith(".clang-tidy") for f in all_files)
 
@@ -43,7 +50,7 @@ class CppClangTidyRule:
                     make_green_finding(
                         self.id,
                         "cpp-clang-tidy-present",
-                        repo_ev[0],
+                        relevant[0],
                         summary=".clang-tidy config found — static analysis configured.",
                         confidence=0.95,
                     )
@@ -53,29 +60,25 @@ class CppClangTidyRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="low",
-                    summary="No .clang-tidy config found — static analysis not configured.",
-                    recommendation=(
-                        "Add a .clang-tidy file to enable clang-tidy static analysis."
+                    hit=Hit(
+                        rag="amber",
+                        severity="low",
+                        summary=(
+                            "No .clang-tidy config found — static analysis not configured."
+                        ),
+                        recommendation=(
+                            "Add a .clang-tidy file to enable clang-tidy static analysis."
+                        ),
+                        locator="project-wide",
                     ),
-                    evidence_locator="project-wide",
-                    collector_name=repo_ev[0].collector_name,
-                    collector_version=repo_ev[0].collector_version,
-                    confidence=0.9,
-                    pattern_tag="cpp-clang-tidy-missing",
+                    ev=relevant[0],
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "cpp-clang-tidy" not in rule_registry:
-        rule_registry.register("cpp-clang-tidy", CppClangTidyRule())
-
-
-_register()
 
 __all__ = ["CppClangTidyRule"]

@@ -7,25 +7,34 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any, Literal
 
+from nfr_review.collectors.payloads.otel_trace import OtelTracePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 DEFAULT_THRESHOLD = 5
 
 
-class DynNPlus1Rule:
+class DynNPlus1Rule(FieldRule[OtelTracePayload]):
     """Detect N+1 query patterns by counting child DB spans per request span."""
 
     id = "dyn-n-plus-1"
-    band: Band = 3
-    required_collectors: list[str] = ["otel-trace"]
+    band = 3
+    collector_name = "otel-trace"
+    evidence_kind = "otel-trace"
+    payload_type = OtelTracePayload
+    pattern_tag = "dyn-n-plus-1"
     required_tech: list[str] = []
+    default_confidence = 0.9
+    all_clear_summary = "No N+1 query patterns detected."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_ev = filter_evidence(evidence, "otel-trace", "otel-trace")
-        if not trace_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -35,7 +44,7 @@ class DynNPlus1Rule:
         spans_by_id: dict[str, dict[str, Any]] = {}
         children: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
-        for ev in trace_ev:
+        for ev in relevant:
             for span in ev.payload.spans:
                 sid = span.get("span_id", "")
                 if sid:
@@ -44,7 +53,7 @@ class DynNPlus1Rule:
                 if pid:
                     children[pid].append(span)
 
-        first = trace_ev[0]
+        first = relevant[0]
         findings: list[Finding] = []
 
         server_spans = [s for s in spans_by_id.values() if s.get("kind") == 2]
@@ -78,25 +87,27 @@ class DynNPlus1Rule:
                 severity: Literal["high", "medium"] = "high" if count > 20 else "medium"
 
                 findings.append(
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag=rag,
-                        severity=severity,
-                        summary=(
-                            f"N+1 query pattern: {count} identical DB calls "
-                            f"({stmt_key!r}) under request span "
-                            f"'{route}' (threshold={DEFAULT_THRESHOLD})."
-                        ),
-                        recommendation=(
-                            f"Replace the {count} individual queries with a "
-                            "batch query or JOIN. This is a classic N+1 pattern "
-                            "where the ORM fetches related records one at a time."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.9,
+                        ev=first,
                         pattern_tag=f"dyn-n-plus-1:{route}",
+                        default_confidence=self.default_confidence,
+                        hit=Hit(
+                            rag=rag,
+                            severity=severity,
+                            summary=(
+                                f"N+1 query pattern: {count} identical DB calls "
+                                f"({stmt_key!r}) under request span "
+                                f"'{route}' (threshold={DEFAULT_THRESHOLD})."
+                            ),
+                            recommendation=(
+                                f"Replace the {count} individual queries with a "
+                                "batch query or JOIN. This is a classic N+1 pattern "
+                                "where the ORM fetches related records one at a time."
+                            ),
+                            locator=first.locator,
+                            confidence=0.9,
+                        ),
                     )
                 )
 
@@ -141,12 +152,5 @@ def _db_identity(span: dict[str, Any]) -> str:
         return stmt
     return span.get("name", "unknown-db-op")
 
-
-def _register() -> None:
-    if "dyn-n-plus-1" not in rule_registry:
-        rule_registry.register("dyn-n-plus-1", DynNPlus1Rule())
-
-
-_register()
 
 __all__ = ["DynNPlus1Rule"]

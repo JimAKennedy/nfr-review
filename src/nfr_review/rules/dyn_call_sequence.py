@@ -7,25 +7,34 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from nfr_review.collectors.payloads.otel_trace import OtelTracePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _DEFAULT_MAX_DIAGRAMS = 10
 
 
-class DynCallSequenceRule:
+class DynCallSequenceRule(FieldRule[OtelTracePayload]):
     """Generate Mermaid sequenceDiagram blocks from trace span trees."""
 
     id = "dyn-call-sequence"
-    band: Band = 3
-    required_collectors: list[str] = ["otel-trace"]
+    band = 3
+    collector_name = "otel-trace"
+    evidence_kind = "otel-trace"
+    payload_type = OtelTracePayload
+    pattern_tag = "dyn-call-sequence"
     required_tech: list[str] = []
+    default_confidence = 0.9
+    all_clear_summary = "No call sequence diagrams generated."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        trace_evidence = filter_evidence(evidence, "otel-trace", "otel-trace")
-        if not trace_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -33,7 +42,7 @@ class DynCallSequenceRule:
             )
 
         all_spans: list[dict[str, Any]] = []
-        for ev in trace_evidence:
+        for ev in relevant:
             for span in ev.payload.spans:
                 if isinstance(span, dict):
                     all_spans.append(span)
@@ -61,7 +70,7 @@ class DynCallSequenceRule:
             max_diagrams = context.max_diagrams
 
         findings: list[Finding] = []
-        first = trace_evidence[0]
+        first = relevant[0]
 
         for trace_id, spans in sorted_traces[:max_diagrams]:
             mermaid = _build_sequence_diagram(trace_id, spans)
@@ -172,12 +181,5 @@ def _build_sequence_diagram(trace_id: str, spans: list[dict[str, Any]]) -> str:
     lines.extend(messages)
     return "\n".join(lines)
 
-
-def _register() -> None:
-    if "dyn-call-sequence" not in rule_registry:
-        rule_registry.register("dyn-call-sequence", DynCallSequenceRule())
-
-
-_register()
 
 __all__ = ["DynCallSequenceRule"]

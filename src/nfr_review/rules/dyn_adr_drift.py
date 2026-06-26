@@ -10,7 +10,7 @@ from typing import Any
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.output.topology import build_topology_graph
 from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _ARROW_RE = re.compile(r"([\w][\w-]*)\s*(?:→|->|-->)\s*([\w][\w-]*)")
@@ -52,6 +52,7 @@ def _normalise_name(name: str) -> str:
     return name.strip().lower()
 
 
+@register
 class DynAdrDriftRule:
     """Cross-reference observed runtime topology against ADR-declared architecture."""
 
@@ -183,12 +184,5 @@ class DynAdrDriftRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dyn-adr-drift" not in rule_registry:
-        rule_registry.register("dyn-adr-drift", DynAdrDriftRule())
-
-
-_register()
 
 __all__ = ["DynAdrDriftRule"]

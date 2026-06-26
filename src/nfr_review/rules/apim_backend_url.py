@@ -5,100 +5,47 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.apim import ApimPolicyPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _NAMED_VALUE_RE = re.compile(r"\{\{.+?\}\}")
 
 
-class ApimHardcodedBackendUrlRule:
-    """Flag when APIM policies use hardcoded backend URLs instead of named values."""
-
+class ApimHardcodedBackendUrlRule(FieldRule[ApimPolicyPayload]):
     id = "apim-hardcoded-backend-url"
-    band: Band = 1
-    required_collectors: list[str] = ["apim-policy"]
-    required_tech: list[str] = ["apim"]
+    collector_name = "apim-policy"
+    evidence_kind = "apim-policy"
+    payload_type = ApimPolicyPayload
+    pattern_tag = "apim-backend-url"
+    required_tech = ["apim"]
+    default_confidence = 0.9
+    all_clear_summary = "No backend URLs found in any APIM policy."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        apim_evidence = filter_evidence(evidence, "apim-policy", "apim-policy")
-        if not apim_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no apim-policy evidence available",
+    def check(self, payload: ApimPolicyPayload, ev: Evidence) -> Iterable[Hit]:
+        if not payload.backend_urls:
+            return
+
+        hardcoded = [url for url in payload.backend_urls if not _NAMED_VALUE_RE.search(url)]
+
+        if hardcoded:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=(
+                    f"Hardcoded backend URL(s): {', '.join(hardcoded)}."
+                    " Environment-specific values should use named values."
+                ),
+                recommendation=(
+                    "Replace hardcoded backend URLs with named values"
+                    " (e.g. {{backend-url}}) to support environment"
+                    " promotion and avoid secrets in source control."
+                ),
+                locator=payload.file_path,
             )
 
-        findings: list[Finding] = []
-        for ev in apim_evidence:
-            file_path = ev.payload.file_path
-            backend_urls = ev.payload.backend_urls
-
-            if not backend_urls:
-                # No backend URLs to check -- skip this file
-                continue
-
-            hardcoded = [url for url in backend_urls if not _NAMED_VALUE_RE.search(url)]
-
-            if hardcoded:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Hardcoded backend URL(s): {', '.join(hardcoded)}."
-                            " Environment-specific values should use named values."
-                        ),
-                        recommendation=(
-                            "Replace hardcoded backend URLs with named values"
-                            " (e.g. {{backend-url}}) to support environment"
-                            " promotion and avoid secrets in source control."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="apim-backend-url",
-                    )
-                )
-            else:
-                findings.append(
-                    make_green_finding(
-                        self.id,
-                        "apim-backend-url",
-                        ev,
-                        summary="All backend URLs use named values.",
-                        confidence=0.9,
-                        recommendation="No action required -- named values are used.",
-                        evidence_locator=file_path,
-                    )
-                )
-
-        if not findings:
-            first = apim_evidence[0]
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "apim-backend-url",
-                    first,
-                    summary="No backend URLs found in any APIM policy.",
-                    confidence=0.9,
-                    evidence_locator="all-policies",
-                )
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "apim-hardcoded-backend-url" not in rule_registry:
-        rule_registry.register("apim-hardcoded-backend-url", ApimHardcodedBackendUrlRule())
-
-
-_register()
 
 __all__ = ["ApimHardcodedBackendUrlRule"]

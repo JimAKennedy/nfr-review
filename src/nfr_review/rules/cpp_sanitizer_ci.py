@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.ci import CiPipelinePayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _SANITIZER_KEYWORDS = frozenset(
     {
@@ -25,15 +25,23 @@ _SANITIZER_KEYWORDS = frozenset(
 )
 
 
-class CppSanitizerCiRule:
+class CppSanitizerCiRule(FieldRule[CiPipelinePayload]):
     id = "cpp-sanitizer-ci"
-    band: Band = 1
-    required_collectors: list[str] = ["ci-artifact"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "ci-artifact"
+    evidence_kind = "ci-pipeline"
+    payload_type = CiPipelinePayload
+    pattern_tag = "cpp-sanitizer-ci-missing"
+    required_tech = ["cpp"]
+    default_confidence = 0.85
+    all_clear_summary = "CI includes sanitizer jobs for runtime error detection."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        ci_ev = filter_evidence(evidence, "ci-artifact", "ci-pipeline")
-        if not ci_ev:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -41,8 +49,9 @@ class CppSanitizerCiRule:
             )
 
         has_sanitizer = False
-        for ev in ci_ev:
-            searchable = " ".join(ev.payload.step_names + ev.payload.job_names).lower()
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            searchable = " ".join(payload.step_names + payload.job_names).lower()
             for keyword in _SANITIZER_KEYWORDS:
                 if keyword in searchable:
                     has_sanitizer = True
@@ -57,7 +66,7 @@ class CppSanitizerCiRule:
                     make_green_finding(
                         self.id,
                         "cpp-sanitizer-ci-present",
-                        ci_ev[0],
+                        relevant[0],
                         summary="CI includes sanitizer jobs for runtime error detection.",
                         confidence=0.9,
                     )
@@ -67,32 +76,27 @@ class CppSanitizerCiRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "No sanitizer jobs found in CI — runtime errors may go undetected."
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "No sanitizer jobs found in CI — runtime errors may go undetected."
+                        ),
+                        recommendation=(
+                            "Add CI jobs with -fsanitize=address and"
+                            " -fsanitize=undefined to detect memory errors"
+                            " and undefined behavior."
+                        ),
+                        locator="project-wide",
                     ),
-                    recommendation=(
-                        "Add CI jobs with -fsanitize=address and -fsanitize=undefined "
-                        "to detect memory errors and undefined behavior."
-                    ),
-                    evidence_locator="project-wide",
-                    collector_name=ci_ev[0].collector_name,
-                    collector_version=ci_ev[0].collector_version,
-                    confidence=0.85,
-                    pattern_tag="cpp-sanitizer-ci-missing",
+                    ev=relevant[0],
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "cpp-sanitizer-ci" not in rule_registry:
-        rule_registry.register("cpp-sanitizer-ci", CppSanitizerCiRule())
-
-
-_register()
 
 __all__ = ["CppSanitizerCiRule"]

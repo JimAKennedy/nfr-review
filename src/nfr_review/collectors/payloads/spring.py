@@ -20,6 +20,7 @@ class SpringConfigFilePayload(BasePayload):
     spring_security: dict[str, Any]
     actuator: dict[str, Any]
     raw_keys: list[str]
+    spring: dict[str, Any] = {}
 
 
 __all__ = [

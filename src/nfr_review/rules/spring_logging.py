@@ -1,15 +1,15 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: logging-config-missing — flags lack of structured logging configuration."""
+"""Rule: logging-config-missing -- flags lack of structured logging configuration."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.spring import SpringConfigFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _JSON_INDICATORS = frozenset(
     {
@@ -21,71 +21,39 @@ _JSON_INDICATORS = frozenset(
 )
 
 
-class LoggingConfigMissingRule:
+class LoggingConfigMissingRule(FieldRule[SpringConfigFilePayload]):
     """Flag when no structured logging (JSON/logstash encoder) is configured."""
 
     id = "logging-config-missing"
-    band: Band = 1
-    required_collectors: list[str] = ["spring-config"]
-    required_tech: list[str] = ["spring_boot"]
+    collector_name = "spring-config"
+    evidence_kind = "spring-config-file"
+    payload_type = SpringConfigFilePayload
+    pattern_tag = "logging-config"
+    required_tech = ["spring_boot"]
+    default_confidence = 0.75
+    all_clear_summary = "Structured logging configuration detected."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        spring_evidence = filter_evidence(evidence, "spring-config", "spring-config-file")
-        if not spring_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no spring-config evidence available",
-            )
+    def check(self, payload: SpringConfigFilePayload, ev: Evidence) -> Iterable[Hit]:
+        logging_section = payload.logging or {}
 
-        for ev in spring_evidence:
-            payload = ev.payload
-            logging_section = payload.logging or {}
-            raw_keys = payload.raw_keys
+        if _has_structured_logging(logging_section, payload.raw_keys):
+            return
 
-            if _has_structured_logging(logging_section, raw_keys):
-                file_path = payload.file_path
-                return RuleResult(
-                    rule_id=self.id,
-                    findings=[
-                        make_green_finding(
-                            self.id,
-                            "logging-config",
-                            ev,
-                            summary=(
-                                f"Structured logging configuration detected in {file_path}."
-                            ),
-                            confidence=0.8,
-                            evidence_locator=file_path,
-                        )
-                    ],
-                )
-
-        file_path = spring_evidence[0].payload.file_path
-        return RuleResult(
-            rule_id=self.id,
-            findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="low",
-                    summary=(
-                        "No structured logging configuration detected."
-                        " Text-based logs are harder to parse in production."
-                    ),
-                    recommendation=(
-                        "Configure a JSON or Logstash encoder"
-                        " (e.g. logback-spring.xml with JsonLayout"
-                        " or logging.pattern.console with JSON format)"
-                        " for machine-readable log output."
-                    ),
-                    evidence_locator=file_path,
-                    collector_name=spring_evidence[0].collector_name,
-                    collector_version=spring_evidence[0].collector_version,
-                    confidence=0.75,
-                    pattern_tag="logging-config",
-                )
-            ],
+        yield Hit(
+            rag="amber",
+            severity="low",
+            summary=(
+                "No structured logging configuration detected."
+                " Text-based logs are harder to parse in production."
+            ),
+            recommendation=(
+                "Configure a JSON or Logstash encoder"
+                " (e.g. logback-spring.xml with JsonLayout"
+                " or logging.pattern.console with JSON format)"
+                " for machine-readable log output."
+            ),
+            locator=payload.file_path,
         )
 
 
@@ -113,12 +81,5 @@ def _flatten_values(d: dict[str, Any]) -> str:
             parts.append(str(v))
     return " ".join(parts)
 
-
-def _register() -> None:
-    if "logging-config-missing" not in rule_registry:
-        rule_registry.register("logging-config-missing", LoggingConfigMissingRule())
-
-
-_register()
 
 __all__ = ["LoggingConfigMissingRule"]

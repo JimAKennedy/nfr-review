@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.skaffold import SkaffoldAnalysisPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _EXPLICIT_TAG_POLICIES = frozenset(
     {
@@ -22,120 +21,75 @@ _EXPLICIT_TAG_POLICIES = frozenset(
 )
 
 
-class SkaffoldBuildConfigRule:
+class SkaffoldBuildConfigRule(FieldRule[SkaffoldAnalysisPayload]):
     """Flag Skaffold configs missing build sections or with weak tag policies."""
 
     id = "skaffold-build-config"
-    band: Band = 1
-    required_collectors: list[str] = ["skaffold"]
-    required_tech: list[str] = ["skaffold"]
+    collector_name = "skaffold"
+    evidence_kind = "skaffold-analysis"
+    payload_type = SkaffoldAnalysisPayload
+    pattern_tag = "skaffold-build-config"
+    required_tech = ["skaffold"]
+    default_confidence = 0.9
+    all_clear_summary = (
+        "Skaffold build config uses an explicit tag policy for reproducible image tagging."
+    )
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        skaffold_evidence = filter_evidence(evidence, "skaffold", "skaffold-analysis")
-        if not skaffold_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no skaffold-analysis evidence available",
+    def check(self, payload: SkaffoldAnalysisPayload, ev: Evidence) -> Iterable[Hit]:
+        build = payload.build
+
+        if not build or not build.get("artifacts"):
+            yield Hit(
+                rag="red",
+                severity="high",
+                summary=(
+                    "Skaffold config has no build section or no artifacts defined."
+                    " Builds may not be reproducible."
+                ),
+                recommendation=(
+                    "Define a build section with explicit artifacts"
+                    " in skaffold.yaml to ensure reproducible container builds."
+                ),
+                locator=ev.locator,
             )
+            return
 
-        findings: list[Finding] = []
+        tag_policy = build.get("tagPolicy", {}) or {}
+        has_explicit_policy = any(key in tag_policy for key in _EXPLICIT_TAG_POLICIES)
 
-        for ev in skaffold_evidence:
-            build = ev.payload.build
+        if "gitCommit" in tag_policy and not has_explicit_policy:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=(
+                    "Skaffold uses gitCommit tag policy."
+                    " Tags depend on local git state and may not be"
+                    " reproducible across environments."
+                ),
+                recommendation=(
+                    "Consider using sha256, envTemplate, or dateTime"
+                    " tag policy for more deterministic image tags."
+                ),
+                locator=ev.locator,
+                confidence=0.8,
+            )
+        elif not tag_policy or (not has_explicit_policy and "gitCommit" not in tag_policy):
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=(
+                    "Skaffold config has no explicit tag policy."
+                    " Default tagging may produce non-deterministic image tags."
+                ),
+                recommendation=(
+                    "Define an explicit tagPolicy (sha256, envTemplate,"
+                    " or dateTime) in the build section for reproducible tags."
+                ),
+                locator=ev.locator,
+                confidence=0.8,
+            )
+        # else: explicit policy is present — no hit, base class emits green
 
-            if not build or not build.get("artifacts"):
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(
-                            "Skaffold config has no build section or no artifacts defined."
-                            " Builds may not be reproducible."
-                        ),
-                        recommendation=(
-                            "Define a build section with explicit artifacts"
-                            " in skaffold.yaml to ensure reproducible container builds."
-                        ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="skaffold-build-config",
-                    )
-                )
-                continue
-
-            tag_policy = build.get("tagPolicy", {}) or {}
-            has_explicit_policy = any(key in tag_policy for key in _EXPLICIT_TAG_POLICIES)
-
-            if "gitCommit" in tag_policy and not has_explicit_policy:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            "Skaffold uses gitCommit tag policy."
-                            " Tags depend on local git state and may not be"
-                            " reproducible across environments."
-                        ),
-                        recommendation=(
-                            "Consider using sha256, envTemplate, or dateTime"
-                            " tag policy for more deterministic image tags."
-                        ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.8,
-                        pattern_tag="skaffold-build-config",
-                    )
-                )
-            elif not tag_policy or (not has_explicit_policy and "gitCommit" not in tag_policy):
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            "Skaffold config has no explicit tag policy."
-                            " Default tagging may produce non-deterministic image tags."
-                        ),
-                        recommendation=(
-                            "Define an explicit tagPolicy (sha256, envTemplate,"
-                            " or dateTime) in the build section for reproducible tags."
-                        ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.8,
-                        pattern_tag="skaffold-build-config",
-                    )
-                )
-            else:
-                findings.append(
-                    make_green_finding(
-                        self.id,
-                        "skaffold-build-config",
-                        ev,
-                        summary=(
-                            "Skaffold build config uses an explicit tag policy"
-                            " for reproducible image tagging."
-                        ),
-                        confidence=0.9,
-                        evidence_locator=ev.locator,
-                    )
-                )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "skaffold-build-config" not in rule_registry:
-        rule_registry.register("skaffold-build-config", SkaffoldBuildConfigRule())
-
-
-_register()
 
 __all__ = ["SkaffoldBuildConfigRule"]

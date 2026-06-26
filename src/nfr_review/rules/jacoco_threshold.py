@@ -4,91 +4,48 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.deps import DepsPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 _JACOCO_GROUP = "org.jacoco"
 
 
-class JacocoThresholdRule:
-    """Flag Java projects that have no JaCoCo dependency/plugin configured."""
-
+class JacocoThresholdRule(FieldRule[DepsPayload]):
     id = "jacoco-threshold-missing"
-    band: Band = 1
-    required_collectors: list[str] = ["java-deps"]
-    required_tech: list[str] = ["java"]
+    collector_name = "java-deps"
+    evidence_kind = "java-deps"
+    payload_type = DepsPayload
+    pattern_tag = "jacoco-coverage"
+    required_tech = ["java"]
+    default_confidence = 0.85
+    all_clear_summary = "JaCoCo plugin is present in Maven dependencies."
+    all_clear_recommendation = "No action required — JaCoCo coverage tooling is configured."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_deps_evidence = filter_evidence(evidence, "java-deps", "java-deps")
-        if not java_deps_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no java-deps evidence available",
-            )
-
-        ev = java_deps_evidence[0]
-        dependencies: list[dict[str, Any]] = ev.payload.dependencies
-
+    def check(self, payload: DepsPayload, ev: Evidence) -> Iterable[Hit]:
         has_jacoco = any(
-            dep.get("name", "").startswith(f"{_JACOCO_GROUP}:") for dep in dependencies
+            dep.name.startswith(f"{_JACOCO_GROUP}:") for dep in payload.dependencies
         )
-
-        if has_jacoco:
-            return RuleResult(
-                rule_id=self.id,
-                findings=[
-                    make_green_finding(
-                        self.id,
-                        "jacoco-coverage",
-                        ev,
-                        summary="JaCoCo plugin is present in Maven dependencies.",
-                        recommendation=(
-                            "No action required — JaCoCo coverage tooling is configured."
-                        ),
-                        evidence_locator=ev.locator,
-                    )
-                ],
+        if not has_jacoco:
+            locator = (
+                payload.manifest_files_found[0] if payload.manifest_files_found else ev.locator
+            )
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=(
+                    "No JaCoCo Maven plugin found. Code coverage thresholds"
+                    " cannot be enforced in CI."
+                ),
+                recommendation=(
+                    "Add org.jacoco:jacoco-maven-plugin to the build and configure"
+                    " <rules> with a minimum line/branch coverage threshold"
+                    " (e.g., 80%). Bind the check goal to the verify phase."
+                ),
+                locator=locator,
             )
 
-        manifest_files = ev.payload.manifest_files_found
-        locator = manifest_files[0] if manifest_files else ev.locator
-
-        return RuleResult(
-            rule_id=self.id,
-            findings=[
-                Finding(
-                    rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "No JaCoCo Maven plugin found. Code coverage thresholds"
-                        " cannot be enforced in CI."
-                    ),
-                    recommendation=(
-                        "Add org.jacoco:jacoco-maven-plugin to the build and configure"
-                        " <rules> with a minimum line/branch coverage threshold"
-                        " (e.g., 80%). Bind the check goal to the verify phase."
-                    ),
-                    evidence_locator=locator,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.85,
-                    pattern_tag="jacoco-coverage",
-                )
-            ],
-        )
-
-
-def _register() -> None:
-    if "jacoco-threshold-missing" not in rule_registry:
-        rule_registry.register("jacoco-threshold-missing", JacocoThresholdRule())
-
-
-_register()
 
 __all__ = ["JacocoThresholdRule"]

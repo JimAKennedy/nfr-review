@@ -32,7 +32,7 @@ class TestActuatorExposureRiskRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no spring-config evidence available"
+        assert result.skip_reason == "no spring-config-file evidence available"
 
     def test_wildcard_include_amber(self) -> None:
         ev = _spring_evidence(
@@ -156,7 +156,7 @@ class TestLoggingConfigMissingRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no spring-config evidence available"
+        assert result.skip_reason == "no spring-config-file evidence available"
 
     def test_no_structured_logging_amber(self) -> None:
         ev = _spring_evidence(
@@ -244,7 +244,7 @@ class TestSpringProfileMisconfigurationRule:
     def test_no_evidence_skipped(self) -> None:
         result = self.rule.evaluate([], None)
         assert result.skipped is True
-        assert result.skip_reason == "no spring-config evidence available"
+        assert result.skip_reason == "no spring-config-file evidence available"
 
     def test_prod_debug_logging_amber(self) -> None:
         ev = _spring_evidence(

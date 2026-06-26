@@ -1,116 +1,72 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: CMAKE-003 — checks for modern CMake build configuration practices."""
+"""Rule: cmake-build-config -- checks for modern CMake build configuration practices."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import make_green_finding
+from nfr_review.collectors.payloads.cmake import CmakeConfigPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class CmakeBuildConfigRule:
+class CmakeBuildConfigRule(FieldRule[CmakeConfigPayload]):
+    """Check CMake build configuration follows modern practices."""
+
     id = "cmake-build-config"
-    band: Band = 1
-    required_collectors: list[str] = ["cmake"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "cmake"
+    evidence_kind = "cmake-config"
+    payload_type = CmakeConfigPayload
+    pattern_tag = "cmake-build-config"
+    required_tech = ["cpp"]
+    default_confidence = 0.85
+    all_clear_summary = "CMake build configuration follows modern practices."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cmake_ev = [e for e in evidence if e.kind == "cmake-config"]
-        if not cmake_ev:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no cmake evidence available",
+    def check(self, payload: CmakeConfigPayload, ev: Evidence) -> Iterable[Hit]:
+        if payload.has_global_cmake_flags:
+            yield Hit(
+                rag="amber",
+                severity="medium",
+                summary=("Global CMAKE_CXX_FLAGS used -- prefer target_compile_options"),
+                recommendation=(
+                    "Replace set(CMAKE_CXX_FLAGS ...) with "
+                    "target_compile_options() for per-target control."
+                ),
+                locator=payload.file_path,
+                confidence=0.85,
+                pattern_tag="cmake-global-flags",
             )
 
-        findings: list[Finding] = []
-        for ev in cmake_ev:
-            file_path = ev.payload.file_path
-
-            if ev.payload.has_global_cmake_flags:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            "Global CMAKE_CXX_FLAGS used — prefer target_compile_options"
-                        ),
-                        recommendation=(
-                            "Replace set(CMAKE_CXX_FLAGS ...) with "
-                            "target_compile_options() for per-target control."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.85,
-                        pattern_tag="cmake-global-flags",
-                    )
-                )
-
-            has_target = (
-                ev.payload.has_target_compile_features or ev.payload.has_target_compile_options
-            )
-            if not has_target and not ev.payload.has_global_cmake_flags:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="low",
-                        summary=("No target_compile_features or target_compile_options found"),
-                        recommendation=(
-                            "Use target_compile_features(mylib PUBLIC cxx_std_17) "
-                            "to specify C++ standard requirements per target."
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.75,
-                        pattern_tag="cmake-no-target-features",
-                    )
-                )
-
-            if not ev.payload.project_version:
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="amber",
-                        severity="low",
-                        summary="project() missing VERSION",
-                        recommendation=(
-                            "Add VERSION to project() call for proper versioning: "
-                            "project(MyProject VERSION 1.0.0)"
-                        ),
-                        evidence_locator=file_path,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.8,
-                        pattern_tag="cmake-no-project-version",
-                    )
-                )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "cmake-build-config-ok",
-                    cmake_ev[0],
-                    summary="CMake build configuration follows modern practices.",
-                )
+        has_target = payload.has_target_compile_features or payload.has_target_compile_options
+        if not has_target and not payload.has_global_cmake_flags:
+            yield Hit(
+                rag="amber",
+                severity="low",
+                summary="No target_compile_features or target_compile_options found",
+                recommendation=(
+                    "Use target_compile_features(mylib PUBLIC cxx_std_17) "
+                    "to specify C++ standard requirements per target."
+                ),
+                locator=payload.file_path,
+                confidence=0.75,
+                pattern_tag="cmake-no-target-features",
             )
 
-        return RuleResult(rule_id=self.id, findings=findings)
+        if not payload.project_version:
+            yield Hit(
+                rag="amber",
+                severity="low",
+                summary="project() missing VERSION",
+                recommendation=(
+                    "Add VERSION to project() call for proper versioning: "
+                    "project(MyProject VERSION 1.0.0)"
+                ),
+                locator=payload.file_path,
+                confidence=0.8,
+                pattern_tag="cmake-no-project-version",
+            )
 
-
-def _register() -> None:
-    if "cmake-build-config" not in rule_registry:
-        rule_registry.register("cmake-build-config", CmakeBuildConfigRule())
-
-
-_register()
 
 __all__ = ["CmakeBuildConfigRule"]

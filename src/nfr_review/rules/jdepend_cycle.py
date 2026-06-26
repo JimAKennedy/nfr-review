@@ -4,94 +4,46 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.jdepend import JDependPackagesPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class JDepCycleRule:
+class JDepCycleRule(FieldRule[JDependPackagesPayload]):
     """Red finding for any Java package cycle detected by JDepend."""
 
     id = "JDEP-CYCLE"
-    band: Band = 1
-    required_collectors: list[str] = ["jdepend"]
+    collector_name = "jdepend"
+    evidence_kind = "jdepend-packages"
+    payload_type = JDependPackagesPayload
+    pattern_tag = "jdep-cycle-detected"
+    skip_evidence_kind = "jdepend-skip"
+    default_confidence = 0.95
+    all_clear_summary = "No package dependency cycles detected."
+    all_clear_recommendation = "No action required."
+    all_clear_tag = "jdep-cycle-ok"
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        jdep_evidence = filter_evidence(evidence, "jdepend")
-        if not jdep_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no jdepend evidence available",
+    def check(self, payload: JDependPackagesPayload, ev: Evidence) -> Iterable[Hit]:
+        cycle_groups = payload.cycle_groups
+        if not cycle_groups:
+            return
+
+        for group in cycle_groups:
+            packages = group if isinstance(group, list) else [group]
+            pkg_list = " → ".join(packages)
+            yield Hit(
+                rag="red",
+                severity="high",
+                summary=f"Package dependency cycle detected: {pkg_list}",
+                recommendation=(
+                    "Break the cycle by introducing an interface package or"
+                    " inverting the dependency direction. Cyclic dependencies"
+                    " prevent independent deployment and testing."
+                ),
+                locator=ev.locator,
             )
 
-        findings: list[Finding] = []
-
-        for ev in jdep_evidence:
-            if ev.kind == "jdepend-skip":
-                return RuleResult(
-                    rule_id=self.id,
-                    skipped=True,
-                    skip_reason=ev.payload.reason,
-                )
-
-            if ev.kind != "jdepend-packages":
-                continue
-
-            cycle_groups = ev.payload.cycle_groups
-            if not cycle_groups:
-                findings.append(
-                    make_green_finding(
-                        self.id,
-                        "jdep-cycle-ok",
-                        ev,
-                        summary="No package dependency cycles detected.",
-                        confidence=0.95,
-                        evidence_locator=ev.locator,
-                    )
-                )
-                continue
-
-            for group in cycle_groups:
-                packages = group if isinstance(group, list) else [group]
-                pkg_list = " → ".join(packages)
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag="red",
-                        severity="high",
-                        summary=(f"Package dependency cycle detected: {pkg_list}"),
-                        recommendation=(
-                            "Break the cycle by introducing an interface package or"
-                            " inverting the dependency direction. Cyclic dependencies"
-                            " prevent independent deployment and testing."
-                        ),
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.95,
-                        pattern_tag="jdep-cycle-detected",
-                    )
-                )
-
-        if not findings:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no jdepend-packages evidence found",
-            )
-
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "JDEP-CYCLE" not in rule_registry:
-        rule_registry.register("JDEP-CYCLE", JDepCycleRule())
-
-
-_register()
 
 __all__ = ["JDepCycleRule"]

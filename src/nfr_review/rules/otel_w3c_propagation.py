@@ -6,35 +6,44 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelSdkConfigPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _W3C_PROPAGATOR_NAMES = frozenset({"tracecontext", "w3c", "traceparent"})
 
 
-class OTelW3CPropagationRule:
+class OTelW3CPropagationRule(FieldRule[OtelSdkConfigPayload]):
     """Flag repos without W3C trace-context propagation configured."""
 
     id = "otel-w3c-propagation"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-sdk-config"
+    payload_type = OtelSdkConfigPayload
+    pattern_tag = "otel-w3c-propagation"
     required_tech: list[str] = []
+    default_confidence = 0.9
+    all_clear_summary = "W3C trace-context propagation is configured."
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        sdk_evidence = filter_evidence(evidence, "otel", "otel-sdk-config")
-        if not sdk_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no otel-sdk-config evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        first = sdk_evidence[0]
+        first = relevant[0]
         all_propagators: set[str] = set()
-        for ev in sdk_evidence:
-            propagators = ev.payload.propagators
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            propagators = payload.propagators
             all_propagators.update(p.lower() for p in propagators)
 
         has_w3c = bool(all_propagators & _W3C_PROPAGATOR_NAMES)
@@ -43,13 +52,17 @@ class OTelW3CPropagationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-w3c-propagation",
-                        first,
-                        summary="W3C trace-context propagation is configured.",
-                        confidence=0.9,
-                        evidence_locator=first.locator,
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.9,
+                        hit=Hit(
+                            rag="green",
+                            summary="W3C trace-context propagation is configured.",
+                            recommendation="No action required.",
+                            locator=first.locator,
+                        ),
                     )
                 ],
             )
@@ -58,24 +71,27 @@ class OTelW3CPropagationRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    Finding(
+                    make_finding(
                         rule_id=self.id,
-                        rag="amber",
-                        severity="medium",
-                        summary=(
-                            f"Propagators configured ({', '.join(sorted(all_propagators))}) "
-                            "but W3C tracecontext not included."
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.85,
+                        hit=Hit(
+                            rag="amber",
+                            severity="medium",
+                            summary=(
+                                "Propagators configured ("
+                                f"{', '.join(sorted(all_propagators))}"
+                                ") but W3C tracecontext not included."
+                            ),
+                            recommendation=(
+                                "Add 'tracecontext' to OTEL_PROPAGATORS for W3C "
+                                "trace-context propagation. This is the industry standard "
+                                "and required for cross-service trace correlation."
+                            ),
+                            locator=first.locator,
+                            confidence=0.85,
                         ),
-                        recommendation=(
-                            "Add 'tracecontext' to OTEL_PROPAGATORS for W3C "
-                            "trace-context propagation. This is the industry standard "
-                            "and required for cross-service trace correlation."
-                        ),
-                        evidence_locator=first.locator,
-                        collector_name=first.collector_name,
-                        collector_version=first.collector_version,
-                        confidence=0.85,
-                        pattern_tag="otel-w3c-propagation",
                     )
                 ],
             )
@@ -83,32 +99,27 @@ class OTelW3CPropagationRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary="No trace-context propagation configured.",
-                    recommendation=(
-                        "Set OTEL_PROPAGATORS=tracecontext,baggage to enable "
-                        "W3C trace-context propagation. For Spring Boot, configure "
-                        "management.tracing.propagation.type=W3C. Without "
-                        "propagation, cross-service trace correlation will not work."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.8,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary="No trace-context propagation configured.",
+                        recommendation=(
+                            "Set OTEL_PROPAGATORS=tracecontext,baggage to enable "
+                            "W3C trace-context propagation. For Spring Boot, configure "
+                            "management.tracing.propagation.type=W3C. Without "
+                            "propagation, cross-service trace correlation will not work."
+                        ),
+                        locator=first.locator,
+                        confidence=0.8,
                     ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.8,
-                    pattern_tag="otel-w3c-propagation",
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "otel-w3c-propagation" not in rule_registry:
-        rule_registry.register("otel-w3c-propagation", OTelW3CPropagationRule())
-
-
-_register()
 
 __all__ = ["OTelW3CPropagationRule"]

@@ -6,59 +6,69 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.graphify import GraphifyPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
+from nfr_review.rules.rule_helpers import make_green_finding
 
 _MAX_FINDINGS = 10
 
 
-class StructureGodNodeRule:
+class StructureGodNodeRule(FieldRule[GraphifyPayload]):
     """Flag nodes whose total degree far exceeds the median (coupling hotspots)."""
 
     id = "structure-god-node"
-    band: Band = 1
-    required_collectors: list[str] = ["graphify"]
+    collector_name = "graphify"
+    evidence_kind = "graphify-analysis"
+    payload_type = GraphifyPayload
+    pattern_tag = "structure-god-node"
     required_tech: list[str] = []
+    default_confidence = 0.8
+    all_clear_summary = (
+        "No god nodes detected — all entities are within the coupling threshold."
+    )
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        gf_evidence = filter_evidence(evidence, "graphify", "graphify-analysis")
-        if not gf_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
                 skip_reason="no graphify-analysis evidence available",
             )
 
-        ev = gf_evidence[0]
-        god_nodes = ev.payload.get("god_nodes", [])
-        threshold = ev.payload.get("god_node_threshold", 0)
+        ev = relevant[0]
+        payload = self._coerce(ev.payload)
+        god_nodes = payload.god_nodes
+        threshold = payload.god_node_threshold
 
         findings: list[Finding] = []
         for gn in god_nodes[:_MAX_FINDINGS]:
-            label = gn.get("label", gn.get("node_id", "?"))
-            degree = gn.get("total_degree", 0)
-            src_file = gn.get("source_file", "unknown")
             findings.append(
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"'{label}' has total degree {degree} "
-                        f"(threshold {threshold}) — coupling hotspot."
+                    ev=ev,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=self.default_confidence,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            f"'{gn.label}' has total degree {gn.total_degree} "
+                            f"(threshold {threshold}) — coupling hotspot."
+                        ),
+                        recommendation=(
+                            f"Consider breaking '{gn.label}' into smaller "
+                            f"units or introducing a facade to reduce "
+                            f"direct coupling."
+                        ),
+                        locator=gn.source_file,
+                        confidence=0.8,
                     ),
-                    recommendation=(
-                        f"Consider breaking '{label}' into smaller "
-                        f"units or introducing a facade to reduce "
-                        f"direct coupling."
-                    ),
-                    evidence_locator=src_file,
-                    collector_name=ev.collector_name,
-                    collector_version=ev.collector_version,
-                    confidence=0.8,
-                    pattern_tag="structure-god-node",
                 )
             )
 
@@ -78,12 +88,5 @@ class StructureGodNodeRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "structure-god-node" not in rule_registry:
-        rule_registry.register("structure-god-node", StructureGodNodeRule())
-
-
-_register()
 
 __all__ = ["StructureGodNodeRule"]

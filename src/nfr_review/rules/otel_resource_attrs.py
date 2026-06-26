@@ -6,35 +6,46 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.otel import OtelSdkConfigPayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _REQUIRED_ATTRS = frozenset({"service.name", "service.version"})
 
 
-class OTelResourceAttrsRule:
+class OTelResourceAttrsRule(FieldRule[OtelSdkConfigPayload]):
     """Flag repos without required OTel resource attributes (service.name, service.version)."""
 
     id = "otel-resource-attrs"
-    band: Band = 1
-    required_collectors: list[str] = ["otel"]
+    collector_name = "otel"
+    evidence_kind = "otel-sdk-config"
+    payload_type = OtelSdkConfigPayload
+    pattern_tag = "otel-resource-attrs"
     required_tech: list[str] = []
+    default_confidence = 0.9
+    all_clear_summary = (
+        "Required OTel resource attributes (service.name, service.version) are configured."
+    )
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        sdk_evidence = filter_evidence(evidence, "otel", "otel-sdk-config")
-        if not sdk_evidence:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
-                skip_reason="no otel-sdk-config evidence available",
+                skip_reason=f"no {self.evidence_kind} evidence available",
             )
 
-        first = sdk_evidence[0]
+        first = relevant[0]
         all_attrs: set[str] = set()
-        for ev in sdk_evidence:
-            resource_attrs = ev.payload.resource_attributes
+        for ev in relevant:
+            payload = self._coerce(ev.payload)
+            resource_attrs = payload.resource_attributes
             if isinstance(resource_attrs, dict):
                 all_attrs.update(resource_attrs.keys())
 
@@ -44,16 +55,20 @@ class OTelResourceAttrsRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-resource-attrs",
-                        first,
-                        summary=(
-                            "Required OTel resource attributes (service.name, "
-                            "service.version) are configured."
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.9,
+                        hit=Hit(
+                            rag="green",
+                            summary=(
+                                "Required OTel resource attributes (service.name, "
+                                "service.version) are configured."
+                            ),
+                            recommendation="No action required.",
+                            locator=first.locator,
                         ),
-                        confidence=0.9,
-                        evidence_locator=first.locator,
                     )
                 ],
             )
@@ -61,36 +76,33 @@ class OTelResourceAttrsRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "Missing OTel resource attributes: " + ", ".join(sorted(missing)) + "."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.85,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "Missing OTel resource attributes: "
+                            + ", ".join(sorted(missing))
+                            + "."
+                        ),
+                        recommendation=(
+                            "Set OTEL_RESOURCE_ATTRIBUTES="
+                            "service.name=<name>,service.version=<version> "
+                            "or use OTEL_SERVICE_NAME for service.name. For Spring Boot, "
+                            "set spring.application.name in application.yml. These "
+                            "attributes are essential for trace correlation and "
+                            "the dyn-adr-drift rule."
+                        ),
+                        locator=first.locator,
+                        confidence=0.85,
                     ),
-                    recommendation=(
-                        "Set OTEL_RESOURCE_ATTRIBUTES="
-                        "service.name=<name>,service.version=<version> "
-                        "or use OTEL_SERVICE_NAME for service.name. For Spring Boot, "
-                        "set spring.application.name in application.yml. These "
-                        "attributes are essential for trace correlation and "
-                        "the dyn-adr-drift rule."
-                    ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.85,
-                    pattern_tag="otel-resource-attrs",
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "otel-resource-attrs" not in rule_registry:
-        rule_registry.register("otel-resource-attrs", OTelResourceAttrsRule())
-
-
-_register()
 
 __all__ = ["OTelResourceAttrsRule"]

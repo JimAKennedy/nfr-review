@@ -4,72 +4,36 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class GoDeferInLoopRule:
+class GoDeferInLoopRule(FieldRule[GoAstFilePayload]):
     """Flag defer statements inside for loops that accumulate deferred calls."""
 
     id = "go-defer-in-loop"
-    band: Band = 1
-    required_collectors: list[str] = ["go-ast"]
+    collector_name = "go-ast"
+    evidence_kind = "go-ast-file"
+    payload_type = GoAstFilePayload
+    pattern_tag = "go-defer-in-loop"
+    all_clear_summary = "No defer-in-loop patterns detected."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        go_evidence = filter_evidence(evidence, "go-ast", "go-ast-file")
-        if not go_evidence:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no go-ast evidence available",
-            )
-
-        findings: list[Finding] = []
-        for ev in go_evidence:
-            file_path = ev.payload.file_path
-            for stmt in ev.payload.defer_statements:
-                if stmt["in_loop"]:
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="amber",
-                            severity="medium",
-                            summary="Defer inside loop accumulates deferred calls",
-                            recommendation=(
-                                "Extract the loop body to a separate function"
-                                " or use explicit close instead of defer."
-                            ),
-                            evidence_locator=f"{file_path}:{stmt['line']}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
-                            pattern_tag="go-defer-in-loop",
-                        )
-                    )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "go-defer-in-loop",
-                    go_evidence[0],
-                    summary="No defer-in-loop patterns detected.",
-                    confidence=0.9,
+    def check(self, payload: GoAstFilePayload, ev: Evidence) -> Iterable[Hit]:
+        for stmt in payload.defer_statements:
+            if stmt.in_loop:
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary="Defer inside loop accumulates deferred calls",
+                    recommendation=(
+                        "Extract the loop body to a separate function"
+                        " or use explicit close instead of defer."
+                    ),
+                    locator=f"{payload.file_path}:{stmt.line}",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "go-defer-in-loop" not in rule_registry:
-        rule_registry.register("go-defer-in-loop", GoDeferInLoopRule())
-
-
-_register()
 
 __all__ = ["GoDeferInLoopRule"]

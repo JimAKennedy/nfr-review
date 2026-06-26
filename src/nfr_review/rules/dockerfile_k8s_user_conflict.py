@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.dockerfile import DockerfileAnalysisPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 _ROOT_NAMES = frozenset({"root", "0"})
@@ -28,13 +28,15 @@ def _runasuser_is_root(security_context: dict[str, Any] | None) -> bool:
     return run_as_user == 0
 
 
-class DockerfileK8sUserConflictRule:
-    """Flag deployments that override a Dockerfile non-root USER with runAsUser: 0."""
-
+class DockerfileK8sUserConflictRule(FieldRule[DockerfileAnalysisPayload]):
     id = "dockerfile-k8s-user-conflict"
-    band: Band = 1
-    required_collectors: list[str] = ["dockerfile", "k8s-manifest"]
-    required_tech: list[str] = ["dockerfile", "kubernetes"]
+    collector_name = "dockerfile"
+    evidence_kind = "dockerfile-analysis"
+    payload_type = DockerfileAnalysisPayload
+    pattern_tag = "dockerfile-k8s-user-conflict"
+    required_tech = ["dockerfile", "kubernetes"]
+    required_collectors = ["dockerfile", "k8s-manifest"]
+    default_confidence = 0.95
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         df_evidence = filter_evidence(evidence, "dockerfile", "dockerfile-analysis")
@@ -53,7 +55,6 @@ class DockerfileK8sUserConflictRule:
                 skip_reason="no k8s-manifest evidence available",
             )
 
-        # Determine whether any Dockerfile sets a non-root user
         dockerfile_nonroot = False
         dockerfile_path = ""
         for ev in df_evidence:
@@ -68,7 +69,6 @@ class DockerfileK8sUserConflictRule:
                 break
 
         if not dockerfile_nonroot:
-            # No non-root USER in any Dockerfile — rule doesn't apply
             first_k8s = k8s_evidence[0]
             return RuleResult(
                 rule_id=self.id,
@@ -91,7 +91,6 @@ class DockerfileK8sUserConflictRule:
             resource_name = ev.payload.name
             file_path = ev.payload.file_path
 
-            # Check pod-level securityContext
             pod_sc = ev.payload.security_context
             if _runasuser_is_root(pod_sc):
                 findings.append(
@@ -116,7 +115,6 @@ class DockerfileK8sUserConflictRule:
                 )
                 continue
 
-            # Check container-level securityContext
             for container in ev.payload.containers:
                 container_name = container.get("name", "")
                 container_sc = container.get("security_context")
@@ -162,12 +160,5 @@ class DockerfileK8sUserConflictRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "dockerfile-k8s-user-conflict" not in rule_registry:
-        rule_registry.register("dockerfile-k8s-user-conflict", DockerfileK8sUserConflictRule())
-
-
-_register()
 
 __all__ = ["DockerfileK8sUserConflictRule"]

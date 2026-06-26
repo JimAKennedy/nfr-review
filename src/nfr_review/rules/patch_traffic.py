@@ -22,18 +22,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
+from nfr_review.collectors.payloads.service_mesh import ServiceMeshVirtualServicePayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import FieldRule
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 
-class ProgressiveTrafficShiftingRule:
-    """PATCH-TRAFFIC-001: detect progressive traffic shifting config."""
-
+class ProgressiveTrafficShiftingRule(FieldRule[ServiceMeshVirtualServicePayload]):
     id = "PATCH-TRAFFIC-001"
-    band: Band = 1
-    required_collectors: list[str] = ["service-mesh"]
+    collector_name = "service-mesh"
+    evidence_kind = "service-mesh-virtual-service"
+    payload_type = ServiceMeshVirtualServicePayload
+    pattern_tag = "patch-traffic-shifting"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         vs_evidence = filter_evidence(evidence, "service-mesh", "service-mesh-virtual-service")
@@ -166,12 +168,13 @@ def _has_k8s_workloads(evidence: list[Evidence]) -> bool:
     )
 
 
-class FailoverDocumentationRule:
-    """PATCH-TRAFFIC-002: detect failover/DR documentation in repo root."""
-
+class FailoverDocumentationRule(FieldRule[RepoStructureSummaryPayload]):
     id = "PATCH-TRAFFIC-002"
-    band: Band = 1
-    required_collectors: list[str] = ["repo-structure"]
+    collector_name = "repo-structure"
+    evidence_kind = "repo-structure-summary"
+    payload_type = RepoStructureSummaryPayload
+    pattern_tag = "patch-traffic-failover-docs"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         summaries = filter_evidence(evidence, "repo-structure", "repo-structure-summary")
@@ -255,12 +258,13 @@ class FailoverDocumentationRule:
         return RuleResult(rule_id=self.id, findings=findings)
 
 
-class ConnectionDrainingRule:
-    """PATCH-TRAFFIC-003: detect connection draining configuration."""
-
+class ConnectionDrainingRule(FieldRule[ServiceMeshVirtualServicePayload]):
     id = "PATCH-TRAFFIC-003"
-    band: Band = 1
-    required_collectors: list[str] = ["service-mesh"]
+    collector_name = "service-mesh"
+    evidence_kind = "service-mesh-destination-rule"
+    payload_type = ServiceMeshVirtualServicePayload
+    pattern_tag = "patch-traffic-drain"
+    default_confidence = 0.85
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
         dr_evidence = filter_evidence(
@@ -337,19 +341,6 @@ class ConnectionDrainingRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    for rule_cls in (
-        ProgressiveTrafficShiftingRule,
-        FailoverDocumentationRule,
-        ConnectionDrainingRule,
-    ):
-        rule = rule_cls()
-        if rule.id not in rule_registry:
-            rule_registry.register(rule.id, rule)
-
-
-_register()
 
 __all__ = [
     "ProgressiveTrafficShiftingRule",

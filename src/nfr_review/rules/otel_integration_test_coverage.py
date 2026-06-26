@@ -6,22 +6,29 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 
-class OTelIntegrationTestCoverageRule:
+class OTelIntegrationTestCoverageRule(FieldRule[JavaAstFilePayload]):
     """Flag repos where API endpoints lack corresponding integration tests."""
 
     id = "otel-integration-test-coverage"
-    band: Band = 1
-    required_collectors: list[str] = ["repo-structure"]
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "otel-integration-test-coverage"
     required_tech: list[str] = []
+    required_collectors: list[str] = ["repo-structure"]
+    default_confidence = 0.8
+    all_clear_summary = "All controllers have corresponding integration tests."
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_ast_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
+        java_ast_evidence = [
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+        ]
 
         if not java_ast_evidence:
             return RuleResult(
@@ -102,16 +109,21 @@ class OTelIntegrationTestCoverageRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-integration-test-coverage",
-                        first,
-                        summary=(
-                            f"All {len(controllers)} controller(s) have "
-                            "corresponding integration tests."
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.8,
+                        hit=Hit(
+                            rag="green",
+                            summary=(
+                                f"All {len(controllers)} controller(s) have "
+                                "corresponding integration tests."
+                            ),
+                            recommendation="No action required.",
+                            locator=first.locator,
+                            confidence=0.8,
                         ),
-                        confidence=0.8,
-                        evidence_locator=first.locator,
                     )
                 ],
             )
@@ -120,38 +132,31 @@ class OTelIntegrationTestCoverageRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        f"{len(untested)} of {len(controllers)} controller(s) "
-                        f"lack integration tests: {', '.join(untested_names)}."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.75,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            f"{len(untested)} of {len(controllers)} controller(s) "
+                            f"lack integration tests: {', '.join(untested_names)}."
+                        ),
+                        recommendation=(
+                            "Create integration test classes (e.g., "
+                            + ", ".join(f"{n}IT.java" for n in untested_names[:3])
+                            + ") with @SpringBootTest to exercise API endpoints. "
+                            "Integration tests that produce OTel traces enable "
+                            "Band 3 dynamic analysis."
+                        ),
+                        locator=first.locator,
+                        confidence=0.75,
                     ),
-                    recommendation=(
-                        "Create integration test classes (e.g., "
-                        + ", ".join(f"{n}IT.java" for n in untested_names[:3])
-                        + ") with @SpringBootTest to exercise API endpoints. "
-                        "Integration tests that produce OTel traces enable "
-                        "Band 3 dynamic analysis."
-                    ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.75,
-                    pattern_tag="otel-integration-test-coverage",
                 )
             ],
         )
 
-
-def _register() -> None:
-    if "otel-integration-test-coverage" not in rule_registry:
-        rule_registry.register(
-            "otel-integration-test-coverage", OTelIntegrationTestCoverageRule()
-        )
-
-
-_register()
 
 __all__ = ["OTelIntegrationTestCoverageRule"]

@@ -16,7 +16,7 @@ from nfr_review.llm_client import (
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult
 from nfr_review.protocols import Band, LlmClient
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,7 @@ _LLM_PROMPT = (
 )
 
 
+@register
 class PiiInLogStatementsRule:
     id = "pii-in-log-statements"
     band: Band = 2
@@ -201,12 +202,5 @@ class PiiInLogStatementsRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "pii-in-log-statements" not in rule_registry:
-        rule_registry.register("pii-in-log-statements", PiiInLogStatementsRule())
-
-
-_register()
 
 __all__ = ["PiiInLogStatementsRule"]

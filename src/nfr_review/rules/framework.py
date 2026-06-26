@@ -1,15 +1,17 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Typed rule framework: Hit, make_finding, FieldRule[P].
+"""Typed rule framework: Hit, make_finding, FieldRule[P], register.
 
 Subclass ``FieldRule[YourPayload]`` for Band-1 rules that read a single
 evidence kind. Override ``check()`` to yield ``Hit`` objects; the base
 handles evidence selection, skip-if-empty, payload coercion, the green
-all-clear finding, and Finding construction.
+all-clear finding, and Finding construction.  FieldRule subclasses with
+an ``id`` class attribute are **auto-registered** at class-definition time.
 
 Rules that join multiple collectors, use LLM orchestration, or do
 cross-record aggregation should implement ``evaluate()`` directly —
-the ``Rule`` protocol remains the permanent escape hatch.
+the ``Rule`` protocol remains the permanent escape hatch.  Decorate
+these with ``@register`` to auto-register them.
 
 See docs/rule-framework.md for full design rationale and authoring guide.
 """
@@ -29,8 +31,10 @@ from nfr_review.models import (
     Severity,
 )
 from nfr_review.protocols import Band
+from nfr_review.registry import rule_registry
 
 P = TypeVar("P", bound=BasePayload)
+T_Rule = TypeVar("T_Rule")
 
 _RAG_SEVERITY: dict[RAG, Severity] = {
     "red": "high",
@@ -104,12 +108,16 @@ class FieldRule(Generic[P]):
     all_clear_summary: str = "No issues detected."
     all_clear_recommendation: str = "No action required."
 
+    all_clear_tag: str = ""
+    skip_evidence_kind: str = ""
     required_collectors: list[str] = []
 
     def __init_subclass__(cls, **kw: object) -> None:
         super().__init_subclass__(**kw)
         if not cls.__dict__.get("required_collectors") and hasattr(cls, "collector_name"):
             cls.required_collectors = [cls.collector_name]
+        if "id" in cls.__dict__ and cls.id not in rule_registry:
+            rule_registry.register(cls.id, cls())
 
     def check(self, payload: P, ev: Evidence) -> Iterable[Hit]:
         """Yield ``Hit`` objects for one typed payload. Yield nothing when clean."""
@@ -141,6 +149,25 @@ class FieldRule(Generic[P]):
             if e.collector_name == self.collector_name and e.kind == self.evidence_kind
         ]
         if not relevant:
+            # If the collector emitted skip evidence, propagate its reason.
+            if self.skip_evidence_kind:
+                for ev in evidence:
+                    if (
+                        ev.collector_name == self.collector_name
+                        and ev.kind == self.skip_evidence_kind
+                    ):
+                        payload = ev.payload
+                        reason = (
+                            payload.get("reason", "")
+                            if hasattr(payload, "get")
+                            else getattr(payload, "reason", "")
+                        )
+                        if reason:
+                            return RuleResult(
+                                rule_id=self.id,
+                                skipped=True,
+                                skip_reason=reason,
+                            )
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -166,7 +193,7 @@ class FieldRule(Generic[P]):
                 make_finding(
                     rule_id=self.id,
                     ev=relevant[0],
-                    pattern_tag=self.pattern_tag,
+                    pattern_tag=self.all_clear_tag or self.pattern_tag,
                     default_confidence=self.default_confidence,
                     hit=Hit(
                         rag="green",
@@ -178,3 +205,15 @@ class FieldRule(Generic[P]):
             )
 
         return RuleResult(rule_id=self.id, findings=findings)
+
+
+def register(cls: type[T_Rule]) -> type[T_Rule]:
+    """Class decorator that auto-registers a raw-protocol Rule instance.
+
+    Use on classes that implement the Rule protocol directly (not FieldRule
+    subclasses — those auto-register via __init_subclass__).
+    """
+    rule_id: str = cls.id  # type: ignore[attr-defined]
+    if rule_id not in rule_registry:
+        rule_registry.register(rule_id, cls())  # type: ignore[arg-type]
+    return cls

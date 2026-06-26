@@ -15,7 +15,7 @@ from nfr_review.llm_client import (
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
 from nfr_review.protocols import Band, LlmClient
-from nfr_review.registry import rule_registry
+from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ _LLM_PROMPT = (
 )
 
 
+@register
 class ArchitecturalDriftFromAdrRule:
     id = "architectural-drift-from-adr"
     band: Band = 2
@@ -209,12 +210,5 @@ class ArchitecturalDriftFromAdrRule:
 
         return RuleResult(rule_id=self.id, findings=findings)
 
-
-def _register() -> None:
-    if "architectural-drift-from-adr" not in rule_registry:
-        rule_registry.register("architectural-drift-from-adr", ArchitecturalDriftFromAdrRule())
-
-
-_register()
 
 __all__ = ["ArchitecturalDriftFromAdrRule"]

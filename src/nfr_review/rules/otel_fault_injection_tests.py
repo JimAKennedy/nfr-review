@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
+from nfr_review.models import Evidence, RuleResult
+from nfr_review.rules.framework import FieldRule, Hit, make_finding
 
 _RESILIENCE_CONFIG_KEYS = frozenset(
     {
@@ -48,17 +47,31 @@ _FAULT_TEST_PATTERNS = frozenset(
 )
 
 
-class OTelFaultInjectionTestsRule:
+class OTelFaultInjectionTestsRule(FieldRule[JavaAstFilePayload]):
     """Flag repos with resilience patterns but no fault-injection tests."""
 
     id = "otel-fault-injection-tests"
-    band: Band = 1
-    required_collectors: list[str] = ["repo-structure"]
+    collector_name = "java-ast"
+    evidence_kind = "java-ast-file"
+    payload_type = JavaAstFilePayload
+    pattern_tag = "otel-fault-injection-tests"
     required_tech: list[str] = []
+    required_collectors: list[str] = ["repo-structure"]
+    default_confidence = 0.75
+    all_clear_summary = (
+        "Resilience patterns detected with corresponding fault-injection tests."
+    )
+    all_clear_recommendation = "No action required."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        java_ast_evidence = filter_evidence(evidence, "java-ast", "java-ast-file")
-        spring_evidence = filter_evidence(evidence, "spring-config", "spring-config-file")
+        java_ast_evidence = [
+            e for e in evidence if e.collector_name == "java-ast" and e.kind == "java-ast-file"
+        ]
+        spring_evidence = [
+            e
+            for e in evidence
+            if e.collector_name == "spring-config" and e.kind == "spring-config-file"
+        ]
 
         has_resilience_config = self._check_spring_resilience(spring_evidence)
         has_resilience_annotations = self._check_ast_resilience(java_ast_evidence)
@@ -78,16 +91,21 @@ class OTelFaultInjectionTestsRule:
             return RuleResult(
                 rule_id=self.id,
                 findings=[
-                    make_green_finding(
-                        self.id,
-                        "otel-fault-injection-tests",
-                        first,
-                        summary=(
-                            "Resilience patterns detected with corresponding "
-                            "fault-injection tests."
+                    make_finding(
+                        rule_id=self.id,
+                        ev=first,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=0.75,
+                        hit=Hit(
+                            rag="green",
+                            summary=(
+                                "Resilience patterns detected with corresponding "
+                                "fault-injection tests."
+                            ),
+                            recommendation="No action required.",
+                            locator=first.locator,
+                            confidence=0.75,
                         ),
-                        confidence=0.75,
-                        evidence_locator=first.locator,
                     )
                 ],
             )
@@ -95,28 +113,30 @@ class OTelFaultInjectionTestsRule:
         return RuleResult(
             rule_id=self.id,
             findings=[
-                Finding(
+                make_finding(
                     rule_id=self.id,
-                    rag="amber",
-                    severity="medium",
-                    summary=(
-                        "Resilience patterns (circuit breakers, retries) detected "
-                        "but no fault-injection tests found."
+                    ev=first,
+                    pattern_tag=self.pattern_tag,
+                    default_confidence=0.7,
+                    hit=Hit(
+                        rag="amber",
+                        severity="medium",
+                        summary=(
+                            "Resilience patterns (circuit breakers, retries) detected "
+                            "but no fault-injection tests found."
+                        ),
+                        recommendation=(
+                            "Create fault-injection test classes that exercise "
+                            "resilience patterns under failure conditions. Use WireMock "
+                            "to simulate downstream failures, Testcontainers with "
+                            "Toxiproxy for network faults, or @DirtiesContext for "
+                            "state-dependent scenarios. These tests should trigger "
+                            "circuit-breaker opens, retry exhaustion, and bulkhead "
+                            "rejection to validate resilience behavior."
+                        ),
+                        locator=first.locator,
+                        confidence=0.7,
                     ),
-                    recommendation=(
-                        "Create fault-injection test classes that exercise "
-                        "resilience patterns under failure conditions. Use WireMock "
-                        "to simulate downstream failures, Testcontainers with "
-                        "Toxiproxy for network faults, or @DirtiesContext for "
-                        "state-dependent scenarios. These tests should trigger "
-                        "circuit-breaker opens, retry exhaustion, and bulkhead "
-                        "rejection to validate resilience behavior."
-                    ),
-                    evidence_locator=first.locator,
-                    collector_name=first.collector_name,
-                    collector_version=first.collector_version,
-                    confidence=0.7,
-                    pattern_tag="otel-fault-injection-tests",
                 )
             ],
         )
@@ -168,12 +188,5 @@ class OTelFaultInjectionTestsRule:
                     return True
         return False
 
-
-def _register() -> None:
-    if "otel-fault-injection-tests" not in rule_registry:
-        rule_registry.register("otel-fault-injection-tests", OTelFaultInjectionTestsRule())
-
-
-_register()
 
 __all__ = ["OTelFaultInjectionTestsRule"]

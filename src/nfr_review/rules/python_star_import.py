@@ -8,7 +8,6 @@ from collections.abc import Iterable
 
 from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
 from nfr_review.models import Evidence
-from nfr_review.registry import rule_registry
 from nfr_review.rules.framework import FieldRule, Hit
 
 
@@ -36,12 +35,5 @@ class PythonStarImportRule(FieldRule[PythonAstFilePayload]):
                     locator=f"{payload.file_path}:{imp.line}",
                 )
 
-
-def _register() -> None:
-    if "python-star-import" not in rule_registry:
-        rule_registry.register("python-star-import", PythonStarImportRule())
-
-
-_register()
 
 __all__ = ["PythonStarImportRule"]

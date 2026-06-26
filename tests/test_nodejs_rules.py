@@ -96,7 +96,7 @@ class TestNodejsFloatingPromiseRule:
     def test_skipped_no_evidence(self) -> None:
         result = self.rule.evaluate(_non_js_evidence(), None)
         assert result.skipped
-        assert "no nodejs-ast evidence" in result.skip_reason
+        assert "no nodejs-ast-file evidence" in result.skip_reason
 
     def test_r007_field_compliance(self) -> None:
         ev = _ev(

@@ -8,21 +8,27 @@ from typing import Any
 
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload
 from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
+from nfr_review.rules.framework import FieldRule
+from nfr_review.rules.rule_helpers import make_green_finding
 
 
-class AdrLifecycleGapRule:
-    """Flag when ADRs exist but lack lifecycle status tracking."""
-
+class AdrLifecycleGapRule(FieldRule[AdrDocumentPayload]):
     id = "adr-lifecycle-gap"
-    band: Band = 1
-    required_collectors: list[str] = ["adr"]
+    collector_name = "adr"
+    evidence_kind = "adr-document"
+    payload_type = AdrDocumentPayload
+    pattern_tag = "adr-lifecycle"
+    default_confidence = 0.9
+    all_clear_summary = "All ADRs have status tracking."
+    all_clear_recommendation = "No action required — ADR lifecycle is well-managed."
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        adr_docs = filter_evidence(evidence, "adr", "adr-document")
-        if not adr_docs:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
             return RuleResult(
                 rule_id=self.id,
                 skipped=True,
@@ -31,12 +37,12 @@ class AdrLifecycleGapRule:
 
         with_status = [
             e
-            for e in adr_docs
+            for e in relevant
             if isinstance(e.payload, AdrDocumentPayload) and e.payload.status
         ]
         without_status = [
             e
-            for e in adr_docs
+            for e in relevant
             if isinstance(e.payload, AdrDocumentPayload) and not e.payload.status
         ]
 
@@ -49,7 +55,7 @@ class AdrLifecycleGapRule:
                         rag="red",
                         severity="medium",
                         summary=(
-                            f"{len(adr_docs)} ADR(s) found but none have status tracking."
+                            f"{len(relevant)} ADR(s) found but none have status tracking."
                         ),
                         recommendation=(
                             "Add a status field (accepted/deprecated/superseded)"
@@ -81,7 +87,7 @@ class AdrLifecycleGapRule:
                         rag="amber",
                         severity="low",
                         summary=(
-                            f"{len(without_status)} of {len(adr_docs)} ADR(s)"
+                            f"{len(without_status)} of {len(relevant)} ADR(s)"
                             f" lack status fields: {missing_files}"
                         ),
                         recommendation=(
@@ -103,8 +109,8 @@ class AdrLifecycleGapRule:
                 make_green_finding(
                     self.id,
                     "adr-lifecycle",
-                    adr_docs[0],
-                    summary=f"All {len(adr_docs)} ADR(s) have status tracking.",
+                    relevant[0],
+                    summary=f"All {len(relevant)} ADR(s) have status tracking.",
                     confidence=0.9,
                     recommendation="No action required — ADR lifecycle is well-managed.",
                     evidence_locator="adr-summary",
@@ -112,12 +118,5 @@ class AdrLifecycleGapRule:
             ],
         )
 
-
-def _register() -> None:
-    if "adr-lifecycle-gap" not in rule_registry:
-        rule_registry.register("adr-lifecycle-gap", AdrLifecycleGapRule())
-
-
-_register()
 
 __all__ = ["AdrLifecycleGapRule"]

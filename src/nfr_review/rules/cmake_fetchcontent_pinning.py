@@ -1,90 +1,47 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rule: CMAKE-002 — checks FetchContent dependencies are version-pinned."""
+"""Rule: cmake-fetchcontent-pinning -- checks FetchContent dependencies are version-pinned."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Iterable
 
-from nfr_review.models import Evidence, Finding, RuleResult
-from nfr_review.protocols import Band
-from nfr_review.registry import rule_registry
-from nfr_review.rules.rule_helpers import make_green_finding
+from nfr_review.collectors.payloads.cmake import CmakeConfigPayload
+from nfr_review.models import Evidence
+from nfr_review.rules.framework import FieldRule, Hit
 
 
-class CmakeFetchcontentPinningRule:
+class CmakeFetchcontentPinningRule(FieldRule[CmakeConfigPayload]):
+    """Check that FetchContent dependencies are version-pinned."""
+
     id = "cmake-fetchcontent-pinning"
-    band: Band = 1
-    required_collectors: list[str] = ["cmake"]
-    required_tech: list[str] = ["cpp"]
+    collector_name = "cmake"
+    evidence_kind = "cmake-config"
+    payload_type = CmakeConfigPayload
+    pattern_tag = "cmake-fetchcontent-pinning"
+    required_tech = ["cpp"]
+    default_confidence = 0.9
+    all_clear_summary = "All FetchContent dependencies are version-pinned."
+    all_clear_recommendation = "No action required."
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        cmake_ev = [e for e in evidence if e.kind == "cmake-config"]
-        if not cmake_ev:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no cmake evidence available",
-            )
-
-        findings: list[Finding] = []
-        has_any_fetchcontent = False
-        for ev in cmake_ev:
-            file_path = ev.payload.file_path
-            declares = ev.payload.fetchcontent_declares
-            if not declares:
-                continue
-            has_any_fetchcontent = True
-            for dep in declares:
-                if not dep.is_pinned:
-                    tag = dep.tag or "(none)"
-                    findings.append(
-                        Finding(
-                            rule_id=self.id,
-                            rag="red" if not dep.tag else "amber",
-                            severity="high" if not dep.tag else "medium",
-                            summary=(
-                                f"FetchContent dependency '{dep.name}' uses "
-                                f"unpinned tag '{tag}' in {file_path}:{dep.line}"
-                            ),
-                            recommendation=(
-                                f"Pin '{dep.name}' to a specific version tag "
-                                f"or commit hash instead of a branch name."
-                            ),
-                            evidence_locator=f"{file_path}:{dep.line}",
-                            collector_name=ev.collector_name,
-                            collector_version=ev.collector_version,
-                            confidence=0.9,
-                            pattern_tag="cmake-unpinned-fetchcontent",
-                        )
-                    )
-
-        if not has_any_fetchcontent:
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason="no FetchContent dependencies found",
-            )
-
-        if not findings:
-            findings.append(
-                make_green_finding(
-                    self.id,
-                    "cmake-fetchcontent-pinned",
-                    cmake_ev[0],
-                    summary="All FetchContent dependencies are version-pinned.",
-                    confidence=0.9,
+    def check(self, payload: CmakeConfigPayload, ev: Evidence) -> Iterable[Hit]:
+        for dep in payload.fetchcontent_declares:
+            if not dep.is_pinned:
+                tag = dep.tag or "(none)"
+                yield Hit(
+                    rag="red" if not dep.tag else "amber",
+                    severity="high" if not dep.tag else "medium",
+                    summary=(
+                        f"FetchContent dependency '{dep.name}' uses "
+                        f"unpinned tag '{tag}' in {payload.file_path}:{dep.line}"
+                    ),
+                    recommendation=(
+                        f"Pin '{dep.name}' to a specific version tag "
+                        f"or commit hash instead of a branch name."
+                    ),
+                    locator=f"{payload.file_path}:{dep.line}",
+                    pattern_tag="cmake-unpinned-fetchcontent",
                 )
-            )
 
-        return RuleResult(rule_id=self.id, findings=findings)
-
-
-def _register() -> None:
-    if "cmake-fetchcontent-pinning" not in rule_registry:
-        rule_registry.register("cmake-fetchcontent-pinning", CmakeFetchcontentPinningRule())
-
-
-_register()
 
 __all__ = ["CmakeFetchcontentPinningRule"]
