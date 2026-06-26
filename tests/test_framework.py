@@ -154,7 +154,7 @@ class TestMakeFinding:
 # FieldRule tests — concrete subclass for testing
 # ---------------------------------------------------------------------------
 class ScoreCheckRule(FieldRule[SamplePayload]):
-    id = "test-score-check"
+    # id set after class creation to avoid auto-registration in global registry
     collector_name = "test-collector"
     evidence_kind = "test-kind"
     payload_type = SamplePayload
@@ -179,6 +179,9 @@ class ScoreCheckRule(FieldRule[SamplePayload]):
             )
 
 
+ScoreCheckRule.id = "test-score-check"
+
+
 class TestFieldRuleInitSubclass:
     def test_required_collectors_auto_populated(self) -> None:
         assert ScoreCheckRule.required_collectors == ["test-collector"]
@@ -188,7 +191,6 @@ class TestFieldRuleInitSubclass:
 
     def test_explicit_required_collectors_not_overwritten(self) -> None:
         class CustomCollectors(FieldRule[SamplePayload]):
-            id = "custom"
             collector_name = "a"
             evidence_kind = "b"
             payload_type = SamplePayload
@@ -198,6 +200,7 @@ class TestFieldRuleInitSubclass:
             def check(self, payload: SamplePayload, ev: Evidence) -> Iterable[Hit]:
                 return []
 
+        CustomCollectors.id = "custom"
         assert CustomCollectors.required_collectors == ["a", "b"]
 
 
@@ -335,7 +338,6 @@ class TestFieldRuleCoerce:
 class TestFieldRuleDefaultConfidence:
     def test_default_confidence_used(self) -> None:
         class HighConfRule(FieldRule[SamplePayload]):
-            id = "high-conf"
             collector_name = "test-collector"
             evidence_kind = "test-kind"
             payload_type = SamplePayload
@@ -345,6 +347,7 @@ class TestFieldRuleDefaultConfidence:
             def check(self, payload: SamplePayload, ev: Evidence) -> Iterable[Hit]:
                 yield Hit(rag="amber", summary="s", recommendation="r", locator="f:1")
 
+        HighConfRule.id = "high-conf"
         rule = HighConfRule()
         ev = _make_evidence()
         result = rule.evaluate([ev], context=None)
@@ -352,7 +355,6 @@ class TestFieldRuleDefaultConfidence:
 
     def test_hit_confidence_overrides_default(self) -> None:
         class OverrideRule(FieldRule[SamplePayload]):
-            id = "override"
             collector_name = "test-collector"
             evidence_kind = "test-kind"
             payload_type = SamplePayload
@@ -364,6 +366,7 @@ class TestFieldRuleDefaultConfidence:
                     rag="amber", summary="s", recommendation="r", locator="f:1", confidence=0.5
                 )
 
+        OverrideRule.id = "override"
         rule = OverrideRule()
         ev = _make_evidence()
         result = rule.evaluate([ev], context=None)
