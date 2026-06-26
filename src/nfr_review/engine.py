@@ -179,6 +179,7 @@ class Engine:
                 len(produced),
             )
 
+    # region:engine-run
     def run(self, target: Path, config: Config) -> RunResult:
         if not target.exists():
             raise EngineError(f"target does not exist: {target}")
@@ -349,6 +350,8 @@ class Engine:
             warnings=warnings,
             evidence=evidence,
         )
+
+    # endregion:engine-run
 
 
 __all__ = ["Engine", "EngineError", "RunResult"]

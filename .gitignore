@@ -44,6 +44,8 @@ hygiene-report.jsonl
 .tools/
 package.json
 package-lock.json
+!site/package.json
+!site/package-lock.json
 reports/
 docs/research/
 

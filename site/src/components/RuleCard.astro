@@ -1,0 +1,81 @@
+---
+interface Props {
+  id: string;
+  title: string;
+  severity: 'green' | 'amber' | 'red';
+  category: string;
+  description?: string;
+}
+
+const { id, title, severity, category, description } = Astro.props;
+
+const severityColors: Record<string, string> = {
+  green: 'var(--nfr-green)',
+  amber: 'var(--nfr-amber)',
+  red: 'var(--nfr-red)',
+};
+---
+
+<div class="rule-card">
+  <div class="rule-card-header">
+    <code class="rule-id">{id}</code>
+    <span class="rule-severity" style={`color: ${severityColors[severity]}`}>
+      {severity.toUpperCase()}
+    </span>
+  </div>
+  <h4 class="rule-title">{title}</h4>
+  <span class="rule-category">{category}</span>
+  {description && <p class="rule-description">{description}</p>}
+  <slot />
+</div>
+
+<style>
+  .rule-card {
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    background: var(--sl-color-gray-6);
+  }
+
+  .rule-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .rule-id {
+    font-family: var(--sl-font-system-mono);
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+  }
+
+  .rule-severity {
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .rule-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+  }
+
+  .rule-category {
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-xs);
+    color: var(--nfr-text-muted);
+    background: var(--sl-color-gray-5);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+
+  .rule-description {
+    margin: 0.75rem 0 0;
+    font-size: var(--sl-text-sm);
+    color: var(--nfr-text-muted);
+  }
+</style>

@@ -43,6 +43,7 @@ _RAG_SEVERITY: dict[RAG, Severity] = {
 }
 
 
+# region:hit-dataclass
 @dataclass(frozen=True, slots=True)
 class Hit:
     """What a rule author yields from ``check()``.
@@ -59,6 +60,9 @@ class Hit:
     confidence: float | None = None
     pattern_tag: str | None = None
     content_hash: str = ""
+
+
+# endregion:hit-dataclass
 
 
 def make_finding(
@@ -89,6 +93,7 @@ def make_finding(
     )
 
 
+# region:field-rule
 class FieldRule(Generic[P]):
     """Declarative single-evidence-kind rule with typed payload access.
 
@@ -122,6 +127,8 @@ class FieldRule(Generic[P]):
     def check(self, payload: P, ev: Evidence) -> Iterable[Hit]:
         """Yield ``Hit`` objects for one typed payload. Yield nothing when clean."""
         raise NotImplementedError
+
+    # endregion:field-rule
 
     def _coerce(self, raw: object) -> P:
         """Coerce *raw* to the declared ``payload_type``.
