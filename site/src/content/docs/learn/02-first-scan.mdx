@@ -3,4 +3,209 @@ title: "Your First Scan"
 description: "Install, run, and interpret your first nfr-review report"
 ---
 
-Content coming in S02.
+import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
+
+This chapter gets you from zero to a completed scan in under five minutes.
+
+## Install
+
+<Tabs>
+  <TabItem label="pip">
+    ```bash
+    pip install nfr-review
+    ```
+  </TabItem>
+  <TabItem label="pipx (isolated)">
+    ```bash
+    pipx install nfr-review
+    ```
+  </TabItem>
+  <TabItem label="From source">
+    ```bash
+    git clone https://github.com/JimAKennedy/nfr-review.git
+    cd nfr-review
+    pip install -e ".[dev]"
+    ```
+  </TabItem>
+</Tabs>
+
+Requires **Python 3.11+**. Verify the install:
+
+```bash
+nfr-review --version
+```
+
+### Optional extras
+
+Install additional capabilities as needed:
+
+```bash
+# PDF report generation
+pip install "nfr-review[pdf]"
+
+# LLM-powered executive summaries (Anthropic)
+pip install "nfr-review[llm-anthropic]"
+
+# Everything
+pip install "nfr-review[full]"
+```
+
+## Run your first scan
+
+<Steps>
+1. **Pick a target repository.** Any local checkout works. For this walkthrough,
+   clone a small public project:
+
+   ```bash
+   git clone https://github.com/pallets/flask.git /tmp/flask-demo
+   ```
+
+2. **Run the scan.** The `report` command runs collectors, evaluates rules,
+   and produces a timestamped report:
+
+   ```bash
+   nfr-review report /tmp/flask-demo
+   ```
+
+   This takes 10–30 seconds depending on repository size. Output goes to a
+   `reports/` directory with a timestamped filename.
+
+3. **Open the report.** The command prints the output path:
+
+   ```
+   Report written to reports/flask-demo-20260626T183045.md
+   ```
+
+   Open it in any Markdown viewer, or add `--html` for a self-contained HTML report.
+</Steps>
+
+## Understand the output
+
+A report has four main sections:
+
+### Findings summary
+
+The summary table cross-tabulates findings by **category** (rows) and **severity**
+(columns). This is your executive overview — which areas have the most red findings?
+
+```
+| Category        | Critical | High | Medium | Low | Info |
+|-----------------|----------|------|--------|-----|------|
+| Security        |        0 |    2 |      3 |   1 |    0 |
+| Reliability     |        0 |    1 |      4 |   2 |    1 |
+| Observability   |        0 |    0 |      2 |   3 |    0 |
+| Maintainability |        0 |    0 |      1 |   5 |    2 |
+```
+
+### Design maturity score
+
+If the `--score` flag is used, nfr-review computes a **maturity score** from 0 to 100,
+weighted by ISO 25010 quality categories. Each finding deducts points based on severity:
+
+- **Critical**: −15 points
+- **High**: −10 points
+- **Medium**: −5 points
+- **Low**: −2 points
+- **Info**: −0 points
+
+The score gives a single-number trend indicator — track it over time to see whether
+non-functional quality is improving or degrading.
+
+### Findings detail
+
+Each finding appears with full context:
+
+```markdown
+### 🔴 PY002: Star import obscures dependencies
+
+**Severity:** high · **Confidence:** 0.95 · **Category:** maintainability
+
+Star import `from utils import *` makes it impossible to determine which names
+are in scope without reading the imported module.
+
+**Location:** `src/app.py:3`
+
+**Recommendation:** Replace with explicit imports: `from utils import func_a, func_b`
+```
+
+### Skipped rules
+
+Rules that couldn't run (missing technology declaration, failed collector) are listed
+with the reason. This prevents false confidence — you know exactly what **wasn't**
+checked.
+
+## CLI quick reference
+
+The four commands you'll use most:
+
+| Command | Purpose |
+|---------|---------|
+| `nfr-review report <path>` | Full scan → timestamped report |
+| `nfr-review run <path>` | Findings only → CSV/JSONL (for CI pipelines) |
+| `nfr-review list-rules` | Show all registered rules with severity and category |
+| `nfr-review explain <rule-id>` | Detailed description of a single rule |
+
+### Common flags
+
+```bash
+# Generate HTML report alongside Markdown
+nfr-review report /path/to/repo --html
+
+# Set severity threshold (exit code 2 if any finding meets it)
+nfr-review run /path/to/repo --severity-threshold high
+
+# Use a config file
+nfr-review report /path/to/repo --config nfr-review.yaml
+
+# Include design maturity score
+nfr-review report /path/to/repo --score
+
+# Parallelise collectors (faster on multi-core machines)
+nfr-review report /path/to/repo --workers 4
+```
+
+## Add a config file
+
+For recurring scans, create an `nfr-review.yaml` in the target repository:
+
+```yaml
+version: 1
+
+# Declare which technologies are present — rules for
+# undeclared technologies are skipped automatically
+tech:
+  python: true
+  docker: true
+  kubernetes: false
+
+# Skip specific rules by ID
+rules:
+  skip:
+    - spring-actuator-exposure  # not a Spring project
+
+# Exclude vendored or generated code
+exclude_paths:
+  - "vendor/**"
+  - "generated/**"
+
+# Fail CI if any high-severity finding is detected
+severity_threshold: high
+```
+
+When nfr-review finds this file in the target directory, it applies the configuration
+automatically. You can also pass `--config path/to/config.yaml` explicitly.
+
+## Exit codes
+
+nfr-review uses exit codes for CI integration:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success — scan completed, no findings above threshold |
+| `1` | Error — invalid config, target not found, collector failure |
+| `2` | Threshold exceeded — at least one finding meets `severity_threshold` |
+
+## Next
+
+Now that you have a report, the next chapter explains **how** nfr-review produced
+it — the three-phase pipeline architecture.

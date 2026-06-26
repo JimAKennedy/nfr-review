@@ -3,4 +3,132 @@ title: "The Pipeline"
 description: "The three-phase architecture: collect, evaluate, report"
 ---
 
-Content coming in S02.
+import CodeSnippet from '../../../components/CodeSnippet.astro';
+
+Every nfr-review scan follows the same three-phase pipeline:
+
+```
+Repository ──▶ Collect ──▶ Evaluate ──▶ Report
+                  │            │            │
+              Evidence      Findings     MD/HTML/
+              (typed)     (structured)   CSV/SARIF
+```
+
+This chapter walks through each phase and shows the code that drives it.
+
+## Phase 1: Collection
+
+**Collectors** are parsers that read files from the target repository and emit
+structured **evidence**. Each collector focuses on a specific technology or
+file type:
+
+| Collector | What it reads | Evidence it produces |
+|-----------|---------------|---------------------|
+| `python-ast` | `.py` files | Function signatures, imports, class hierarchies |
+| `java-ast` | `.java` files | Class structure, annotations, method signatures |
+| `dockerfile` | `Dockerfile` | Base images, exposed ports, multi-stage patterns |
+| `k8s-manifest` | Kubernetes YAML | Resource limits, probes, security contexts |
+| `terraform` | `.tf` files | Resource declarations, provider configs |
+| `python-deps` | `requirements.txt`, `pyproject.toml` | Dependency versions and constraints |
+| `repo-structure` | Directory tree | File counts, language distribution |
+| `adr` | `docs/adr/` | Architecture Decision Records |
+
+nfr-review ships with ~30 collectors. They run in parallel when `--workers` > 1.
+
+### Evidence shape
+
+Every piece of evidence has a consistent structure:
+
+<CodeSnippet file="src/nfr_review/models.py" region="evidence-model" caption="Evidence model — the output of every collector" />
+
+The `kind` field determines which rules will examine this evidence. A rule
+declares what evidence kinds it consumes, and the engine only dispatches
+matching evidence.
+
+### Fault tolerance
+
+If a collector crashes, nfr-review logs a warning and continues. The failing
+collector's evidence is simply absent — rules that needed it are marked as
+skipped in the report, so you know what wasn't checked.
+
+## Phase 2: Evaluation
+
+**Rules** examine evidence and yield **findings**. Each rule focuses on a
+specific non-functional concern:
+
+- `python-star-import` checks for `from x import *` patterns
+- `dockerfile-latest-tag` checks for `:latest` base images
+- `k8s-missing-resource-limits` checks for pods without CPU/memory limits
+- `missing-health-check` checks for services without `/health` endpoints
+
+### The FieldRule pattern
+
+Most rules extend `FieldRule`, a typed base class that handles evidence
+filtering and payload coercion automatically:
+
+<CodeSnippet file="src/nfr_review/rules/framework.py" region="field-rule" caption="FieldRule — the typed base class for most rules" />
+
+A concrete rule only needs to implement `check()`:
+
+<CodeSnippet file="src/nfr_review/rules/python_star_import.py" region="example-field-rule" caption="A real rule — detecting Python star imports" />
+
+When a rule finds a problem, it yields a `Hit`:
+
+<CodeSnippet file="src/nfr_review/rules/framework.py" region="hit-dataclass" caption="Hit — what a rule yields when it finds a problem" />
+
+The engine converts each Hit into a Finding (which you saw in Chapter 1)
+and adds metadata like the collector name and version.
+
+### Rule filtering
+
+Not every rule runs on every scan. The engine skips rules when:
+
+- The rule requires a technology not declared in `config.tech`
+- The rule's required collector failed during Phase 1
+- The rule is in `config.rules.skip`
+- `config.rules.include_only` is set and the rule isn't in the list
+
+Skipped rules appear in the report with their skip reason — this is
+deliberate transparency, not a bug.
+
+## Phase 3: Reporting
+
+After evaluation, the engine returns a `RunResult` containing all findings,
+metadata, and audit information. Renderers then format this into the output
+you requested:
+
+| Format | Flag | Use case |
+|--------|------|----------|
+| Markdown | *(default)* | Human review, PR comments |
+| HTML | `--html` | Self-contained report with diagrams |
+| CSV | `--csv` | Import into spreadsheets or tracking tools |
+| JSONL | *(always produced)* | Pipeline integration, programmatic analysis |
+| SARIF | `--sarif` | GitHub code scanning integration |
+| PDF | `--pdf` | Executive stakeholders (requires `[pdf]` extra) |
+
+The Markdown report includes:
+
+1. **Summary table** — category × severity cross-tabulation
+2. **Design maturity score** — 0–100 weighted score (with `--score`)
+3. **Diagrams** — severity distribution, tech overview (Mermaid)
+4. **Findings** — grouped by RAG status (red / amber / green)
+5. **Skipped rules** — what wasn't checked and why
+6. **Dependency findings** — third-party code findings (separated from first-party)
+
+## The engine orchestration
+
+The `Engine.run()` method ties all three phases together:
+
+<CodeSnippet file="src/nfr_review/engine.py" region="engine-run" caption="Engine.run() — the three-phase orchestrator" />
+
+Key design choices visible in this code:
+
+- **Fault tolerance**: collector failures don't abort the run
+- **Path filtering**: evidence from excluded paths is dropped before evaluation
+- **Origin classification**: findings are tagged as `first_party` or `dependency`
+- **Audit trail**: metadata records which collectors ran, which rules were skipped, and why
+
+## Next
+
+The next chapter dives deeper into collectors — how they work, what evidence
+they produce, and how to understand their output.
