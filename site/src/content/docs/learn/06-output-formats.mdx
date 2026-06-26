@@ -3,4 +3,164 @@ title: "Output Formats"
 description: "CSV, JSONL, SARIF, Markdown, PDF — when to use each"
 ---
 
-Content coming in S03.
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+nfr-review produces findings in multiple output formats. The `report` command
+generates all enabled formats in a single run, writing files to the output
+directory (default: `nfr-output/`).
+
+## Format comparison
+
+| Format | Best for | Machine-readable | Includes score |
+|--------|----------|:-:|:-:|
+| **CSV** | Spreadsheet import, quick triage | ✅ | ❌ |
+| **JSONL** | Pipeline integration, baseline tracking | ✅ | ✅ |
+| **SARIF** | GitHub Code Scanning annotations | ✅ | ❌ |
+| **Markdown** | Human review, PR comments | ❌ | ✅ |
+| **HTML** | Browser viewing, sharing with stakeholders | ❌ | ✅ |
+| **PDF** | Executive summaries, compliance evidence | ❌ | ✅ |
+
+## CSV — the canonical row format
+
+The CSV file uses the 10 canonical Finding fields in a fixed column order:
+
+```
+rule_id, rag, severity, summary, recommendation,
+evidence_locator, collector_name, collector_version,
+confidence, pattern_tag
+```
+
+One row per finding, plus one synthetic `rag=skipped` row per skipped rule
+so the file shows every rule the engine considered.
+
+```csv
+rule_id,rag,severity,summary,recommendation,evidence_locator,collector_name,collector_version,confidence,pattern_tag
+python-star-import,red,high,"Star import obscures dependencies","Replace with explicit imports",src/utils.py:3,python-ast,1.0.0,0.95,
+k8s-resource-limits,amber,medium,"No CPU limits set","Add resources.limits.cpu",deploy.yaml:15,k8s-manifest,1.0.0,0.90,
+java-health-check,green,info,"Health endpoint found","",src/main/java/HealthController.java:8,java-ast,1.0.0,0.95,
+```
+
+## JSONL — structured records for pipelines
+
+JSONL (JSON Lines) outputs one JSON object per line. The first record is always
+`run_metadata` containing scan configuration, rules run, and rules skipped.
+Subsequent records are individual findings.
+
+<Tabs>
+  <TabItem label="Run metadata">
+    ```json
+    {
+      "record_type": "run_metadata",
+      "scan_timestamp": "2026-06-26T10:30:00Z",
+      "nfr_review_version": "0.3.1",
+      "repo_path": "/path/to/project",
+      "rules_run": ["python-star-import", "k8s-resource-limits"],
+      "rules_skipped": [{"rule_id": "helm-values", "reason": "helm not detected"}],
+      "maturity_score": {"overall": 72, "grade": "B"}
+    }
+    ```
+  </TabItem>
+  <TabItem label="Finding record">
+    ```json
+    {
+      "record_type": "finding",
+      "rule_id": "python-star-import",
+      "rag": "red",
+      "severity": "high",
+      "summary": "Star import obscures dependencies",
+      "recommendation": "Replace with explicit imports",
+      "evidence_locator": "src/utils.py:3",
+      "collector_name": "python-ast",
+      "collector_version": "1.0.0",
+      "confidence": 0.95,
+      "pattern_tag": null
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+JSONL is the format used for **baseline tracking** — compare two scans to see
+what improved or regressed. See [Baseline Tracking](/recipes/baseline-tracking/)
+for details.
+
+## SARIF — GitHub Code Scanning
+
+[SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) is the
+standard format for static analysis results. GitHub Code Scanning consumes SARIF
+to annotate PRs with inline findings.
+
+Severity mapping to SARIF levels:
+
+| nfr-review severity | SARIF level |
+|---------------------|-------------|
+| `critical`, `high` | `error` |
+| `medium` | `warning` |
+| `low`, `info` | `note` |
+
+To upload SARIF results in a GitHub Actions workflow:
+
+```yaml
+- name: Run nfr-review
+  run: nfr-review report --format sarif -o nfr-output/
+
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: nfr-output/report.sarif
+```
+
+<Aside type="caution">
+SARIF upload requires the repository to have GitHub Advanced Security enabled
+(free for public repositories).
+</Aside>
+
+## Markdown — human-readable reports
+
+The Markdown report includes:
+
+- **Executive summary** with the maturity score and grade
+- **Category × severity cross-tabulation** showing finding distribution
+- **Findings by severity** with full details, grouped red → amber → green
+- **Methodology appendix** explaining each category and how it was assessed
+- **Skipped rules** with reasons
+
+This is the default format for `nfr-review report` with no `--format` flag.
+
+## HTML — self-contained web report
+
+The HTML report contains the same content as Markdown, rendered with embedded
+styles and optional Mermaid diagrams. It's a single `.html` file with no
+external dependencies — open it in any browser or attach it to an email.
+
+## PDF — executive format
+
+The PDF report mirrors the Markdown/HTML content but is formatted for print.
+Useful for compliance evidence, audit trails, or stakeholders who prefer
+documents over dashboards.
+
+<Aside type="note">
+PDF generation requires the `weasyprint` package. Install with
+`pip install nfr-review[pdf]`.
+</Aside>
+
+## Choosing formats
+
+Use the `--format` flag to select one or more formats:
+
+```bash
+# Single format
+nfr-review report --format sarif
+
+# Multiple formats
+nfr-review report --format csv,jsonl,markdown
+
+# All formats (default)
+nfr-review report
+```
+
+All formats are generated by default when no `--format` flag is given.
+
+## Next
+
+With findings in hand, the next chapter explains how nfr-review computes a
+design maturity score from them.

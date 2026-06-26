@@ -3,4 +3,156 @@ title: "Collectors Deep Dive"
 description: "How evidence is gathered, payload types, and tech detection"
 ---
 
-Content coming in S03.
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+import CodeSnippet from '../../../components/CodeSnippet.astro';
+
+Collectors are the first phase of the pipeline. Each collector walks the repository,
+parses a specific technology's artifacts, and returns structured **evidence** — typed
+payloads that rules can inspect without reimplementing parsing logic.
+
+## The Collector protocol
+
+Every collector implements a simple protocol:
+
+<CodeSnippet file="src/nfr_review/protocols.py" region="collector-protocol" caption="Every collector implements this protocol — a name, version, and collect method" />
+
+The `collect` method receives the repository root and a config object, and returns
+a list of `Evidence` records. Each record carries:
+
+- A `kind` (e.g. `"python-ast"`, `"k8s-manifest"`)
+- The source `locator` (file path and line number)
+- A typed `payload` with the extracted data
+
+<CodeSnippet file="src/nfr_review/models.py" region="evidence-model" caption="Evidence — the output of every collector" />
+
+## Tech detection
+
+Before running collectors, nfr-review scans the repository to detect which technologies
+are present. This avoids running a Java AST parser against a Python-only project.
+
+Detection is file-based — it looks for telltale files and directories:
+
+| Technology | Detection signal |
+|-----------|-----------------|
+| Java | `*.java` files, `pom.xml`, `build.gradle` |
+| Spring Boot | `@SpringBootApplication`, `application.yml` |
+| Python | `*.py` files, `pyproject.toml`, `setup.py` |
+| Go | `go.mod`, `*.go` files |
+| Kubernetes | `kind: Deployment`, `kind: Service` in YAML |
+| Dockerfile | `Dockerfile`, `*.dockerfile` |
+| Terraform | `*.tf` files |
+| Helm | `Chart.yaml` |
+| C++ | `CMakeLists.txt`, `*.cpp`, `*.hpp` |
+| Node.js | `package.json` |
+| OpenTelemetry | `otel-collector-config.yaml`, `opentelemetry` in deps |
+
+Only collectors whose technology is detected (or explicitly enabled) will run.
+
+## Collector families
+
+nfr-review ships with ~35 collectors grouped by what they parse:
+
+### Language AST collectors
+
+AST collectors use [tree-sitter](https://tree-sitter.github.io/) to parse source files
+into syntax trees, then extract structured payloads. All inherit from `BaseASTCollector`,
+which handles file discovery, hidden-directory skipping, and parser initialisation.
+
+| Collector | Language | What it extracts |
+|-----------|----------|-----------------|
+| `java-ast` | Java | Classes, methods, annotations, catch blocks, log statements |
+| `python-ast` | Python | Imports, functions, classes, catch blocks, decorators |
+| `go-ast` | Go | Functions, goroutines, defers, error handling |
+| `cpp-ast` | C++ | Classes, raw pointers, include guards, RAII patterns |
+
+Subclasses implement a single `_parse_file()` method that receives the parsed source
+and returns the payload. The base class handles everything else.
+
+### Dependency collectors
+
+| Collector | Files parsed | What it extracts |
+|-----------|-------------|-----------------|
+| `java-deps` | `pom.xml`, `build.gradle` | Dependencies, versions, scopes |
+| `python-deps` | `pyproject.toml`, `requirements.txt` | Packages, version pins, extras |
+| `go-deps` | `go.mod`, `go.sum` | Module dependencies, versions |
+| `nodejs-deps` | `package.json`, `package-lock.json` | Dependencies, dev dependencies |
+
+### Infrastructure collectors
+
+| Collector | What it parses |
+|-----------|---------------|
+| `k8s-manifest` | Kubernetes Deployments, Services, ConfigMaps — resource limits, probes, security contexts |
+| `helm` | Chart.yaml, values.yaml — chart metadata, value schemas |
+| `dockerfile` | Dockerfile instructions — base images, pinning, multi-stage builds |
+| `terraform` | HCL files — providers, state backend, pinning |
+| `istio` | VirtualService, DestinationRule — traffic policies |
+| `otel` | OTel collector configs — pipelines, exporters, receivers |
+
+### Documentation and build collectors
+
+| Collector | What it detects |
+|-----------|----------------|
+| `adr` | Architecture Decision Records — status, superseded-by links |
+| `ci-artifact` | CI workflow files — test steps, security scans, deploy gates |
+| `repo-structure` | README, CONTRIBUTING, LICENSE — documentation presence |
+| `jacoco-report` | JaCoCo XML — code coverage percentages |
+
+## Payload types
+
+Each collector returns a typed payload. Rules declare which payload type they
+expect via the `payload_type` attribute on `FieldRule`, giving you compile-time
+safety when accessing fields.
+
+<Tabs>
+  <TabItem label="Python AST">
+    ```python
+    class PythonAstFilePayload(BasePayload):
+        file_path: str
+        imports: list[ImportInfo]       # module, name, is_star
+        functions: list[FunctionInfo]   # name, decorators, args
+        classes: list[ClassInfo]        # name, bases, methods
+        catch_blocks: list[CatchInfo]   # exception type, is_bare
+    ```
+  </TabItem>
+  <TabItem label="Kubernetes">
+    ```python
+    class K8sManifestPayload(BasePayload):
+        file_path: str
+        kind: str                        # Deployment, Service, ...
+        name: str
+        namespace: str | None
+        containers: list[ContainerInfo]  # image, limits, probes
+    ```
+  </TabItem>
+  <TabItem label="Dependencies">
+    ```python
+    class DependencyPayload(BasePayload):
+        file_path: str
+        ecosystem: str                   # maven, pip, npm, go
+        dependencies: list[DepInfo]      # name, version, scope
+    ```
+  </TabItem>
+</Tabs>
+
+Rules never need to re-parse files — they receive structured, validated payloads.
+
+## Controlling collectors
+
+You can skip collectors you don't need or force-enable ones that weren't auto-detected:
+
+```yaml
+# nfr-review.yaml
+collectors:
+  skip:
+    - helm          # skip Helm analysis
+    - gatling       # skip Gatling report parsing
+```
+
+Tech detection runs before collector selection. A collector is run only if its
+technology is detected **and** it isn't in the skip list. To review what was
+detected, check the run metadata in the JSONL output.
+
+## Next
+
+Now that you know how evidence is gathered, the next chapter explains how rules
+evaluate that evidence to produce findings.
