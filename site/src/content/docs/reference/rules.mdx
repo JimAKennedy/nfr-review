@@ -1,6 +1,29 @@
 ---
 title: "Rule Catalogue"
-description: "Searchable catalogue of every rule nfr-review ships with"
+description: "Searchable catalogue of every rule nfr-review ships with — filter by category, severity, band, or search by keyword"
 ---
 
-Content coming in S04.
+import RuleCatalogue from '../../../components/RuleCatalogue.astro';
+
+nfr-review ships **125 rules** across 5 categories (security, reliability, performance,
+maintainability, structure) and 3 analysis bands:
+
+| Band | Name | How it works |
+|------|------|-------------|
+| 1 | Static | Pattern-matching on files, manifests, and ASTs — no external data needed |
+| 2 | Composite | Combines multiple collectors or uses LLM analysis for deeper inference |
+| 3 | Dynamic | Analyses runtime traces collected via OpenTelemetry |
+
+Use the search box and filters below to find rules relevant to your stack.
+Click a column header to sort.
+
+<RuleCatalogue />
+
+## Updating the catalogue
+
+The data backing this page lives in `site/src/data/rules.json`. To regenerate it
+after adding or modifying rules:
+
+```bash
+nfr-review list-rules --format json > site/src/data/rules.json
+```

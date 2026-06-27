@@ -1,6 +1,110 @@
 ---
 title: "Finding Fields"
-description: "CSV/JSONL column definitions"
+description: "Field definitions for CSV and JSONL output formats"
 ---
 
-Content coming in S04.
+Every finding produced by nfr-review follows the same schema. The CSV and JSONL
+output formats expose these fields in a flat structure suitable for downstream
+processing, dashboards, and baseline comparisons.
+
+## Finding model fields
+
+These 12 fields appear in both CSV and JSONL output. Field order in CSV matches
+the table order below.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rule_id` | string | Unique rule identifier (e.g. `dockerfile-secret-leakage`) |
+| `rag` | `red` \| `amber` \| `green` \| `skipped` | Traffic-light assessment: red = must fix, amber = should address, green = informational |
+| `severity` | `critical` \| `high` \| `medium` \| `low` \| `info` | Five-level severity aligned with ISO/IEC 25010 quality categories |
+| `summary` | string | Human-readable description of the finding |
+| `recommendation` | string | Suggested remediation action |
+| `evidence_locator` | string | File path (optionally with `:line_number` suffix) where the issue was found |
+| `collector_name` | string | Collector that gathered the evidence (e.g. `dockerfile`, `java-ast`, `otel-trace`) |
+| `collector_version` | string | Semantic version of the collector |
+| `confidence` | float (0.0–1.0) | Confidence score — 1.0 for deterministic pattern matches, lower for heuristic or LLM-based analysis |
+| `pattern_tag` | string | Sub-classification within the rule (e.g. `missing-user-directive`, `floating-tag`) |
+| `content_hash` | string | SHA-256 prefix of the source content for line-number-independent baseline matching |
+| `origin` | `first_party` \| `dependency` | Whether the finding is in project code or vendored/third-party code |
+
+## RAG vs severity
+
+nfr-review uses **two orthogonal scales**:
+
+- **RAG** (Red / Amber / Green) is the *actionability* signal — should you fix this now,
+  address it soon, or just be aware?
+- **Severity** is the *impact* scale — how bad is the issue if left unaddressed?
+
+A `high` severity finding might be `green` RAG if the specific instance is low-risk
+in context (e.g. a missing probe on a batch job). A `low` severity finding might be
+`red` RAG if it blocks a compliance requirement.
+
+## JSONL-specific fields
+
+The JSONL format (R018) wraps each finding with additional metadata for machine
+processing.
+
+### Record types
+
+Each JSONL line has a `record_type` field:
+
+| `record_type` | Description |
+|----------------|-------------|
+| `run_metadata` | First line — provenance: tool version, target repo, git SHA, timestamp, collector versions, rules run/skipped |
+| `finding` | A finding record with all 12 model fields plus optional classification |
+
+### Classification fields
+
+When `--baseline` is used, each finding record includes a `classification` field:
+
+| Value | Meaning |
+|-------|---------|
+| `new` | Finding not present in the baseline — a regression |
+| `baseline` | Finding already known from the baseline — suppressed from exit code |
+| `shifted` | Finding exists in baseline but at a different line — includes `baseline_locator` |
+| `resolved` | Finding was in baseline but is no longer present — the issue was fixed |
+
+### Suppression fields
+
+When findings are suppressed via inline `nfr-review:skip()` directives, the JSONL
+output records suppression metadata for audit purposes:
+
+| Field | Description |
+|-------|-------------|
+| `suppressed` | `true` if the finding was suppressed |
+| `suppression_reason` | Developer-provided reason from the skip directive |
+| `suppression_source` | File and line where the suppression was declared |
+
+### Run metadata fields
+
+The first JSONL line (`record_type: "run_metadata"`) contains:
+
+| Field | Description |
+|-------|-------------|
+| `tool_version` | nfr-review version (e.g. `0.3.1`) |
+| `target_repo` | Absolute path to the scanned repository |
+| `git_sha` | HEAD commit SHA (if available) |
+| `git_branch` | Current branch name |
+| `git_dirty` | `true` if the working tree has uncommitted changes |
+| `timestamp` | ISO 8601 scan timestamp |
+| `collector_versions` | Dict mapping collector name to version |
+| `rules_run` | List of rule IDs that executed |
+| `rules_skipped` | List of `{rule_id, reason}` for skipped rules |
+
+## CSV format
+
+The CSV output uses the 12 finding model fields as column headers. One row per
+finding, UTF-8 encoded, RFC 4180 compliant. Skipped rules and run metadata are
+not included in CSV — use JSONL for full provenance.
+
+```csv
+rule_id,rag,severity,summary,recommendation,evidence_locator,collector_name,collector_version,confidence,pattern_tag,content_hash,origin
+dockerfile-secret-leakage,red,critical,"Dockerfile copies .env file into image","Use Docker secrets or build-time --secret flag",Dockerfile:12,dockerfile,1.0.0,1.0,env-copy,a1b2c3d4e5f6,first_party
+```
+
+## SARIF format
+
+nfr-review also emits [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) for
+integration with GitHub Advanced Security code scanning. Use `--sarif output.sarif`
+with any scan command. The SARIF file maps findings to their source locations and
+includes rule metadata as `reportingDescriptor` entries.

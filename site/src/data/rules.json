@@ -1,0 +1,2471 @@
+[
+  {
+    "id": "architectural-drift-from-adr",
+    "band": 2,
+    "required_collectors": [
+      "adr",
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "maintainability",
+    "tags": [
+      "adr",
+      "architecture",
+      "llm"
+    ],
+    "description": "Detects divergence between architecture decision records and actual codebase.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "adr-gap",
+    "band": 2,
+    "required_collectors": [
+      "adr-derive",
+      "adr"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "adr",
+      "architecture"
+    ],
+    "description": "Flags implicit architectural decisions in code that lack a corresponding ADR.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "adr-lifecycle-gap",
+    "band": 1,
+    "required_collectors": [
+      "adr"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "adr",
+      "architecture",
+      "documentation"
+    ],
+    "description": "Flags ADRs that exist but lack lifecycle status tracking.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "apim-auth-policy-missing",
+    "band": 1,
+    "required_collectors": [
+      "apim-policy"
+    ],
+    "required_tech": [
+      "apim"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "apim",
+      "azure",
+      "auth"
+    ],
+    "description": "Flags Azure API Management policies that lack authentication configuration.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A01"
+    ]
+  },
+  {
+    "id": "apim-hardcoded-backend-url",
+    "band": 1,
+    "required_collectors": [
+      "apim-policy"
+    ],
+    "required_tech": [
+      "apim"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "apim",
+      "azure",
+      "config"
+    ],
+    "description": "Flags APIM policies using hardcoded backend URLs instead of named values.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "apim-rate-limit-missing",
+    "band": 1,
+    "required_collectors": [
+      "apim-policy"
+    ],
+    "required_tech": [
+      "apim"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "apim",
+      "azure",
+      "rate-limiting"
+    ],
+    "description": "Flags APIM policies without rate limiting in the inbound section.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A04"
+    ]
+  },
+  {
+    "id": "bare-except-catch-all",
+    "band": 1,
+    "required_collectors": [],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "error-handling",
+      "cross-language"
+    ],
+    "description": "Flags bare except blocks and overly broad exception catch-alls across Java, Python,.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "logging-to-stdout",
+    "band": 1,
+    "required_collectors": [],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "logging",
+      "observability",
+      "cross-language"
+    ],
+    "description": "Flags direct stdout/stderr writes that should use a structured logging framework.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "ci-security-scan-missing",
+    "band": 1,
+    "required_collectors": [
+      "ci-artifact"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "ci",
+      "security-scanning"
+    ],
+    "description": "Flags CI pipelines that lack a security scanning step (SAST, DAST, or dependency.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A06"
+    ]
+  },
+  {
+    "id": "ci-test-stage-missing",
+    "band": 1,
+    "required_collectors": [
+      "ci-artifact"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "ci",
+      "testing"
+    ],
+    "description": "Flags CI pipelines that lack a test execution step.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "cmake-build-config",
+    "band": 1,
+    "required_collectors": [
+      "cmake"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "cmake",
+      "cpp",
+      "build"
+    ],
+    "description": "Flags CMake projects with missing or misconfigured build type settings.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "cmake-fetchcontent-pinning",
+    "band": 1,
+    "required_collectors": [
+      "cmake"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "cmake",
+      "cpp",
+      "supply-chain"
+    ],
+    "description": "Flags FetchContent dependencies that use unpinned branches instead of specific.",
+    "compliance_refs": [
+      "ISO 25010:Security"
+    ]
+  },
+  {
+    "id": "cmake-minimum-version",
+    "band": 1,
+    "required_collectors": [
+      "cmake"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "cmake",
+      "cpp"
+    ],
+    "description": "Flags CMake projects with outdated or missing cmake_minimum_required version.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "correlation-id-missing",
+    "band": 1,
+    "required_collectors": [
+      "java-deps"
+    ],
+    "required_tech": [
+      "java"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "observability",
+      "tracing"
+    ],
+    "description": "Flags Java projects with no distributed tracing or correlation-ID library.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "cpp-clang-format",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "cpp",
+      "formatting",
+      "toolchain"
+    ],
+    "description": "Flags C++ repos missing a .clang-format configuration file.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "cpp-clang-tidy",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "cpp",
+      "linting",
+      "toolchain"
+    ],
+    "description": "Flags C++ repos missing a .clang-tidy configuration file.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "cpp-dormant-classes",
+    "band": 2,
+    "required_collectors": [
+      "cpp-ast"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "cpp",
+      "dead-code"
+    ],
+    "description": "Flags C++ classes with high method-to-call ratio suggesting dead or underused code.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "cpp-exception-safety",
+    "band": 1,
+    "required_collectors": [
+      "cpp-ast"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "cpp",
+      "error-handling"
+    ],
+    "description": "Flags C++ code with exception-safety concerns including missing noexcept and unsafe.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "cpp-include-guards",
+    "band": 1,
+    "required_collectors": [
+      "cpp-ast"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "cpp",
+      "headers"
+    ],
+    "description": "Flags C++ headers missing include guards or #pragma once.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "cpp-raw-memory",
+    "band": 1,
+    "required_collectors": [
+      "cpp-ast"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "cpp",
+      "memory-safety"
+    ],
+    "description": "Flags raw new/delete and malloc/free usage that should use smart pointers or RAII.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "cpp-sanitizer-ci",
+    "band": 1,
+    "required_collectors": [
+      "ci-artifact"
+    ],
+    "required_tech": [
+      "cpp"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "cpp",
+      "ci",
+      "sanitizers"
+    ],
+    "description": "Flags C++ CI pipelines that lack address/thread/memory sanitizer builds.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "csharp-async-void",
+    "band": 1,
+    "required_collectors": [
+      "csharp-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "csharp",
+      "async"
+    ],
+    "description": "Flags async void methods that should be async Task to avoid unobserved exceptions.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "csharp-blocking-async",
+    "band": 1,
+    "required_collectors": [
+      "csharp-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "performance",
+    "tags": [
+      "csharp",
+      "async",
+      "threading"
+    ],
+    "description": "Flags synchronous blocking on async operations (.Result, .Wait()) that risk thread.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "csharp-configure-await",
+    "band": 1,
+    "required_collectors": [
+      "csharp-ast"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "performance",
+    "tags": [
+      "csharp",
+      "async"
+    ],
+    "description": "Flags await expressions missing ConfigureAwait(false) in library code.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "csharp-disposable-no-using",
+    "band": 1,
+    "required_collectors": [
+      "csharp-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "csharp",
+      "resource-management"
+    ],
+    "description": "Flags IDisposable object creation not wrapped in a using statement, risking.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "dep-freshness",
+    "band": 2,
+    "required_collectors": [
+      "python-deps",
+      "nodejs-deps",
+      "java-deps",
+      "go-deps",
+      "csharp-deps"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "security",
+    "tags": [
+      "dependencies",
+      "supply-chain",
+      "cross-language"
+    ],
+    "description": "Graduated staleness and dead library detection across Python, Node.js, Java, Go,.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A06"
+    ]
+  },
+  {
+    "id": "dep-upgrade-path",
+    "band": 2,
+    "required_collectors": [
+      "python-deps",
+      "nodejs-deps",
+      "java-deps",
+      "go-deps",
+      "csharp-deps"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "dependencies",
+      "supply-chain",
+      "cross-language"
+    ],
+    "description": "N-1 ceiling detection with upgrade path recommendations via constraint solving.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "dockerfile-base-pinning",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile"
+    ],
+    "required_tech": [
+      "dockerfile"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "docker",
+      "supply-chain"
+    ],
+    "description": "Flags Docker base images using floating tags instead of pinned versions or digests.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A08"
+    ]
+  },
+  {
+    "id": "dockerfile-k8s-image-drift",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile",
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "dockerfile",
+      "kubernetes"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "docker",
+      "kubernetes",
+      "consistency"
+    ],
+    "description": "Flags mismatches between Dockerfile base image tags and Kubernetes container image.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "dockerfile-k8s-user-conflict",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile",
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "dockerfile",
+      "kubernetes"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "docker",
+      "kubernetes",
+      "security"
+    ],
+    "description": "Flags Kubernetes deployments that override a Dockerfile non-root USER with.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A05"
+    ]
+  },
+  {
+    "id": "dockerfile-multistage",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile"
+    ],
+    "required_tech": [
+      "dockerfile"
+    ],
+    "severity": "low",
+    "category": "performance",
+    "tags": [
+      "docker",
+      "image-size"
+    ],
+    "description": "Suggests multi-stage builds when a single-stage Dockerfile has build-time RUN.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "dockerfile-secret-leakage",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile"
+    ],
+    "required_tech": [
+      "dockerfile"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "docker",
+      "secrets"
+    ],
+    "description": "Flags Dockerfiles that COPY/ADD secret files or expose secrets via ARG/ENV.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A02"
+    ]
+  },
+  {
+    "id": "dockerfile-user-directive",
+    "band": 1,
+    "required_collectors": [
+      "dockerfile"
+    ],
+    "required_tech": [
+      "dockerfile"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "docker",
+      "security"
+    ],
+    "description": "Flags Dockerfiles that lack a USER directive, causing containers to run as root.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A05"
+    ]
+  },
+  {
+    "id": "java-dormant-classes",
+    "band": 2,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [
+      "java"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "java",
+      "dead-code"
+    ],
+    "description": "Flags Java classes with high method count but low usage, suggesting dead or.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "python-dormant-classes",
+    "band": 2,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [
+      "python"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "python",
+      "dead-code"
+    ],
+    "description": "Flags Python classes with high method count but low usage, suggesting dead or.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "go-dormant-classes",
+    "band": 2,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [
+      "go"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "go",
+      "dead-code"
+    ],
+    "description": "Flags Go types with high method count but low usage, suggesting dead or underused.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "dyn-adr-drift",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "adr",
+      "topology",
+      "drift"
+    ],
+    "description": "Cross-references observed runtime service topology from traces against ADR-declared architecture, flagging undocumented coupling and dead architecture.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "dyn-call-sequence",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "info",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "tracing"
+    ],
+    "description": "Generates Mermaid sequence diagrams from OTel trace span trees to visualise runtime call flows.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "dyn-correlation-propagation",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "correlation",
+      "tracing"
+    ],
+    "description": "Verifies correlation-ID attribute consistency across all spans in a trace, flagging broken propagation from root to leaf spans.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "dyn-latency-p95",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "performance",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "latency",
+      "performance"
+    ],
+    "description": "Computes p95 latency per HTTP route from server spans and compares against declared targets in nfr_targets.latency_p95_ms.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "dyn-method-coverage",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "info",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "coverage"
+    ],
+    "description": "Reports which instrumented methods were exercised during a test run by aggregating code.namespace and code.function span attributes.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "dyn-n-plus-1",
+    "band": 3,
+    "required_collectors": [
+      "otel-trace"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "performance",
+    "tags": [
+      "otel",
+      "observability",
+      "dynamic-analysis",
+      "n-plus-1",
+      "database"
+    ],
+    "description": "Detects N+1 query patterns by counting child database spans per request span, flagging when identical DB calls exceed the threshold.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "gatling-performance-thresholds",
+    "band": 2,
+    "required_collectors": [
+      "gatling"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "performance",
+    "tags": [
+      "performance-testing",
+      "gatling"
+    ],
+    "description": "Evaluates Gatling load test results against configurable performance thresholds.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "go-defer-in-loop",
+    "band": 1,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "go",
+      "resource-management"
+    ],
+    "description": "Flags defer statements inside for loops that accumulate deferred calls until.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "go-error-ignored",
+    "band": 1,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "go",
+      "error-handling"
+    ],
+    "description": "Flags Go error return values explicitly discarded via blank identifier assignment.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "go-goroutine-leak",
+    "band": 1,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "go",
+      "concurrency"
+    ],
+    "description": "Flags goroutine launches without explicit lifecycle management (context, WaitGroup,.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "go-http-no-timeout",
+    "band": 1,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "go",
+      "http",
+      "timeout"
+    ],
+    "description": "Flags HTTP calls using http.DefaultClient or custom Client without Timeout.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "go-package-subdivision",
+    "band": 2,
+    "required_collectors": [
+      "go-ast"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "go",
+      "package-structure",
+      "architecture",
+      "domain"
+    ],
+    "description": "Flags Go projects with oversized or poorly organized packages, detecting god packages and mixed domain concerns within Go's flat package convention.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "health-probe-separation",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "kubernetes"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "health",
+      "probes"
+    ],
+    "description": "Flags Kubernetes containers whose liveness and readiness probes are identically.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "helm-chart-metadata",
+    "band": 1,
+    "required_collectors": [
+      "helm"
+    ],
+    "required_tech": [
+      "helm"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "helm",
+      "metadata"
+    ],
+    "description": "Flags Helm charts with incomplete Chart.yaml metadata (missing version,.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "helm-secret-leakage",
+    "band": 1,
+    "required_collectors": [
+      "helm"
+    ],
+    "required_tech": [
+      "helm"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "helm",
+      "secrets"
+    ],
+    "description": "Flags plaintext secrets in Helm values.yaml and rendered manifest templates.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A02"
+    ]
+  },
+  {
+    "id": "helm-values-validation",
+    "band": 1,
+    "required_collectors": [
+      "helm"
+    ],
+    "required_tech": [
+      "helm"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "helm",
+      "configuration"
+    ],
+    "description": "Flags Helm charts with missing resource limits, replica counts, or.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "istio-circuit-breaker",
+    "band": 1,
+    "required_collectors": [
+      "istio"
+    ],
+    "required_tech": [
+      "istio"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "istio",
+      "resilience",
+      "service-mesh"
+    ],
+    "description": "Flags DestinationRules that lack outlierDetection for circuit breaking.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "istio-mtls-strict",
+    "band": 1,
+    "required_collectors": [
+      "istio"
+    ],
+    "required_tech": [
+      "istio"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "istio",
+      "mtls",
+      "service-mesh"
+    ],
+    "description": "Flags Istio meshes where PeerAuthentication does not enforce STRICT mTLS.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A02"
+    ]
+  },
+  {
+    "id": "istio-traffic-policy",
+    "band": 1,
+    "required_collectors": [
+      "istio"
+    ],
+    "required_tech": [
+      "istio"
+    ],
+    "severity": "medium",
+    "category": "performance",
+    "tags": [
+      "istio",
+      "traffic",
+      "service-mesh"
+    ],
+    "description": "Flags DestinationRules that lack trafficPolicy with connectionPool settings.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "jacoco-coverage-actual",
+    "band": 2,
+    "required_collectors": [
+      "jacoco-report"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "testing",
+      "coverage"
+    ],
+    "description": "Evaluates actual line and branch coverage from JaCoCo XML reports against.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "jacoco-threshold-missing",
+    "band": 1,
+    "required_collectors": [
+      "java-deps"
+    ],
+    "required_tech": [
+      "java"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "testing",
+      "coverage"
+    ],
+    "description": "Flags Java projects with no JaCoCo dependency or plugin configured.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "exception-handling-antipattern",
+    "band": 1,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "error-handling"
+    ],
+    "description": "Flags catch blocks that swallow Exception/Throwable without rethrowing or logging.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "health-endpoint-missing",
+    "band": 1,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "health",
+      "observability"
+    ],
+    "description": "Flags Java services with no @RestController exposing a health-check endpoint.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "java-package-subdivision",
+    "band": 2,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "java",
+      "package-structure",
+      "architecture",
+      "domain"
+    ],
+    "description": "Flags Java projects with flat or insufficiently subdivided package hierarchies, detecting god packages, single-depth structures, and mixed domain concerns.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "resilience-annotation-missing",
+    "band": 1,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "resilience"
+    ],
+    "description": "Flags classes that import HTTP clients but lack resilience annotations (@Retry,.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "thread-pool-misconfiguration",
+    "band": 1,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "performance",
+    "tags": [
+      "java",
+      "threading",
+      "concurrency"
+    ],
+    "description": "Flags ThreadPoolExecutor instances without bounded queue or rejection policy.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "JDEP-CYCLE",
+    "band": 1,
+    "required_collectors": [
+      "jdepend"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "maintainability",
+    "tags": [
+      "java",
+      "jdepend",
+      "architecture"
+    ],
+    "description": "Flags Java package cycles detected by JDepend analysis.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "JDEP-DISTANCE",
+    "band": 1,
+    "required_collectors": [
+      "jdepend"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "java",
+      "jdepend",
+      "architecture"
+    ],
+    "description": "Flags Java packages with distance from main sequence (D) above 0.5.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "JDEP-INSTABILITY",
+    "band": 1,
+    "required_collectors": [
+      "jdepend"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "performance",
+    "tags": [
+      "java",
+      "jdepend",
+      "architecture"
+    ],
+    "description": "Flags Java packages with high instability (I > 0.8) and low abstractness.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "network-policy-missing",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "kubernetes"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "kubernetes",
+      "network"
+    ],
+    "description": "Flags Kubernetes namespaces with no NetworkPolicy resources defined.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A05"
+    ]
+  },
+  {
+    "id": "probes-missing",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "kubernetes"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "health",
+      "probes"
+    ],
+    "description": "Flags Kubernetes containers missing livenessProbe or readinessProbe.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "resource-limits-missing",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "kubernetes"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "resource-management"
+    ],
+    "description": "Flags Kubernetes containers without resources.limits defined.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "non-root-container-violation",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [
+      "kubernetes"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "kubernetes",
+      "security"
+    ],
+    "description": "Flags Kubernetes containers without securityContext.runAsNonRoot=true.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A05"
+    ]
+  },
+  {
+    "id": "nodejs-callback-error-ignored",
+    "band": 1,
+    "required_collectors": [
+      "nodejs-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "nodejs",
+      "error-handling"
+    ],
+    "description": "Flags Node.js callbacks that receive an error parameter but never check or.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "nodejs-floating-promise",
+    "band": 1,
+    "required_collectors": [
+      "nodejs-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "nodejs",
+      "async",
+      "error-handling"
+    ],
+    "description": "Flags promise chains without .catch() that risk unhandled promise rejections.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "nodejs-promise-no-catch",
+    "band": 1,
+    "required_collectors": [
+      "nodejs-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "nodejs",
+      "async",
+      "error-handling"
+    ],
+    "description": "Flags .then() chains without .catch() error handling.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "nodejs-sync-fs-api",
+    "band": 1,
+    "required_collectors": [
+      "nodejs-ast"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "performance",
+    "tags": [
+      "nodejs",
+      "performance",
+      "async"
+    ],
+    "description": "Flags synchronous fs and child_process calls that block the Node.js event loop.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "otel-exporter-config",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [
+      "otel"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability"
+    ],
+    "description": "Flags OTel Collector configs where no production exporter is configured.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-fault-injection-tests",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "testing",
+      "resilience",
+      "chaos"
+    ],
+    "description": "Flags repos with resilience patterns but no fault-injection tests.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-file-exporter",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "ci"
+    ],
+    "description": "Flags repos without an OTel file exporter configured for CI trace capture.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-integration-test-coverage",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "testing",
+      "coverage",
+      "observability"
+    ],
+    "description": "Flags repos where API endpoints lack corresponding integration tests.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-pipeline-completeness",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [
+      "otel"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability"
+    ],
+    "description": "Flags OTel Collector configs where not all signal types (traces, metrics, logs).",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-resource-attrs",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "tracing"
+    ],
+    "description": "Flags repos without required OTel resource attributes.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-sampling",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [
+      "otel"
+    ],
+    "severity": "medium",
+    "category": "performance",
+    "tags": [
+      "otel",
+      "observability",
+      "performance"
+    ],
+    "description": "Flags OTel Collector configs without sampling or rate-limiting processors.",
+    "compliance_refs": [
+      "ISO 25010:Performance"
+    ]
+  },
+  {
+    "id": "otel-test-agent",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "testing"
+    ],
+    "description": "Flags repos where test profiles don't attach the OTel agent.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-test-observability",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "testing",
+      "observability"
+    ],
+    "description": "Flags test configs that don't produce OTel traces for dynamic analysis.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "otel-w3c-propagation",
+    "band": 1,
+    "required_collectors": [
+      "otel"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "otel",
+      "observability",
+      "tracing"
+    ],
+    "description": "Flags repos without W3C trace-context propagation configured.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ARCH-002",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "graceful-shutdown"
+    ],
+    "description": "Flags workloads missing preStop hooks or with insufficient.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ARCH-004",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "pdb"
+    ],
+    "description": "Flags multi-replica Deployments/StatefulSets with no matching PodDisruptionBudget.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ARCH-001",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "availability"
+    ],
+    "description": "Flags Deployment/StatefulSet resources running with a single replica, making.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ARCH-003",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "rollout"
+    ],
+    "description": "Flags workloads with missing or unsafe update/rollout strategy (e.g. Recreate.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-DEPS-001",
+    "band": 2,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "dependencies"
+    ],
+    "description": "Detects dependency declaration annotations on Kubernetes workloads for patch.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "PATCH-DEPS-002",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "dependencies"
+    ],
+    "description": "Detects shared-fate indicators across workloads (common volumes, configmaps,.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-DEPS-003",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "dependencies"
+    ],
+    "description": "Detects cross-ring dependency direction violations in patch deployment ordering.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ROLL-003",
+    "band": 2,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "patching",
+      "rollback",
+      "migrations"
+    ],
+    "description": "Detects migration tooling without corresponding rollback evidence.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "PATCH-HEALTH-001",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "probes"
+    ],
+    "description": "Checks readiness/liveness probes in the context of patching safety and rolling.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-HEALTH-003",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "probes"
+    ],
+    "description": "Checks startup probe presence for patching safety with slow-starting containers.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-HEALTH-004",
+    "band": 1,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "graceful-shutdown"
+    ],
+    "description": "Flags workloads with insufficient terminationGracePeriodSeconds for safe patching.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-HEALTH-002",
+    "band": 2,
+    "required_collectors": [
+      "k8s-manifest"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "kubernetes",
+      "patching",
+      "probes"
+    ],
+    "description": "Flags readiness probes that are likely trivial or overly fragile during patching.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ROLL-002",
+    "band": 1,
+    "required_collectors": [
+      "ci-artifact"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "rollback",
+      "ci"
+    ],
+    "description": "Checks that at least one CI pipeline has a rollback or revert stage.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-ROLL-001",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "patching",
+      "rollback",
+      "documentation"
+    ],
+    "description": "Checks for rollback/disaster-recovery documentation in the repository root.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "PATCH-SCOPE-001",
+    "band": 2,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "rollout"
+    ],
+    "description": "Detects patch class soak configuration for graduated rollouts.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-SCOPE-002",
+    "band": 2,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "security",
+    "tags": [
+      "patching",
+      "security"
+    ],
+    "description": "Detects accelerated cadence configuration for critical-security patches.",
+    "compliance_refs": [
+      "ISO 25010:Security"
+    ]
+  },
+  {
+    "id": "PATCH-TELEM-001",
+    "band": 2,
+    "required_collectors": [
+      "telemetry-config"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "observability",
+      "otel"
+    ],
+    "description": "Detects golden signal emission coverage (latency, traffic, errors, saturation) via.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-TELEM-002",
+    "band": 2,
+    "required_collectors": [
+      "telemetry-config"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "observability",
+      "otel"
+    ],
+    "description": "Detects mandatory label presence (service.name, service.version) in OTel resource.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-TELEM-003",
+    "band": 2,
+    "required_collectors": [
+      "telemetry-config"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "observability"
+    ],
+    "description": "Detects synthetic transaction configuration for proactive failure detection.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-TRAFFIC-001",
+    "band": 1,
+    "required_collectors": [
+      "service-mesh"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "traffic",
+      "service-mesh"
+    ],
+    "description": "Detects progressive traffic shifting configuration (canary/blue-green) in service.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-TRAFFIC-002",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "traffic",
+      "documentation"
+    ],
+    "description": "Detects failover/DR documentation in the repository root.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "PATCH-TRAFFIC-003",
+    "band": 1,
+    "required_collectors": [
+      "service-mesh"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "patching",
+      "traffic",
+      "service-mesh"
+    ],
+    "description": "Detects connection draining configuration in service mesh for graceful traffic.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "pii-in-log-statements",
+    "band": 2,
+    "required_collectors": [
+      "java-ast"
+    ],
+    "required_tech": [],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "java",
+      "pii",
+      "logging",
+      "llm"
+    ],
+    "description": "Flags log statements that emit PII fields (email, SSN, credit card) using regex and.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A01"
+    ]
+  },
+  {
+    "id": "proto-field-numbering",
+    "band": 1,
+    "required_collectors": [
+      "proto"
+    ],
+    "required_tech": [
+      "grpc"
+    ],
+    "severity": "high",
+    "category": "maintainability",
+    "tags": [
+      "grpc",
+      "protobuf",
+      "api"
+    ],
+    "description": "Flags protobuf messages where field number gaps exist without matching reserved.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "proto-method-comments",
+    "band": 2,
+    "required_collectors": [
+      "proto"
+    ],
+    "required_tech": [
+      "grpc"
+    ],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "grpc",
+      "protobuf",
+      "documentation"
+    ],
+    "description": "Flags gRPC service methods that lack preceding comment documentation.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "proto-service-versioning",
+    "band": 2,
+    "required_collectors": [
+      "proto"
+    ],
+    "required_tech": [
+      "grpc"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "grpc",
+      "protobuf",
+      "versioning"
+    ],
+    "description": "Flags gRPC services that lack version indicators in name or package.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "python-async-fire-and-forget",
+    "band": 1,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "python",
+      "async",
+      "concurrency"
+    ],
+    "description": "Flags asyncio.create_task() calls where the returned Task reference is not stored.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "python-broad-except-silent",
+    "band": 1,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "python",
+      "error-handling"
+    ],
+    "description": "Flags catch blocks that silently swallow Exception/BaseException without logging or.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "python-mutable-default",
+    "band": 1,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "python",
+      "correctness"
+    ],
+    "description": "Flags function definitions using mutable default arguments (list, dict, set).",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "python-package-subdivision",
+    "band": 2,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "python",
+      "package-structure",
+      "architecture",
+      "domain"
+    ],
+    "description": "Flags Python projects with flat or insufficiently subdivided package structures, detecting god packages with excessive class counts, single-depth hierarchies, and mixed domain concerns within packages.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "python-star-import",
+    "band": 1,
+    "required_collectors": [
+      "python-ast"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "python",
+      "imports"
+    ],
+    "description": "Flags wildcard imports (from x import *) that obscure dependencies and pollute.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "sample-readme-exists",
+    "band": 1,
+    "required_collectors": [
+      "repo-structure"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "maintainability",
+    "tags": [
+      "documentation",
+      "repo-structure"
+    ],
+    "description": "Verifies a README file exists at the repository root.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "skaffold-build-config",
+    "band": 1,
+    "required_collectors": [
+      "skaffold"
+    ],
+    "required_tech": [
+      "skaffold"
+    ],
+    "severity": "medium",
+    "category": "maintainability",
+    "tags": [
+      "skaffold",
+      "build",
+      "kubernetes"
+    ],
+    "description": "Flags Skaffold configs missing build sections or with weak tag policies.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "actuator-exposure-risk",
+    "band": 1,
+    "required_collectors": [
+      "spring-config"
+    ],
+    "required_tech": [
+      "spring_boot"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "java",
+      "spring",
+      "actuator"
+    ],
+    "description": "Flags Spring Boot actuator endpoints exposed without access restriction.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A01"
+    ]
+  },
+  {
+    "id": "logging-config-missing",
+    "band": 1,
+    "required_collectors": [
+      "spring-config"
+    ],
+    "required_tech": [
+      "spring_boot"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "java",
+      "spring",
+      "logging",
+      "observability"
+    ],
+    "description": "Flags Spring Boot apps without structured logging (JSON/logstash encoder).",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "spring-profile-misconfiguration",
+    "band": 1,
+    "required_collectors": [
+      "spring-config"
+    ],
+    "required_tech": [
+      "spring_boot"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "java",
+      "spring",
+      "configuration"
+    ],
+    "description": "Flags production Spring profiles with debug logging, in-memory databases, or.",
+    "compliance_refs": [
+      "ISO 25010:Security"
+    ]
+  },
+  {
+    "id": "structure-coupling-cluster",
+    "band": 1,
+    "required_collectors": [
+      "graphify"
+    ],
+    "required_tech": [],
+    "severity": "low",
+    "category": "structure",
+    "tags": [
+      "graphify",
+      "coupling",
+      "architecture"
+    ],
+    "description": "Flags pairs of communities with disproportionate inter-community coupling edges (calls, imports), suggesting hidden dependencies between modules.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "structure-god-node",
+    "band": 1,
+    "required_collectors": [
+      "graphify"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "structure",
+    "tags": [
+      "graphify",
+      "coupling",
+      "architecture"
+    ],
+    "description": "Flags entities whose total degree (in + out edges) exceeds 2x the median, indicating coupling hotspots that are difficult to change safely.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "structure-weak-boundary",
+    "band": 1,
+    "required_collectors": [
+      "graphify"
+    ],
+    "required_tech": [],
+    "severity": "medium",
+    "category": "structure",
+    "tags": [
+      "graphify",
+      "boundaries",
+      "architecture"
+    ],
+    "description": "Flags Leiden communities where cross-boundary edges exceed 40% of total edges, indicating leaky module boundaries.",
+    "compliance_refs": [
+      "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "terraform-iam-policy",
+    "band": 1,
+    "required_collectors": [
+      "terraform"
+    ],
+    "required_tech": [
+      "terraform"
+    ],
+    "severity": "critical",
+    "category": "security",
+    "tags": [
+      "terraform",
+      "iam",
+      "cloud"
+    ],
+    "description": "Flags IAM policies with wildcard (*) actions or resources in Terraform definitions.",
+    "compliance_refs": [
+      "ISO 25010:Security",
+      "OWASP:A01"
+    ]
+  },
+  {
+    "id": "terraform-provider-pinning",
+    "band": 1,
+    "required_collectors": [
+      "terraform"
+    ],
+    "required_tech": [
+      "terraform"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "terraform",
+      "supply-chain"
+    ],
+    "description": "Flags Terraform providers that lack version constraints, risking uncontrolled.",
+    "compliance_refs": [
+      "ISO 25010:Security"
+    ]
+  },
+  {
+    "id": "terraform-state-backend",
+    "band": 1,
+    "required_collectors": [
+      "terraform"
+    ],
+    "required_tech": [
+      "terraform"
+    ],
+    "severity": "high",
+    "category": "security",
+    "tags": [
+      "terraform",
+      "state"
+    ],
+    "description": "Flags Terraform repos that store state locally instead of using a remote backend.",
+    "compliance_refs": [
+      "ISO 25010:Security"
+    ]
+  }
+]

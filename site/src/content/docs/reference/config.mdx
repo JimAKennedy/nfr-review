@@ -1,6 +1,209 @@
 ---
 title: "Configuration"
-description: "Full nfr-review.yaml schema with defaults"
+description: "Full nfr-review.yaml schema with all fields, types, and defaults"
 ---
 
-Content coming in S04.
+nfr-review is configured via `nfr-review.yaml` in your project root. All fields
+are optional — an empty file or no file at all produces valid defaults.
+
+Generate a starter config with technology auto-detection:
+
+```bash
+nfr-review init ./my-project
+```
+
+## Full annotated example
+
+```yaml
+version: 1
+
+# Technology flags — auto-detected by `init`, override here
+tech:
+  java: true
+  python: true
+  kubernetes: true
+  dockerfile: true
+  otel: true
+
+# Rule selection
+rules:
+  skip: []                    # Rule IDs to exclude
+  include_only: null          # If set, ONLY these rules run (allowlist mode)
+
+# Collector selection
+collectors:
+  skip: []                    # Collector IDs to exclude
+
+# Fail the scan (exit code 2) if any finding meets or exceeds this severity
+severity_threshold: null      # null | low | medium | high | critical
+
+# Glob patterns for paths to exclude from analysis
+exclude_paths: []
+
+# Whether to skip test directories (true = exclude them)
+exclude_test_paths: true
+
+# Maximum dependency resolver iterations
+max_resolve_rounds: 2000
+
+# Paths treated as vendored/third-party (excluded from first-party analysis)
+dependency_paths:
+  - "vendor/*"
+  - "vendored/*"
+  - "third_party/*"
+  - "third-party/*"
+  - "thirdparty/*"
+  - "*.min.js"
+  - "*.min.css"
+
+# Filter findings by origin
+origin_filter: null           # null | first_party | dependency
+
+# OTLP trace file for Band 3 dynamic analysis
+otel_traces: null
+
+# LLM backend for Band 2 composite rules
+llm:
+  provider: anthropic         # anthropic | openai | claude-cli
+  model: claude-sonnet-4-6
+  base_url: null
+  api_key_env_var: ANTHROPIC_API_KEY
+
+# Scoring weights and deductions (ISO/IEC 25010 aligned)
+scoring:
+  category_weights:
+    security: 1.0
+    reliability: 1.0
+    performance: 1.0
+    maintainability: 1.0
+    OTEL: 1.0
+    structure: 1.0
+  severity_deductions:
+    critical: 15
+    high: 8
+    medium: 3
+    low: 1
+    info: 0
+  category_aliases:
+    observability: reliability
+    obs: reliability
+    ops: maintainability
+
+# Declarative performance targets for Band 3 quantitative rules
+nfr_targets:
+  latency_p95_ms:
+    "GET /api/users": 200
+    "POST /api/orders": 500
+  throughput_rps_min: null
+  custom_thresholds: {}
+
+# Design-change detection thresholds (percentage change to trigger a signal)
+design_change:
+  thresholds:
+    class_count: 20.0
+    jdepend_instability: 15.0
+    dormant_class_count: 25.0
+    dependency_count: 30.0
+    test_coverage: 5.0
+    adr_count: 1.0
+    api_endpoint_count: 1.0
+    bounded_context_count: 1.0
+    integration_point_count: 1.0
+    deployment_service_count: 1.0
+    schema_migration_count: 1.0
+
+# Graphify structural analysis integration
+graphify:
+  query_enabled: true
+  mcp_enabled: false
+  graph_path: null
+```
+
+---
+
+## Section reference
+
+### `tech`
+
+A dictionary of technology flags. When `true`, collectors and rules for that
+technology are activated. Auto-detected by `nfr-review init`.
+
+Common keys: `java`, `python`, `go`, `csharp`, `nodejs`, `cpp`, `dockerfile`,
+`kubernetes`, `helm`, `istio`, `terraform`, `skaffold`, `otel`, `spring_boot`,
+`grpc`, `apim`, `gatling`.
+
+### `rules`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip` | list[str] | `[]` | Rule IDs to exclude from the scan |
+| `include_only` | list[str] \| null | `null` | If set, **only** these rules run (allowlist mode) |
+
+### `collectors`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip` | list[str] | `[]` | Collector IDs to exclude |
+
+### `llm`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `provider` | string | `anthropic` | LLM provider: `anthropic`, `openai`, or `claude-cli` |
+| `model` | string | `claude-sonnet-4-6` | Model identifier |
+| `base_url` | string \| null | `null` | Custom API endpoint (for proxies or local models) |
+| `api_key_env_var` | string | `ANTHROPIC_API_KEY` | Environment variable holding the API key |
+
+**Environment variable overrides:** `NFR_LLM_PROVIDER`, `NFR_LLM_MODEL`, `NFR_LLM_BASE_URL`
+override the corresponding YAML fields.
+
+### `scoring`
+
+Controls the design maturity score computation.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `category_weights` | dict[str, float] | all `1.0` | Weight multiplier per category |
+| `severity_deductions` | dict[str, int] | critical=15, high=8, medium=3, low=1, info=0 | Points deducted per finding at each severity |
+| `category_aliases` | dict[str, str] | observability→reliability, obs→reliability, ops→maintainability | Maps alternative category names to canonical ones |
+
+Scoring supports **two-level merge**: a central config provides defaults, and each
+repo can override specific weights via its own `nfr-review.yaml`. Only the keys you
+specify are overridden; others keep their central values.
+
+### `nfr_targets`
+
+Declarative performance targets for Band 3 quantitative rules (requires OTel traces).
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `latency_p95_ms` | dict[str, int] | `{}` | P95 latency targets per HTTP route (ms) |
+| `throughput_rps_min` | int \| null | `null` | Minimum throughput in requests per second |
+| `custom_thresholds` | dict[str, any] | `{}` | Additional thresholds for custom rules |
+
+### `design_change`
+
+Percentage thresholds for design-change detection signals. A structural metric must
+change by more than this percentage between baselines to trigger a signal.
+
+| Metric | Default | What it tracks |
+|--------|---------|---------------|
+| `class_count` | 20% | Classes added/removed |
+| `jdepend_instability` | 15% | Package instability shift |
+| `dormant_class_count` | 25% | Underused class count change |
+| `dependency_count` | 30% | Dependencies added/removed |
+| `test_coverage` | 5% | Coverage delta |
+| `adr_count` | 1 (absolute) | New architecture decision records |
+| `api_endpoint_count` | 1 (absolute) | API surface growth |
+| `bounded_context_count` | 1 (absolute) | Service boundary changes |
+| `integration_point_count` | 1 (absolute) | New integration points |
+| `deployment_service_count` | 1 (absolute) | Deployment topology changes |
+| `schema_migration_count` | 1 (absolute) | New schema migrations |
+
+### `graphify`
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `query_enabled` | bool | `true` | Enable structural graph queries |
+| `mcp_enabled` | bool | `false` | Enable MCP server integration for graph queries |
+| `graph_path` | string \| null | `null` | Custom path to the Graphify database |

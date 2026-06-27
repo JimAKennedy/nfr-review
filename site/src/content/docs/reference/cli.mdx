@@ -1,6 +1,234 @@
 ---
 title: "CLI Reference"
-description: "All commands, flags, and exit codes"
+description: "All commands, flags, and exit codes for the nfr-review CLI"
 ---
 
-Content coming in S04.
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success — scan completed without threshold violations |
+| `1` | Recoverable failure — bad target path, config error, engine error, unknown rule |
+| `2` | Threshold exceeded — at least one finding has severity ≥ the configured threshold |
+
+## Global Patterns
+
+Several options appear on most commands:
+
+| Flag | Description |
+|------|-------------|
+| `-v, --verbose` | Increase verbosity (stack: `-v` = INFO, `-vv` = DEBUG) |
+| `-q, --quiet` | Suppress warnings — show only errors |
+| `--log-file PATH` | Write diagnostics to a file instead of stderr |
+| `--config PATH` | Path to `nfr-review.yaml` (default: `./nfr-review.yaml` if present) |
+| `--exclude-tests / --include-tests` | Exclude or include test directories (default: exclude) |
+
+---
+
+## `nfr-review run`
+
+Run an NFR scan against a target repository.
+
+```bash
+nfr-review run ./my-project --csv findings.csv --score
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `TARGET` | Path | *(required)* | Repository directory to scan |
+| `--csv PATH` | Path | `{repo}-nfr-review.csv` | Findings CSV output path |
+| `--jsonl PATH` | Path | `{repo}-nfr-review.jsonl` | Run record JSONL output path |
+| `--sarif PATH` | Path | — | SARIF 2.1.0 findings output path |
+| `--baseline PATH` | Path | — | Prior JSONL file; suppress known findings, exit on regressions |
+| `--score` | Flag | off | Compute and display design maturity score |
+| `--workers N` | Int | `1` | Parallel collector threads (`1` = sequential) |
+| `--otel-traces PATH` | Path | — | OTLP JSON/NDJSON trace file for Band 3 dynamic analysis |
+| `--collector / --no-collector` | Flag | off | Start an OTel Collector subprocess for trace capture |
+| `--framework NAME` | Choice | — | Filter to rules mapped to a compliance framework: `pci-dss`, `hipaa`, `nist`, `sox`, `cis`, `psd2`, `gdpr`, `iso27001` |
+| `--design-baseline-dir PATH` | Path | — | Directory for structural baseline snapshots (save on first run, diff on rerun) |
+| `--force-standard-config` | Flag | off | Ignore project design-change thresholds; use built-in defaults |
+| `--origin NAME` | Choice | — | Filter findings by origin: `first_party` or `dependency` |
+
+---
+
+## `nfr-review list-rules`
+
+List all registered rules.
+
+```bash
+nfr-review list-rules
+nfr-review list-rules --format json > rules.json
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format` | Choice | `text` | Output format: `text` (table) or `json` (array of objects) |
+
+---
+
+## `nfr-review explain`
+
+Print the full description and metadata for a single rule.
+
+```bash
+nfr-review explain dockerfile-secret-leakage
+```
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `RULE_ID` | String | Rule identifier to explain |
+
+---
+
+## `nfr-review hygiene`
+
+Run a repository hygiene audit covering documentation, licensing, CI automation,
+build readiness, code debt, community health, and privacy signals.
+
+```bash
+nfr-review hygiene ./my-project
+nfr-review hygiene --list-checks
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `TARGET` | Path | *(required unless `--list-checks`)* | Repository directory |
+| `--list-checks` | Flag | off | List available hygiene checks and exit |
+| `--output-dir PATH` | Path | `.` | Directory for CSV/JSONL output files |
+| `--format` | Choice | `both` | Output format: `csv`, `jsonl`, or `both` |
+| `--severity-threshold` | Choice | — | Exit code 2 if any finding meets or exceeds this severity |
+| `--category` | String | — | Comma-separated category names to include |
+
+---
+
+## `nfr-review report`
+
+Run both NFR and hygiene scans and produce a timestamped report bundle
+(Markdown, optional PDF and HTML).
+
+```bash
+nfr-review report ./my-project --html --output-dir reports/
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `TARGET` | Path | *(required)* | Repository directory |
+| `--output-dir PATH` | Path | `reports` | Report output directory |
+| `--html` | Flag | off | Produce a self-contained HTML report |
+| `--no-pdf` | Flag | off | Skip PDF generation |
+| `--no-summary` | Flag | off | Skip LLM executive summary section |
+| `--no-tests` | Flag | off | Skip pytest execution |
+| `--no-deps` | Flag | off | Skip dependency analysis |
+| `--no-diagrams` | Flag | off | Suppress Mermaid diagram sections |
+| `--no-score` | Flag | off | Skip design maturity score computation |
+| `--test-timeout N` | Int | `900` | Seconds to wait for pytest before timing out |
+| `--sarif PATH` | Path | — | SARIF 2.1.0 output path |
+| `--max-resolve-rounds N` | Int | `2000` | Maximum dependency resolver iterations |
+| `--workers N` | Int | `1` | Parallel collector threads |
+| `--otel-traces PATH` | Path | — | OTLP trace file for Band 3 dynamic analysis |
+| `--collector / --no-collector` | Flag | off | Start OTel Collector subprocess |
+| `--framework NAME` | Choice | — | Filter to a specific compliance framework |
+| `--origin NAME` | Choice | — | Filter findings: `first_party` or `dependency` |
+
+---
+
+## `nfr-review deps`
+
+Analyse the dependency tree and produce upgrade recommendations.
+
+```bash
+nfr-review deps ./my-project --output deps-report.md
+nfr-review deps ./my-project --dot deps.dot --render-diagrams
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `TARGET` | Path | *(required)* | Repository directory |
+| `--no-tree` | Flag | off | Skip transitive resolution (faster, shallower analysis) |
+| `--output PATH` | Path | — | Write Markdown report to file |
+| `--dot PATH` | Path | — | Write Graphviz DOT dependency graph to file |
+| `--render-diagrams` | Flag | off | Render DOT to SVG (requires `graphviz` installed) |
+| `--max-resolve-rounds N` | Int | `2000` | Maximum resolver iterations |
+
+---
+
+## `nfr-review issues`
+
+File or sync GitHub issues for NFR findings.
+
+### `issues scan`
+
+Run an NFR scan and file GitHub issues for high-severity findings.
+
+```bash
+nfr-review issues scan ./my-project --dry-run
+nfr-review issues scan ./my-project --repo owner/repo --severity-threshold medium
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `TARGET` | Path | *(required)* | Repository directory |
+| `--dry-run` | Flag | off | Preview issues without filing them |
+| `--repo` | String | *(auto-detect)* | GitHub `owner/repo` |
+| `--severity-threshold` | Choice | `high` | Minimum severity to file as an issue |
+
+### `issues sync`
+
+Sync GitHub issues from a JSONL scan file — creates new issues, updates existing
+ones, and optionally closes resolved findings.
+
+```bash
+nfr-review issues sync scan.jsonl --repo owner/repo --dry-run
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `JSONL_PATH` | Path | *(required)* | JSONL scan file path |
+| `--repo` | String | *(required unless `--dry-run`)* | GitHub `owner/repo` |
+| `--extra-labels` | String | — | Comma-separated labels to add (e.g. `team:platform`) |
+| `--rag-min` | Choice | `amber` | Minimum RAG level: `red`, `amber`, `green` |
+| `--severity-threshold` | Choice | `high` | Minimum severity to file |
+| `--first-run-cap N` | Int | `25` | Maximum issues to create on first run |
+| `--close-resolved / --no-close-resolved` | Flag | on | Close issues when their findings disappear |
+| `--dry-run` | Flag | off | Preview decisions without GitHub API calls |
+
+---
+
+## `nfr-review init`
+
+Detect technologies in a repository and generate an `nfr-review.yaml` configuration file.
+
+```bash
+nfr-review init ./my-project
+```
+
+---
+
+## `nfr-review baseline`
+
+Manage OTel trace baselines for runtime comparison.
+
+### `baseline create`
+
+Extract interaction fingerprints from OTel trace files to build a UAT baseline.
+
+### `baseline diff`
+
+Compare production traces against a previously created baseline.
+
+---
+
+## `nfr-review monitor`
+
+Start a live OTLP HTTP receiver that compares incoming traces against a baseline
+in real time.
+
+---
+
+## `nfr-review version`
+
+Print the installed nfr-review version.
+
+```bash
+nfr-review version
+```
