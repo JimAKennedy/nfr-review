@@ -1,6 +1,155 @@
 ---
 title: "Compliance Matrix"
-description: "Rules mapped to SOC2, HIPAA, PCI-DSS, and ISO 27001 frameworks"
+description: "Rules mapped to SOC 2, ISO 27001, PCI DSS, and NIST 800-53 frameworks"
 ---
 
-Content coming in S04.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review maps findings to four compliance frameworks so teams can use scan
+results as evidence in audits. The compliance filter narrows output to only
+the rules relevant to a specific standard.
+
+## Supported frameworks
+
+| Framework | Slug | Version |
+|-----------|------|---------|
+| SOC 2 Type II | `soc2` | Trust Services Criteria |
+| ISO 27001 | `iso27001` | 2022 edition |
+| PCI DSS | `pci-dss` | v4.0 |
+| NIST 800-53 | `nist-800-53` | Rev 5 |
+
+## Using compliance filtering
+
+Filter scan output to a specific framework:
+
+```bash
+# Show only SOC 2-relevant findings
+nfr-review report ./my-repo --compliance soc2
+
+# Multiple frameworks
+nfr-review report ./my-repo --compliance soc2,pci-dss
+```
+
+Findings not mapped to the requested framework are excluded from the report.
+The compliance context appears in the finding metadata and SARIF output.
+
+## Mapped rules
+
+The compliance matrix maps **68 rules** across all four frameworks. Rules are
+grouped by domain below.
+
+### CI/CD and build pipeline
+
+| Rule ID | Description |
+|---------|-------------|
+| `ci-test-stage-missing` | CI pipeline lacks a test stage |
+| `ci-security-scan-missing` | CI pipeline lacks a SAST/security scan |
+
+### Kubernetes security
+
+| Rule ID | Description |
+|---------|-------------|
+| `probes-missing` | Health probes (liveness/readiness) not configured |
+| `resource-limits-missing` | CPU/memory resource limits not set |
+| `network-policy-missing` | No NetworkPolicy restricting pod traffic |
+| `non-root-container-violation` | Container runs as root |
+
+### Docker security
+
+| Rule ID | Description |
+|---------|-------------|
+| `dockerfile-base-pinning` | Base image not pinned to digest or specific tag |
+| `dockerfile-secret-leakage` | Secrets passed via build args or ENV |
+| `dockerfile-user-directive` | No USER directive (runs as root) |
+| `dockerfile-multistage` | Missing multi-stage build (larger attack surface) |
+| `dockerfile-k8s-user-conflict` | Dockerfile USER conflicts with K8s securityContext |
+| `dockerfile-k8s-image-drift` | Image in Dockerfile differs from K8s manifest |
+
+### Java and Spring Boot
+
+| Rule ID | Description |
+|---------|-------------|
+| `health-endpoint-missing` | No health check endpoint configured |
+| `resilience-annotation-missing` | Missing resilience annotations (retry, circuit breaker) |
+| `exception-handling-antipattern` | Broad exception catching or swallowing |
+| `thread-pool-misconfiguration` | Thread pool sizing or queue issues |
+| `actuator-exposure-risk` | Spring Actuator endpoints exposed without auth |
+| `logging-config-missing` | No structured logging configuration |
+| `spring-profile-misconfiguration` | Profile-specific config issues |
+
+### Security and API
+
+| Rule ID | Description |
+|---------|-------------|
+| `pii-in-log-statements` | PII detected in log statements |
+| `apim-auth-policy-missing` | API Management missing authentication policy |
+| `apim-rate-limit-missing` | API Management missing rate limiting |
+
+### Architecture
+
+| Rule ID | Description |
+|---------|-------------|
+| `adr-lifecycle-gap` | ADR missing required fields or stale |
+| `architectural-drift-from-adr` | Implementation drifts from ADR decisions |
+
+### C++ build quality
+
+| Rule ID | Description |
+|---------|-------------|
+| `cmake-build-config` | CMake configuration issues |
+| `cpp-clang-format` | No clang-format configuration |
+| `cpp-clang-tidy` | No clang-tidy configuration |
+| `cpp-raw-memory` | Raw pointer usage (prefer smart pointers) |
+| `cpp-sanitizer-ci` | No sanitizer (ASan/TSan/UBSan) in CI |
+
+### Dependency management
+
+| Rule ID | Description |
+|---------|-------------|
+| `dep-freshness` | Dependencies past staleness threshold |
+| `dep-upgrade-path` | No viable upgrade path for outdated dependency |
+
+### Observability
+
+| Rule ID | Description |
+|---------|-------------|
+| `otel-exporter-config` | OTel exporter misconfiguration |
+| `otel-pipeline-completeness` | Incomplete OTel pipeline (missing stages) |
+| `otel-sampling` | Sampling configuration issues |
+| `correlation-id-missing` | No correlation/trace ID propagation |
+
+### Hygiene rules
+
+All 27 hygiene rules are mapped to the compliance frameworks:
+
+- **HYG-DOC-001/002/003** — Documentation completeness
+- **HYG-CI-001 through 007** — CI automation maturity
+- **HYG-COM-001 through 006** — Community health files
+- **HYG-BLD-001 through 005** — Build system readiness
+- **HYG-PRV-001/002/003** — Privacy and PII
+- **HYG-LIC-001 through 004** — Licensing compliance
+
+### Patching and upgrade rules
+
+| Rule prefix | Count | Description |
+|-------------|-------|-------------|
+| `PATCH-SCOPE-*` | 2 | Patch scope and boundary compliance |
+| `PATCH-ARCH-*` | 4 | Architectural conformance during patching |
+| `PATCH-HEALTH-*` | 4 | Health check maintenance during patches |
+| `PATCH-TRAFFIC-*` | 3 | Traffic management during rollouts |
+| `PATCH-DEPS-*` | 3 | Dependency hygiene during updates |
+| `PATCH-TELEM-*` | 3 | Telemetry preservation during changes |
+| `PATCH-ROLL-*` | 3 | Rollback capability verification |
+
+<Aside type="note">
+All four frameworks map to the same set of 68 rules. The framework slug
+provides context for audit reporting — the rules themselves don't change
+behaviour based on which framework is selected.
+</Aside>
+
+## SARIF compliance metadata
+
+When compliance filtering is active and SARIF output is enabled, each result
+includes the framework context in the `properties` field, making it easy to
+correlate findings with specific compliance controls in GitHub Security or
+other SARIF consumers.

@@ -1,6 +1,188 @@
 ---
 title: "Design Change Detection"
-description: "Baselines, structural drift, and threshold tuning"
+description: "Track structural drift between scans with baseline snapshots and configurable thresholds"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review can track **structural drift** between review runs by comparing
+baseline snapshots. When the number of classes jumps, a new API endpoint
+appears, or a dependency is added, the change surfaces as a finding — helping
+teams catch architectural shifts early, before they become entrenched.
+
+## Quick start
+
+```bash
+# First run — creates the baseline snapshot
+nfr-review run ./my-repo --design-baseline-dir ./baselines
+
+# ... make changes to the codebase ...
+
+# Second run — diffs against the baseline, reports changes
+nfr-review run ./my-repo --design-baseline-dir ./baselines
+```
+
+The first run saves a `<repo>-structural-baseline.json` file:
+
+```
+No previous structural baseline found, saving initial:
+  ./baselines/my-repo-structural-baseline.json
+```
+
+Subsequent runs diff the current scan against the saved baseline. If nothing
+changed, you see:
+
+```
+No structural changes since last baseline.
+```
+
+## How it works
+
+1. **Snapshot** — Each scan extracts numeric and set metrics from evidence
+   (class counts, dependency lists, API endpoints) into a `StructuralBaseline`.
+2. **Diff** — The engine compares the new snapshot against the previous
+   baseline per metric, producing `NumericDelta` (value changed) and
+   `SetDelta` (items added/removed) records.
+3. **Threshold filter** — Deltas below configured thresholds are suppressed.
+   Numeric thresholds are minimum absolute percent change; set thresholds are
+   minimum total items added + removed.
+4. **Findings** — Surviving deltas become `design-change-trigger` findings
+   with severity scaled by magnitude.
+5. **Save** — The new snapshot always overwrites the baseline so the next run
+   diffs against the latest state.
+
+## Detected signals
+
+nfr-review extracts metrics across seven architectural dimensions using
+dedicated signal extractors.
+
+### Numeric metrics
+
+| Category | Metric | What it detects |
+|----------|--------|-----------------|
+| `structure` | `class_count` | Total classes/structs across all languages |
+| `structure` | `dormant_class_count` | Classes with no inheritance or nesting links |
+| `jdepend` | `jdepend_instability` | Max instability (I) across Java packages |
+| `dependencies` | `dependency_count` | Direct dependency count |
+| `coverage` | `test_coverage` | Line coverage percentage |
+| `adrs` | `adr_count` | Number of ADR documents |
+| `api_surface` | `api_endpoint_count` | Proto RPCs + OpenAPI endpoints |
+| `bounded_context` | `bounded_context_count` | Distinct bounded contexts |
+| `deployment_topology` | `deployment_service_count` | Helm charts, K8s resources, Terraform modules |
+| `schema_migration` | `schema_migration_count` | Migration tools + migration files |
+
+### Set metrics
+
+| Category | Metric | What it tracks |
+|----------|--------|---------------|
+| `dependencies` | `dependency_names` | Direct dependency names |
+| `adrs` | `adr_titles` | ADR document titles |
+| `adrs` | `superseded_adrs` | ADRs marked superseded/deprecated/replaced |
+| `api_surface` | `api_endpoints` | `Service.Method` (proto), `METHOD /path` (OpenAPI) |
+| `bounded_context` | `bounded_contexts` | Context names from package structure |
+| `deployment_topology` | `deployment_services` | `helm:myapp`, `k8s:Deployment`, `terraform:vpc` |
+| `schema_migration` | `schema_migrations` | `tool:flyway`, `file:db/migration/V2__add_column.sql` |
+
+## Threshold configuration
+
+Default thresholds are built in. Override them in `nfr-review.yaml`:
+
+```yaml
+design_change:
+  thresholds:
+    class_count: 20.0           # minimum % change to trigger
+    jdepend_instability: 15.0
+    dormant_class_count: 25.0
+    dependency_count: 30.0
+    test_coverage: 5.0
+    adr_count: 1.0
+    api_endpoint_count: 1.0
+    bounded_context_count: 1.0
+    deployment_service_count: 1.0
+    schema_migration_count: 1.0
+```
+
+<Aside type="caution">
+The `thresholds` dict is replaced entirely when you override it. Include every
+threshold you want active — omitted keys pass through unfiltered, meaning any
+change at all surfaces as a finding.
+</Aside>
+
+To ignore project overrides and use built-in defaults:
+
+```bash
+nfr-review run ./my-repo \
+  --design-baseline-dir ./baselines \
+  --force-standard-config
+```
+
+## Severity scaling
+
+Findings from design-change detection use `rule_id: design-change-trigger`
+and `rag: amber`. Severity is scaled by magnitude:
+
+**Numeric changes:**
+
+| Change magnitude | Severity |
+|-----------------|----------|
+| >= 50% | `high` |
+| >= 20% | `medium` |
+| < 20% | `low` |
+
+**Set changes:**
+
+| Items added/removed | Severity |
+|--------------------|----------|
+| >= 5 | `high` |
+| >= 3 | `medium` |
+| < 3 | `low` |
+
+## Output example
+
+A diff summary prints to stderr when changes are detected:
+
+```
+Design Change Summary
+=====================
+
+[structure]
+  class_count: 42 -> 55 (+13) (+31.0%)
+
+[dependencies]
+  dependency_names added: spring-boot-starter-kafka, micrometer-core
+```
+
+Each change also appears as a finding in CSV, JSONL, and SARIF output with a
+`pattern_tag` of `design_change:<metric_name>` for filtering and alerting.
+
+## Baseline storage
+
+Baselines are stored in the directory passed to `--design-baseline-dir`:
+
+```
+baselines/my-service-structural-baseline.json
+```
+
+The file is a versioned JSON document:
+
+```json
+{
+  "version": 1,
+  "created_at": "2026-06-18T12:00:00Z",
+  "source_repo": "my-service",
+  "metrics": {
+    "structure": {
+      "numeric_metrics": { "class_count": { "value": 42.0 } },
+      "set_metrics": {}
+    }
+  }
+}
+```
+
+The baseline is overwritten on every run. To keep history, commit baseline
+files to version control or archive them as CI artifacts.
+
+## Next
+
+The next chapter covers advanced features — parallel execution, graph
+analysis, production monitoring, and LLM integration.

@@ -1,6 +1,126 @@
 ---
 title: "Filing GitHub Issues"
-description: "Automatically filing findings as GitHub issues"
+description: "Automatically creating, updating, and closing issues from scan findings"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review can automatically **create, update, and close** GitHub issues from
+scan findings. This turns findings into tracked work items that integrate
+with your existing project management.
+
+## Enabling issue sync
+
+### In CI (recommended)
+
+Use the GitHub Action with `create-issues: "true"`:
+
+```yaml
+- name: Run NFR Review
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    create-issues: "true"
+    rag-min: "amber"           # create issues for amber + red
+    first-run-cap: "25"        # limit first-time issue creation
+    extra-labels: "nfr-review"
+```
+
+### From the CLI
+
+Use the `issues` command directly:
+
+```bash
+nfr-review issues ./my-repo \
+  --rag-min amber \
+  --first-run-cap 25
+```
+
+<Aside type="note">
+Issue sync requires `GITHUB_TOKEN` with `issues: write` permission. In GitHub
+Actions, this is available automatically via `${{ github.token }}`.
+</Aside>
+
+## How issue sync works
+
+### New findings create issues
+
+When a finding has no matching open issue, nfr-review creates one with:
+- **Title** — rule ID and summary
+- **Body** — severity, evidence location, recommendation, and compliance refs
+- **Labels** — severity, category, and any `extra-labels` you configured
+
+### Existing findings update issues
+
+If a finding already has a matching open issue, the issue body is updated
+with the latest evidence. The issue stays open.
+
+### Resolved findings close issues
+
+When a finding disappears from the scan (the code was fixed), nfr-review
+closes the corresponding issue with a comment explaining it was resolved.
+
+## Controlling issue creation
+
+### RAG minimum
+
+Set `rag-min` to control which findings create issues:
+
+| Setting | Issues created for |
+|---------|-------------------|
+| `"red"` (default) | Red findings only |
+| `"amber"` | Red + amber findings |
+
+Green findings never create issues.
+
+### First-run cap
+
+On first adoption, a scan may produce dozens of findings. The `first-run-cap`
+limits how many issues are created in the first run:
+
+```yaml
+first-run-cap: "25"   # create at most 25 issues on first scan
+```
+
+Subsequent runs have no cap — only new findings create issues, which is
+typically a small number.
+
+### Labels
+
+Add custom labels for project management integration:
+
+```yaml
+extra-labels: "team:platform,sprint:23,priority:p2"
+```
+
+Labels are comma-separated. nfr-review also adds severity and category
+labels automatically.
+
+## Triage workflow
+
+A suggested workflow for managing nfr-review issues:
+
+1. **Nightly scan** creates and updates issues automatically
+2. **Team triage** — review new issues weekly, assign owners
+3. **Fix and verify** — fixes close issues on the next scan
+4. **Suppress** — for findings that aren't actionable, suppress the rule in
+   config rather than closing the issue manually (it will reopen on the next
+   scan)
+
+## Preventing issue churn
+
+If a rule creates issues that aren't relevant to your project:
+
+```yaml
+# nfr-review.yaml
+rules:
+  skip:
+    - rule-id-to-suppress
+```
+
+This prevents the finding from appearing in scans, so no issue is created.
+
+<Aside type="caution">
+Don't close nfr-review issues manually — they'll reopen on the next scan
+unless you suppress the rule in config or fix the underlying issue.
+</Aside>

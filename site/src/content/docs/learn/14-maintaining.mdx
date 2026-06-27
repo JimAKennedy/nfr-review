@@ -1,6 +1,191 @@
 ---
 title: "Maintaining nfr-review"
-description: "Adding rules, updating metadata, and managing regression snapshots"
+description: "Keeping baselines current, managing upgrades, and ongoing quality tracking"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+Once nfr-review is integrated into your workflow, ongoing maintenance ensures
+you get the most value from it. This chapter covers baseline management,
+score trending, handling rule updates, and version upgrades.
+
+## Baseline management
+
+### Finding baselines
+
+Finding baselines track known issues so you can focus on regressions. Keep
+them current by refreshing after each merge:
+
+```bash
+# Nightly CI refreshes the baseline automatically
+# (see the nightly workflow in the CI/CD chapter)
+
+# Manual refresh
+nfr-review report ./my-repo --format jsonl -o baseline/
+```
+
+<Aside type="tip">
+Store baselines as CI artifacts with 90-day retention rather than committing
+them to version control. They change frequently and the JSONL files can be
+large.
+</Aside>
+
+### Design-change baselines
+
+Design-change baselines are smaller (just metric snapshots) and can be
+committed to version control:
+
+```bash
+# Commit baselines for history tracking
+git add baselines/my-repo-structural-baseline.json
+git commit -m "Update design-change baseline"
+```
+
+This lets you diff baselines across branches and track when architectural
+shifts were introduced.
+
+## Score trending
+
+Track your maturity score over time to measure improvement:
+
+1. **Save JSONL output from each nightly scan** — the score metadata is in the
+   `record_type: score` record
+2. **Extract the overall score** for dashboards:
+   ```bash
+   jq -r 'select(.record_type == "score") | .overall' report.jsonl
+   ```
+3. **Set CI gates** based on score direction:
+   ```yaml
+   # Fail if score dropped by more than 5 points
+   - name: Check score regression
+     run: |
+       CURRENT=$(jq -r 'select(.record_type == "score") | .overall' report.jsonl)
+       BASELINE=$(jq -r 'select(.record_type == "score") | .overall' baseline/report.jsonl)
+       DELTA=$(echo "$CURRENT - $BASELINE" | bc)
+       if (( $(echo "$DELTA < -5" | bc -l) )); then
+         echo "Score regressed by $DELTA points"
+         exit 2
+       fi
+   ```
+
+## Handling rule updates
+
+When nfr-review adds new rules in an update:
+
+### New findings from new rules
+
+New rules may flag issues that weren't detected before. This is expected
+behaviour — not a regression. To handle this smoothly:
+
+1. **Run a full scan** after upgrading to see what's new
+2. **Refresh your baseline** so the new findings become the known state
+3. **Triage new findings** — some may be genuine issues worth fixing, others
+   may need config tuning
+
+### Suppressing rules
+
+If a new rule doesn't apply to your project, suppress it in config:
+
+```yaml
+# nfr-review.yaml
+rules:
+  skip:
+    - rule-id-to-suppress
+```
+
+### Adjusting severity
+
+Override the default severity for rules that don't match your risk profile:
+
+```yaml
+rules:
+  overrides:
+    some-rule-id:
+      severity: low  # downgrade from medium
+```
+
+## Version upgrades
+
+### Minor upgrades (0.x.y → 0.x.z)
+
+Minor versions add rules, fix false positives, and improve collectors. They
+should not break existing workflows:
+
+```bash
+pip install --upgrade nfr-review
+```
+
+After upgrading:
+1. Run your test suite to verify nothing broke
+2. Run a scan and compare findings against your baseline
+3. Refresh the baseline once you've triaged any new findings
+
+### Major upgrades
+
+Major versions may change config schema, output formats, or rule behaviour.
+Check the changelog for migration steps:
+
+```bash
+# Check what changed
+pip install --upgrade nfr-review
+nfr-review version
+```
+
+<Aside type="caution">
+If you use scoring for CI gates or trend tracking, test the upgrade in a
+branch first. Scoring formula changes in a major version can shift scores
+without any code changes.
+</Aside>
+
+## Regression snapshots
+
+If you maintain custom rules or contribute to nfr-review, regression
+snapshots ensure that rule changes don't silently alter output on known
+repositories:
+
+```bash
+# Refresh snapshots after intentional rule changes
+python scripts/refresh_snapshots.py
+
+# Run regression tests
+python -m pytest tests/ -m regression --timeout=600
+```
+
+Regression tests clone a set of pinned public repositories and compare
+scan output against stored JSONL snapshots. They run nightly in CI — not
+on every PR — because they take several minutes.
+
+## Monitoring your pipeline
+
+Keep your nfr-review pipeline healthy:
+
+- **Check CI logs** for collector warnings — a collector that silently stops
+  producing evidence means rules depending on it get skipped
+- **Watch rules coverage** in reports — a drop in coverage means fewer rules
+  ran, usually due to missing collectors or tech detection changes
+- **Review skipped rules** in verbose output — `nfr-review run -v` lists
+  every rule that was skipped and why
+
+## Configuration versioning
+
+If multiple teams use nfr-review with shared config, version the config
+alongside the baseline:
+
+```
+project-root/
+  nfr-review.yaml        # shared config
+  baselines/
+    repo-baseline.jsonl   # or as CI artifact
+```
+
+This ensures everyone runs the same rules with the same weights, and
+score comparisons across teams are meaningful.
+
+## Summary
+
+The learn path is complete. For quick-reference material, see:
+
+- [CLI Reference](/reference/cli) — all commands and flags
+- [Configuration](/reference/config) — full config schema
+- [Rules Catalogue](/reference/rules) — all 125+ rules with metadata
+- [Recipes](/recipes/interpreting-reports) — task-oriented guides

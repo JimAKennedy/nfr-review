@@ -5,6 +5,7 @@ description: "FieldRule anatomy, RAG model, severity, and confidence"
 
 import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 import CodeSnippet from '../../../components/CodeSnippet.astro';
+import FindingSample from '../../../components/FindingSample.astro';
 
 Rules are the second phase of the pipeline. Each rule examines evidence from
 collectors and emits **findings** — structured observations about non-functional
@@ -72,6 +73,32 @@ Every finding has a RAG (Red / Amber / Green) status:
 Green findings are positive signals — they confirm that a best practice is
 in place. Reports include green findings so reviewers can see what's working,
 not just what's broken.
+
+### Example findings
+
+<FindingSample
+  ruleId="dockerfile-secret-leakage"
+  severity="red"
+  title="Secret leaked via COPY instruction"
+  location="Dockerfile:14"
+  detail="The file .env is copied into the image. Secrets in environment files will be baked into the image layer and visible to anyone with access to the image."
+/>
+
+<FindingSample
+  ruleId="k8s-resource-limits"
+  severity="amber"
+  title="Container missing memory limit"
+  location="k8s/deployment.yaml:28"
+  detail="No resources.limits.memory set on container 'api'. Without memory limits, a single pod can exhaust node memory and trigger OOM kills across workloads."
+/>
+
+<FindingSample
+  ruleId="java-health-check"
+  severity="green"
+  title="Health endpoint configured"
+  location="src/main/resources/application.yml:12"
+  detail="Spring Boot Actuator health endpoint is enabled and exposed, supporting liveness and readiness probes."
+/>
 
 <Aside type="tip">
 The RAG-to-severity mapping is a default. Individual rules can override severity

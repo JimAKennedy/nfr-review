@@ -1,6 +1,201 @@
 ---
 title: "Advanced Features"
-description: "LLM rules, arch command, dependency analysis, dynamic analysis, and monitoring"
+description: "Parallel workers, graph analysis, production monitoring, baseline tracking, and LLM integration"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review includes several advanced capabilities beyond the core
+collect-and-evaluate pipeline: parallel execution for large repos, graph
+analysis for structural metrics, production monitoring via OTLP, finding
+baselines for tracking regressions, and LLM integration for Band 2 rules.
+
+## Parallel execution
+
+By default the engine runs collectors sequentially. For large repositories
+with many collectors, you can parallelise with `--workers`:
+
+```bash
+# Use 4 threads
+nfr-review report ./my-repo --workers 4
+
+# Also works with the run command
+nfr-review run ./my-repo --workers 4
+```
+
+The engine dispatches collectors across a `ThreadPoolExecutor`. Each collector
+runs with independent target, config, and exclude patterns. Failures in one
+collector are caught and logged as warnings — they never abort the run.
+
+<Aside type="tip">
+Start with `--workers 4` and increase if your machine has more cores. The
+sweet spot depends on I/O vs. CPU balance — repos with many file-scanning
+collectors benefit most from parallelism.
+</Aside>
+
+## Graph analysis (Graphify)
+
+The **graphify** collector wraps the external `graphify` CLI tool to extract a
+knowledge graph from the codebase. It computes:
+
+- **God nodes** — classes with disproportionately high connectivity (> 2x the
+  average degree), indicating coupling hotspots
+- **Community structure** — clusters of related classes and their boundary
+  statistics
+- **Dormant code** — nodes with no incoming edges (potential dead code)
+- **Dependency structure** — inter-module dependency edges
+
+The output feeds into rules that detect structural anti-patterns. Graphify is
+optional — if the tool is not installed, the collector is skipped gracefully.
+
+```bash
+# Install graphify separately
+pip install graphify
+
+# nfr-review detects it automatically
+nfr-review report ./my-repo
+```
+
+## Production monitoring
+
+nfr-review can act as a **live production monitor** that compares runtime
+traces against a UAT baseline. This catches behavioural drift in production
+that static analysis cannot detect.
+
+### Creating a baseline
+
+First, collect OTLP traces from your test suite or staging environment, then
+create an interaction baseline:
+
+```bash
+# Create baseline from test traces
+nfr-review baseline create \
+  --otel-traces tests/traces/staging.ndjson \
+  --output baseline.json
+```
+
+### Diffing against production
+
+Compare production traces against the baseline to find novel interactions:
+
+```bash
+nfr-review baseline diff \
+  --baseline baseline.json \
+  --otel-traces production-traces.ndjson
+```
+
+This reports new endpoints, changed response patterns, and missing
+interactions as findings.
+
+### Live monitoring mode
+
+For continuous monitoring, start the monitor as an OTLP receiver:
+
+```bash
+nfr-review monitor \
+  --baseline baseline.json \
+  --host 0.0.0.0 \
+  --port 4318 \
+  --window 60
+```
+
+The monitor:
+- Accepts OTLP traces on the configured host/port
+- Aggregates spans in sliding time windows
+- Compares fingerprints against the baseline
+- Emits JSON alerts to stdout for novel or changed interactions
+- Deduplicates alerts to prevent noise
+
+<Aside type="note">
+Monitor mode requires the `[monitor]` extra:
+`pip install nfr-review[monitor]`. It uses aiohttp for the OTLP receiver.
+</Aside>
+
+## Finding baselines
+
+Beyond design-change baselines, nfr-review supports **finding baselines** for
+tracking regressions over time. A finding baseline records all known findings
+from a scan, so subsequent scans can highlight what's new.
+
+```bash
+# Save a baseline (the JSONL output acts as the baseline)
+nfr-review report ./my-repo --format jsonl -o baseline/
+
+# Compare against the baseline
+nfr-review report ./my-repo --baseline baseline/report.jsonl
+```
+
+When a baseline is loaded, the output includes classification metadata:
+- **New findings** — not in the baseline (potential regressions)
+- **Existing findings** — already known from the baseline
+- **Resolved findings** — in the baseline but no longer detected
+
+This is how the PR workflow detects regressions — it downloads the nightly
+baseline and runs in diff mode.
+
+## LLM integration
+
+Band 2 rules use an LLM for semantic analysis that goes beyond pattern
+matching. nfr-review supports three LLM backends:
+
+### Anthropic (default)
+
+```yaml
+# nfr-review.yaml
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+```
+
+Requires the Anthropic Python SDK (`pip install anthropic`) and
+`ANTHROPIC_API_KEY` in the environment.
+
+### OpenAI-compatible
+
+Works with OpenAI, Azure OpenAI, Ollama, and OpenRouter:
+
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o
+  base_url: https://api.openai.com/v1  # or your Ollama/Azure endpoint
+```
+
+### Claude CLI
+
+Shells out to the `claude` CLI tool — useful when Claude Code is already
+authenticated:
+
+```yaml
+llm:
+  provider: claude-cli
+```
+
+<Aside type="tip">
+LLM integration is optional. All Band 1 rules (static analysis) work without
+any LLM configuration. Band 2 rules are skipped gracefully when no LLM is
+configured, and the scan reports which rules were skipped and why.
+</Aside>
+
+### Configuration via environment
+
+You can also configure the LLM via environment variables:
+
+```bash
+export NFR_LLM_PROVIDER=anthropic
+export NFR_LLM_MODEL=claude-sonnet-4-20250514
+export ANTHROPIC_API_KEY=sk-...
+```
+
+Environment variables take precedence over `nfr-review.yaml` settings.
+
+### Retry behaviour
+
+The LLM client uses exponential backoff (up to 16 seconds, max 3 retries) on
+transient errors (429 rate limits, 5xx server errors). Non-transient errors
+cause the rule to be skipped with a warning.
+
+## Next
+
+The next chapter covers CI/CD integration — how to run nfr-review in GitHub
+Actions workflows for PR checks, nightly scans, and SARIF upload.

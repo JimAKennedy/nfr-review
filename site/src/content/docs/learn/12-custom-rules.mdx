@@ -3,4 +3,177 @@ title: "Writing Custom Rules"
 description: "FieldRule tutorial with real code, testing, and registration"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review is designed to be extended with custom rules. The recommended
+approach is the **FieldRule** pattern — a base class that handles evidence
+selection, payload coercion, and finding construction so you only write the
+check logic.
+
+## The FieldRule pattern
+
+Subclass `FieldRule` and declare a few class attributes, then implement a
+single `check()` method that yields `Hit` objects for each issue found:
+
+```python
+from nfr_review.rules.framework import FieldRule, Hit
+from nfr_review.collectors.payloads import PythonAstFilePayload
+from nfr_review.protocols import Evidence
+from typing import Iterable
+
+class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
+    id = "python-mutable-default"
+    collector_name = "python-ast"
+    evidence_kind = "python-ast-file"
+    payload_type = PythonAstFilePayload
+    pattern_tag = "mutable-default"
+    all_clear_summary = "No mutable default arguments detected."
+
+    def check(
+        self, payload: PythonAstFilePayload, ev: Evidence
+    ) -> Iterable[Hit]:
+        for func in payload.functions:
+            for default in func.default_args:
+                if default.default_type in {"list", "dict", "set"}:
+                    yield Hit(
+                        rag="amber",
+                        summary=f"Mutable default ({default.default_type}) in {func.name}()",
+                        recommendation="Use None as default and initialize in body",
+                        locator=f"{payload.file_path}:{default.line}",
+                    )
+```
+
+### What FieldRule handles for you
+
+- **Evidence selection** — filters the evidence list to matching `collector_name`
+  and `evidence_kind`
+- **Payload coercion** — validates and casts the evidence payload to your
+  `payload_type` (a Pydantic model)
+- **Skip-if-empty** — if no matching evidence exists, the rule is skipped
+  cleanly
+- **Green all-clear** — when `check()` yields nothing, a green finding is
+  emitted with `all_clear_summary`
+- **Finding construction** — each `Hit` is wrapped in a full `Finding` with
+  rule ID, band, category, and compliance refs
+
+### The Hit object
+
+```python
+Hit(
+    rag="amber",              # "red", "amber", or "green"
+    summary="What's wrong",   # one-line description
+    recommendation="Fix it",  # actionable guidance
+    locator="path/file:42",   # where in the codebase
+    severity="medium",        # optional — defaults from RAG mapping
+    detail="Extra context",   # optional — extended explanation
+)
+```
+
+Severity defaults follow RAG: `red → high`, `amber → medium`, `green → info`.
+You can override by setting `severity` explicitly on the Hit.
+
+### Auto-registration
+
+FieldRule subclasses register automatically via `__init_subclass__`. Just
+define the class in a module under `src/nfr_review/rules/` — no manual
+registration call needed.
+
+## The imperative pattern
+
+For rules that need to join multiple collectors, call an LLM, or do
+cross-record aggregation, implement the `Rule` protocol directly:
+
+```python
+from nfr_review.rules.framework import register
+from nfr_review.protocols import Evidence, RuleResult
+
+@register
+class CrossCuttingRule:
+    id = "cross-cutting-check"
+    band = 1
+    required_collectors = ["java-ast", "ci-artifact"]
+
+    def evaluate(
+        self, evidence: list[Evidence], context: any
+    ) -> RuleResult:
+        java_evidence = [e for e in evidence if e.kind == "java-ast-file"]
+        ci_evidence = [e for e in evidence if e.kind == "ci-pipeline"]
+        # ... cross-reference logic ...
+        return RuleResult(findings=findings, skipped=[])
+```
+
+<Aside type="tip">
+Prefer FieldRule for single-collector rules — it eliminates boilerplate. Use
+the imperative pattern only when you genuinely need access to multiple
+evidence types or the full evidence list.
+</Aside>
+
+## Rule metadata
+
+Every rule needs an entry in `src/nfr_review/rule_metadata.py` so it appears
+in `list-rules`, the web catalogue, and compliance mappings:
+
+```python
+RULE_METADATA["python-mutable-default"] = RuleMetadataEntry(
+    severity="medium",
+    category="maintainability",
+    description="Detects mutable default arguments in Python functions",
+    tags=["python", "anti-pattern"],
+    compliance_refs=[],  # e.g. ["SOC2-CC6.1", "ISO27001-A.14.2.1"]
+)
+```
+
+## Scoring integration
+
+If your rule uses a new category keyword not already in the scoring system,
+add it to the category keywords mapping in `src/nfr_review/scoring.py`:
+
+```python
+_CATEGORY_KEYWORDS["my-category"] = "maintainability"
+```
+
+This ensures findings from your rule contribute to the correct maturity score
+category.
+
+## Testing
+
+Write at least two test cases — one positive (issue detected) and one
+negative (clean code):
+
+```python
+from nfr_review.protocols import Evidence
+
+def test_mutable_default_detected(sample_payload_with_mutable):
+    rule = PythonMutableDefaultRule()
+    result = rule.evaluate([sample_evidence], context=None)
+    assert len(result.findings) > 0
+    assert result.findings[0].rag == "amber"
+
+def test_clean_code_is_green(sample_payload_clean):
+    rule = PythonMutableDefaultRule()
+    result = rule.evaluate([clean_evidence], context=None)
+    assert all(f.rag == "green" for f in result.findings)
+```
+
+Verify your rule appears in the registry:
+
+```bash
+nfr-review list-rules | grep python-mutable-default
+nfr-review explain python-mutable-default
+```
+
+## Checklist for new rules
+
+1. Create a module in `src/nfr_review/rules/`
+2. Subclass `FieldRule` or implement the `Rule` protocol
+3. Add an entry to `RULE_METADATA` in `src/nfr_review/rule_metadata.py`
+4. Add a scoring keyword mapping if using a new category
+5. Write positive and negative test cases
+6. Add a methodology description in `src/nfr_review/output/markdown.py` if
+   introducing a new category
+7. Run `nfr-review list-rules` to verify registration
+
+## Next
+
+The next chapter covers writing custom collectors — how to feed new evidence
+types into the pipeline.

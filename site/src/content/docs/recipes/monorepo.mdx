@@ -1,6 +1,93 @@
 ---
 title: "Scanning a Monorepo"
-description: "How to configure nfr-review for monorepo scanning"
+description: "How to scan individual services in a monorepo independently"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review scans a single directory tree at a time. For monorepos with
+multiple services, scan each service independently and merge results as
+needed.
+
+## Scan each service separately
+
+Point nfr-review at each service's root directory:
+
+```bash
+# Scan individual services
+nfr-review report ./services/user-service --output-dir ./results/user-service
+nfr-review report ./services/order-service --output-dir ./results/order-service
+nfr-review report ./services/gateway --output-dir ./results/gateway
+```
+
+Each scan produces its own report with findings, scores, and baselines scoped
+to that service.
+
+## Per-service configuration
+
+Create an `nfr-review.yaml` in each service directory for service-specific
+tuning:
+
+```
+monorepo/
+  services/
+    user-service/
+      nfr-review.yaml     # service-specific config
+      src/
+    order-service/
+      nfr-review.yaml
+      src/
+```
+
+Or use a shared config with per-service overrides:
+
+```bash
+nfr-review report ./services/user-service \
+  --config ./shared-nfr-config.yaml
+```
+
+## CI integration for monorepos
+
+Use a matrix strategy to scan services in parallel:
+
+```yaml
+jobs:
+  nfr-review:
+    strategy:
+      matrix:
+        service: [user-service, order-service, gateway]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run NFR Review
+        uses: JimAKennedy/nfr-review@v1
+        with:
+          path: services/${{ matrix.service }}
+          comment: "true"
+```
+
+<Aside type="tip">
+Each matrix job gets its own PR comment. Use `extra-labels` to tag issues by
+service: `extra-labels: "service:${{ matrix.service }}"`.
+</Aside>
+
+## Shared infrastructure scanning
+
+For shared infrastructure (Helm charts, Terraform modules, CI pipelines) that
+lives outside service directories, add a separate scan:
+
+```bash
+nfr-review report ./infrastructure --output-dir ./results/infra
+```
+
+## Aggregating scores
+
+Extract scores from each service's JSONL output for a dashboard:
+
+```bash
+for service in user-service order-service gateway; do
+  SCORE=$(jq -r 'select(.record_type == "score") | .overall' \
+    results/$service/*-report.jsonl)
+  echo "$service: $SCORE"
+done
+```

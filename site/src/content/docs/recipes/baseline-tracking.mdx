@@ -1,6 +1,123 @@
 ---
 title: "Baseline Tracking"
-description: "Setting up and interpreting baseline diffs"
+description: "Setting up and interpreting finding and design-change baselines"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+Baselines let you track changes over time — distinguishing new findings
+(regressions) from known issues. nfr-review supports two types of baselines.
+
+## Finding baselines
+
+A finding baseline is a JSONL snapshot of all findings from a scan. When you
+provide a baseline to a subsequent scan, the output classifies each finding
+as new, existing, or resolved.
+
+### Setting up the baseline loop
+
+1. **Nightly scan** saves the baseline:
+   ```yaml
+   # In your nightly workflow
+   - name: Upload baseline
+     uses: actions/upload-artifact@v7
+     with:
+       name: nfr-review-baseline
+       path: ${{ steps.nfr.outputs.jsonl-path }}
+       retention-days: 90
+   ```
+
+2. **PR scan** downloads and diffs against it:
+   ```yaml
+   - name: Download baseline
+     run: |
+       gh run download "$RUN_ID" \
+         --name nfr-review-baseline \
+         --dir baseline/
+
+   - name: Run with baseline
+     uses: JimAKennedy/nfr-review@v1
+     with:
+       baseline: baseline/nfr-review-output.jsonl
+   ```
+
+### Interpreting baseline diffs
+
+| Classification | Meaning | Action |
+|---------------|---------|--------|
+| **New** | Not in the baseline — potential regression | Investigate and fix |
+| **Existing** | Already known from the baseline | Track or suppress |
+| **Resolved** | Was in the baseline, now gone | Celebrate |
+
+<Aside type="tip">
+The PR comment highlights new findings prominently. Existing findings are
+listed but de-emphasised, so reviewers focus on regressions.
+</Aside>
+
+### Manual baseline workflow
+
+```bash
+# Create initial baseline
+nfr-review report ./my-repo --format jsonl -o baseline/
+
+# Later, compare against it
+nfr-review report ./my-repo --baseline baseline/report.jsonl
+```
+
+## Design-change baselines
+
+Design-change baselines track structural metrics (class counts, dependency
+lists, API endpoints) and surface drift as findings when thresholds are
+exceeded.
+
+### Setting up
+
+```bash
+# First run — creates the baseline
+nfr-review run ./my-repo --design-baseline-dir ./baselines
+
+# Subsequent runs — diffs against it
+nfr-review run ./my-repo --design-baseline-dir ./baselines
+```
+
+### Committing design baselines
+
+Design-change baseline files are small JSON documents. Commit them to version
+control for history tracking:
+
+```bash
+git add baselines/my-repo-structural-baseline.json
+git commit -m "Update design-change baseline"
+```
+
+This lets you see when architectural shifts were introduced by diffing
+baseline files across commits.
+
+### Threshold tuning
+
+If baselines trigger too many or too few findings, adjust thresholds:
+
+```yaml
+# nfr-review.yaml
+design_change:
+  thresholds:
+    class_count: 30.0        # looser: 30% change before flagging
+    dependency_count: 10.0   # tighter: 10% change triggers alert
+```
+
+See the [Design Change Detection](/learn/09-design-change) chapter for the
+full threshold reference.
+
+## Combining both baselines
+
+For maximum coverage, use both baseline types together:
+
+```bash
+nfr-review report ./my-repo \
+  --baseline baseline/report.jsonl \
+  --design-baseline-dir ./baselines \
+  --output-dir results/
+```
+
+This catches both new rule violations (finding baseline) and structural drift
+(design-change baseline) in a single scan.
