@@ -64,6 +64,7 @@ class CppClassInfo(BasePayload):
     namespace: str
     friends: list[str]
     outer_class: str
+    annotations: list[str] = []
 
 
 class CppFunction(BasePayload):

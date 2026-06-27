@@ -17,7 +17,25 @@ from nfr_review.protocols import Band
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _DEFAULT_EXTENSIONS = frozenset({".py", ".java", ".go", ".ts", ".js", ".rs"})
-_SKIP_PREFIXES = (".agents/", ".gsd/", "venv/", ".venv/", "node_modules/")
+_SKIP_PREFIXES = (
+    ".agents/",
+    ".gsd/",
+    "venv/",
+    ".venv/",
+    "node_modules/",
+    "build/",
+    "dist/",
+    "out/",
+)
+_SKIP_SUFFIXES = (
+    ".config.ts",
+    ".config.js",
+    ".config.mjs",
+    ".config.cjs",
+    ".generated.ts",
+    ".generated.js",
+    "conftest.py",
+)
 
 
 class LicenseHeaderRule:
@@ -48,6 +66,7 @@ class LicenseHeaderRule:
             for e in per_file
             if any(e.locator.endswith(ext) for ext in extensions)
             and not any(e.locator.startswith(p) for p in _SKIP_PREFIXES)
+            and not any(e.locator.endswith(s) for s in _SKIP_SUFFIXES)
         ]
 
         if not relevant:

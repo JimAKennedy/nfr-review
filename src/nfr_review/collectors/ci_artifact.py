@@ -73,6 +73,15 @@ _SECURITY_KEYWORDS = frozenset(
         "scorecard",
         "grype",
         "osv-scanner",
+        # C/C++ security tools
+        "clang-tidy",
+        "-fsanitize=address",
+        "addresssanitizer",
+        "threadsanitizer",
+        "ubsan",
+        "asan",
+        "tsan",
+        "gitleaks",
     }
 )
 

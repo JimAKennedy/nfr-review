@@ -31,6 +31,8 @@ _LINT_PATTERNS = re.compile(
     r"|checkstyle|spotbugs|pmd|ktlint|detekt|error-?prone|spotless"
     # .NET
     r"|dotnet-format|roslyn"
+    # C/C++
+    r"|clang-format|clang-tidy|cppcheck|cpplint|include-what-you-use"
     r")",
     re.IGNORECASE,
 )

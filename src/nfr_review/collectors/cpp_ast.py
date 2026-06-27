@@ -101,6 +101,7 @@ _SMART_PTR_TYPES = frozenset({"unique_ptr", "shared_ptr", "weak_ptr"})
 _MALLOC_FUNCTIONS = frozenset({"malloc", "calloc", "realloc", "free"})
 _INCLUDE_GUARD_RE = re.compile(r"^\s*#\s*ifndef\s+\w+", re.MULTILINE)
 _PRAGMA_ONCE_RE = re.compile(r"^\s*#\s*pragma\s+once", re.MULTILINE)
+_ANNOTATION_RE = re.compile(r"//\s*(ownership-transfer|framework-managed|suppress-dormant)\b")
 
 
 def _extract_functions(root: Node, source: bytes) -> list[CppFunction]:
@@ -372,6 +373,20 @@ def _enclosing_class(node: Node, source: bytes) -> str:
     return ""
 
 
+def _class_annotations(node: Node, source: bytes) -> list[str]:
+    """Extract recognized annotation comments from the line before or same line as a class."""
+    annotations: list[str] = []
+    src_lines = source.split(b"\n")
+    class_line = node.start_point[0]
+    for line_idx in (class_line - 1, class_line):
+        if 0 <= line_idx < len(src_lines):
+            line_text = src_lines[line_idx].decode("utf-8", errors="replace")
+            m = _ANNOTATION_RE.search(line_text)
+            if m:
+                annotations.append(m.group(1))
+    return annotations
+
+
 def _extract_classes(root: Node, source: bytes) -> list[CppClassInfo]:
     classes: list[CppClassInfo] = []
     for node_type in ("class_specifier", "struct_specifier"):
@@ -403,6 +418,7 @@ def _extract_classes(root: Node, source: bytes) -> list[CppClassInfo]:
                     namespace=_enclosing_namespace(node, source),
                     friends=friends,
                     outer_class=_enclosing_class(node, source),
+                    annotations=_class_annotations(node, source),
                 )
             )
     return classes

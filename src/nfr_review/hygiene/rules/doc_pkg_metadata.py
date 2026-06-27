@@ -36,8 +36,14 @@ class PkgMetadataRule:
                 rule_id=self.id,
                 rag="red",
                 severity="high",
-                summary="No package manifest found (pyproject.toml, package.json).",
-                recommendation="Add a pyproject.toml or package.json with project metadata.",
+                summary=(
+                    "No package manifest found"
+                    " (pyproject.toml, package.json, CMakeLists.txt, etc.)."
+                ),
+                recommendation=(
+                    "Add a pyproject.toml, package.json, CMakeLists.txt,"
+                    " or other manifest with project metadata."
+                ),
                 evidence_locator=ev.locator,
                 collector_name=ev.collector_name,
                 collector_version=ev.collector_version,

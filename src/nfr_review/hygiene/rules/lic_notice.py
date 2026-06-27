@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
+from nfr_review.hygiene.rules.lic_copyleft import detect_project_license_family
 from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.rules.rule_helpers import make_green_finding
@@ -43,6 +44,26 @@ class NoticeCompletenessRule:
             )
 
         per_file = [e for e in evidence if e.kind == "license-scan"]
+
+        project_family = detect_project_license_family(per_file)
+        if project_family in ("gpl", "agpl", "lgpl"):
+            return RuleResult(
+                rule_id=self.id,
+                findings=[
+                    make_green_finding(
+                        self.id,
+                        "notice-completeness",
+                        summary_ev,
+                        summary=(
+                            f"Project uses {project_family.upper()} license — "
+                            "NOTICE file is an Apache-2.0 convention, not required."
+                        ),
+                        evidence_locator=".",
+                        confidence=0.95,
+                    )
+                ],
+            )
+
         all_holders: set[str] = set()
         for ev in per_file:
             for h in ev.payload.holders:

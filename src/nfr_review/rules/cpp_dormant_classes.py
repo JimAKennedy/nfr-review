@@ -24,6 +24,9 @@ from nfr_review.rules.framework import FieldRule, Hit, make_finding
 from nfr_review.rules.rule_helpers import make_green_finding
 
 _TOKEN_RE = re.compile(r"\b([A-Za-z_]\w*)\b")
+_SUPPRESSION_ANNOTATIONS = frozenset(
+    {"ownership-transfer", "framework-managed", "suppress-dormant"}
+)
 
 
 def _type_refs(type_str: str, known: set[str]) -> set[str]:
@@ -107,7 +110,12 @@ class CppDormantClassesRule(FieldRule[CppAstFilePayload]):
                 connected.add(name)
                 connected.add(outer)
 
-        orphans = sorted(known_names - connected)
+        suppressed = {
+            cls["name"]
+            for cls in all_classes
+            if _SUPPRESSION_ANNOTATIONS & set(cls.get("annotations", []))
+        }
+        orphans = sorted(known_names - connected - suppressed)
 
         findings: list[Finding] = []
         for orphan_name in orphans:

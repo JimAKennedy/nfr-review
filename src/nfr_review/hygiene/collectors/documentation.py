@@ -190,6 +190,13 @@ _CSPROJ_FIELDS = (
     "PackageProjectUrl",
 )
 
+_CMAKE_FIELDS = (
+    "name",
+    "version",
+    "description",
+    "homepage_url",
+)
+
 
 def _parse_cargo_toml(repo_path: Path) -> ManifestEntry | None:
     path = repo_path / "Cargo.toml"
@@ -291,6 +298,62 @@ def _parse_csproj(repo_path: Path) -> ManifestEntry | None:
     return ManifestEntry(
         path=rel_path,
         type="csproj",
+        fields_present=present,
+        fields_missing=missing,
+    )
+
+
+_CMAKE_PROJECT_RE = re.compile(
+    r"project\s*\("
+    r"\s*(\w+)"
+    r"(?:\s+VERSION\s+([\d.]+))?"
+    r'(?:\s+DESCRIPTION\s+"([^"]*)")?'
+    r'(?:\s+HOMEPAGE_URL\s+"([^"]*)")?',
+    re.IGNORECASE,
+)
+
+
+def _parse_cmakelists(repo_path: Path) -> ManifestEntry | None:
+    path = repo_path / "CMakeLists.txt"
+    if not path.is_file():
+        return None
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        logger.debug("Failed to read %s", path)
+        return None
+
+    m = _CMAKE_PROJECT_RE.search(text)
+    if m is None:
+        return ManifestEntry(
+            path="CMakeLists.txt",
+            type="CMakeLists.txt",
+            fields_present=[],
+            fields_missing=list(_CMAKE_FIELDS),
+        )
+
+    present: list[str] = ["name"]
+    missing: list[str] = []
+
+    if m.group(2):
+        present.append("version")
+    else:
+        missing.append("version")
+
+    if m.group(3):
+        present.append("description")
+    else:
+        missing.append("description")
+
+    if m.group(4):
+        present.append("homepage_url")
+    else:
+        missing.append("homepage_url")
+
+    return ManifestEntry(
+        path="CMakeLists.txt",
+        type="CMakeLists.txt",
         fields_present=present,
         fields_missing=missing,
     )
@@ -407,6 +470,10 @@ class DocumentationCollector:
         csproj = _parse_csproj(repo_path)
         if csproj is not None:
             manifests.append(csproj)
+
+        cmake = _parse_cmakelists(repo_path)
+        if cmake is not None:
+            manifests.append(cmake)
 
         has_docs_dir = (repo_path / "docs").is_dir()
         doc_tool = _detect_doc_tool(repo_path)

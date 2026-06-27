@@ -363,3 +363,136 @@ class TestOrphanReduction:
         orphan_names = {f.summary.split("'")[1] for f in result.findings if f.rag == "amber"}
         assert "ToolBar" not in orphan_names
         assert "Editor" not in orphan_names
+
+    def test_ownership_transfer_annotation_suppresses(
+        self, collector: CppAstCollector, rule: CppDormantClassesRule
+    ) -> None:
+        results = collector.collect(FIXTURES, config=None)
+        dormant = [e for e in results if "dormant_check.h" in e.payload["file_path"]]
+        result = rule.evaluate(dormant, context=None)
+        orphan_names = {f.summary.split("'")[1] for f in result.findings if f.rag == "amber"}
+        assert "FrameworkView" not in orphan_names
+
+    def test_ownership_transfer_annotation_extracted(self, collector: CppAstCollector) -> None:
+        results = collector.collect(FIXTURES, config=None)
+        dormant = [e for e in results if "dormant_check.h" in e.payload["file_path"]]
+        classes = dormant[0].payload["classes"]
+        fw_class = next(c for c in classes if c["name"] == "FrameworkView")
+        assert "ownership-transfer" in fw_class["annotations"]
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: annotation suppression with synthetic evidence
+# ---------------------------------------------------------------------------
+
+
+class TestAnnotationSuppression:
+    def test_annotated_orphan_not_flagged(self, rule: CppDormantClassesRule) -> None:
+        classes = [
+            {
+                "name": "Base",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": True,
+            },
+            {
+                "name": "Derived",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [{"name": "Base", "access": "public"}],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "FactoryView",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "annotations": ["ownership-transfer"],
+            },
+        ]
+        result = rule.evaluate(_make_evidence(classes), context=None)
+        assert all(f.rag == "green" for f in result.findings)
+
+    def test_unannotated_orphan_still_flagged(self, rule: CppDormantClassesRule) -> None:
+        classes = [
+            {
+                "name": "Base",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": True,
+            },
+            {
+                "name": "Derived",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [{"name": "Base", "access": "public"}],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Orphan",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+        ]
+        result = rule.evaluate(_make_evidence(classes), context=None)
+        assert any(f.rag == "amber" and "Orphan" in f.summary for f in result.findings)
+
+    def test_framework_managed_also_suppresses(self, rule: CppDormantClassesRule) -> None:
+        classes = [
+            {
+                "name": "Base",
+                "line": 1,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": True,
+            },
+            {
+                "name": "Derived",
+                "line": 10,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [{"name": "Base", "access": "public"}],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+            },
+            {
+                "name": "Widget",
+                "line": 20,
+                "has_destructor": False,
+                "is_struct": False,
+                "base_classes": [],
+                "methods": [],
+                "fields": [],
+                "is_abstract": False,
+                "annotations": ["framework-managed"],
+            },
+        ]
+        result = rule.evaluate(_make_evidence(classes), context=None)
+        assert all(f.rag == "green" for f in result.findings)

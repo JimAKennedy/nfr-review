@@ -3,8 +3,9 @@
 """HYG-LIC-001: Copyleft license detection.
 
 Flags GPL/AGPL/LGPL licenses found in source files or dependency evidence.
-Source-file copyleft is always red (blocks open-source release as Apache-2.0).
-Dependency copyleft is red for GPL/AGPL, amber for LGPL (dynamic linking OK).
+When the project's own root LICENSE/COPYING file is copyleft, findings from
+the project's own source files are downgraded to green/info — the project
+deliberately chose that license.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from nfr_review.hygiene import hygiene_rule_registry
-from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
+from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.rules.rule_helpers import make_green_finding
 
@@ -27,6 +28,10 @@ _LICENSE_INFRA_SUFFIXES = (
     "license_scan.py",
 )
 
+_ROOT_LICENSE_NAMES = frozenset(
+    {"LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "COPYING"}
+)
+
 
 def _classify_license(spdx_key: str) -> str | None:
     lower = spdx_key.lower()
@@ -38,6 +43,19 @@ def _classify_license(spdx_key: str) -> str | None:
         return "gpl"
     if "mpl" in lower:
         return "mpl"
+    return None
+
+
+def detect_project_license_family(per_file: list[Evidence]) -> str | None:
+    """Return the copyleft family of the project's root license, or None."""
+    for ev in per_file:
+        locator_upper = ev.locator.upper()
+        if locator_upper not in {n.upper() for n in _ROOT_LICENSE_NAMES}:
+            continue
+        for lic in ev.payload.licenses:
+            family = _classify_license(lic.get("spdx_key", ""))
+            if family is not None:
+                return family
     return None
 
 
@@ -61,6 +79,8 @@ class CopyleftDetectionRule:
                 skip_reason="no license-scan evidence available",
             )
 
+        project_family = detect_project_license_family(per_file)
+
         findings: list[Finding] = []
         seen: set[tuple[str, str]] = set()
 
@@ -80,20 +100,46 @@ class CopyleftDetectionRule:
                     continue
                 seen.add(dedup_key)
 
+                if project_family and family == project_family:
+                    findings.append(
+                        make_green_finding(
+                            self.id,
+                            "copyleft-detection",
+                            ev,
+                            summary=(
+                                f"Project license is {spdx} — consistent with "
+                                f"project's own {project_family.upper()} license."
+                            ),
+                            evidence_locator=ev.locator,
+                            confidence=0.95,
+                        )
+                    )
+                    continue
+
                 if family in _STRONG_COPYLEFT:
-                    rag: RAG = "red"
-                    severity: Severity = "high"
                     summary = (
                         f"Copyleft license {spdx} detected in {ev.locator}. "
-                        "Incompatible with Apache-2.0 release."
+                        "Incompatible with permissive release."
                     )
                     recommendation = (
                         "Remove or replace this file/dependency, or obtain "
                         "a license exception from the copyright holder."
                     )
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            rag="red",
+                            severity="high",
+                            summary=summary,
+                            recommendation=recommendation,
+                            evidence_locator=ev.locator,
+                            collector_name=ev.collector_name,
+                            collector_version=ev.collector_version,
+                            confidence=0.9,
+                            pattern_tag="copyleft-detection",
+                        )
+                    )
                 else:
-                    rag = "amber"
-                    severity = "medium"
                     summary = (
                         f"Weak copyleft license {spdx} detected in "
                         f"{ev.locator}. Dynamic linking is typically acceptable."
@@ -102,21 +148,20 @@ class CopyleftDetectionRule:
                         "Verify that usage is limited to dynamic linking. "
                         "Consult legal if embedding or modifying."
                     )
-
-                findings.append(
-                    Finding(
-                        rule_id=self.id,
-                        rag=rag,
-                        severity=severity,
-                        summary=summary,
-                        recommendation=recommendation,
-                        evidence_locator=ev.locator,
-                        collector_name=ev.collector_name,
-                        collector_version=ev.collector_version,
-                        confidence=0.9,
-                        pattern_tag="copyleft-detection",
+                    findings.append(
+                        Finding(
+                            rule_id=self.id,
+                            rag="amber",
+                            severity="medium",
+                            summary=summary,
+                            recommendation=recommendation,
+                            evidence_locator=ev.locator,
+                            collector_name=ev.collector_name,
+                            collector_version=ev.collector_version,
+                            confidence=0.9,
+                            pattern_tag="copyleft-detection",
+                        )
                     )
-                )
 
         if not findings:
             if summary_ev:
