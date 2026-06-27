@@ -1,0 +1,171 @@
+---
+title: "Scoring and Maturity"
+description: "Design maturity score, category weights, and grading"
+---
+
+import { Aside } from '@astrojs/starlight/components';
+import CodeSnippet from '../../../components/CodeSnippet.astro';
+
+nfr-review computes a **design maturity score** (0–100) from the findings in
+each scan. The score provides a single number for tracking quality over time,
+comparing repositories, and setting quality gates in CI.
+
+## The MaturityScore model
+
+<CodeSnippet file="src/nfr_review/scoring.py" region="maturity-score" caption="MaturityScore — the output of scoring" />
+
+The score combines:
+
+- **`overall`** — weighted average of category scores (0–100)
+- **`grade`** — letter grade derived from the overall score
+- **`category_scores`** — per-category breakdown (each 0–100)
+- **`finding_counts`** — number of findings at each severity
+- **`rules_coverage`** — fraction of rules that ran vs total available
+
+## Grade scale
+
+<CodeSnippet file="src/nfr_review/scoring.py" region="grade-scale" caption="Grade thresholds — A through F" />
+
+| Grade | Score range | Interpretation |
+|-------|-----------|----------------|
+| **A** | 90–100 | Excellent — minimal findings, strong practices |
+| **B** | 75–89 | Good — some gaps but fundamentally sound |
+| **C** | 60–74 | Fair — several areas need attention |
+| **D** | 45–59 | Poor — significant quality concerns |
+| **F** | 0–44 | Failing — urgent remediation needed |
+
+## How scores are calculated
+
+### 1. Severity deductions
+
+Each finding deducts points from its category's score based on severity:
+
+<CodeSnippet file="src/nfr_review/config.py" region="severity-deductions" caption="Points deducted per finding severity" />
+
+A category starts at 100. A single `critical` finding drops it to 85.
+Three `medium` findings bring it to 91. Deductions are additive — a category
+with one `high` and two `medium` findings scores `100 - 8 - 3 - 3 = 86`.
+
+### 2. Category weights
+
+Categories contribute to the overall score according to their weight:
+
+<CodeSnippet file="src/nfr_review/config.py" region="category-weights" caption="Default category weights — all equal at 1.0" />
+
+By default all categories have equal weight. You can adjust weights in your
+config to emphasise what matters most to your project:
+
+```yaml
+# nfr-review.yaml
+scoring:
+  category_weights:
+    security: 2.0      # security matters twice as much
+    performance: 0.5   # less emphasis on performance
+```
+
+<Aside type="tip">
+Categories with no findings score 100. Only categories that appear in findings
+or have a configured weight are included in the overall calculation. A project
+with no Kubernetes manifests won't be penalised for missing K8s security contexts.
+</Aside>
+
+### 3. Overall score
+
+The overall score is a **weighted average** of all category scores:
+
+```
+overall = Σ(category_score × weight) / Σ(weight)
+```
+
+Categories with higher weight pull the overall score more. A project scoring
+90 in security (weight 2.0) and 60 in performance (weight 0.5) gets:
+
+```
+(90 × 2.0 + 60 × 0.5) / (2.0 + 0.5) = 210 / 2.5 = 84 → Grade B
+```
+
+### 4. Rules coverage
+
+Rules coverage tracks what fraction of applicable rules actually ran:
+
+```
+coverage = rules_run / (rules_run + rules_skipped)
+```
+
+A low coverage number means many rules couldn't run — usually because
+collectors were skipped or required technology wasn't detected. The coverage
+value appears in JSONL output and reports for transparency.
+
+## Trend tracking
+
+nfr-review can compare the current score against a **baseline** to show
+improvement or regression:
+
+```bash
+# Save a baseline
+nfr-review report --format jsonl -o baseline/
+
+# Later, compare against it
+nfr-review report --baseline baseline/report.jsonl
+```
+
+The trend comparison shows:
+
+| Field | Meaning |
+|-------|---------|
+| `delta` | Point change (positive = improved) |
+| `direction` | `"improved"`, `"regressed"`, or `"stable"` |
+| `category_deltas` | Per-category point changes |
+
+This enables CI gates like "fail if the score regressed by more than 5 points"
+or dashboards tracking quality trajectories over time.
+
+## Category aliases
+
+Some rules map to category names that differ from the scoring categories.
+nfr-review normalises these with aliases:
+
+| Rule category | Scores under |
+|---------------|-------------|
+| `observability` | `reliability` |
+| `ops` | `maintainability` |
+
+This ensures all findings contribute to the six core scoring categories
+regardless of what name the rule's keyword mapping produced.
+
+## Customising scoring
+
+You can override every aspect of scoring in `nfr-review.yaml`:
+
+```yaml
+scoring:
+  category_weights:
+    security: 2.0
+    reliability: 1.5
+    performance: 1.0
+    maintainability: 1.0
+    OTEL: 0.5
+    structure: 0.5
+
+  severity_deductions:
+    critical: 20      # harsher on critical issues
+    high: 10
+    medium: 3
+    low: 1
+    info: 0
+
+  category_aliases:
+    observability: reliability
+    ops: maintainability
+```
+
+<Aside type="caution">
+Changing weights or deductions makes scores non-comparable with scans that
+used different settings. If you use scoring for CI gates or trend tracking,
+keep the config stable or version it alongside your baseline.
+</Aside>
+
+## Next
+
+The next chapter covers project hygiene checks — a separate layer of analysis
+that examines documentation, licensing, CI automation, and dependency health.

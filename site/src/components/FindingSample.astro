@@ -1,0 +1,91 @@
+---
+interface Props {
+  ruleId: string;
+  severity: 'green' | 'amber' | 'red';
+  title: string;
+  location?: string;
+  detail?: string;
+}
+
+const { ruleId, severity, title, location, detail } = Astro.props;
+
+const severityConfig: Record<string, { color: string; bg: string; border: string; label: string }> = {
+  green: { color: 'var(--nfr-green)', bg: '#e8f5ed', border: '#b8e0c4', label: 'GREEN' },
+  amber: { color: 'var(--nfr-amber)', bg: '#fdf5e6', border: '#e8d5a0', label: 'AMBER' },
+  red:   { color: 'var(--nfr-red)',   bg: '#fde8e8', border: '#e8b0b0', label: 'RED' },
+};
+
+const cfg = severityConfig[severity];
+---
+
+<div class="finding-sample" style={`border-left-color: ${cfg.color}`}>
+  <div class="finding-header">
+    <span class="finding-badge" style={`background: ${cfg.bg}; color: ${cfg.color}; border-color: ${cfg.border}`}>
+      {cfg.label}
+    </span>
+    <code class="finding-rule">{ruleId}</code>
+  </div>
+  <div class="finding-title">{title}</div>
+  {location && <div class="finding-location">{location}</div>}
+  {detail && <div class="finding-detail">{detail}</div>}
+  <slot />
+</div>
+
+<style>
+  .finding-sample {
+    border-left: 4px solid;
+    border-radius: 0 6px 6px 0;
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    background: var(--sl-color-gray-6);
+  }
+
+  .finding-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .finding-badge {
+    font-family: var(--nfr-font-sans);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    border: 1px solid;
+    letter-spacing: 0.05em;
+  }
+
+  .finding-rule {
+    font-family: var(--sl-font-system-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--nfr-text-muted);
+  }
+
+  .finding-title {
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+    color: var(--sl-color-white);
+    margin-bottom: 0.25rem;
+  }
+
+  .finding-location {
+    font-family: var(--sl-font-system-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--nfr-text-muted);
+    margin-bottom: 0.25rem;
+  }
+
+  .finding-detail {
+    font-family: var(--sl-font);
+    font-size: var(--sl-text-sm);
+    color: var(--nfr-text-muted);
+    line-height: 1.5;
+  }
+
+  :root[data-theme='dark'] .finding-badge {
+    background: color-mix(in srgb, currentColor 15%, transparent) !important;
+  }
+</style>

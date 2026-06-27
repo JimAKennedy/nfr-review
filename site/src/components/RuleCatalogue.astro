@@ -1,0 +1,351 @@
+---
+import rules from '../data/rules.json';
+
+const severityOrder = ['critical', 'high', 'medium', 'low', 'info'];
+const sorted = [...rules].sort((a, b) => {
+  const ai = severityOrder.indexOf(a.severity);
+  const bi = severityOrder.indexOf(b.severity);
+  return ai !== bi ? ai - bi : a.id.localeCompare(b.id);
+});
+
+const categories = [...new Set(rules.map((r: any) => r.category))].sort();
+const severities = severityOrder.filter((s) =>
+  rules.some((r: any) => r.severity === s),
+);
+const allTags = [...new Set(rules.flatMap((r: any) => r.tags))].sort();
+
+const severityClasses: Record<string, string> = {
+  critical: 'sev-critical',
+  high: 'sev-high',
+  medium: 'sev-medium',
+  low: 'sev-low',
+  info: 'sev-info',
+};
+---
+
+<div class="rule-catalogue">
+  <div class="catalogue-controls">
+    <input
+      type="text"
+      id="rule-search"
+      placeholder="Search by ID, description, or tag…"
+      autocomplete="off"
+    />
+    <div class="filter-row">
+      <select id="cat-filter">
+        <option value="">All categories</option>
+        {categories.map((c) => <option value={c}>{c}</option>)}
+      </select>
+      <select id="sev-filter">
+        <option value="">All severities</option>
+        {severities.map((s) => <option value={s}>{s}</option>)}
+      </select>
+      <select id="band-filter">
+        <option value="">All bands</option>
+        <option value="1">Band 1 — Static</option>
+        <option value="2">Band 2 — Composite</option>
+        <option value="3">Band 3 — Dynamic</option>
+      </select>
+    </div>
+    <p class="match-count" id="match-count">
+      Showing {rules.length} of {rules.length} rules
+    </p>
+  </div>
+
+  <div class="catalogue-table-wrap">
+    <table class="catalogue-table">
+      <thead>
+        <tr>
+          <th>Rule ID</th>
+          <th>Sev</th>
+          <th>Band</th>
+          <th>Category</th>
+          <th>Description</th>
+          <th>Tags</th>
+          <th>Compliance</th>
+        </tr>
+      </thead>
+      <tbody id="rule-body">
+        {sorted.map((r: any) => {
+          const searchText = [r.id, r.description, ...r.tags, ...r.compliance_refs]
+            .join(' ')
+            .toLowerCase();
+          return (
+            <tr
+              data-severity={r.severity}
+              data-category={r.category}
+              data-band={r.band}
+              data-search={searchText}
+            >
+              <td>
+                <code>{r.id}</code>
+              </td>
+              <td>
+                <span class={`sev-badge ${severityClasses[r.severity]}`}>
+                  {r.severity}
+                </span>
+              </td>
+              <td class="band-cell">{r.band}</td>
+              <td>{r.category}</td>
+              <td class="desc-cell">{r.description}</td>
+              <td class="tags-cell">
+                {r.tags.map((t: string) => (
+                  <span class="tag">{t}</span>
+                ))}
+              </td>
+              <td class="refs-cell">
+                {r.compliance_refs.map((c: string) => (
+                  <span class="ref">{c}</span>
+                ))}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script is:inline>
+(function () {
+  const search = document.getElementById('rule-search');
+  const catF = document.getElementById('cat-filter');
+  const sevF = document.getElementById('sev-filter');
+  const bandF = document.getElementById('band-filter');
+  const rows = document.querySelectorAll('#rule-body tr');
+  const count = document.getElementById('match-count');
+  const total = rows.length;
+
+  function filter() {
+    const q = search.value.toLowerCase();
+    const cat = catF.value;
+    const sev = sevF.value;
+    const band = bandF.value;
+    let shown = 0;
+    rows.forEach(function (r) {
+      const matchQ = !q || r.dataset.search.indexOf(q) !== -1;
+      const matchC = !cat || r.dataset.category === cat;
+      const matchS = !sev || r.dataset.severity === sev;
+      const matchB = !band || r.dataset.band === band;
+      if (matchQ && matchC && matchS && matchB) {
+        r.style.display = '';
+        shown++;
+      } else {
+        r.style.display = 'none';
+      }
+    });
+    count.textContent = 'Showing ' + shown + ' of ' + total + ' rules';
+  }
+
+  search.addEventListener('input', filter);
+  catF.addEventListener('change', filter);
+  sevF.addEventListener('change', filter);
+  bandF.addEventListener('change', filter);
+})();
+</script>
+
+<style>
+  .rule-catalogue {
+    font-family: var(--nfr-font-sans);
+  }
+
+  .catalogue-controls {
+    margin-bottom: 1.25rem;
+  }
+
+  #rule-search {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 6px;
+    font-size: var(--sl-text-sm);
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-white);
+    margin-bottom: 0.5rem;
+  }
+
+  #rule-search:focus {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-row select {
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 6px;
+    font-size: var(--sl-text-xs);
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-white);
+    min-width: 10rem;
+  }
+
+  .match-count {
+    font-size: var(--sl-text-xs);
+    color: var(--nfr-text-muted);
+    margin: 0.5rem 0 0;
+  }
+
+  .catalogue-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .catalogue-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--sl-text-xs);
+    line-height: 1.4;
+  }
+
+  .catalogue-table th {
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--nfr-text-muted);
+    border-bottom: 2px solid var(--sl-color-gray-4);
+    white-space: nowrap;
+    font-size: 0.7rem;
+  }
+
+  .catalogue-table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    vertical-align: top;
+  }
+
+  .catalogue-table tbody tr:hover {
+    background: var(--sl-color-gray-6);
+  }
+
+  .catalogue-table code {
+    font-family: var(--sl-font-system-mono);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    background: var(--sl-color-gray-5);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+  }
+
+  .desc-cell {
+    min-width: 16rem;
+    max-width: 24rem;
+  }
+
+  .band-cell {
+    text-align: center;
+    font-weight: 600;
+  }
+
+  .tags-cell {
+    min-width: 8rem;
+  }
+
+  .refs-cell {
+    min-width: 8rem;
+  }
+
+  .sev-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  .sev-critical {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #dc2626;
+  }
+
+  .sev-high {
+    background: #fff7ed;
+    color: #ea580c;
+    border: 1px solid #ea580c;
+  }
+
+  .sev-medium {
+    background: #fefce8;
+    color: #ca8a04;
+    border: 1px solid #ca8a04;
+  }
+
+  .sev-low {
+    background: #eff6ff;
+    color: #2563eb;
+    border: 1px solid #2563eb;
+  }
+
+  .sev-info {
+    background: #f9fafb;
+    color: #6b7280;
+    border: 1px solid #6b7280;
+  }
+
+  :root[data-theme='dark'] .sev-critical {
+    background: #3b1111;
+    color: #fca5a5;
+    border-color: #b91c1c;
+  }
+
+  :root[data-theme='dark'] .sev-high {
+    background: #3b1f0b;
+    color: #fdba74;
+    border-color: #c2410c;
+  }
+
+  :root[data-theme='dark'] .sev-medium {
+    background: #3b3508;
+    color: #fde047;
+    border-color: #a16207;
+  }
+
+  :root[data-theme='dark'] .sev-low {
+    background: #0b1f3b;
+    color: #93c5fd;
+    border-color: #1d4ed8;
+  }
+
+  :root[data-theme='dark'] .sev-info {
+    background: #1f2937;
+    color: #9ca3af;
+    border-color: #4b5563;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 0.05rem 0.3rem;
+    background: var(--sl-color-gray-5);
+    border-radius: 3px;
+    font-size: 0.65rem;
+    margin: 0.1rem 0.15rem;
+    white-space: nowrap;
+  }
+
+  .ref {
+    display: inline-block;
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  .ref + .ref::before {
+    content: ', ';
+  }
+
+  /* Remove the max-width constraint for this page */
+  :global(.sl-markdown-content:has(.rule-catalogue)) {
+    max-width: none !important;
+  }
+</style>

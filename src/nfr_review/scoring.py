@@ -24,6 +24,7 @@ from nfr_review.config import (
 from nfr_review.models import Finding
 
 
+# region:maturity-score
 # nfr-review:skip(python-dormant-classes) reason: returned by compute_maturity_score
 class MaturityScore(BaseModel):
     """Design maturity score with category breakdown."""
@@ -33,6 +34,9 @@ class MaturityScore(BaseModel):
     category_scores: dict[str, int]  # category -> score
     finding_counts: dict[str, int]  # severity -> count
     rules_coverage: float  # fraction of rules that ran vs total
+
+
+# endregion:maturity-score
 
 
 # nfr-review:skip(python-dormant-classes) reason: returned by compute_trend
@@ -46,6 +50,7 @@ class ScoreTrend(BaseModel):
     category_deltas: dict[str, int]  # category -> delta
 
 
+# region:grade-scale
 def _grade(score: int) -> str:
     if score >= 90:
         return "A"
@@ -56,6 +61,9 @@ def _grade(score: int) -> str:
     if score >= 45:
         return "D"
     return "F"
+
+
+# endregion:grade-scale
 
 
 _CATEGORY_KEYWORDS: dict[str, str] = {

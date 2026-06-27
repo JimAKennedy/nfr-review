@@ -1,0 +1,123 @@
+---
+interface Props {
+  variant?: 'full' | 'collect' | 'evaluate' | 'report';
+}
+
+const { variant = 'full' } = Astro.props;
+
+const phases = [
+  { id: 'collect', label: 'Collect', detail: 'Gather evidence from the target repo', icon: '1' },
+  { id: 'evaluate', label: 'Evaluate', detail: 'Run rules against evidence', icon: '2' },
+  { id: 'report', label: 'Report', detail: 'Render findings to output formats', icon: '3' },
+];
+
+const activePhases = variant === 'full' ? phases : phases.filter(p => p.id === variant);
+---
+
+<div class="pipeline-diagram">
+  {activePhases.map((phase, i) => (
+    <div class="pipeline-phase">
+      <div class="phase-circle">{phase.icon}</div>
+      <div class="phase-content">
+        <strong class="phase-label">{phase.label}</strong>
+        <span class="phase-detail">{phase.detail}</span>
+      </div>
+      {i < activePhases.length - 1 && <div class="phase-arrow" aria-hidden="true" />}
+    </div>
+  ))}
+</div>
+
+<style>
+  .pipeline-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.5rem 1rem;
+    margin: 1.5rem 0;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 8px;
+    background: var(--sl-color-gray-6);
+    overflow-x: auto;
+  }
+
+  .pipeline-phase {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .phase-circle {
+    flex-shrink: 0;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    background: var(--sl-color-accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--nfr-font-sans);
+    font-weight: 700;
+    font-size: var(--sl-text-sm);
+  }
+
+  .phase-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .phase-label {
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+
+  .phase-detail {
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-xs);
+    color: var(--nfr-text-muted);
+  }
+
+  .phase-arrow {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2px;
+    background: var(--sl-color-gray-3);
+    position: relative;
+  }
+
+  .phase-arrow::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -4px;
+    border: 5px solid transparent;
+    border-left-color: var(--sl-color-gray-3);
+  }
+
+  @media (max-width: 48rem) {
+    .pipeline-diagram {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .phase-arrow {
+      width: 2px;
+      height: 1.5rem;
+      margin-left: 1.1rem;
+    }
+
+    .phase-arrow::after {
+      right: auto;
+      left: -4px;
+      top: auto;
+      bottom: 0;
+      border: 5px solid transparent;
+      border-top-color: var(--sl-color-gray-3);
+    }
+  }
+</style>

@@ -108,6 +108,7 @@ ISO_25010_CATEGORIES: tuple[str, ...] = (
     "maintainability",
 )
 
+# region:category-weights
 DEFAULT_CATEGORY_WEIGHTS: dict[str, float] = {
     "security": 1.0,
     "reliability": 1.0,
@@ -116,7 +117,9 @@ DEFAULT_CATEGORY_WEIGHTS: dict[str, float] = {
     "OTEL": 1.0,
     "structure": 1.0,
 }
+# endregion:category-weights
 
+# region:severity-deductions
 DEFAULT_SEVERITY_DEDUCTIONS: dict[str, int] = {
     "critical": 15,
     "high": 8,
@@ -124,6 +127,7 @@ DEFAULT_SEVERITY_DEDUCTIONS: dict[str, int] = {
     "low": 1,
     "info": 0,
 }
+# endregion:severity-deductions
 
 CATEGORY_ALIASES: dict[str, str] = {
     "observability": "reliability",

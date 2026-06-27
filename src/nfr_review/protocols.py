@@ -10,6 +10,7 @@ from nfr_review.models import Evidence, RuleResult
 Band = Literal[1, 2, 3]
 
 
+# region:collector-protocol
 @runtime_checkable
 class Collector(Protocol):
     """Pluggable evidence collector. Implementations gather raw signal from a target repo."""
@@ -20,6 +21,9 @@ class Collector(Protocol):
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         """Walk repo_path and return a list of Evidence records."""
         ...
+
+
+# endregion:collector-protocol
 
 
 @runtime_checkable

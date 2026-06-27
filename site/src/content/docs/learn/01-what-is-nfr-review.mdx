@@ -1,0 +1,91 @@
+---
+title: "What is nfr-review?"
+description: "Problem statement, what it checks, and sample output"
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import CodeSnippet from '../../../components/CodeSnippet.astro';
+
+Most code reviews focus on **what** the code does — correct logic, clean APIs, readable names.
+But production failures rarely come from wrong logic alone. They come from missing health checks,
+unencrypted secrets in config, dependency rot, absent rate limiting, no graceful shutdown — the
+**non-functional** properties that nobody remembers to check until something breaks at 3am.
+
+**nfr-review** automates the review of these properties. Point it at a repository, and it
+produces a structured report covering security, reliability, observability, performance,
+maintainability, and more — without requiring a running application.
+
+## What it checks
+
+nfr-review ships with 100+ rules across categories aligned to ISO 25010 quality attributes:
+
+<CardGrid>
+  <Card title="Security" icon="warning">
+    Hardcoded secrets, missing auth middleware, permissive CORS, unvalidated input,
+    insecure container base images.
+  </Card>
+  <Card title="Reliability" icon="approve-check-circle">
+    Missing health checks, no circuit breakers, absent retry policies, unhandled error
+    paths, missing graceful shutdown.
+  </Card>
+  <Card title="Observability" icon="magnifier">
+    No structured logging, missing trace propagation, absent metrics endpoints,
+    swallowed exceptions, missing correlation IDs.
+  </Card>
+  <Card title="Maintainability" icon="setting">
+    Star imports, mutable default arguments, high cyclomatic complexity, missing type
+    hints, test coverage gaps.
+  </Card>
+</CardGrid>
+
+It also covers performance, portability, deployment topology, dependency health,
+CI/CD automation, documentation coverage, and licensing compliance.
+
+## How it works — in one paragraph
+
+nfr-review reads source files and configuration from a repository using **collectors**
+(parsers for Python, Java, Go, Dockerfiles, Kubernetes manifests, Terraform, and more).
+Collectors produce structured **evidence** — typed data about what they found. **Rules**
+evaluate that evidence against known patterns and yield **findings** with a severity,
+a recommendation, and a precise source location. Finally, a **renderer** assembles
+findings into a report (Markdown, HTML, PDF, CSV, SARIF, or JSONL).
+
+No code execution. No network access to the target. Pure static analysis.
+
+## What a finding looks like
+
+Every finding has a consistent shape:
+
+<CodeSnippet file="src/nfr_review/models.py" region="finding-model" caption="Finding model — the output of every rule" />
+
+A real finding might say:
+
+| Field | Example |
+|-------|---------|
+| `rule_id` | `PY002` |
+| `rag` | `red` |
+| `severity` | `high` |
+| `summary` | Star import obscures dependencies |
+| `recommendation` | Replace `from foo import *` with explicit imports |
+| `evidence_locator` | `src/utils.py:3` |
+| `confidence` | `0.95` |
+
+Findings are grouped by RAG status (red / amber / green) in reports and cross-tabulated
+by category and severity in the summary table.
+
+## What you get
+
+Running `nfr-review report` against a repository produces:
+
+- A **Markdown report** with findings grouped by severity, a summary cross-tabulation,
+  and a design maturity score (0–100)
+- An **HTML report** with the same content, self-contained with embedded Mermaid diagrams
+- A **CSV file** with one row per finding, suitable for import into any tracking tool
+- A **JSONL record** with full metadata for pipeline integration
+- Optionally, a **SARIF file** for GitHub code scanning integration
+- Optionally, a **PDF** for executive stakeholders
+
+## Next
+
+In the next chapter, you'll install nfr-review and run your first scan against a real
+repository.

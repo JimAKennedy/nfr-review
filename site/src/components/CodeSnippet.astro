@@ -1,0 +1,135 @@
+---
+import { Code } from 'astro:components';
+import fs from 'node:fs';
+import path from 'node:path';
+
+interface Props {
+  file: string;
+  region: string;
+  lang?: string;
+  caption?: string;
+}
+
+const { file, region, caption } = Astro.props;
+
+const ext = path.extname(file).slice(1);
+const langMap: Record<string, string> = {
+  py: 'python',
+  yaml: 'yaml',
+  yml: 'yaml',
+  json: 'json',
+  toml: 'toml',
+  md: 'markdown',
+  sh: 'bash',
+  js: 'javascript',
+  ts: 'typescript',
+};
+const lang = (Astro.props.lang ?? langMap[ext] ?? ext) as any;
+
+const commentPrefix = ['py', 'yaml', 'yml', 'toml', 'sh'].includes(ext) ? '#' : '//';
+
+const projectRoot = path.resolve(process.cwd(), '..');
+const filePath = path.join(projectRoot, file);
+
+let code = '';
+let error = '';
+
+try {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const lines = content.split('\n');
+  const startMarker = `${commentPrefix} region:${region}`;
+  const endMarker = `${commentPrefix} endregion:${region}`;
+
+  const startIdx = lines.findIndex(l => l.trim() === startMarker);
+  const endIdx = lines.findIndex(l => l.trim() === endMarker);
+
+  if (startIdx === -1 || endIdx === -1) {
+    error = `Region "${region}" not found in ${file}`;
+  } else {
+    const rawLines = lines.slice(startIdx + 1, endIdx);
+    const nonEmpty = rawLines.filter(l => l.trim().length > 0);
+    const minIndent = nonEmpty.reduce((min, l) => {
+      const indent = l.match(/^(\s*)/)?.[1].length ?? 0;
+      return Math.min(min, indent);
+    }, Infinity);
+    code = rawLines.map(l => l.slice(minIndent === Infinity ? 0 : minIndent)).join('\n').trimEnd();
+  }
+} catch {
+  error = `Could not read ${file}`;
+}
+
+const githubUrl = `https://github.com/JimAKennedy/nfr-review/blob/main/${file}`;
+---
+
+<div class="code-snippet">
+  <div class="code-snippet-header">
+    <a href={githubUrl} class="code-snippet-file" target="_blank" rel="noopener">{file}</a>
+  </div>
+  {error ? (
+    <div class="code-snippet-body">
+      <p class="code-snippet-error">{error}</p>
+    </div>
+  ) : (
+    <div class="code-snippet-body">
+      <Code code={code} lang={lang} />
+    </div>
+  )}
+  {caption && <div class="code-snippet-caption">{caption}</div>}
+</div>
+
+<style>
+  .code-snippet {
+    background: var(--nfr-code-bg);
+    border-radius: 6px;
+    margin: 1.5rem 0;
+    overflow: hidden;
+  }
+
+  .code-snippet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.75rem;
+    background: rgba(255, 255, 255, 0.08);
+    font-family: var(--sl-font-system-mono);
+    font-size: 0.75rem;
+  }
+
+  .code-snippet-file {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+  }
+
+  .code-snippet-file:hover {
+    color: rgba(255, 255, 255, 0.9);
+    text-decoration: underline;
+  }
+
+  .code-snippet-body {
+    padding: 0;
+  }
+
+  .code-snippet-body :global(pre) {
+    margin: 0;
+    border-radius: 0;
+    padding: 1rem 0.75rem;
+  }
+
+  .code-snippet-error {
+    color: #e06c75;
+    font-family: var(--sl-font-system-mono);
+    font-size: var(--sl-text-code);
+    font-style: italic;
+    margin: 0;
+    padding: 1rem 0.75rem;
+  }
+
+  .code-snippet-caption {
+    padding: 0.3rem 0.75rem 0.5rem;
+    font-family: var(--nfr-font-sans);
+    font-size: var(--sl-text-xs);
+    color: rgba(255, 255, 255, 0.45);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+</style>

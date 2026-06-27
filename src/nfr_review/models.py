@@ -114,6 +114,7 @@ class _DictPayloadProxy(dict):  # type: ignore[type-arg]
             raise AttributeError(name) from None
 
 
+# region:evidence-model
 class Evidence(BaseModel):
     """A single piece of evidence produced by a collector."""
 
@@ -124,6 +125,7 @@ class Evidence(BaseModel):
     locator: str
     kind: str
     payload: Any = Field(default_factory=dict)
+    # endregion:evidence-model
 
     @classmethod
     def _coerce_dict_payload(
@@ -152,6 +154,7 @@ class Evidence(BaseModel):
                 object.__setattr__(self, "payload", coerced)
 
 
+# region:finding-model
 class Finding(BaseModel):
     """A rule evaluation finding. Field order matches R007 exactly.
 
@@ -174,6 +177,7 @@ class Finding(BaseModel):
     pattern_tag: str
     content_hash: str = ""
     origin: Origin = "first_party"
+    # endregion:finding-model
 
     @property
     def identity_key(self) -> tuple[str, str, str]:

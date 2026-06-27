@@ -11,6 +11,7 @@ from nfr_review.models import Evidence
 from nfr_review.rules.framework import FieldRule, Hit
 
 
+# region:example-field-rule
 class PythonStarImportRule(FieldRule[PythonAstFilePayload]):
     """Flag wildcard imports that obscure dependencies."""
 
@@ -35,5 +36,7 @@ class PythonStarImportRule(FieldRule[PythonAstFilePayload]):
                     locator=f"{payload.file_path}:{imp.line}",
                 )
 
+
+# endregion:example-field-rule
 
 __all__ = ["PythonStarImportRule"]

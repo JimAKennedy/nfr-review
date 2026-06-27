@@ -1,0 +1,153 @@
+@import '@fontsource-variable/source-serif-4';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+:root {
+  /* nfr-review colour palette — analytical blue-teal */
+  --nfr-bg: #f6f7f9;
+  --nfr-surface: #ebedf2;
+  --nfr-text: #1a1d26;
+  --nfr-text-muted: #525868;
+  --nfr-primary: #1a6b8a;
+  --nfr-primary-dark: #0e4a62;
+  --nfr-accent-bg: #e8f1f5;
+  --nfr-code-bg: #1b1d24;
+  --nfr-green: #2d8a4e;
+  --nfr-amber: #b8860b;
+  --nfr-red: #c94040;
+
+  /* Starlight theme overrides */
+  --sl-color-accent-low: #e8f1f5;
+  --sl-color-accent: #1a6b8a;
+  --sl-color-accent-high: #0e4a62;
+  --sl-color-white: #1a1d26;
+  --sl-color-gray-1: #525868;
+  --sl-color-gray-2: #7a8090;
+  --sl-color-gray-3: #a0a6b4;
+  --sl-color-gray-4: #ccd0d8;
+  --sl-color-gray-5: #ebedf2;
+  --sl-color-gray-6: #f6f7f9;
+  --sl-color-black: #f6f7f9;
+
+  /* Typography */
+  --sl-font: 'Source Serif 4 Variable', 'Source Serif 4', Georgia, serif;
+  --sl-font-system-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace,
+    monospace;
+  --nfr-font-sans: 'Inter Variable', 'Inter', system-ui, sans-serif;
+
+  /* Font sizes */
+  --sl-text-h1: 2.4rem;
+  --sl-text-h2: 1.6rem;
+  --sl-text-h3: 1.1rem;
+  --sl-text-body: 1.05rem;
+  --sl-text-sm: 0.9rem;
+  --sl-text-xs: 0.8rem;
+  --sl-text-code: 0.875rem;
+}
+
+/* Dark mode */
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #0e4a62;
+  --sl-color-accent: #3dacc9;
+  --sl-color-accent-high: #c8e6f0;
+  --sl-color-white: #dce0e8;
+  --sl-color-black: #14161c;
+  --sl-color-gray-1: #b8bcc8;
+  --sl-color-gray-2: #8a90a0;
+  --sl-color-gray-3: #5c6274;
+  --sl-color-gray-4: #343848;
+  --sl-color-gray-5: #22252e;
+  --sl-color-gray-6: #1a1d24;
+
+  --nfr-bg: #14161c;
+  --nfr-surface: #22252e;
+  --nfr-text: #dce0e8;
+  --nfr-text-muted: #8a90a0;
+  --nfr-primary: #3dacc9;
+  --nfr-primary-dark: #8fd4e8;
+  --nfr-accent-bg: #162838;
+  --nfr-code-bg: #0e1016;
+  --nfr-green: #4ec972;
+  --nfr-amber: #d4a020;
+  --nfr-red: #e06060;
+}
+
+/* Headings */
+h1 {
+  font-family: var(--sl-font);
+  font-weight: 700;
+  color: var(--nfr-primary-dark);
+}
+
+h2 {
+  font-family: var(--sl-font);
+  font-weight: 600;
+  color: var(--nfr-primary);
+}
+
+h3,
+h4 {
+  font-family: var(--nfr-font-sans);
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+/* Body prose */
+.sl-markdown-content {
+  font-family: var(--sl-font);
+  font-size: var(--sl-text-body);
+  line-height: 1.7;
+  color: var(--nfr-text);
+}
+
+/* Captions and secondary text */
+.sl-markdown-content figcaption,
+.sl-markdown-content .caption {
+  font-family: var(--nfr-font-sans);
+  font-size: var(--sl-text-xs);
+  color: var(--nfr-text-muted);
+}
+
+/* Tables use sans-serif for clarity */
+.sl-markdown-content table {
+  font-family: var(--nfr-font-sans);
+  font-size: var(--sl-text-sm);
+}
+
+.sl-markdown-content th {
+  font-weight: 600;
+}
+
+/* Code blocks */
+.sl-markdown-content pre {
+  background: var(--nfr-code-bg) !important;
+  border-radius: 6px;
+}
+
+.sl-markdown-content code {
+  font-family: var(--sl-font-system-mono);
+  font-size: var(--sl-text-code);
+}
+
+/* RAG severity badges */
+.rag-green {
+  color: var(--nfr-green);
+  font-weight: 600;
+}
+
+.rag-amber {
+  color: var(--nfr-amber);
+  font-weight: 600;
+}
+
+.rag-red {
+  color: var(--nfr-red);
+  font-weight: 600;
+}
+
+/* Content width constraint */
+@media (min-width: 72rem) {
+  .sl-markdown-content {
+    max-width: 65ch;
+  }
+}

@@ -1,0 +1,160 @@
+---
+title: "Rules Deep Dive"
+description: "FieldRule anatomy, RAG model, severity, and confidence"
+---
+
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import CodeSnippet from '../../../components/CodeSnippet.astro';
+
+Rules are the second phase of the pipeline. Each rule examines evidence from
+collectors and emits **findings** — structured observations about non-functional
+properties. nfr-review ships with 120+ rules covering security, reliability,
+observability, performance, maintainability, and structure.
+
+## The Band system
+
+Rules are organised into three bands by the type of analysis they perform:
+
+| Band | Analysis type | Example |
+|------|--------------|---------|
+| **Band 1** | Single-evidence field checks via `FieldRule` | Star import detection, missing health probe |
+| **Band 2** | Multi-evidence correlation via the `Rule` protocol | Cross-language error handling consistency |
+| **Band 3** | Dynamic / runtime analysis | Latency threshold violations from OTel traces |
+
+Most rules are Band 1 — they check one payload at a time using the `FieldRule`
+base class. Band 2 and 3 rules implement the `Rule` protocol directly for access
+to the full evidence list.
+
+## FieldRule anatomy
+
+The `FieldRule` generic base class is the standard way to write rules:
+
+<CodeSnippet file="src/nfr_review/rules/framework.py" region="field-rule" caption="FieldRule[P] — generic base class with typed payload access" />
+
+Key attributes:
+
+- **`id`** — unique rule identifier (e.g. `python-star-import`)
+- **`band`** — always `1` for FieldRules
+- **`collector_name`** — which collector's evidence this rule consumes
+- **`evidence_kind`** — the specific evidence kind to filter for
+- **`payload_type`** — the Pydantic model the payload is validated against
+- **`default_confidence`** — how confident the rule is in its findings (0.0–1.0)
+
+Subclasses implement a single `check(payload, evidence)` method that yields `Hit`
+objects for each finding.
+
+## The Hit dataclass
+
+When a rule detects an issue (or confirms a good practice), it yields a `Hit`:
+
+<CodeSnippet file="src/nfr_review/rules/framework.py" region="hit-dataclass" caption="Hit — what rules yield for each finding" />
+
+Each Hit carries:
+
+- **`rag`** — Red, Amber, or Green status
+- **`summary`** — what was found, in one sentence
+- **`recommendation`** — what to do about it
+- **`locator`** — precise source location (`file:line`)
+- **`severity`** — optional override (otherwise derived from RAG)
+- **`confidence`** — optional per-finding override
+
+## The RAG model
+
+Every finding has a RAG (Red / Amber / Green) status:
+
+| RAG | Meaning | Default severity |
+|-----|---------|-----------------|
+| 🔴 **Red** | Definite problem requiring action | `high` |
+| 🟡 **Amber** | Potential concern or missing best practice | `medium` |
+| 🟢 **Green** | Good practice confirmed present | `info` |
+| ⏭️ **Skipped** | Rule could not run (missing collector data) | — |
+
+Green findings are positive signals — they confirm that a best practice is
+in place. Reports include green findings so reviewers can see what's working,
+not just what's broken.
+
+<Aside type="tip">
+The RAG-to-severity mapping is a default. Individual rules can override severity
+on a per-Hit basis when the RAG color doesn't capture the right urgency — for
+example, a red finding for a missing feature might be `medium` rather than `high`
+if the feature is optional.
+</Aside>
+
+## Severity and confidence
+
+**Severity** uses five levels aligned with common vulnerability scoring:
+
+| Level | Meaning | Score deduction |
+|-------|---------|----------------|
+| `critical` | Exploitable vulnerability or data loss risk | −15 points |
+| `high` | Significant gap requiring near-term fix | −8 points |
+| `medium` | Best practice violation worth addressing | −3 points |
+| `low` | Minor improvement opportunity | −1 point |
+| `info` | Informational or positive confirmation | 0 points |
+
+**Confidence** (0.0–1.0) indicates how sure the rule is about the finding.
+Rules set a `default_confidence` (typically 0.85–0.95 for AST-based checks),
+and individual Hits can override it. Low-confidence findings can be filtered
+out in reports.
+
+## Example: a complete rule
+
+Here's a real rule that detects Python star imports:
+
+<CodeSnippet file="src/nfr_review/rules/python_star_import.py" region="example-field-rule" caption="A complete FieldRule — checks one payload field, yields Hits" />
+
+The pattern is consistent across all FieldRules:
+1. Declare the collector, evidence kind, and payload type
+2. Implement `check()` to iterate over the payload
+3. Yield `Hit` objects with RAG status, summary, and recommendation
+
+## Rule filtering
+
+You can control which rules run via configuration:
+
+<Tabs>
+  <TabItem label="Skip rules">
+    ```yaml
+    # nfr-review.yaml
+    rules:
+      skip:
+        - python-star-import
+        - python-mutable-default
+    ```
+  </TabItem>
+  <TabItem label="Run only specific rules">
+    ```yaml
+    # nfr-review.yaml
+    rules:
+      include_only:
+        - dockerfile-secret-leakage
+        - k8s-resource-limits
+        - java-health-check
+    ```
+  </TabItem>
+</Tabs>
+
+When `include_only` is set, only those rules run — everything else is skipped.
+When both `skip` and `include_only` are set, `include_only` takes precedence.
+
+## Inline suppressions
+
+You can suppress specific rules on individual lines using magic comments:
+
+```python
+import os  # nfr-review:skip(python-star-import)
+```
+
+Or suppress multiple rules:
+
+```python
+import os  # nfr-review:skip(python-star-import, python-mutable-default)
+```
+
+Suppressed findings are excluded from the report but logged in the JSONL output
+with a `suppression_reason` field for auditability.
+
+## Next
+
+Now that you understand how findings are produced, the next chapter covers the
+output formats available for consuming them.

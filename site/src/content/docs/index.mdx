@@ -1,0 +1,44 @@
+---
+title: nfr-review
+description: Non-functional design review automation — learn the tool, understand how it works, and maintain it with confidence.
+template: splash
+hero:
+  tagline: Automated non-functional design reviews for your codebase
+  actions:
+    - text: Start Learning
+      link: /nfr-review/learn/01-what-is-nfr-review/
+      icon: right-arrow
+    - text: GitHub
+      link: https://github.com/JimAKennedy/nfr-review
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What You'll Find Here
+
+<CardGrid>
+  <Card title="Guided Learning Path" icon="open-book">
+    14 chapters take you from first scan to writing custom rules and maintaining the tool. Work through them in order to build deep understanding.
+  </Card>
+  <Card title="Live Code Samples" icon="setting">
+    Every code example is extracted from the actual source at build time — no hand-copied snippets that drift out of sync with reality.
+  </Card>
+  <Card title="Rule Catalogue" icon="list-format">
+    Interactive, searchable catalogue of every rule nfr-review ships with — severity, category, compliance mappings, and example findings.
+  </Card>
+  <Card title="Recipes and Reference" icon="pencil">
+    Task-oriented recipes for common workflows (monorepo scanning, CI/CD integration, compliance audits) alongside complete CLI and config reference.
+  </Card>
+</CardGrid>
+
+## How This Site Is Organised
+
+**Learn** — A sequential training path. Start here. Each chapter builds on the last, from "what does this tool do?" through the full pipeline architecture to writing your own rules and collectors.
+
+**Reference** — Jump-in, look-up material. CLI flags, config schema, the full rule catalogue, payload field definitions. Use this day-to-day.
+
+**Recipes** — Task-oriented guides. "I need to scan a monorepo." "I need to set up baseline tracking." Step-by-step instructions for specific workflows.
+
+**Appendices** — Architecture diagrams of nfr-review itself, a glossary of terms, and FAQ.
