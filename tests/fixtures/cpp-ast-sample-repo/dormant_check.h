@@ -88,3 +88,11 @@ public:
 private:
     std::string label_;
 };
+
+// ownership-transfer
+class FrameworkView {
+public:
+    void draw();
+private:
+    int width_;
+};

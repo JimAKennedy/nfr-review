@@ -214,6 +214,18 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> Versio
     if (repo_path / "go.mod").is_file():
         return VersionInfo(declared=True, value="(git-tags)", source="go.mod")
 
+    # --- CMake (CMakeLists.txt) ---
+    cmake_root = repo_path / "CMakeLists.txt"
+    if cmake_root.is_file():
+        try:
+            text = cmake_root.read_text(encoding="utf-8")
+        except OSError as e:
+            logger.debug("Failed to read CMakeLists.txt for version detection: %s", e)
+            text = ""
+        m = re.search(r"project\s*\(\s*\w+\s+VERSION\s+([\d.]+)", text, re.IGNORECASE)
+        if m:
+            return VersionInfo(declared=True, value=m.group(1), source="CMakeLists.txt")
+
     return VersionInfo(declared=False, value=None, source=None)
 
 

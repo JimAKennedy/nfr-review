@@ -11,6 +11,24 @@ from nfr_review.models import Evidence, Finding, RuleResult
 from nfr_review.protocols import Band
 from nfr_review.rules.rule_helpers import make_green_finding
 
+_PYTHON_BACKENDS = frozenset(
+    {
+        "setuptools (setup.py)",
+        "setuptools (setup.cfg)",
+        "hatchling",
+        "flit_core",
+        "flit",
+        "poetry",
+        "poetry-core",
+        "poetry.core.masonry.api",
+        "maturin",
+        "scikit-build-core",
+        "pdm-backend",
+        "pdm.backend",
+        "unknown",
+    }
+)
+
 
 class EntryPointsRule:
     id = "HYG-BLD-003"
@@ -29,6 +47,18 @@ class EntryPointsRule:
 
         build_info = ev.payload.build_system
         has_build = build_info.get("has_build_system", False)
+        backend = build_info.get("backend", "")
+
+        if has_build and backend not in _PYTHON_BACKENDS:
+            finding = make_green_finding(
+                self.id,
+                "entry-points-skipped",
+                ev,
+                summary=(f"Build system is {backend} — Python entry points not applicable."),
+                evidence_locator=ev.locator,
+                confidence=1.0,
+            )
+            return RuleResult(rule_id=self.id, findings=[finding])
 
         if not has_build:
             finding = make_green_finding(

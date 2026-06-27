@@ -52,12 +52,13 @@ class VersionStrategyRule:
                     summary=(
                         "No version declared (checked pyproject.toml, setup.py/cfg, "
                         "package __init__.py, pom.xml, build.gradle(.kts), go.mod, "
-                        "Cargo.toml, *.csproj)."
+                        "Cargo.toml, *.csproj, CMakeLists.txt)."
                     ),
                     recommendation=(
                         "Declare a version: [project].version in pyproject.toml (Python), "
                         "<version> in pom.xml (JVM), version in Cargo.toml (Rust), "
-                        "or <Version> in *.csproj (C#)."
+                        "<Version> in *.csproj (C#), or project(NAME VERSION x.y.z) "
+                        "in CMakeLists.txt (C/C++)."
                     ),
                     evidence_locator=info.get("source") or ev.locator,
                     collector_name=ev.collector_name,
