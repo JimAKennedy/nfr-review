@@ -1,6 +1,122 @@
 ---
 title: "Collector Reference"
-description: "Each collector: what it reads, what evidence it produces"
+description: "All collectors, what they read, and what evidence they produce"
 ---
 
-Content coming in S04.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review ships with **34 collectors** that extract evidence from
+repositories. Each collector targets a specific technology or file type and
+emits typed evidence records that rules consume.
+
+## How collectors work
+
+Collectors implement a simple protocol: given a repository path and config,
+return a list of `Evidence` objects. The engine runs all applicable collectors
+(filtering by detected technologies) and passes the combined evidence to
+rules.
+
+Collectors that fail are caught and logged as warnings — they never abort the
+scan.
+
+## Collector inventory
+
+### Language AST collectors
+
+These collectors parse source code into abstract syntax trees and extract
+structural information (classes, methods, error handling, dependencies).
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `java-ast` | `java` | `java-ast-file` | Classes, methods, fields, catch blocks, thread pools, log statements |
+| `python-ast` | `python` | `python-ast-file` | Functions, classes, imports, log statements, catch blocks, async calls, default args |
+| `go-ast` | `go` | `go-ast-file` | Functions, structs, methods, error assignments, HTTP calls, goroutine launches |
+| `cpp-ast` | `cpp` | `cpp-ast-file` | Classes, functions, methods, raw/smart pointers, new/delete, malloc, includes, annotations |
+| `csharp-ast` | `csharp` | `csharp-ast-file` | Methods, log statements, await expressions, blocking calls, catch blocks |
+| `nodejs-ast` | `nodejs` | `nodejs-ast-file` | Functions, log statements, await expressions, sync calls, catch blocks, promise chains |
+
+### Dependency collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `java-deps` | `java` | `java-deps` | Maven/Gradle dependencies with versions, scopes |
+| `python-deps` | `python` | `python-deps` | pip/poetry/pipenv dependencies from requirements.txt, pyproject.toml |
+| `go-deps` | `go` | `go-deps` | Go module dependencies from go.mod |
+| `nodejs-deps` | `nodejs` | `nodejs-deps` | npm dependencies from package.json |
+| `csharp-deps` | `csharp` | `csharp-deps` | NuGet dependencies from .csproj files |
+
+### Infrastructure collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `k8s-manifest` | `kubernetes` | `k8s-resource`, `k8s-manifest-summary` | Deployments, Services, ConfigMaps, resource limits, probes |
+| `dockerfile` | `dockerfile` | `dockerfile-analysis` | Stages, FROM bases, RUN commands, user directives, COPY/ADD |
+| `helm` | `helm` | `helm-analysis` | Chart metadata, values, template analysis |
+| `terraform` | `terraform` | `terraform-analysis` | Resources, providers, modules, variables |
+| `skaffold` | `skaffold` | `skaffold-analysis` | Build/deploy configuration |
+| `istio` | `istio` | `istio-analysis` | VirtualServices, DestinationRules, traffic policies |
+| `service-mesh` | `kubernetes` | `service-mesh-summary` | Mesh-wide routing, rollout, and PDB analysis |
+
+### CI/CD collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `ci-artifact` | `ci` | `ci-pipeline`, `ci-summary` | Pipeline stages, steps, actions, triggers |
+| `cmake` | `cpp` | `cmake-config`, `cmake-test-signals` | CMake build config, test/lint/sanitizer targets |
+
+### Architecture collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `adr` | `adr` | `adr-document` | ADR titles, statuses, dates, content |
+| `adr-derive` | `adr` | `adr-derived`, `adr-derive-summary` | Structured ADR metadata extraction |
+| `proto` | `grpc` | `proto-service`, `proto-analysis` | gRPC services, methods, messages |
+| `graphify` | — | `graphify-analysis` | Code graph: nodes, edges, god nodes, communities |
+
+### Configuration collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `spring-config` | `spring_boot` | `spring-config-file` | Application properties, profiles, actuator settings |
+| `apim-policy` | `apim` | `apim-policy` | API Management inbound/outbound/backend policies |
+
+### Observability collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `otel` | `otel` | `otel-analysis` | Collector config, SDK init, pipeline definitions |
+| `otel-trace` | — | `otel-trace` | OTLP trace spans from NDJSON files |
+| `telemetry-config` | `otel` | `telemetry-config-summary` | Exporter targets, sampling config, pipeline completeness |
+
+### Repository metadata collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `repo-structure` | — | `repo-structure-summary` | Top-level files/dirs, README, git presence, build system |
+
+### Quality and coverage collectors
+
+| Collector | Tech | Evidence kind | What it extracts |
+|-----------|------|--------------|-----------------|
+| `jacoco-report` | `java` | `jacoco-report`, `jacoco-summary` | Line/branch/method coverage per package |
+| `jdepend` | `java` | `jdepend-packages`, `jdepend-summary` | Package metrics: abstractness, instability, cycles |
+| `gatling` | — | `gatling-result`, `gatling-summary` | Performance test response times and throughput |
+
+## Skipping collectors
+
+Skip collectors you don't need:
+
+```yaml
+# nfr-review.yaml
+collectors:
+  skip:
+    - graphify        # don't run graph analysis
+    - jacoco-report   # no JaCoCo reports in this project
+```
+
+<Aside type="note">
+Collectors gated on `required_tech` are already skipped automatically when
+the technology isn't detected. Manual skipping is only needed for collectors
+that run unconditionally or when you want to exclude a tech-specific collector
+even though the technology is present.
+</Aside>

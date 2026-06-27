@@ -1,6 +1,118 @@
 ---
 title: "Tech Detection"
-description: "18 technology keys and what triggers each"
+description: "19 technology keys and what triggers each detection"
 ---
 
-Content coming in S04.
+import { Aside } from '@astrojs/starlight/components';
+
+Before collectors run, nfr-review scans the target repository to detect which
+technologies are present. The result is a `dict[str, bool]` that gates
+tech-specific collectors — a Spring Boot collector won't run against a Go
+project, and vice versa.
+
+## How detection works
+
+The detection system checks for known file patterns, directory structures,
+and content markers. All checks use safe file operations that handle OS
+errors silently — a permission error on one path won't crash the scan.
+
+Detection runs once at startup and the result is passed to the engine. You
+can override detection results in config:
+
+```yaml
+# nfr-review.yaml
+tech:
+  java: true          # force Java detection on
+  kubernetes: false   # force Kubernetes detection off
+```
+
+Manual overrides take precedence over auto-detection.
+
+## Technology keys
+
+### Languages
+
+| Key | Detection method |
+|-----|-----------------|
+| `java` | `pom.xml` or `build.gradle`/`build.gradle.kts` present, or `**/*.java` files found |
+| `python` | `pyproject.toml`, `setup.py`, `setup.cfg`, or `requirements.txt` present |
+| `go` | `go.mod` file present |
+| `nodejs` | `package.json` present |
+| `csharp` | `*.csproj` or `*.sln` files found anywhere in the repo |
+| `cpp` | `CMakeLists.txt`, `Makefile`, or `meson.build` present; or `*.vcxproj`, `conanfile.*`, `vcpkg.json`; or `*.cpp`/`*.cc`/`*.cxx` source files |
+
+### Frameworks
+
+| Key | Detection method |
+|-----|-----------------|
+| `spring_boot` | `application.yml` or `application.properties` in `src/main/resources/`, or `spring-boot` dependency in `pom.xml`/`build.gradle` |
+
+### Infrastructure
+
+| Key | Detection method |
+|-----|-----------------|
+| `kubernetes` | `kustomization.yaml` present, or `k8s`/`kubernetes`/`deploy` directory containing YAML with K8s resource kinds (Deployment, Service, Pod, StatefulSet, etc.) |
+| `dockerfile` | `Dockerfile`, `docker-compose.yml`/`.yaml`, `*.Dockerfile`, or `dockerfile` found anywhere |
+| `helm` | `Chart.yaml` found anywhere in the repo |
+| `terraform` | `*.tf` files found anywhere |
+| `skaffold` | `skaffold.yaml` present |
+| `istio` | `istio/` directory present, or `*.yaml` files containing `kind: VirtualService` or `kind: DestinationRule` |
+
+### APIs and protocols
+
+| Key | Detection method |
+|-----|-----------------|
+| `grpc` | `*.proto` files found anywhere in the repo |
+| `apim` | `*.xml` files containing `<policies>` with `<inbound>`, `<backend>`, or `<outbound>` tags |
+
+### CI/CD
+
+| Key | Detection method |
+|-----|-----------------|
+| `ci` | `.github/workflows/*.yml`, `.gitlab-ci.yml`, `Jenkinsfile`, or `azure-pipelines.yml` present |
+
+### Architecture
+
+| Key | Detection method |
+|-----|-----------------|
+| `adr` | `docs/adr/`, `doc/adr/`, or `adr/` directory containing `*.md` files |
+
+### Observability
+
+| Key | Detection method |
+|-----|-----------------|
+| `otel` | `opentelemetry` appears in `pom.xml`, `go.mod`, `package.json`, `requirements.txt`, or `pyproject.toml`; or `*otel*collector*config*` / `*otelcol*` YAML files found |
+
+## Checking detected technologies
+
+Use verbose mode to see what was detected:
+
+```bash
+nfr-review run ./my-repo -v
+```
+
+The output includes a line like:
+
+```
+Tech detected: java=true spring_boot=true kubernetes=true ci=true
+```
+
+## Interaction with collectors
+
+Collectors declare `required_tech` as a list of technology keys. A collector
+only runs if **all** its required technologies are detected (or forced via
+config). Collectors without `required_tech` always run.
+
+```python
+class SpringConfigCollector:
+    required_tech = ["spring_boot"]  # only runs for Spring Boot projects
+```
+
+This prevents irrelevant collectors from running and producing empty evidence,
+which keeps scan output clean and rules coverage high.
+
+<Aside type="tip">
+If a collector you expect to run is being skipped, check `nfr-review run -v`
+to verify the technology was detected. If it wasn't, you can force it with a
+`tech:` override in your config.
+</Aside>

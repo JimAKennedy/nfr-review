@@ -3,4 +3,107 @@ title: "Tuning for Large Repos"
 description: "Performance tuning for large repositories"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+Large repositories (50k+ files, deep dependency trees, multiple language
+ecosystems) can take longer to scan. Here's how to speed things up.
+
+## Use parallel workers
+
+The single biggest speedup for large repos:
+
+```bash
+nfr-review report ./my-repo --workers 8
+```
+
+Workers parallelise collector execution across threads. Start with the number
+of CPU cores and adjust based on I/O vs. CPU balance.
+
+## Exclude test directories
+
+By default, test directories are excluded from analysis. If you've disabled
+this, re-enable it:
+
+```bash
+nfr-review report ./my-repo --exclude-tests
+```
+
+This skips scanning `tests/`, `test/`, `__tests__/`, `spec/`, and fixture
+directories, significantly reducing file I/O for repos with large test suites.
+
+## Skip unnecessary collectors
+
+If you know certain collectors aren't relevant, skip them:
+
+```yaml
+# nfr-review.yaml
+collectors:
+  skip:
+    - graphify        # graph analysis is expensive for large repos
+    - jacoco-report   # skip if no JaCoCo reports
+    - gatling         # skip if no Gatling reports
+```
+
+Each skipped collector saves one pass over the file tree.
+
+## Use tech overrides
+
+Auto-detection scans the full repo tree for technology markers. If you know
+your stack, declare it explicitly to skip detection:
+
+```yaml
+tech:
+  java: true
+  spring_boot: true
+  kubernetes: true
+  python: false       # skip Python analysis
+  go: false           # skip Go analysis
+```
+
+## Container mode in CI
+
+The container execution mode avoids pip dependency resolution on every run:
+
+```yaml
+- uses: JimAKennedy/nfr-review@v1
+  with:
+    execution: "container"
+    path: .
+    workers: 4
+```
+
+Image layers are cached, so subsequent runs start faster.
+
+## Selective scanning
+
+For very large monorepos, scan only the directories that changed:
+
+```bash
+# In CI, identify changed paths
+CHANGED=$(git diff --name-only origin/main...HEAD | cut -d/ -f1-2 | sort -u)
+
+# Scan each changed directory
+for dir in $CHANGED; do
+  if [ -d "$dir" ]; then
+    nfr-review run "$dir" --output-dir results/
+  fi
+done
+```
+
+<Aside type="caution">
+Selective scanning means each run only covers part of the repo. Use nightly
+full scans to catch issues in unchanged code.
+</Aside>
+
+## Timeouts
+
+If a scan is taking too long in CI, set a step timeout:
+
+```yaml
+- name: Run NFR Review
+  timeout-minutes: 15
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    workers: 4
+```

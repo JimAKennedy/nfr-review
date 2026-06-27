@@ -1,6 +1,154 @@
 ---
 title: "Payload Schemas"
-description: "Pydantic model field reference per collector"
+description: "Pydantic model reference for collector evidence payloads"
 ---
 
-Content coming in S04.
+import { Aside } from '@astrojs/starlight/components';
+
+Every collector emits evidence with a **typed payload** — a Pydantic
+`BaseModel` subclass that defines the shape of collected data. Rules use
+these types for compile-time safety and automatic validation via the
+FieldRule pattern.
+
+All payload models are defined in `src/nfr_review/collectors/payloads/` and
+exported from the package's `__init__.py`.
+
+## Language AST payloads
+
+### Python
+
+| Model | Key fields |
+|-------|-----------|
+| `PythonAstFilePayload` | `file_path`, `functions`, `classes`, `imports`, `log_statements`, `catch_blocks` |
+| `PythonFunction` | `name`, `line`, `is_async`, `default_args`, `decorators` |
+| `PythonClass` | `name`, `line`, `bases`, `methods` |
+| `PythonDefaultArg` | `name`, `default_type`, `line` |
+| `PythonCatchBlock` | `exception_type`, `line`, `is_bare` |
+
+### Java
+
+| Model | Key fields |
+|-------|-----------|
+| `JavaAstFilePayload` | `file_path`, `classes`, `log_statements`, `catch_blocks` |
+| `JavaClass` | `name`, `line`, `methods`, `fields`, `bases`, `is_abstract` |
+| `JavaMethod` | `name`, `line`, `return_type`, `parameters`, `is_public`, `is_static` |
+| `JavaThreadPool` | `line`, `pool_type`, `core_size`, `max_size`, `queue_type`, `queue_capacity` |
+| `JavaCatchBlock` | `exception_type`, `line`, `is_generic` |
+
+### Go
+
+| Model | Key fields |
+|-------|-----------|
+| `GoAstFilePayload` | `file_path`, `functions`, `structs`, `error_assignments`, `http_calls`, `goroutine_launches` |
+| `GoFunction` | `name`, `line`, `is_exported`, `parameters`, `returns` |
+| `GoStruct` | `name`, `line`, `fields`, `methods` |
+| `GoErrorAssignment` | `line`, `is_ignored`, `identifier` |
+| `GoHttpCall` | `line`, `method`, `url_pattern` |
+
+### C++
+
+| Model | Key fields |
+|-------|-----------|
+| `CppAstFilePayload` | `file_path`, `classes`, `functions`, `includes`, `raw_pointers`, `smart_pointers`, `new_expressions`, `delete_expressions`, `annotations` |
+| `CppClassInfo` | `name`, `line`, `bases`, `methods`, `fields`, `annotations` |
+| `CppFunction` | `name`, `line`, `return_type`, `parameters`, `is_virtual` |
+| `CppRawPointer` | `line`, `type_name`, `context` |
+| `CppSmartPointer` | `line`, `pointer_type`, `managed_type` |
+
+### C# and Node.js
+
+| Model | Key fields |
+|-------|-----------|
+| `CSharpAstFilePayload` | `file_path`, `methods`, `log_statements`, `catch_blocks`, `blocking_calls` |
+| `NodejsAstFilePayload` | `file_path`, `functions`, `log_statements`, `catch_blocks`, `sync_calls`, `promise_chains` |
+
+## Infrastructure payloads
+
+### Kubernetes
+
+| Model | Key fields |
+|-------|-----------|
+| `K8sResourcePayload` | `kind`, `name`, `namespace`, `containers`, `probes`, `resource_limits` |
+| `K8sManifestSummaryPayload` | `resource_counts`, `namespaces`, `has_network_policy` |
+| `K8sContainer` | `name`, `image`, `resources`, `security_context`, `env_vars` |
+
+### Docker
+
+| Model | Key fields |
+|-------|-----------|
+| `DockerfileAnalysisPayload` | `stages`, `run_commands`, `user_directives`, `has_multistage` |
+| `DockerStage` | `base_image`, `is_pinned`, `commands` |
+
+### Helm, Terraform, Skaffold
+
+| Model | Key fields |
+|-------|-----------|
+| `HelmAnalysisPayload` | `chart_name`, `chart_version`, `values`, `dependencies` |
+| `TerraformAnalysisPayload` | `resources`, `providers`, `modules`, `variables` |
+| `SkaffoldAnalysisPayload` | `build_config`, `deploy_config`, `profiles` |
+
+## CI/CD payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `CiPipelinePayload` | `pipeline_type`, `stages`, `triggers`, `actions` |
+| `CiSummaryPayload` | `has_tests`, `has_lint`, `has_sast`, `has_coverage_gate` |
+| `CmakeConfigPayload` | `cmake_version`, `project_name`, `targets`, `options` |
+| `CmakeTestSignalsPayload` | `has_ctest`, `has_lint_target`, `has_sanitizer_target` |
+
+## Architecture payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `AdrDocumentPayload` | `title`, `status`, `date`, `content`, `file_path` |
+| `AdrDerivedPayload` | `title`, `context`, `decision`, `consequences`, `metadata` |
+| `ProtoAnalysisPayload` | `services`, `messages`, `imports` |
+| `ProtoService` | `name`, `methods`, `file_path` |
+
+## Configuration payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `SpringConfigFilePayload` | `file_path`, `properties`, `profiles`, `actuator_endpoints` |
+| `ApimPolicyPayload` | `file_path`, `inbound_policies`, `outbound_policies`, `has_auth`, `has_rate_limit` |
+
+## Observability payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `OtelAnalysisPayload` | `exporters`, `pipelines`, `sampling_config`, `sdk_init` |
+| `OtelTracePayload` | `spans`, `service_name`, `trace_id` |
+| `TelemetryConfigSummaryPayload` | `exporters`, `pipelines`, `sampling_rate` |
+
+## Dependency payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `DepsPayload` | `dependencies`, `dev_dependencies`, `total_count` |
+| `DependencyItem` | `name`, `version`, `scope`, `latest_version`, `age_days` |
+| `JDependPackagesPayload` | `packages`, `cycles` |
+
+## Hygiene payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `BuildReadinessPayload` | `build_system`, `version_info`, `entry_points`, `pre_commit` |
+| `CiAutomationPayload` | `configs`, `has_ci`, `pipeline_count` |
+| `DocumentationPayload` | `manifest_entries`, `completeness_score` |
+| `CommunityPayload` | `readme`, `contributing`, `code_of_conduct`, `security`, `changelog`, `codeowners` |
+| `CodeDebtPayload` | `files`, `total_markers`, `marker_density` |
+| `LicenseScanPayload` | `detections`, `summary` |
+| `PrivacyPayload` | `matches`, `total_matches` |
+
+## Quality payloads
+
+| Model | Key fields |
+|-------|-----------|
+| `JacocoReportPayload` | `packages`, `overall_coverage` |
+| `GatlingResultPayload` | `response_times`, `throughput`, `error_rate` |
+
+<Aside type="tip">
+For the complete field definitions with types and defaults, read the Pydantic
+model source in `src/nfr_review/collectors/payloads/`. Each model includes
+field descriptions that appear in generated JSON Schema.
+</Aside>

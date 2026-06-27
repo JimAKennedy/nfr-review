@@ -1,6 +1,174 @@
 ---
-title: "Hygiene System"
-description: "Separate registry, hygiene checks, and community/CI/docs/license scanning"
+title: "Hygiene Checks"
+description: "Repository hygiene audit — build readiness, CI, docs, licensing, and privacy scanning"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+Beyond design-quality rules, nfr-review includes a **hygiene audit** that
+checks operational readiness: does the repo have a CI pipeline? Is the license
+declared? Are there pre-commit hooks? Are PII patterns leaking into source?
+
+The hygiene subsystem uses a **separate registry** from core NFR rules so the
+two concerns stay decoupled. You can run hygiene checks independently or as
+part of a full report.
+
+## Running a hygiene scan
+
+```bash
+# Standalone hygiene audit
+nfr-review hygiene ./my-repo
+
+# List all registered checks
+nfr-review hygiene --list-checks
+```
+
+The standalone command writes CSV and JSONL output files by default:
+
+```bash
+nfr-review hygiene ./my-repo --output-dir ./results --format both
+```
+
+In a full `nfr-review report`, hygiene runs automatically alongside NFR rules
+and both sets of findings appear in the combined output.
+
+## Hygiene categories
+
+Hygiene checks are organised into six categories, each backed by a dedicated
+collector that extracts metadata from the repository.
+
+### Build and release (BLD)
+
+The **build readiness** collector examines build manifests (`pyproject.toml`,
+`package.json`, `pom.xml`, `Cargo.toml`, `CMakeLists.txt`) and extracts
+version strategy, entry points, and pre-commit hook configuration.
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-BLD-001 | Build system is present and recognised |
+| HYG-BLD-002 | Version is declared and follows SemVer |
+| HYG-BLD-003 | Entry points or main modules are configured |
+| HYG-BLD-004 | Pre-commit or git hooks are set up |
+| HYG-BLD-005 | Code debt markers (TODO, FIXME, HACK) are within threshold |
+
+### CI/CD automation (CI)
+
+The **CI automation** collector parses workflow files for GitHub Actions,
+GitLab CI, Jenkins, CircleCI, and Azure DevOps.
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-CI-001 | CI/CD pipeline exists |
+| HYG-CI-002 | CI includes a test step |
+| HYG-CI-003 | CI includes a lint or format step |
+| HYG-CI-004 | CI includes SAST or security scanning |
+| HYG-CI-005 | GitHub Actions are pinned by SHA (not tag) |
+| HYG-CI-006 | CI enforces a test coverage gate |
+| HYG-CI-007 | Release and publish automation is configured |
+
+<Aside type="tip">
+HYG-CI-005 catches a common supply-chain risk: GitHub Actions referenced by
+mutable tags (`uses: actions/checkout@v4`) can be silently replaced. Pinning
+by SHA (`uses: actions/checkout@abc123...`) ensures reproducible builds.
+</Aside>
+
+### Community health (COM)
+
+The **community** collector inspects standard community health files and
+checks their content quality.
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-COM-001 | README exists and includes installation/setup sections |
+| HYG-COM-002 | CONTRIBUTING.md is present |
+| HYG-COM-003 | CODE_OF_CONDUCT.md is present |
+| HYG-COM-004 | SECURITY policy is present |
+| HYG-COM-005 | CHANGELOG exists and follows a recognised format |
+| HYG-COM-006 | CODEOWNERS file is present |
+
+### Documentation (DOC)
+
+The **documentation** collector validates package metadata completeness
+(name, version, description, authors, license, URLs, classifiers).
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-DOC-001 | Package metadata is complete (name, version, description, etc.) |
+| HYG-DOC-002 | Documentation infrastructure exists (docs folder, mkdocs, sphinx) |
+| HYG-DOC-003 | API documentation hints are present (py.typed, typings classifier) |
+
+### Licensing (LIC)
+
+The **license scan** collector uses scancode-toolkit (when available) to
+detect licenses and copyrights in source files. If scancode is not installed,
+rules that depend on it are skipped gracefully.
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-LIC-001 | Copyleft license detection (GPL, AGPL, LGPL) |
+| HYG-LIC-002 | NOTICE file lists third-party copyright entries |
+| HYG-LIC-003 | License headers present in source files |
+| HYG-LIC-004 | SPDX license expression is valid (parses metadata directly) |
+
+<Aside type="note">
+HYG-LIC-001 downgrades to green if the project has deliberately chosen a
+copyleft license (detected via the project's own license declaration). It only
+flags copyleft as amber when found in dependencies or when the project license
+is permissive but copyleft code appears in the tree.
+</Aside>
+
+### Privacy (PRV)
+
+The **privacy** collector scans source files for personally identifiable
+information patterns, internal organisation references, and hardcoded
+tracking or analytics IDs.
+
+| Rule | What it checks |
+|------|---------------|
+| HYG-PRV-001 | PII patterns in source files (emails, phone numbers, IPs) |
+| HYG-PRV-002 | Internal organisation references (intranet URLs, team names) |
+| HYG-PRV-003 | Hardcoded tracking or analytics IDs |
+
+## Filtering by category
+
+Run only specific categories with `--category`:
+
+```bash
+# Only licensing checks
+nfr-review hygiene ./my-repo --category lic
+
+# Multiple categories
+nfr-review hygiene ./my-repo --category lic,ci,bld
+```
+
+## Setting a severity gate
+
+Use `--severity-threshold` to fail the scan (exit code 2) when any finding
+meets or exceeds a severity level:
+
+```bash
+# Fail on high or critical findings
+nfr-review hygiene ./my-repo --severity-threshold high
+```
+
+This integrates naturally with CI pipelines where you want hygiene checks to
+block merges.
+
+## Hygiene in reports
+
+When you run `nfr-review report`, hygiene findings are combined with NFR
+findings in the output. The report sections separate them for clarity, and
+the maturity score includes hygiene categories alongside design categories.
+
+```bash
+# Full report with NFR + hygiene
+nfr-review report ./my-repo --output-dir ./results
+```
+
+Hygiene findings appear in the CSV, JSONL, SARIF, and Markdown outputs with
+their `HYG-` prefixed rule IDs, making them easy to filter and track.
+
+## Next
+
+The next chapter covers design-change detection — how nfr-review tracks
+structural drift between scans and surfaces architectural changes.

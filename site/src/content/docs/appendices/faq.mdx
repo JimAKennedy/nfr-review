@@ -3,4 +3,164 @@ title: "FAQ"
 description: "Frequently asked questions and troubleshooting"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+## General
+
+### What is nfr-review?
+
+nfr-review is a CLI tool that performs automated non-functional design
+reviews. It analyses source code, infrastructure configs, CI pipelines,
+and ADRs to surface quality issues across security, reliability, performance,
+and maintainability.
+
+### What languages does it support?
+
+AST analysis is available for **Java**, **Python**, **Go**, **C++**, **C#**,
+and **Node.js/TypeScript**. Infrastructure analysis covers Kubernetes, Docker,
+Helm, Terraform, and Istio. Framework-specific support includes Spring Boot,
+gRPC/protobuf, and Azure API Management.
+
+### Do I need an LLM API key?
+
+No. All Band 1 rules (100+ rules) work without any LLM. Band 2 rules
+(semantic analysis) require an LLM API key but are optional — they're
+skipped gracefully when unconfigured.
+
+## Installation
+
+### How do I install nfr-review?
+
+```bash
+pip install nfr-review
+```
+
+For optional features:
+
+```bash
+pip install "nfr-review[pdf]"      # PDF report generation
+pip install "nfr-review[monitor]"  # production monitoring
+pip install "nfr-review[all]"      # everything
+```
+
+### What Python version is required?
+
+Python 3.11 or later.
+
+## Scanning
+
+### Why are some rules skipped?
+
+Rules are skipped when:
+- **Required technology not detected** — e.g. Spring Boot rules on a Go project
+- **Required collector didn't produce evidence** — collector was skipped or
+  failed
+- **Rule suppressed in config** — listed in `rules.skip`
+
+Use `nfr-review run -v` to see why each rule was skipped.
+
+### How do I speed up scans?
+
+Use `--workers 4` (or more) to parallelise collector execution. See the
+[Large Repos recipe](/recipes/large-repos) for more tuning tips.
+
+### Can I scan only part of a repository?
+
+Yes — point nfr-review at a subdirectory:
+
+```bash
+nfr-review report ./my-repo/services/user-service
+```
+
+### What does "rules coverage" mean?
+
+It's the fraction of applicable rules that actually ran. Low coverage
+suggests missing evidence — check verbose output for skipped collectors.
+
+## Output
+
+### How do I get SARIF output?
+
+```bash
+nfr-review report ./my-repo --format sarif -o results/
+```
+
+Or in the GitHub Action: `sarif-upload: "true"`.
+
+### Can I suppress specific rules?
+
+Yes, in your config:
+
+```yaml
+# nfr-review.yaml
+rules:
+  skip:
+    - rule-id-to-suppress
+```
+
+### How is the maturity score calculated?
+
+Each finding deducts points from its category based on severity. Category
+scores are combined using configurable weights. See
+[Scoring and Maturity](/learn/07-scoring) for the full algorithm.
+
+## CI/CD
+
+### How do I set up nfr-review in GitHub Actions?
+
+Copy one of the example workflows from the
+[CI/CD Integration](/learn/11-ci-cd) chapter. The minimal setup is:
+
+```yaml
+- uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    fail-on: "red"
+```
+
+### What does the first-run-cap do?
+
+On first adoption, a scan may produce many findings. `first-run-cap` limits
+how many GitHub issues are created in the initial run (default: 25) to
+prevent flooding your issue tracker.
+
+### Can I run nfr-review in GitLab CI?
+
+The GitHub Action is GitHub-specific, but the CLI works anywhere:
+
+```bash
+pip install nfr-review
+nfr-review report . --format sarif -o results/
+```
+
+## Troubleshooting
+
+### "No collectors produced evidence"
+
+This usually means tech detection didn't find any recognised technologies.
+Check with `nfr-review run -v` and consider adding tech overrides:
+
+```yaml
+tech:
+  java: true
+```
+
+### "Required collector not available"
+
+The collector may need an optional dependency. Check:
+- `graphify` requires `pip install graphify`
+- License scanning requires `pip install scancode-toolkit`
+- Monitor mode requires `pip install nfr-review[monitor]`
+
+### Findings differ between local and CI runs
+
+Common causes:
+- **Different nfr-review versions** — pin the version in CI
+- **Missing full git history** — add `fetch-depth: 0` to checkout
+- **Time-based rules** — dependency freshness findings change as
+  dependencies age
+
+<Aside type="tip">
+When reporting issues, include the output of `nfr-review version` and
+`nfr-review run -vv` for debug-level logging.
+</Aside>

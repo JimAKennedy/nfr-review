@@ -3,4 +3,194 @@ title: "Writing Custom Collectors"
 description: "Collector protocol, payload models, and evidence kinds"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+Collectors are the data-extraction layer of nfr-review. Each collector reads
+a specific aspect of a repository (AST, config files, CI pipelines) and emits
+typed **Evidence** records that rules consume. Writing a custom collector lets
+you feed new signal types into the pipeline.
+
+## The Collector protocol
+
+A collector is any object that satisfies this protocol:
+
+```python
+from pathlib import Path
+from nfr_review.protocols import Evidence
+
+class MyCollector:
+    name: str = "my-collector"
+    version: str = "0.1.0"
+
+    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        ...
+```
+
+The `collect` method receives the repository root path and the resolved
+config, and returns a list of `Evidence` objects.
+
+## Evidence objects
+
+Each evidence record describes one piece of collected data:
+
+```python
+Evidence(
+    collector_name="my-collector",     # matches collector.name
+    collector_version="0.1.0",         # matches collector.version
+    locator="src/main/App.java",       # file path or resource ID
+    kind="my-evidence-kind",           # evidence subtype (rules filter on this)
+    payload=my_payload,                # typed Pydantic model or dict
+)
+```
+
+The `kind` field is how rules find the evidence they need — a rule declares
+`evidence_kind = "my-evidence-kind"` to receive only matching evidence.
+
+## Payload models
+
+Payloads should be **Pydantic BaseModel** subclasses defined in
+`src/nfr_review/collectors/payloads/`. This gives you validation, type
+safety, and automatic JSON serialisation:
+
+```python
+from pydantic import BaseModel
+
+class MyPayload(BaseModel):
+    file_path: str
+    widget_count: int
+    widgets: list[str] = []
+    has_config: bool = False
+```
+
+For backward compatibility, collectors can also return plain dicts as
+payloads. However, typed models are strongly preferred — they enable
+FieldRule's automatic payload coercion and provide clear documentation of the
+data shape.
+
+## Example: a simple collector
+
+Here's a minimal collector that scans for configuration files:
+
+```python
+from pathlib import Path
+from nfr_review.protocols import Evidence
+from nfr_review.collectors.payloads import MyConfigPayload
+
+class ConfigCollector:
+    name = "my-config"
+    version = "0.1.0"
+
+    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        results = []
+        for cfg_file in repo_path.rglob("*.config.yaml"):
+            payload = MyConfigPayload(
+                file_path=str(cfg_file.relative_to(repo_path)),
+                has_validation=self._check_validation(cfg_file),
+            )
+            results.append(Evidence(
+                collector_name=self.name,
+                collector_version=self.version,
+                locator=str(cfg_file.relative_to(repo_path)),
+                kind="config-file",
+                payload=payload,
+            ))
+        return results
+
+    def _check_validation(self, path: Path) -> bool:
+        text = path.read_text(errors="replace")
+        return "validation:" in text
+```
+
+## Registration
+
+Register your collector at the bottom of your module:
+
+```python
+from nfr_review.registry import collector_registry
+
+def _register():
+    collector_registry.register(ConfigCollector())
+
+_register()
+```
+
+The `__init__.py` in the collectors directory auto-discovers all `.py` files
+and imports them, triggering registration. Just place your module in
+`src/nfr_review/collectors/` and it will be found.
+
+## Auto-discovery
+
+nfr-review's collector auto-discovery works by dynamically importing every
+`.py` file in the collectors directory at startup. This means:
+
+- No manual import needed in `__init__.py`
+- Your collector is available as soon as the module exists
+- The `_register()` function runs on import, adding your collector to the
+  registry
+
+<Aside type="tip">
+Use `nfr-review run --verbose` to see which collectors are loaded and which
+were skipped. This helps debug registration issues.
+</Aside>
+
+## Handling failures gracefully
+
+Collectors should handle errors internally and return an empty list rather
+than raising exceptions. The engine catches collector failures and logs them
+as warnings, but it's better practice to handle expected errors yourself:
+
+```python
+def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+    try:
+        # ... collection logic ...
+        return results
+    except FileNotFoundError:
+        return []  # no relevant files found
+    except Exception as exc:
+        logging.warning("my-config collector failed: %s", exc)
+        return []
+```
+
+## Tech-gating collectors
+
+If your collector only applies to certain technology stacks, declare
+`required_tech` so the engine skips it automatically when the technology
+isn't detected:
+
+```python
+class SpringConfigCollector:
+    name = "spring-config"
+    version = "0.1.0"
+    required_tech = ["spring_boot"]  # only runs for Spring Boot projects
+
+    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        ...
+```
+
+The tech detection system (see [Tech Detection reference](/reference/tech-detection))
+populates a dict of detected technologies before collectors run.
+
+## Payload export
+
+Export your payload model from
+`src/nfr_review/collectors/payloads/__init__.py` so rules can import it:
+
+```python
+# In payloads/__init__.py
+from .my_config import MyConfigPayload
+```
+
+## Checklist for new collectors
+
+1. Create a module in `src/nfr_review/collectors/`
+2. Define a typed payload in `src/nfr_review/collectors/payloads/`
+3. Implement the `Collector` protocol with `name`, `version`, and `collect()`
+4. Register via `_register()` function at module bottom
+5. Export the payload from `payloads/__init__.py`
+6. Write test cases with fixture data
+7. Add `required_tech` if the collector is technology-specific
+
+## Next
+
+The next chapter covers maintaining nfr-review — keeping baselines current,
+managing rule updates, and upgrading between versions.

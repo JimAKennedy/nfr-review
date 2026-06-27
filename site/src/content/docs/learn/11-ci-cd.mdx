@@ -1,6 +1,253 @@
 ---
 title: "CI/CD Integration"
-description: "GitHub Actions recipes for PR, nightly, and dynamic analysis workflows"
+description: "GitHub Actions workflows for PR checks, nightly scans, SARIF upload, and issue sync"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+
+nfr-review ships with a **GitHub Action** (`JimAKennedy/nfr-review@v1`) and
+four example workflow templates covering the most common CI patterns. Copy the
+template that matches your use case and adjust the inputs.
+
+## Execution modes
+
+The action supports two execution modes:
+
+| Mode | Setting | How it works |
+|------|---------|-------------|
+| **pip** (default) | `execution: "pip"` | Installs nfr-review via pip in the runner |
+| **container** | `execution: "container"` | Runs inside a pre-built Docker image with all extras |
+
+Container mode is faster for repeated runs (image layers are cached) and
+includes PDF generation, diagram rendering, and the `gh` CLI out of the box.
+
+## PR workflow
+
+The PR workflow scans every pull request against the nightly baseline and
+posts a sticky comment with findings.
+
+```yaml
+name: NFR Review
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+
+jobs:
+  nfr-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download nightly baseline
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list \
+            --workflow=nfr-review-nightly.yml \
+            --branch=main --status=success --limit=1 \
+            --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
+          if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "null" ]; then
+            gh run download "$RUN_ID" \
+              --name nfr-review-baseline \
+              --dir "${{ runner.temp }}/baseline"
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run NFR Review
+        uses: JimAKennedy/nfr-review@v1
+        with:
+          path: .
+          fail-on: "red"
+          baseline: ${{ steps.baseline.outputs.found == 'true'
+            && format('{0}/baseline/nfr-review-output.jsonl',
+            runner.temp) || '' }}
+          sarif-upload: "true"
+          comment: "true"
+```
+
+<Aside type="tip">
+On first adoption (no prior nightly exists), the baseline download is skipped
+automatically and nfr-review runs a full scan. No manual setup needed — the
+first nightly run seeds the baseline for subsequent PR scans.
+</Aside>
+
+### Key inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `fail-on` | `"red"` | Fail the job on: `"red"`, `"red+amber"`, or `"never"` |
+| `baseline` | — | Path to a JSONL baseline for diff mode |
+| `sarif-upload` | `"false"` | Upload SARIF to GitHub Security tab |
+| `comment` | `"false"` | Post a sticky PR comment with findings |
+| `create-issues` | `"false"` | Create/sync GitHub issues from findings |
+| `rag-min` | `"red"` | Minimum RAG level for issue creation: `"red"` or `"amber"` |
+| `first-run-cap` | `"25"` | Max issues created on first adoption (prevents flood) |
+| `anthropic-api-key` | — | Enable LLM features (Band 2 rules) |
+
+### Outputs
+
+| Output | Description |
+|--------|-------------|
+| `findings-count` | Total number of findings |
+| `red-count` | Number of red (critical) findings |
+| `amber-count` | Number of amber (warning) findings |
+| `green-count` | Number of green (info) findings |
+| `jsonl-path` | Path to the JSONL output file |
+| `sarif-path` | Path to the SARIF output file |
+| `issues-created` | Number of GitHub issues created |
+| `issues-updated` | Number of GitHub issues updated |
+| `issues-closed` | Number of GitHub issues closed |
+
+## Nightly workflow
+
+The nightly workflow runs a full scan on the default branch, uploads SARIF,
+creates GitHub issues, and publishes a baseline artifact for PR workflows.
+
+```yaml
+name: NFR Review (nightly)
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  security-events: write
+
+jobs:
+  nfr-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0    # full history for git-based collectors
+
+      - name: Check for new commits
+        if: github.event_name == 'schedule'
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Skip if no commits since last successful run
+          LAST_RUN=$(gh run list \
+            --workflow=nfr-review-nightly.yml \
+            --branch=main --status=success --limit=1 \
+            --json createdAt --jq '.[0].createdAt' 2>/dev/null || true)
+          NEW=$(git log --since="$LAST_RUN" --oneline | wc -l | tr -d ' ')
+          echo "skip=$( [ "$NEW" = "0" ] && echo true || echo false )" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Run NFR Review
+        if: steps.check.outputs.skip != 'true'
+        uses: JimAKennedy/nfr-review@v1
+        with:
+          path: .
+          fail-on: "never"
+          sarif-upload: "true"
+          create-issues: "true"
+          rag-min: "amber"
+          first-run-cap: "25"
+
+      - name: Upload baseline
+        if: always() && steps.check.outputs.skip != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: nfr-review-baseline
+          path: ${{ steps.nfr.outputs.jsonl-path }}
+          retention-days: 90
+```
+
+<Aside type="note">
+The nightly workflow triggers on both `push` to main **and** a daily cron
+schedule. The push trigger refreshes the baseline immediately after every
+merge so PR scans always diff against fresh data. The cron trigger catches
+drift even when no PRs are landing. Scheduled runs automatically skip if no
+commits arrived since the last success.
+</Aside>
+
+## Container workflow
+
+For faster execution and built-in extras (PDF, diagrams, `gh` CLI):
+
+```yaml
+- name: Run NFR Review
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    execution: "container"
+    # image: "ghcr.io/jimakennedy/nfr-review:1.2.3"  # pin a version
+    path: .
+    fail-on: "red"
+    sarif-upload: "true"
+    comment: "true"
+    create-issues: "true"
+```
+
+## Dynamic analysis workflow
+
+When your test suite or staging environment exports OTLP traces, you can run
+nfr-review with dynamic analysis:
+
+```yaml
+- name: Run NFR Review with dynamic analysis
+  run: |
+    nfr-review report . \
+      --otel-traces tests/fixtures/traces/sample-traces.ndjson
+```
+
+This analyses runtime behaviour alongside static analysis and includes
+dynamic findings in the report.
+
+## Exit codes
+
+nfr-review uses exit codes to signal scan results for CI gating:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Scan completed, no findings exceeded the threshold |
+| `1` | Error (invalid config, target not found, etc.) |
+| `2` | Findings exceeded the severity threshold |
+
+Use `--severity-threshold` with the standalone commands or `fail-on` with the
+GitHub Action to control what triggers a non-zero exit.
+
+## SARIF integration
+
+When `sarif-upload: "true"` is set, the action uploads SARIF to GitHub's
+Security tab. Findings appear under **Security > Code scanning alerts**
+alongside other SAST tools, with links to the exact file and line.
+
+SARIF output is also available as a file for integration with other tools:
+
+```bash
+nfr-review report ./my-repo --format sarif -o results/
+```
+
+## GitHub issue sync
+
+With `create-issues: "true"`, the nightly workflow creates, updates, and
+closes GitHub issues to match the current findings:
+
+- **New findings** create issues with labels, severity, and evidence
+- **Existing findings** update the issue body if details changed
+- **Resolved findings** close the corresponding issue
+- **First-run cap** prevents flooding by limiting initial issue creation
+
+Labels can be customised with `extra-labels: "team:platform,sprint:23"`.
+
+## Next
+
+The next chapter covers writing custom rules — how to extend nfr-review with
+your own domain-specific checks.

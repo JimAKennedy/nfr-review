@@ -1,6 +1,118 @@
 ---
 title: "Compliance Audit"
-description: "Step-by-step compliance audit walkthrough"
+description: "Step-by-step compliance audit walkthrough using framework filtering"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review maps 68 rules to four compliance frameworks: SOC 2, ISO 27001,
+PCI DSS, and NIST 800-53. This recipe walks through running a compliance
+audit end to end.
+
+## Step 1: Run a compliance-filtered scan
+
+Filter output to your target framework:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2 \
+  --format markdown \
+  --output-dir ./audit-results
+```
+
+Only findings mapped to SOC 2 controls appear in the output. Non-compliance
+findings are excluded.
+
+## Step 2: Review the report
+
+The compliance-filtered report shows:
+- **Passing controls** (green findings) — evidence of compliance
+- **Warnings** (amber findings) — areas needing improvement
+- **Violations** (red findings) — gaps that need remediation
+
+<Aside type="tip">
+Green findings are valuable audit evidence — they document that controls are
+in place. Include them in your compliance package.
+</Aside>
+
+## Step 3: Export evidence
+
+Generate SARIF for integration with compliance tooling:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2 \
+  --format sarif \
+  --output-dir ./audit-evidence
+```
+
+SARIF includes compliance context in the `properties` field of each result.
+
+For spreadsheet-based audit tracking:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2 \
+  --format csv \
+  --output-dir ./audit-evidence
+```
+
+## Step 4: Track remediation
+
+Use GitHub issues to track remediation of compliance gaps:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2 \
+  --create-issues \
+  --rag-min amber \
+  --extra-labels "compliance:soc2,audit:2026-Q2"
+```
+
+Each gap becomes a tracked issue with severity, evidence, and remediation
+guidance.
+
+## Step 5: Demonstrate improvement
+
+Run the scan again after remediation to show progress:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2 \
+  --baseline ./audit-results/report.jsonl
+```
+
+The baseline diff highlights which gaps were closed since the last audit.
+
+## Multiple frameworks
+
+Audit against multiple frameworks simultaneously:
+
+```bash
+nfr-review report ./my-repo \
+  --compliance soc2,pci-dss \
+  --format markdown
+```
+
+## Nightly compliance monitoring
+
+Set up a nightly workflow to continuously monitor compliance:
+
+```yaml
+- name: Compliance scan
+  uses: JimAKennedy/nfr-review@v1
+  with:
+    path: .
+    compliance: "soc2"
+    create-issues: "true"
+    rag-min: "amber"
+    fail-on: "never"
+```
+
+This catches compliance regressions as they're introduced, rather than
+discovering them during periodic audits.
+
+## Framework coverage
+
+See the [Compliance Matrix](/reference/compliance) reference for the complete
+list of mapped rules and frameworks.

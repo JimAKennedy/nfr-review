@@ -3,4 +3,144 @@ title: "Glossary"
 description: "Terms used in nfr-review: RAG, evidence, collector, finding, and more"
 ---
 
-Content coming in a follow-up milestone.
+Key terms used throughout nfr-review documentation and output.
+
+## A
+
+**ADR (Architecture Decision Record)**
+: A document recording a significant architectural decision, its context, and
+  consequences. nfr-review detects and analyses ADR documents for lifecycle
+  compliance.
+
+## B
+
+**Band**
+: A classification tier for rules based on analysis depth. Band 1 is static
+  analysis, Band 2 uses LLM or multi-source composition, Band 3 analyses
+  runtime traces.
+
+**Baseline**
+: A saved snapshot used for comparison in subsequent scans. Finding baselines
+  track known issues; design-change baselines track structural metrics.
+
+## C
+
+**Collector**
+: A component that extracts data from a repository and emits `Evidence`
+  records. Each collector targets a specific technology or file type.
+
+**Compliance framework**
+: A set of controls or criteria that rules map to (SOC 2, ISO 27001, PCI DSS,
+  NIST 800-53). Used for filtered audit reports.
+
+## D
+
+**Design-change trigger**
+: A finding generated when structural metrics drift beyond configured
+  thresholds between baseline scans. Rule ID: `design-change-trigger`.
+
+## E
+
+**Engine**
+: The orchestrator that runs collectors, passes evidence to rules, and
+  collects results. Supports parallel execution via `--workers`.
+
+**Evidence**
+: A typed data record emitted by a collector. Contains a `kind` (subtype),
+  `locator` (file path), and `payload` (structured data).
+
+**Evidence kind**
+: The subtype identifier on evidence records. Rules filter evidence by kind to
+  receive only the data they can analyse.
+
+## F
+
+**FieldRule**
+: The recommended base class for writing rules. Handles evidence filtering,
+  payload coercion, and finding construction automatically.
+
+**Finding**
+: The output of a rule evaluation. Contains a `rule_id`, `rag` status,
+  `severity`, `summary`, `evidence_locator`, and `recommendation`.
+
+## G
+
+**Grade**
+: A letter grade (A through F) derived from the maturity score. A = 90-100,
+  B = 75-89, C = 60-74, D = 45-59, F = 0-44.
+
+## H
+
+**Hit**
+: A lightweight issue record yielded by a `FieldRule.check()` method. Hits
+  are wrapped into full `Finding` objects by the framework.
+
+**Hygiene**
+: The repository hygiene audit subsystem. Checks operational readiness
+  (CI, licensing, documentation, build system) using a separate registry
+  from core NFR rules.
+
+## M
+
+**Maturity score**
+: A 0-100 score computed from findings, weighted by category. Higher is
+  better. Used for quality gates and trend tracking.
+
+## N
+
+**NFR (Non-Functional Requirement)**
+: A quality attribute (performance, security, reliability, maintainability)
+  as opposed to a feature specification. nfr-review focuses on these.
+
+## O
+
+**OTLP (OpenTelemetry Protocol)**
+: The protocol used for transmitting traces, metrics, and logs. nfr-review
+  can receive OTLP traces for Band 3 dynamic analysis and production
+  monitoring.
+
+## P
+
+**Payload**
+: The structured data carried by an evidence record. Typically a Pydantic
+  BaseModel subclass defined in `collectors/payloads/`.
+
+**Pattern tag**
+: A machine-readable label on findings (e.g. `mutable-default`,
+  `design_change:class_count`). Used for filtering and alerting.
+
+## R
+
+**RAG (Red-Amber-Green)**
+: The traffic-light classification for findings. Red = violation,
+  Amber = warning, Green = passing. Distinct from severity.
+
+**Registry**
+: A named collection of collectors or rules. Auto-populated via module
+  import side effects at startup.
+
+**Rule**
+: A component that evaluates evidence and produces findings. Rules declare
+  which collectors they need and are skipped when that evidence is
+  unavailable.
+
+**Rules coverage**
+: The fraction of applicable rules that actually ran. Low coverage means
+  many rules were skipped (usually due to missing evidence).
+
+## S
+
+**SARIF (Static Analysis Results Interchange Format)**
+: A JSON format for static analysis results. nfr-review outputs SARIF for
+  integration with GitHub Security and IDEs.
+
+**Severity**
+: The impact level of a finding: `critical`, `high`, `medium`, `low`, or
+  `info`. Drives scoring deductions and CI gating.
+
+## T
+
+**Tech detection**
+: The startup phase that scans the target repository to identify which
+  technologies are present (Java, Python, Kubernetes, etc.). Results gate
+  tech-specific collectors.

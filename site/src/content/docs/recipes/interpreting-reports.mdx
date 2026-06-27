@@ -1,6 +1,128 @@
 ---
 title: "Interpreting Reports"
-description: "How to read PDF and Markdown reports"
+description: "How to read and act on nfr-review output"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+nfr-review produces reports in multiple formats. This recipe walks through
+how to read each one and extract actionable information.
+
+## The RAG model
+
+Every finding is classified using the **RAG** (Red-Amber-Green) model:
+
+| RAG | Meaning | Action |
+|-----|---------|--------|
+| **Red** | Violation — concrete issue detected | Fix before shipping |
+| **Amber** | Warning — potential issue or missing practice | Investigate, fix or accept |
+| **Green** | Passing — good practice confirmed | No action needed |
+
+Red findings are the priority. Amber findings are worth reviewing but may be
+acceptable depending on context.
+
+## Markdown reports
+
+The Markdown report is the most readable format. Key sections:
+
+### Executive summary
+
+Shows the maturity score, grade, and finding counts at a glance. Look at the
+grade first — A/B means the project is in good shape, C/D needs attention,
+F needs urgent work.
+
+### Findings by severity
+
+Findings are grouped by severity (critical, high, medium, low, info). Start
+with critical and high — these are the most impactful issues.
+
+### Category breakdown
+
+Shows scores per category (security, reliability, performance, etc.). A low
+score in one category highlights a specific area to improve.
+
+### Skipped rules
+
+Lists rules that couldn't run and why. Common reasons:
+- Required collector not available
+- Required technology not detected
+- Rule suppressed in config
+
+A long skipped list means low rules coverage — consider enabling more
+collectors.
+
+## JSONL output
+
+JSONL is the machine-readable format, with one JSON record per line. Key
+record types:
+
+```bash
+# Extract all findings
+jq 'select(.record_type == "finding")' report.jsonl
+
+# Get the maturity score
+jq 'select(.record_type == "score")' report.jsonl
+
+# Count findings by severity
+jq -r 'select(.record_type == "finding") | .severity' report.jsonl | sort | uniq -c
+
+# List red findings only
+jq 'select(.record_type == "finding" and .rag == "red")' report.jsonl
+```
+
+## CSV output
+
+CSV is useful for spreadsheet analysis and team triage:
+
+```bash
+# Open in your spreadsheet tool
+open my-repo-nfr-review-report.csv
+
+# Or filter on the command line
+csvgrep -c rag -m red report.csv
+```
+
+Columns include: `rule_id`, `rag`, `severity`, `category`, `summary`,
+`evidence_locator`, `recommendation`.
+
+## SARIF output
+
+SARIF integrates with GitHub's Security tab and IDEs. Findings appear under
+**Security > Code scanning alerts** with links to exact file locations.
+
+No manual interpretation needed — the SARIF viewer presents findings in
+context.
+
+## Common triage patterns
+
+### New project adoption
+
+On first scan, expect many findings. Prioritise:
+
+1. **Red findings** — these are real issues
+2. **Security and reliability** categories — highest risk
+3. **Suppress rules** that don't apply to your project type
+
+### Ongoing monitoring
+
+Focus on:
+- **New findings** (baseline diff) — regressions from recent changes
+- **Score trend** — is the project improving or regressing?
+- **Skipped rules** — are collectors failing silently?
+
+### Pre-release audit
+
+Run with all extras enabled:
+
+```bash
+nfr-review report ./my-repo \
+  --workers 4 \
+  --format markdown \
+  --severity-threshold medium
+```
+
+<Aside type="tip">
+Use `nfr-review explain <rule-id>` to get detailed information about any
+rule, including what it checks, why it matters, and how to fix issues it
+finds.
+</Aside>

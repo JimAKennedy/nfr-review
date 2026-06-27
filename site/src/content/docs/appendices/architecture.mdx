@@ -1,6 +1,145 @@
 ---
 title: "Architecture Overview"
-description: "C4 diagrams of nfr-review itself"
+description: "How nfr-review is structured: pipeline, registries, and extension points"
 ---
 
-Content coming in a follow-up milestone.
+import { Aside } from '@astrojs/starlight/components';
+
+This page describes the internal architecture of nfr-review — how the
+components fit together and where the extension points are.
+
+## Pipeline overview
+
+nfr-review follows a three-phase pipeline:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Collectors  │────▶│    Rules     │────▶│  Renderers   │
+│  (extract)   │     │  (evaluate)  │     │  (output)    │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                    │                    │
+   Evidence            Findings            Reports
+   (typed payloads)    (RAG + severity)    (CSV/JSONL/SARIF/MD/HTML/PDF)
+```
+
+1. **Collectors** scan the target repository and emit typed `Evidence` records
+2. **Rules** consume evidence and produce `Finding` records with RAG/severity
+3. **Renderers** format findings into output reports
+
+## Key components
+
+### Engine (`src/nfr_review/engine.py`)
+
+The `Engine` class orchestrates the pipeline:
+- Accepts collector and rule registries
+- Runs collectors (optionally in parallel via `ThreadPoolExecutor`)
+- Passes evidence to all applicable rules
+- Returns a `RunResult` containing findings, rule results, and warnings
+- Handles failures gracefully — collector/rule errors become warnings
+
+### Registries (`src/nfr_review/registry.py`)
+
+The `Registry[T]` generic class manages named collections of collectors and
+rules. Two registry instances exist:
+
+| Registry | Purpose |
+|----------|---------|
+| `collector_registry` / `rule_registry` | Core NFR collectors and rules |
+| `hygiene_collector_registry` / `hygiene_rule_registry` | Hygiene audit (separate concern) |
+
+Registries support auto-discovery — modules register via side-effect imports
+at startup.
+
+### Protocols (`src/nfr_review/protocols.py`)
+
+The extension contracts:
+- **`Collector`** — `name`, `version`, `collect(repo_path, config) → list[Evidence]`
+- **`Rule`** — `id`, `band`, `required_collectors`, `evaluate(evidence, context) → RuleResult`
+- **`Evidence`** — `collector_name`, `kind`, `locator`, `payload`
+- **`Finding`** — `rule_id`, `rag`, `severity`, `summary`, `evidence_locator`
+
+### FieldRule framework (`src/nfr_review/rules/framework.py`)
+
+The recommended base class for writing rules. Handles evidence filtering,
+payload coercion, and finding construction. Rules only implement `check()`.
+
+### Tech detection (`src/nfr_review/detect.py`)
+
+Runs before collectors to identify which technologies are present. Returns a
+`dict[str, bool]` that gates tech-specific collectors. Supports 19
+technology keys.
+
+### CLI (`src/nfr_review/cli.py`)
+
+Click-based CLI with commands:
+- `run` — single scan, emit findings
+- `report` — full report with scoring
+- `hygiene` — standalone hygiene audit
+- `list-rules` / `explain` — rule discovery
+- `baseline` — interaction baseline management
+- `monitor` — live OTLP monitoring
+- `issues` — GitHub issue sync
+- `deps` — dependency analysis
+- `init` — create starter config
+
+## Data flow
+
+```
+Target repo
+    │
+    ▼
+┌── Tech Detection ──┐
+│   detect.py         │
+│   → dict[str,bool]  │
+└─────────┬──────────┘
+          │
+          ▼
+┌── Collector Phase ──────────────────┐
+│  For each registered collector:     │
+│   • Skip if required_tech missing   │
+│   • Skip if in config.skip list     │
+│   • Run collect() → Evidence[]      │
+│  (parallel via ThreadPoolExecutor)  │
+└─────────┬──────────────────────────┘
+          │
+          ▼
+┌── Rule Phase ───────────────────────┐
+│  For each registered rule:          │
+│   • Skip if required collectors     │
+│     didn't produce evidence         │
+│   • Run evaluate() → RuleResult     │
+│   • Collect findings + skipped      │
+└─────────┬──────────────────────────┘
+          │
+          ▼
+┌── Output Phase ─────────────────────┐
+│  • Classify findings (origin, etc.) │
+│  • Compute maturity score           │
+│  • Baseline diff (if configured)    │
+│  • Render to selected formats       │
+│  • GitHub issue sync (if enabled)   │
+└─────────────────────────────────────┘
+```
+
+## Band system
+
+Rules are organised into three bands based on analysis depth:
+
+| Band | Name | How it works |
+|------|------|-------------|
+| 1 | Static | Pattern matching and structural analysis on collected evidence |
+| 2 | Composite/LLM | Joins multiple evidence types or uses LLM for semantic analysis |
+| 3 | Dynamic | Analyses runtime traces (OTLP spans) from production or staging |
+
+Band 1 rules require no external dependencies. Band 2 may require an LLM API
+key. Band 3 requires trace data.
+
+## Extension points
+
+| Extension | How to add | See |
+|-----------|-----------|-----|
+| New collector | Implement `Collector` protocol, place in `collectors/` | [Custom Collectors](/learn/13-custom-collectors) |
+| New rule | Subclass `FieldRule` or implement `Rule` protocol, place in `rules/` | [Custom Rules](/learn/12-custom-rules) |
+| New output format | Add a renderer module in `output/` | Source: `src/nfr_review/output/` |
+| New tech detection | Add a detector function in `detect.py` | [Tech Detection](/reference/tech-detection) |
+| New compliance mapping | Add entries in `compliance_mapping.py` | [Compliance](/reference/compliance) |
