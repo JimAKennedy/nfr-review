@@ -11,15 +11,18 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from tests.regression.conftest import (
     _normalize_dep_freshness,
+    _normalize_structure_finding,
     clone_repo,
     load_manifest,
     normalize_findings,
+    write_snapshot_metadata,
 )
 
 _API_CACHE_DIR = Path(__file__).resolve().parent / "api_cache"
@@ -113,6 +116,7 @@ def test_regression_snapshot(
             for record in normalized:
                 fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
                 fh.write("\n")
+        write_snapshot_metadata(snapshot_dir)
         return
 
     if not snapshot_file.exists():
@@ -127,6 +131,8 @@ def test_regression_snapshot(
             record = json.loads(line)
             if record.get("rule_id") == "dep-freshness":
                 record = _normalize_dep_freshness(record)
+            if record.get("rule_id", "").startswith("structure-"):
+                record = _normalize_structure_finding(record)
             baseline.append(record)
 
     if normalized != baseline:
@@ -134,17 +140,15 @@ def test_regression_snapshot(
         removed = [f for f in baseline if f not in normalized]
 
         _UPSTREAM_DRIFT_RULES = {
-            "dep-freshness",
-            "dep-upgrade-path",
+            # Graphify's Leiden clustering is non-deterministic: community
+            # composition, edge counts, and finding counts all vary between
+            # runs.  Normalization (conftest._normalize_structure_finding)
+            # stabilizes IDs and content fields, but the finding *count*
+            # remains unstable.  Pin graphify output (graph.json) to enable
+            # removing these from the drift set.
             "structure-coupling-cluster",
             "structure-god-node",
             "structure-weak-boundary",
-            # Cross-platform: tree-sitter parses different class counts on
-            # macOS vs Ubuntu.  Remove after regenerating snapshots on CI
-            # (Actions → Nightly → refresh_snapshots=true).
-            "actuator-exposure-risk",
-            "java-dormant-classes",
-            "java-package-subdivision",
         }
         added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
         removed_stable = [f for f in removed if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
@@ -172,3 +176,40 @@ def test_regression_snapshot(
 
         parts.append("Run with --update-snapshots to accept the new baseline.")
         pytest.fail("\n".join(parts))
+
+
+@pytest.mark.regression
+def test_snapshot_metadata_exists(snapshot_dir: Path) -> None:
+    """Verify snapshot metadata is present for staleness tracking."""
+    from tests.regression.conftest import load_snapshot_metadata
+
+    meta = load_snapshot_metadata(snapshot_dir)
+    if meta is None:
+        pytest.skip("No snapshot metadata — run with --update-snapshots to generate")
+    generated = datetime.fromisoformat(meta["generated_at"])
+    age_days = (datetime.now(UTC) - generated).days
+    if age_days > 90:
+        pytest.fail(
+            f"Snapshots are {age_days} days old (generated {meta['generated_at']}). "
+            "Regenerate with: pytest --update-snapshots -m regression"
+        )
+
+
+@pytest.mark.regression
+def test_drift_filter_guard() -> None:
+    """Prevent _UPSTREAM_DRIFT_RULES from growing unbounded.
+
+    Each excluded rule is a regression gap.  Adding new entries should
+    be a conscious decision, not a habit.
+    """
+    _MAX_DRIFT_RULES = 5
+    _UPSTREAM_DRIFT_RULES = {
+        "structure-coupling-cluster",
+        "structure-god-node",
+        "structure-weak-boundary",
+    }
+    assert len(_UPSTREAM_DRIFT_RULES) <= _MAX_DRIFT_RULES, (
+        f"_UPSTREAM_DRIFT_RULES has {len(_UPSTREAM_DRIFT_RULES)} entries "
+        f"(max {_MAX_DRIFT_RULES}). Fix the root cause instead of "
+        "adding more exclusions."
+    )
