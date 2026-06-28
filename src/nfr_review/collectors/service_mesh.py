@@ -224,6 +224,185 @@ def _extract_template_args(spec: dict[str, Any]) -> list[ServiceMeshAnalysisArg]
     return args
 
 
+def _build_virtual_service_evidence(
+    collector_name: str,
+    collector_version: str,
+    rel: Path,
+    name: str,
+    namespace: str | None,
+    spec: dict[str, Any],
+) -> Evidence:
+    http_routes = _extract_http_routes(spec)
+    has_weighted = any(any(d.weight is not None for d in r.destinations) for r in http_routes)
+    return Evidence(
+        collector_name=collector_name,
+        collector_version=collector_version,
+        locator=f"{rel}:{name}",
+        kind="service-mesh-virtual-service",
+        payload=ServiceMeshVirtualServicePayload(
+            file_path=str(rel),
+            name=name,
+            namespace=namespace,
+            hosts=spec.get("hosts", []) or [],
+            http_routes=http_routes,
+            has_weighted_routing=has_weighted,
+            total_routes=len(http_routes),
+        ),
+    )
+
+
+def _build_destination_rule_evidence(
+    collector_name: str,
+    collector_version: str,
+    rel: Path,
+    name: str,
+    namespace: str | None,
+    spec: dict[str, Any],
+) -> Evidence:
+    tp = _extract_traffic_policy(spec)
+    subsets = _extract_subsets(spec)
+    return Evidence(
+        collector_name=collector_name,
+        collector_version=collector_version,
+        locator=f"{rel}:{name}",
+        kind="service-mesh-destination-rule",
+        payload=ServiceMeshDestinationRulePayload(
+            file_path=str(rel),
+            name=name,
+            namespace=namespace,
+            host=spec.get("host", ""),
+            connection_pool=tp["connection_pool"],
+            outlier_detection=tp["outlier_detection"],
+            tls_mode=tp["tls_mode"],
+            subsets=subsets,
+            has_connection_pool=tp["connection_pool"] is not None,
+            has_outlier_detection=tp["outlier_detection"] is not None,
+        ),
+    )
+
+
+def _build_rollout_evidence(
+    collector_name: str,
+    collector_version: str,
+    rel: Path,
+    name: str,
+    namespace: str | None,
+    spec: dict[str, Any],
+) -> Evidence:
+    strategy = spec.get("strategy", {}) or {}
+    if "canary" in strategy:
+        strategy_type = "canary"
+        canary = strategy["canary"]
+        canary_steps = _extract_canary_steps(canary)
+        analysis_refs = _extract_analysis_refs(canary)
+        max_surge = canary.get("maxSurge")
+        max_unavailable = canary.get("maxUnavailable")
+    elif "blueGreen" in strategy:
+        strategy_type = "blueGreen"
+        canary_steps = None
+        analysis_refs = _extract_analysis_refs(strategy["blueGreen"])
+        max_surge = None
+        max_unavailable = None
+    else:
+        strategy_type = "unknown"
+        canary_steps = None
+        analysis_refs = []
+        max_surge = None
+        max_unavailable = None
+
+    template = spec.get("template", {}) or {}
+    pod_spec = template.get("spec", {}) or {}
+    affinity = pod_spec.get("affinity", {}) or {}
+
+    return Evidence(
+        collector_name=collector_name,
+        collector_version=collector_version,
+        locator=f"{rel}:{name}",
+        kind="service-mesh-rollout",
+        payload=ServiceMeshRolloutPayload(
+            file_path=str(rel),
+            name=name,
+            namespace=namespace,
+            replicas=spec.get("replicas"),
+            strategy_type=strategy_type,
+            canary_steps=canary_steps,
+            canary_max_surge=str(max_surge) if max_surge is not None else None,
+            canary_max_unavailable=str(max_unavailable)
+            if max_unavailable is not None
+            else None,
+            analysis_refs=analysis_refs,
+            anti_affinity=affinity.get("podAntiAffinity") or None,
+            has_analysis=len(analysis_refs) > 0,
+        ),
+    )
+
+
+def _build_analysis_template_evidence(
+    collector_name: str,
+    collector_version: str,
+    rel: Path,
+    name: str,
+    namespace: str | None,
+    spec: dict[str, Any],
+) -> Evidence:
+    metrics = _extract_metrics(spec)
+    tmpl_args = _extract_template_args(spec)
+    return Evidence(
+        collector_name=collector_name,
+        collector_version=collector_version,
+        locator=f"{rel}:{name}",
+        kind="service-mesh-analysis-template",
+        payload=ServiceMeshAnalysisTemplatePayload(
+            file_path=str(rel),
+            name=name,
+            namespace=namespace,
+            metrics=metrics,
+            args=tmpl_args,
+            has_metrics=len(metrics) > 0,
+        ),
+    )
+
+
+def _classify_mesh_doc(
+    doc: dict[str, Any],
+) -> tuple[str, str, str, str | None, dict[str, Any]] | None:
+    api_version = doc.get("apiVersion", "")
+    if not isinstance(api_version, str):
+        return None
+    kind = doc.get("kind", "")
+    if not kind:
+        return None
+    metadata = doc.get("metadata", {}) or {}
+    name = metadata.get("name", "")
+    namespace = metadata.get("namespace") or None
+    spec = doc.get("spec", {}) or {}
+
+    if _ISTIO_API_RE.match(api_version) and kind == "VirtualService":
+        return ("virtual-service", name, kind, namespace, spec)
+    if _ISTIO_API_RE.match(api_version) and kind == "DestinationRule":
+        return ("destination-rule", name, kind, namespace, spec)
+    if api_version == _ARGO_ROLLOUTS_API and kind == "Rollout":
+        return ("rollout", name, kind, namespace, spec)
+    if api_version == _ARGO_ROLLOUTS_API and kind == "AnalysisTemplate":
+        return ("analysis-template", name, kind, namespace, spec)
+    return None
+
+
+_CRD_BUILDERS = {
+    "virtual-service": _build_virtual_service_evidence,
+    "destination-rule": _build_destination_rule_evidence,
+    "rollout": _build_rollout_evidence,
+    "analysis-template": _build_analysis_template_evidence,
+}
+
+_CRD_COUNT_KEYS = {
+    "virtual-service": "virtual_services",
+    "destination-rule": "destination_rules",
+    "rollout": "rollouts",
+    "analysis-template": "analysis_templates",
+}
+
+
 class ServiceMeshCollector:
     name = "service-mesh"
     version = "0.1.0"
@@ -233,11 +412,7 @@ class ServiceMeshCollector:
         yaml = YAML(typ="safe")
         exclude_test = getattr(config, "exclude_test_paths", True)
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
-
-        vs_count = 0
-        dr_count = 0
-        rollout_count = 0
-        at_count = 0
+        counts: dict[str, int] = {k: 0 for k in _CRD_COUNT_KEYS.values()}
         files_parsed = 0
         files_failed = 0
 
@@ -252,165 +427,9 @@ class ServiceMeshCollector:
             ):
                 continue
 
-            try:
-                content = yaml_file.read_bytes()
-            except OSError as exc:
-                logger.debug("Cannot read %s: %s", rel, exc)
-                files_failed += 1
-                continue
-
-            try:
-                docs = list(yaml.load_all(content))
-            except YAMLError as exc:
-                logger.debug("YAML parse error in %s: %s", rel, exc)
-                files_failed += 1
-                continue
-
-            file_had_mesh = False
-            for doc in docs:
-                if not isinstance(doc, dict):
-                    continue
-                api_version = doc.get("apiVersion", "")
-                if not isinstance(api_version, str):
-                    continue
-                kind = doc.get("kind", "")
-                if not kind:
-                    continue
-                metadata = doc.get("metadata", {}) or {}
-                name = metadata.get("name", "")
-                namespace = metadata.get("namespace") or None
-                spec = doc.get("spec", {}) or {}
-
-                if _ISTIO_API_RE.match(api_version) and kind == "VirtualService":
-                    http_routes = _extract_http_routes(spec)
-                    has_weighted = any(
-                        any(d.weight is not None for d in r.destinations) for r in http_routes
-                    )
-                    evidence.append(
-                        Evidence(
-                            collector_name=self.name,
-                            collector_version=self.version,
-                            locator=f"{rel}:{name}",
-                            kind="service-mesh-virtual-service",
-                            payload=ServiceMeshVirtualServicePayload(
-                                file_path=str(rel),
-                                name=name,
-                                namespace=namespace,
-                                hosts=spec.get("hosts", []) or [],
-                                http_routes=http_routes,
-                                has_weighted_routing=has_weighted,
-                                total_routes=len(http_routes),
-                            ),
-                        )
-                    )
-                    vs_count += 1
-                    file_had_mesh = True
-
-                elif _ISTIO_API_RE.match(api_version) and kind == "DestinationRule":
-                    tp = _extract_traffic_policy(spec)
-                    subsets = _extract_subsets(spec)
-                    evidence.append(
-                        Evidence(
-                            collector_name=self.name,
-                            collector_version=self.version,
-                            locator=f"{rel}:{name}",
-                            kind="service-mesh-destination-rule",
-                            payload=ServiceMeshDestinationRulePayload(
-                                file_path=str(rel),
-                                name=name,
-                                namespace=namespace,
-                                host=spec.get("host", ""),
-                                connection_pool=tp["connection_pool"],
-                                outlier_detection=tp["outlier_detection"],
-                                tls_mode=tp["tls_mode"],
-                                subsets=subsets,
-                                has_connection_pool=tp["connection_pool"] is not None,
-                                has_outlier_detection=tp["outlier_detection"] is not None,
-                            ),
-                        )
-                    )
-                    dr_count += 1
-                    file_had_mesh = True
-
-                elif api_version == _ARGO_ROLLOUTS_API and kind == "Rollout":
-                    rollout_spec = spec
-                    strategy = rollout_spec.get("strategy", {}) or {}
-                    if "canary" in strategy:
-                        strategy_type = "canary"
-                        canary = strategy["canary"]
-                        canary_steps = _extract_canary_steps(canary)
-                        analysis_refs = _extract_analysis_refs(canary)
-                        max_surge = canary.get("maxSurge")
-                        max_unavailable = canary.get("maxUnavailable")
-                    elif "blueGreen" in strategy:
-                        strategy_type = "blueGreen"
-                        canary_steps = None
-                        analysis_refs = _extract_analysis_refs(strategy["blueGreen"])
-                        max_surge = None
-                        max_unavailable = None
-                    else:
-                        strategy_type = "unknown"
-                        canary_steps = None
-                        analysis_refs = []
-                        max_surge = None
-                        max_unavailable = None
-
-                    template = rollout_spec.get("template", {}) or {}
-                    pod_spec = template.get("spec", {}) or {}
-                    affinity = pod_spec.get("affinity", {}) or {}
-
-                    evidence.append(
-                        Evidence(
-                            collector_name=self.name,
-                            collector_version=self.version,
-                            locator=f"{rel}:{name}",
-                            kind="service-mesh-rollout",
-                            payload=ServiceMeshRolloutPayload(
-                                file_path=str(rel),
-                                name=name,
-                                namespace=namespace,
-                                replicas=rollout_spec.get("replicas"),
-                                strategy_type=strategy_type,
-                                canary_steps=canary_steps,
-                                canary_max_surge=str(max_surge)
-                                if max_surge is not None
-                                else None,
-                                canary_max_unavailable=str(max_unavailable)
-                                if max_unavailable is not None
-                                else None,
-                                analysis_refs=analysis_refs,
-                                anti_affinity=affinity.get("podAntiAffinity") or None,
-                                has_analysis=len(analysis_refs) > 0,
-                            ),
-                        )
-                    )
-                    rollout_count += 1
-                    file_had_mesh = True
-
-                elif api_version == _ARGO_ROLLOUTS_API and kind == "AnalysisTemplate":
-                    metrics = _extract_metrics(spec)
-                    tmpl_args = _extract_template_args(spec)
-                    evidence.append(
-                        Evidence(
-                            collector_name=self.name,
-                            collector_version=self.version,
-                            locator=f"{rel}:{name}",
-                            kind="service-mesh-analysis-template",
-                            payload=ServiceMeshAnalysisTemplatePayload(
-                                file_path=str(rel),
-                                name=name,
-                                namespace=namespace,
-                                metrics=metrics,
-                                args=tmpl_args,
-                                has_metrics=len(metrics) > 0,
-                            ),
-                        )
-                    )
-                    at_count += 1
-                    file_had_mesh = True
-
-            if file_had_mesh:
-                files_parsed += 1
+            parsed, failed = self._process_yaml_file(yaml_file, rel, yaml, evidence, counts)
+            files_parsed += parsed
+            files_failed += failed
 
         evidence.append(
             Evidence(
@@ -419,17 +438,48 @@ class ServiceMeshCollector:
                 locator=".",
                 kind="service-mesh-summary",
                 payload=ServiceMeshSummaryPayload(
-                    virtual_services=vs_count,
-                    destination_rules=dr_count,
-                    rollouts=rollout_count,
-                    analysis_templates=at_count,
                     files_parsed=files_parsed,
                     files_failed=files_failed,
+                    **counts,
                 ),
             )
         )
-
         return evidence
+
+    def _process_yaml_file(
+        self,
+        yaml_file: Path,
+        rel: Path,
+        yaml: YAML,
+        evidence: list[Evidence],
+        counts: dict[str, int],
+    ) -> tuple[int, int]:
+        try:
+            content = yaml_file.read_bytes()
+        except OSError as exc:
+            logger.debug("Cannot read %s: %s", rel, exc)
+            return 0, 1
+
+        try:
+            docs = list(yaml.load_all(content))
+        except YAMLError as exc:
+            logger.debug("YAML parse error in %s: %s", rel, exc)
+            return 0, 1
+
+        file_had_mesh = False
+        for doc in docs:
+            if not isinstance(doc, dict):
+                continue
+            classified = _classify_mesh_doc(doc)
+            if classified is None:
+                continue
+            crd_type, name, _kind, namespace, spec = classified
+            builder = _CRD_BUILDERS[crd_type]
+            evidence.append(builder(self.name, self.version, rel, name, namespace, spec))
+            counts[_CRD_COUNT_KEYS[crd_type]] += 1
+            file_had_mesh = True
+
+        return (1 if file_had_mesh else 0), 0
 
 
 def _register() -> None:

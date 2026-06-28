@@ -370,26 +370,97 @@ def _scan_sdk_file(path: Path, content: str, repo_path: Path) -> dict[str, Any] 
     }
 
 
+def _sorted_keys(raw: Any) -> list[str]:
+    return sorted(raw.keys()) if isinstance(raw, dict) else []
+
+
+def _build_pipeline_evidence(
+    collector_name: str,
+    collector_version: str,
+    rel: Path,
+    doc: dict[str, Any],
+) -> tuple[Evidence, list[str]]:
+    receivers_raw = doc.get("receivers", {})
+    processors_raw = doc.get("processors", {})
+    exporters_raw = doc.get("exporters", {})
+    extensions_raw = doc.get("extensions", {})
+
+    exporter_targets = _extract_exporter_targets(
+        exporters_raw if isinstance(exporters_raw, dict) else {}
+    )
+    resource_attributes = _extract_resource_attributes(doc)
+    pipelines = _extract_pipelines(doc)
+    signal_types = _signal_types_from_pipelines(pipelines)
+
+    ev = Evidence(
+        collector_name=collector_name,
+        collector_version=collector_version,
+        locator=str(rel),
+        kind="telemetry-pipeline",
+        payload=TelemetryPipelinePayload(
+            file_path=str(rel),
+            receivers=_sorted_keys(receivers_raw),
+            processors=_sorted_keys(processors_raw),
+            exporters=_sorted_keys(exporters_raw),
+            pipelines=pipelines,
+            signal_types=signal_types,
+            exporter_targets=exporter_targets,
+            resource_attributes=resource_attributes,
+            extensions=_sorted_keys(extensions_raw),
+        ),
+    )
+    return ev, signal_types
+
+
 class TelemetryConfigCollector:
     name = "telemetry-config"
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         evidence: list[Evidence] = []
-        files_parsed = 0
-        files_failed = 0
-        collector_configs_found = 0
-        sdk_instrumentations_found = 0
-        synthetic_configs_found = 0
+        exclude_test = getattr(config, "exclude_test_paths", True)
+        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         signal_coverage: dict[str, bool] = {
             "metrics": False,
             "traces": False,
             "logs": False,
         }
-        exclude_test = getattr(config, "exclude_test_paths", True)
-        exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
 
+        yaml_stats = self._scan_yaml_files(
+            repo_path, exclude_test, exclude_pats, evidence, signal_coverage
+        )
+        sdk_count = self._scan_source_files(
+            repo_path, exclude_test, exclude_pats, evidence, signal_coverage
+        )
+
+        evidence.append(
+            Evidence(
+                collector_name=self.name,
+                collector_version=self.version,
+                locator=".",
+                kind="telemetry-config-summary",
+                payload=TelemetryConfigSummaryPayload(
+                    collector_configs_found=yaml_stats["configs"],
+                    sdk_instrumentations_found=sdk_count,
+                    synthetic_configs_found=yaml_stats["synthetics"],
+                    signal_coverage=signal_coverage,
+                    files_parsed=yaml_stats["parsed"],
+                    files_failed=yaml_stats["failed"],
+                ),
+            )
+        )
+        return evidence
+
+    def _scan_yaml_files(
+        self,
+        repo_path: Path,
+        exclude_test: bool,
+        exclude_pats: list[Any],
+        evidence: list[Evidence],
+        signal_coverage: dict[str, bool],
+    ) -> dict[str, int]:
         yaml = YAML(typ="safe")
+        stats = {"parsed": 0, "failed": 0, "configs": 0, "synthetics": 0}
 
         for yaml_file in sorted(repo_path.rglob("*.y*ml")):
             rel = yaml_file.relative_to(repo_path)
@@ -406,77 +477,33 @@ class TelemetryConfigCollector:
                 raw = yaml_file.read_bytes()
             except OSError as exc:
                 logger.debug("Cannot read %s: %s", rel, exc)
-                files_failed += 1
+                stats["failed"] += 1
                 continue
 
             try:
                 doc = yaml.load(raw)
             except YAMLError as exc:
                 logger.debug("YAML parse error in %s: %s", rel, exc)
-                files_failed += 1
+                stats["failed"] += 1
                 continue
 
             if not isinstance(doc, dict):
                 continue
 
             if _is_otel_collector_config(yaml_file, doc):
-                files_parsed += 1
-                collector_configs_found += 1
-
-                receivers_raw = doc.get("receivers", {})
-                receivers = (
-                    sorted(receivers_raw.keys()) if isinstance(receivers_raw, dict) else []
-                )
-                processors_raw = doc.get("processors", {})
-                processors = (
-                    sorted(processors_raw.keys()) if isinstance(processors_raw, dict) else []
-                )
-                exporters_raw = doc.get("exporters", {})
-                exporters = (
-                    sorted(exporters_raw.keys()) if isinstance(exporters_raw, dict) else []
-                )
-
-                exporter_targets = _extract_exporter_targets(
-                    exporters_raw if isinstance(exporters_raw, dict) else {}
-                )
-                resource_attributes = _extract_resource_attributes(doc)
-                pipelines = _extract_pipelines(doc)
-                signal_types = _signal_types_from_pipelines(pipelines)
-
+                stats["parsed"] += 1
+                stats["configs"] += 1
+                ev, signal_types = _build_pipeline_evidence(self.name, self.version, rel, doc)
                 for sig in signal_types:
                     if sig in signal_coverage:
                         signal_coverage[sig] = True
-
-                extensions_raw = doc.get("extensions", {})
-                extensions = (
-                    sorted(extensions_raw.keys()) if isinstance(extensions_raw, dict) else []
-                )
-
-                evidence.append(
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=str(rel),
-                        kind="telemetry-pipeline",
-                        payload=TelemetryPipelinePayload(
-                            file_path=str(rel),
-                            receivers=receivers,
-                            processors=processors,
-                            exporters=exporters,
-                            pipelines=pipelines,
-                            signal_types=signal_types,
-                            exporter_targets=exporter_targets,
-                            resource_attributes=resource_attributes,
-                            extensions=extensions,
-                        ),
-                    )
-                )
+                evidence.append(ev)
                 continue
 
             synth = _detect_synthetic_config(yaml_file, doc)
             if synth is not None:
-                files_parsed += 1
-                synthetic_configs_found += 1
+                stats["parsed"] += 1
+                stats["synthetics"] += 1
                 evidence.append(
                     Evidence(
                         collector_name=self.name,
@@ -487,6 +514,17 @@ class TelemetryConfigCollector:
                     )
                 )
 
+        return stats
+
+    def _scan_source_files(
+        self,
+        repo_path: Path,
+        exclude_test: bool,
+        exclude_pats: list[Any],
+        evidence: list[Evidence],
+        signal_coverage: dict[str, bool],
+    ) -> int:
+        sdk_count = 0
         for src_file in sorted(repo_path.rglob("*")):
             if not src_file.is_file():
                 continue
@@ -507,7 +545,7 @@ class TelemetryConfigCollector:
 
             sdk_info = _scan_sdk_file(src_file, content, repo_path)
             if sdk_info is not None:
-                sdk_instrumentations_found += 1
+                sdk_count += 1
                 for sig in sdk_info["configured_signals"]:
                     if sig in signal_coverage:
                         signal_coverage[sig] = True
@@ -520,25 +558,7 @@ class TelemetryConfigCollector:
                         payload=TelemetrySdkInitPayload(**sdk_info),
                     )
                 )
-
-        evidence.append(
-            Evidence(
-                collector_name=self.name,
-                collector_version=self.version,
-                locator=".",
-                kind="telemetry-config-summary",
-                payload=TelemetryConfigSummaryPayload(
-                    collector_configs_found=collector_configs_found,
-                    sdk_instrumentations_found=sdk_instrumentations_found,
-                    synthetic_configs_found=synthetic_configs_found,
-                    signal_coverage=signal_coverage,
-                    files_parsed=files_parsed,
-                    files_failed=files_failed,
-                ),
-            )
-        )
-
-        return evidence
+        return sdk_count
 
 
 def _register() -> None:

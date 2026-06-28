@@ -187,6 +187,133 @@ def _parse_jdepend_xml(
     return packages, cycle_groups
 
 
+def _filter_bytecode_dirs(
+    dirs: list[Path],
+    repo_path: Path,
+    exclude_test: bool,
+    exclude_pats: list[Any],
+) -> list[Path]:
+    return [
+        bd
+        for bd in dirs
+        if not should_exclude_path(
+            str(bd.relative_to(repo_path)),
+            exclude_test_paths=exclude_test,
+            exclude_patterns=exclude_pats,
+        )
+    ]
+
+
+def _run_jdepend(
+    bytecode_dir: Path, collector_name: str, collector_version: str, rel_dir: str
+) -> list[Evidence] | subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(  # nosec B603 B607
+            ["jdepend", str(bytecode_dir)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        logger.warning("jdepend binary not found; skipping JDepend analysis")
+        return [
+            Evidence(
+                collector_name=collector_name,
+                collector_version=collector_version,
+                locator=".",
+                kind="jdepend-skip",
+                payload=JDependSkipPayload(
+                    reason="jdepend binary not found — "
+                    "install jdepend and ensure it is on PATH"
+                ),
+            )
+        ]
+    except subprocess.SubprocessError as exc:
+        logger.warning("jdepend failed: %s", exc)
+        return [
+            Evidence(
+                collector_name=collector_name,
+                collector_version=collector_version,
+                locator=".",
+                kind="jdepend-skip",
+                payload=JDependSkipPayload(reason=f"jdepend execution error: {exc}"),
+            )
+        ]
+
+
+def _analyze_bytecode_dir(
+    bytecode_dir: Path,
+    repo_path: Path,
+    collector_name: str,
+    collector_version: str,
+) -> list[Evidence] | None:
+    rel_dir = str(bytecode_dir.relative_to(repo_path))
+
+    run_result = _run_jdepend(bytecode_dir, collector_name, collector_version, rel_dir)
+    if isinstance(run_result, list):
+        return run_result
+
+    if run_result.returncode != 0:
+        logger.warning("jdepend exited with code %d for %s", run_result.returncode, rel_dir)
+        return [
+            Evidence(
+                collector_name=collector_name,
+                collector_version=collector_version,
+                locator=rel_dir,
+                kind="jdepend-skip",
+                payload=JDependSkipPayload(
+                    reason=f"jdepend exited with code {run_result.returncode}",
+                    stderr=run_result.stderr[:500] if run_result.stderr else "",
+                ),
+            )
+        ]
+
+    try:
+        packages, cycle_groups = _parse_jdepend_xml(run_result.stdout)
+    except ET.ParseError as exc:
+        logger.warning("Failed to parse jdepend XML for %s: %s", rel_dir, exc)
+        return [
+            Evidence(
+                collector_name=collector_name,
+                collector_version=collector_version,
+                locator=rel_dir,
+                kind="jdepend-skip",
+                payload=JDependSkipPayload(reason=f"XML parse error: {exc}"),
+            )
+        ]
+
+    cycle_package_names: set[str] = set()
+    for group in cycle_groups:
+        cycle_package_names.update(group)
+
+    distances = [p.d for p in packages]
+    avg_distance = sum(distances) / len(distances) if distances else 0.0
+    max_distance = max(distances) if distances else 0.0
+
+    return [
+        Evidence(
+            collector_name=collector_name,
+            collector_version=collector_version,
+            locator=rel_dir,
+            kind="jdepend-packages",
+            payload=JDependPackagesPayload(bytecode_dir=rel_dir, packages=packages),
+        ),
+        Evidence(
+            collector_name=collector_name,
+            collector_version=collector_version,
+            locator=rel_dir,
+            kind="jdepend-summary",
+            payload=JDependSummaryPayload(
+                total_packages=len(packages),
+                packages_with_cycles=len(cycle_package_names),
+                cycle_groups=cycle_groups,
+                avg_distance=round(avg_distance, 4),
+                max_distance=round(max_distance, 4),
+            ),
+        ),
+    ]
+
+
 class JDependCollector:
     name = "jdepend"
     version = "0.1.0"
@@ -195,44 +322,17 @@ class JDependCollector:
         exclude_test = getattr(config, "exclude_test_paths", True)
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
 
-        bytecode_dirs = _find_bytecode_dirs(repo_path)
-
-        # Filter out excluded paths
-        filtered_dirs: list[Path] = []
-        for bd in bytecode_dirs:
-            rel = str(bd.relative_to(repo_path))
-            if not should_exclude_path(
-                rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
-            ):
-                filtered_dirs.append(bd)
+        filtered_dirs = _filter_bytecode_dirs(
+            _find_bytecode_dirs(repo_path), repo_path, exclude_test, exclude_pats
+        )
 
         if not filtered_dirs:
-            has_java = any(repo_path.rglob("*.java"))
-            if not has_java:
+            rediscovered = self._try_compile_and_rediscover(
+                repo_path, exclude_test, exclude_pats
+            )
+            if rediscovered is None:
                 return []
-
-            compile_err = _try_compile_java(repo_path)
-            if compile_err:
-                logger.info(
-                    "JDepend skipped: Java sources found but no bytecode — %s",
-                    compile_err,
-                )
-                return []
-
-            filtered_dirs = _find_bytecode_dirs(repo_path)
-            filtered_dirs = [
-                bd
-                for bd in filtered_dirs
-                if not should_exclude_path(
-                    str(bd.relative_to(repo_path)),
-                    exclude_test_paths=exclude_test,
-                    exclude_patterns=exclude_pats,
-                )
-            ]
-            if not filtered_dirs:
-                logger.warning(
-                    "JDepend skipped: auto-compile succeeded but no bytecode directories found"
-                )
+            if not rediscovered:
                 return [
                     Evidence(
                         collector_name=self.name,
@@ -245,116 +345,37 @@ class JDependCollector:
                         ),
                     )
                 ]
+            filtered_dirs = rediscovered
 
         evidences: list[Evidence] = []
-
         for bytecode_dir in filtered_dirs:
-            rel_dir = str(bytecode_dir.relative_to(repo_path))
-
-            try:
-                result = subprocess.run(  # nosec B603 B607
-                    ["jdepend", str(bytecode_dir)],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-            except FileNotFoundError:
-                logger.warning("jdepend binary not found; skipping JDepend analysis")
-                return [
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=".",
-                        kind="jdepend-skip",
-                        payload=JDependSkipPayload(
-                            reason="jdepend binary not found — "
-                            "install jdepend and ensure it is on PATH"
-                        ),
-                    )
-                ]
-            except subprocess.SubprocessError as exc:
-                logger.warning("jdepend failed: %s", exc)
-                return [
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=".",
-                        kind="jdepend-skip",
-                        payload=JDependSkipPayload(reason=f"jdepend execution error: {exc}"),
-                    )
-                ]
-
-            if result.returncode != 0:
-                logger.warning(
-                    "jdepend exited with code %d for %s", result.returncode, rel_dir
-                )
-                return [
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=rel_dir,
-                        kind="jdepend-skip",
-                        payload=JDependSkipPayload(
-                            reason=f"jdepend exited with code {result.returncode}",
-                            stderr=result.stderr[:500] if result.stderr else "",
-                        ),
-                    )
-                ]
-
-            xml_output = result.stdout
-            try:
-                packages, cycle_groups = _parse_jdepend_xml(xml_output)
-            except ET.ParseError as exc:
-                logger.warning("Failed to parse jdepend XML for %s: %s", rel_dir, exc)
-                return [
-                    Evidence(
-                        collector_name=self.name,
-                        collector_version=self.version,
-                        locator=rel_dir,
-                        kind="jdepend-skip",
-                        payload=JDependSkipPayload(reason=f"XML parse error: {exc}"),
-                    )
-                ]
-
-            # Collect packages involved in cycles
-            cycle_package_names: set[str] = set()
-            for group in cycle_groups:
-                cycle_package_names.update(group)
-
-            distances = [p.d for p in packages]
-            avg_distance = sum(distances) / len(distances) if distances else 0.0
-            max_distance = max(distances) if distances else 0.0
-
-            evidences.append(
-                Evidence(
-                    collector_name=self.name,
-                    collector_version=self.version,
-                    locator=rel_dir,
-                    kind="jdepend-packages",
-                    payload=JDependPackagesPayload(
-                        bytecode_dir=rel_dir,
-                        packages=packages,
-                    ),
-                )
-            )
-
-            evidences.append(
-                Evidence(
-                    collector_name=self.name,
-                    collector_version=self.version,
-                    locator=rel_dir,
-                    kind="jdepend-summary",
-                    payload=JDependSummaryPayload(
-                        total_packages=len(packages),
-                        packages_with_cycles=len(cycle_package_names),
-                        cycle_groups=cycle_groups,
-                        avg_distance=round(avg_distance, 4),
-                        max_distance=round(max_distance, 4),
-                    ),
-                )
-            )
-
+            result = _analyze_bytecode_dir(bytecode_dir, repo_path, self.name, self.version)
+            if result is not None:
+                if any(e.kind == "jdepend-skip" for e in result):
+                    return result
+                evidences.extend(result)
         return evidences
+
+    def _try_compile_and_rediscover(
+        self,
+        repo_path: Path,
+        exclude_test: bool,
+        exclude_pats: list[Any],
+    ) -> list[Path] | None:
+        if not any(repo_path.rglob("*.java")):
+            return None
+
+        compile_err = _try_compile_java(repo_path)
+        if compile_err:
+            logger.info(
+                "JDepend skipped: Java sources found but no bytecode — %s",
+                compile_err,
+            )
+            return None
+
+        return _filter_bytecode_dirs(
+            _find_bytecode_dirs(repo_path), repo_path, exclude_test, exclude_pats
+        )
 
 
 def _register() -> None:
