@@ -83,6 +83,167 @@ def find_compose_files(repo_path: Path) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
+def _add_compose_edge(
+    source_comp: Component,
+    target_name: str,
+    *,
+    components: list[Component],
+    edge_type: str,
+    svc_name: str,
+    effective_name: str,
+    compose_env: str | None,
+    seen_pairs: set[tuple[str, str]],
+    integrations: list[IntegrationPoint],
+    description: str,
+    protocol: str | None = None,
+) -> None:
+    """Shared dedup-and-append for Compose edges."""
+    target_comp = component_by_name(components, target_name)
+    if target_comp is None or target_comp.id == source_comp.id:
+        return
+    pair = (source_comp.id, target_comp.id)
+    if pair in seen_pairs:
+        return
+    seen_pairs.add(pair)
+
+    intg_id = make_id(
+        "intg",
+        f"{effective_name}/compose/{edge_type}/{svc_name}->{target_name}",
+    )
+    integrations.append(
+        IntegrationPoint(
+            id=intg_id,
+            source_component_id=source_comp.id,
+            target_component_id=target_comp.id,
+            style="synchronous",
+            protocol=protocol,
+            description=description,
+            environment=compose_env,
+        )
+    )
+
+
+def _scan_depends_on_and_links(
+    services: dict,
+    *,
+    components: list[Component],
+    effective_name: str,
+    compose_env: str | None,
+    seen_pairs: set[tuple[str, str]],
+    integrations: list[IntegrationPoint],
+) -> None:
+    """Scan depends_on and links for each service."""
+    for svc_name, svc_config in services.items():
+        if not isinstance(svc_config, dict):
+            continue
+        source_comp = component_by_name(components, svc_name)
+        if source_comp is None:
+            continue
+
+        depends_on = svc_config.get("depends_on", [])
+        dep_names: list[str] = []
+        if isinstance(depends_on, list):
+            dep_names = [d for d in depends_on if isinstance(d, str)]
+        elif isinstance(depends_on, dict):
+            dep_names = list(depends_on.keys())
+
+        for dep_name in dep_names:
+            _add_compose_edge(
+                source_comp,
+                dep_name,
+                components=components,
+                edge_type="depends",
+                svc_name=svc_name,
+                effective_name=effective_name,
+                compose_env=compose_env,
+                seen_pairs=seen_pairs,
+                integrations=integrations,
+                description=f"Compose service '{svc_name}' depends on '{dep_name}'",
+            )
+
+        links = svc_config.get("links", [])
+        if isinstance(links, list):
+            for link in links:
+                if not isinstance(link, str):
+                    continue
+                link_target = link.split(":")[0]
+                _add_compose_edge(
+                    source_comp,
+                    link_target,
+                    components=components,
+                    edge_type="link",
+                    svc_name=svc_name,
+                    effective_name=effective_name,
+                    compose_env=compose_env,
+                    seen_pairs=seen_pairs,
+                    integrations=integrations,
+                    description=f"Compose link from '{svc_name}' to '{link_target}'",
+                )
+
+
+def _scan_shared_networks(
+    services: dict,
+    data: dict,
+    *,
+    components: list[Component],
+    effective_name: str,
+    compose_env: str | None,
+    seen_pairs: set[tuple[str, str]],
+    integrations: list[IntegrationPoint],
+) -> None:
+    """Discover integrations from shared Compose networks."""
+    networks_section = data.get("networks", {})
+    if not isinstance(networks_section, dict):
+        return
+
+    network_members: dict[str, list[str]] = {}
+    for svc_name, svc_config in services.items():
+        if not isinstance(svc_config, dict):
+            continue
+        svc_networks = svc_config.get("networks", [])
+        if isinstance(svc_networks, list):
+            for net in svc_networks:
+                if isinstance(net, str):
+                    network_members.setdefault(net, []).append(svc_name)
+        elif isinstance(svc_networks, dict):
+            for net in svc_networks:
+                network_members.setdefault(net, []).append(svc_name)
+
+    for net_name, members in network_members.items():
+        if len(members) < 2:
+            continue
+        for i, src_name in enumerate(members):
+            for tgt_name in members[i + 1 :]:
+                src_comp = component_by_name(components, src_name)
+                tgt_comp = component_by_name(components, tgt_name)
+                if src_comp is None or tgt_comp is None or src_comp.id == tgt_comp.id:
+                    continue
+                pair = (src_comp.id, tgt_comp.id)
+                reverse_pair = (tgt_comp.id, src_comp.id)
+                if pair in seen_pairs or reverse_pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+
+                intg_id = make_id(
+                    "intg",
+                    f"{effective_name}/compose/network/{net_name}/{src_name}<->{tgt_name}",
+                )
+                integrations.append(
+                    IntegrationPoint(
+                        id=intg_id,
+                        source_component_id=src_comp.id,
+                        target_component_id=tgt_comp.id,
+                        style="synchronous",
+                        protocol="tcp",
+                        description=(
+                            f"Shared Compose network '{net_name}' "
+                            f"connects '{src_name}' and '{tgt_name}'"
+                        ),
+                        environment=compose_env,
+                    )
+                )
+
+
 def discover_compose_integrations(
     repo_path: Path,
     components: list[Component],
@@ -106,129 +267,25 @@ def discover_compose_integrations(
             continue
 
         compose_env = infer_env_from_compose_filename(compose_file)
-
         seen_pairs: set[tuple[str, str]] = set()
 
-        for svc_name, svc_config in services.items():
-            if not isinstance(svc_config, dict):
-                continue
-
-            source_comp = component_by_name(components, svc_name)
-            if source_comp is None:
-                continue
-
-            # depends_on
-            depends_on = svc_config.get("depends_on", [])
-            dep_names: list[str] = []
-            if isinstance(depends_on, list):
-                dep_names = [d for d in depends_on if isinstance(d, str)]
-            elif isinstance(depends_on, dict):
-                dep_names = list(depends_on.keys())
-
-            for dep_name in dep_names:
-                target_comp = component_by_name(components, dep_name)
-                if target_comp is None or target_comp.id == source_comp.id:
-                    continue
-                pair = (source_comp.id, target_comp.id)
-                if pair in seen_pairs:
-                    continue
-                seen_pairs.add(pair)
-
-                intg_id = make_id(
-                    "intg",
-                    f"{effective_name}/compose/depends/{svc_name}->{dep_name}",
-                )
-                integrations.append(
-                    IntegrationPoint(
-                        id=intg_id,
-                        source_component_id=source_comp.id,
-                        target_component_id=target_comp.id,
-                        style="synchronous",
-                        description=(f"Compose service '{svc_name}' depends on '{dep_name}'"),
-                        environment=compose_env,
-                    )
-                )
-
-            # links
-            links = svc_config.get("links", [])
-            if isinstance(links, list):
-                for link in links:
-                    if not isinstance(link, str):
-                        continue
-                    # links can be "service" or "service:alias"
-                    link_target = link.split(":")[0]
-                    target_comp = component_by_name(components, link_target)
-                    if target_comp is None or target_comp.id == source_comp.id:
-                        continue
-                    pair = (source_comp.id, target_comp.id)
-                    if pair in seen_pairs:
-                        continue
-                    seen_pairs.add(pair)
-
-                    intg_id = make_id(
-                        "intg",
-                        f"{effective_name}/compose/link/{svc_name}->{link_target}",
-                    )
-                    integrations.append(
-                        IntegrationPoint(
-                            id=intg_id,
-                            source_component_id=source_comp.id,
-                            target_component_id=target_comp.id,
-                            style="synchronous",
-                            description=(f"Compose link from '{svc_name}' to '{link_target}'"),
-                            environment=compose_env,
-                        )
-                    )
-
-        # Shared networks — services on the same non-default network
-        networks_section = data.get("networks", {})
-        if isinstance(networks_section, dict):
-            network_members: dict[str, list[str]] = {}
-            for svc_name, svc_config in services.items():
-                if not isinstance(svc_config, dict):
-                    continue
-                svc_networks = svc_config.get("networks", [])
-                if isinstance(svc_networks, list):
-                    for net in svc_networks:
-                        if isinstance(net, str):
-                            network_members.setdefault(net, []).append(svc_name)
-                elif isinstance(svc_networks, dict):
-                    for net in svc_networks:
-                        network_members.setdefault(net, []).append(svc_name)
-
-            for net_name, members in network_members.items():
-                if len(members) < 2:
-                    continue
-                for i, src_name in enumerate(members):
-                    for tgt_name in members[i + 1 :]:
-                        src_comp = component_by_name(components, src_name)
-                        tgt_comp = component_by_name(components, tgt_name)
-                        if src_comp is None or tgt_comp is None or src_comp.id == tgt_comp.id:
-                            continue
-                        pair = (src_comp.id, tgt_comp.id)
-                        reverse_pair = (tgt_comp.id, src_comp.id)
-                        if pair in seen_pairs or reverse_pair in seen_pairs:
-                            continue
-                        seen_pairs.add(pair)
-
-                        intg_id = make_id(
-                            "intg",
-                            f"{effective_name}/compose/network/{net_name}/{src_name}<->{tgt_name}",
-                        )
-                        integrations.append(
-                            IntegrationPoint(
-                                id=intg_id,
-                                source_component_id=src_comp.id,
-                                target_component_id=tgt_comp.id,
-                                style="synchronous",
-                                protocol="tcp",
-                                description=(
-                                    f"Shared Compose network '{net_name}' "
-                                    f"connects '{src_name}' and '{tgt_name}'"
-                                ),
-                                environment=compose_env,
-                            )
-                        )
+        _scan_depends_on_and_links(
+            services,
+            components=components,
+            effective_name=effective_name,
+            compose_env=compose_env,
+            seen_pairs=seen_pairs,
+            integrations=integrations,
+        )
+        _scan_shared_networks(
+            services,
+            data,
+            components=components,
+            effective_name=effective_name,
+            compose_env=compose_env,
+            seen_pairs=seen_pairs,
+            integrations=integrations,
+        )
 
     if integrations:
         logger.info("Found %d Docker Compose integrations", len(integrations))

@@ -258,6 +258,117 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
     return None
 
 
+def _build_repos_info(targets: list[Path], repo_names: list[str]) -> list[RepoInfo]:
+    """Build RepoInfo list by collecting git metadata for each target."""
+    repos_info: list[RepoInfo] = []
+    for target, name in zip(targets, repo_names, strict=True):
+        sha, branch = _git_info(target)
+        repos_info.append(
+            RepoInfo(
+                path=str(target.resolve()),
+                name=name,
+                git_sha=sha,
+                git_branch=branch,
+            )
+        )
+    return repos_info
+
+
+def _init_llm_client(skip_llm: bool, cb: ProgressCallback):  # type: ignore[return]
+    """Initialise and return an LLM client, or None if unavailable/skipped."""
+    if skip_llm:
+        return None
+    from nfr_review.llm_client import create_llm_client
+
+    client = create_llm_client()
+    if client.available:
+        cb("LLM available — domain model and market analysis enabled")
+        return client
+    cb("LLM not available — skipping LLM-dependent analysis")
+    return None
+
+
+def _discover_arch_artifacts(
+    targets: list[Path],
+    repo_names: list[str],
+    multi: bool,
+    cb: ProgressCallback,
+):
+    """Discover components and integrations, materialising infra components."""
+    from nfr_review.arch_discovery import (
+        discover_components,
+        discover_components_multi_repo,
+    )
+    from nfr_review.arch_integrations import (
+        discover_integrations,
+        discover_integrations_multi_repo,
+        materialize_infra_components,
+    )
+
+    cb("Discovering components...")
+    if multi:
+        components = discover_components_multi_repo(targets, repo_names)
+    else:
+        components = discover_components(targets[0], repo_name=repo_names[0])
+    cb(f"Found {len(components)} components")
+
+    cb("Mapping integrations...")
+    if multi:
+        integrations = discover_integrations_multi_repo(targets, components, repo_names)
+    else:
+        integrations = discover_integrations(targets[0], components, repo_name=repo_names[0])
+    cb(f"Found {len(integrations)} integration points")
+
+    prev_count = len(components)
+    components = materialize_infra_components(components, integrations)
+    new_infra = len(components) - prev_count
+    if new_infra:
+        cb(f"Materialized {new_infra} infrastructure components")
+
+    return components, integrations
+
+
+def _assemble_report(
+    *,
+    repos_info: list[RepoInfo],
+    llm,
+    components,
+    integrations,
+    test_coverage,
+    diagrams,
+    cross_repo_edges: list[CrossRepoEdge],
+    dynamic_analysis: DynamicAnalysisSection | None,
+    risks,
+    domain_model,
+    market_analysis,
+    recommendations,
+) -> ArchReport:
+    """Assemble ArchReportMetadata and ArchReport from pipeline outputs."""
+    metadata = ArchReportMetadata(
+        tool_version=__version__,
+        timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        repos_analyzed=repos_info,
+        llm_available=llm is not None,
+        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
+        if llm is not None
+        else None,
+    )
+    return ArchReport(
+        metadata=metadata,
+        components=components,
+        integration_points=integrations,
+        dynamic_scenarios=[],
+        test_coverage=test_coverage,
+        diagrams=diagrams,
+        cross_repo_edges=cross_repo_edges,
+        dynamic_analysis=dynamic_analysis,
+        risk_findings=risks,
+        domain_model=domain_model,
+        market_analysis=market_analysis,
+        recommendations=recommendations,
+    )
+
+
 def run_arch_review(
     targets: list[Path],
     *,
@@ -284,15 +395,6 @@ def run_arch_review(
         Optional callback invoked with status messages.
     """
     from nfr_review.arch_diagrams import generate_all_diagrams
-    from nfr_review.arch_discovery import (
-        discover_components,
-        discover_components_multi_repo,
-    )
-    from nfr_review.arch_integrations import (
-        discover_integrations,
-        discover_integrations_multi_repo,
-        materialize_infra_components,
-    )
     from nfr_review.arch_recommendations import generate_recommendations
     from nfr_review.arch_risk_analysis import analyze_risks
     from nfr_review.arch_test_coverage import (
@@ -306,53 +408,9 @@ def run_arch_review(
     if repo_names is None:
         repo_names = [t.resolve().name for t in targets]
 
-    # --- metadata ---
-    repos_info: list[RepoInfo] = []
-    for target, name in zip(targets, repo_names, strict=True):
-        sha, branch = _git_info(target)
-        repos_info.append(
-            RepoInfo(
-                path=str(target.resolve()),
-                name=name,
-                git_sha=sha,
-                git_branch=branch,
-            )
-        )
-
-    # --- LLM client ---
-    llm = None
-    if not skip_llm:
-        from nfr_review.llm_client import create_llm_client
-
-        client = create_llm_client()
-        if client.available:
-            llm = client
-            cb("LLM available — domain model and market analysis enabled")
-        else:
-            cb("LLM not available — skipping LLM-dependent analysis")
-
-    # --- component discovery ---
-    cb("Discovering components...")
-    if multi:
-        components = discover_components_multi_repo(targets, repo_names)
-    else:
-        components = discover_components(targets[0], repo_name=repo_names[0])
-    cb(f"Found {len(components)} components")
-
-    # --- integration mapping ---
-    cb("Mapping integrations...")
-    if multi:
-        integrations = discover_integrations_multi_repo(targets, components, repo_names)
-    else:
-        integrations = discover_integrations(targets[0], components, repo_name=repo_names[0])
-    cb(f"Found {len(integrations)} integration points")
-
-    # --- materialize infrastructure components ---
-    prev_count = len(components)
-    components = materialize_infra_components(components, integrations)
-    new_infra = len(components) - prev_count
-    if new_infra:
-        cb(f"Materialized {new_infra} infrastructure components")
+    repos_info = _build_repos_info(targets, repo_names)
+    llm = _init_llm_client(skip_llm, cb)
+    components, integrations = _discover_arch_artifacts(targets, repo_names, multi, cb)
 
     # --- test coverage ---
     cb("Assessing test coverage...")
@@ -426,27 +484,16 @@ def run_arch_review(
     )
     cb(f"Generated {len(recommendations)} recommendations")
 
-    # --- assemble report ---
-    metadata = ArchReportMetadata(
-        tool_version=__version__,
-        timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        repos_analyzed=repos_info,
-        llm_available=llm is not None,
-        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
-        if llm is not None
-        else None,
-    )
-
-    report = ArchReport(
-        metadata=metadata,
+    report = _assemble_report(
+        repos_info=repos_info,
+        llm=llm,
         components=components,
-        integration_points=integrations,
-        dynamic_scenarios=[],
+        integrations=integrations,
         test_coverage=test_coverage,
         diagrams=diagrams,
         cross_repo_edges=cross_repo_edges,
         dynamic_analysis=dynamic_analysis,
-        risk_findings=risks,
+        risks=risks,
         domain_model=domain_model,
         market_analysis=market_analysis,
         recommendations=recommendations,

@@ -2984,6 +2984,39 @@ def baseline_create_cmd(otel_traces_path: Path, output_path: Path) -> None:
     click.echo(str(output_path))
 
 
+def _render_baseline_diff(
+    findings: list[Any],
+    baseline: Any,
+    otel_traces_path: Path,
+    observed: set[Any] | list[Any],
+    fmt: str,
+) -> str:
+    """Render baseline diff findings as JSON or Markdown."""
+    novel_count = sum(1 for f in findings if f.rule_id == "mon-novel-interaction")
+    disappeared_count = sum(1 for f in findings if f.rule_id == "mon-disappeared-interaction")
+
+    if fmt == "json":
+        lines = [f.model_dump_json() for f in findings]
+        return "\n".join(lines) + ("\n" if lines else "")
+
+    parts = ["# Baseline Diff Report\n"]
+    parts.append(f"Baseline: {baseline.source} ({len(baseline.fingerprints)} fingerprints)\n")
+    parts.append(f"Observed: {otel_traces_path} ({len(observed)} fingerprints)\n")
+    if novel_count:
+        parts.append(f"\n## Novel Interactions ({novel_count})\n")
+        for f in findings:
+            if f.rule_id == "mon-novel-interaction":
+                parts.append(f"- **{f.severity}**: {f.summary}\n")
+    if disappeared_count:
+        parts.append(f"\n## Disappeared Interactions ({disappeared_count})\n")
+        for f in findings:
+            if f.rule_id == "mon-disappeared-interaction":
+                parts.append(f"- {f.summary}\n")
+    if not findings:
+        parts.append("\nNo differences found — production matches UAT baseline.\n")
+    return "\n".join(parts)
+
+
 @baseline_group.command("diff", help="Compare production traces against a UAT baseline.")
 @click.option(
     "--baseline",
@@ -3015,39 +3048,6 @@ def baseline_create_cmd(otel_traces_path: Path, output_path: Path) -> None:
     default=None,
     help="Output file (default: stdout).",
 )
-def _render_baseline_diff(
-    findings: list[Any],
-    baseline: Any,
-    otel_traces_path: Path,
-    observed: list[Any],
-    fmt: str,
-) -> str:
-    """Render baseline diff findings as JSON or Markdown."""
-    novel_count = sum(1 for f in findings if f.rule_id == "mon-novel-interaction")
-    disappeared_count = sum(1 for f in findings if f.rule_id == "mon-disappeared-interaction")
-
-    if fmt == "json":
-        lines = [f.model_dump_json() for f in findings]
-        return "\n".join(lines) + ("\n" if lines else "")
-
-    parts = ["# Baseline Diff Report\n"]
-    parts.append(f"Baseline: {baseline.source} ({len(baseline.fingerprints)} fingerprints)\n")
-    parts.append(f"Observed: {otel_traces_path} ({len(observed)} fingerprints)\n")
-    if novel_count:
-        parts.append(f"\n## Novel Interactions ({novel_count})\n")
-        for f in findings:
-            if f.rule_id == "mon-novel-interaction":
-                parts.append(f"- **{f.severity}**: {f.summary}\n")
-    if disappeared_count:
-        parts.append(f"\n## Disappeared Interactions ({disappeared_count})\n")
-        for f in findings:
-            if f.rule_id == "mon-disappeared-interaction":
-                parts.append(f"- {f.summary}\n")
-    if not findings:
-        parts.append("\nNo differences found — production matches UAT baseline.\n")
-    return "\n".join(parts)
-
-
 def baseline_diff_cmd(
     baseline_path: Path,
     otel_traces_path: Path,

@@ -212,22 +212,11 @@ def _dependency_findings_section(findings: list[Finding]) -> str:
     return "\n".join(lines)
 
 
-def _methodology_appendix(
-    llm_info: tuple[str, str] | None = None,
-) -> str:
-    """Render the scoring methodology appendix as Markdown.
-
-    Parameters
-    ----------
-    llm_info:
-        Optional ``(provider, model)`` tuple describing the LLM used for
-        this run, or ``None`` when no LLM was configured.
-    """
+def _appendix_scoring_methodology() -> list[str]:
+    """Render the RAG/severity, maturity score, and finding origin sections."""
     lines: list[str] = []
     _a = lines.append
 
-    _a("## Appendix — Scoring Methodology")
-    _a("")
     _a("### RAG x Severity Matrix")
     _a("")
     _a("Each finding is classified along two independent axes:")
@@ -335,10 +324,160 @@ def _methodology_appendix(
         " visibility without inflating the project's maturity score."
     )
 
-    _a("")
-    _a("### Category Definitions")
-    _a("")
-    _a(
+    return lines
+
+
+def _cat_table(
+    heading: str,
+    rows: list[tuple[str, str, str]],
+) -> list[str]:
+    """Render a single category definition table."""
+    lines = [
+        "",
+        f"#### {heading}",
+        "",
+        "| Category | Scope | What maturity looks like |",
+        "|----------|-------|-------------------------|",
+    ]
+    for cat, scope, maturity in rows:
+        lines.append(f"| {cat} | {scope} | {maturity} |")
+    return lines
+
+
+_CORE_NFR_CATEGORIES: list[tuple[str, str, str]] = [
+    (
+        "**security**",
+        "Auth, secrets, supply-chain pinning, PII, container user directives",
+        "No leaked secrets, pinned images/providers, no PII in logs, least-privilege",
+    ),
+    (
+        "**reliability**",
+        "Structured logging, correlation IDs, health probes *(alias: observability)*",
+        "Structured logs with correlation IDs, separate health/readiness",
+    ),
+    (
+        "**performance**",
+        "Timeouts, thread pools, goroutine leaks, async correctness, dep instability",
+        "Explicit timeouts, bounded pools, no fire-and-forget async, stable dep graph",
+    ),
+    (
+        "**maintainability**",
+        "Containers, K8s, Helm, CI, service-mesh, "
+        "Terraform, build tooling, ADR governance, "
+        "package subdivision *(alias: ops)*",
+        "Multi-stage Dockerfiles, resource limits, "
+        "network policies, CI gates, current ADRs, "
+        "well-subdivided packages with no god packages",
+    ),
+    (
+        "**structure**",
+        "Graph topology, community boundaries, "
+        "coupling hotspots, blast radius "
+        "*(requires graphify)*",
+        "No god nodes, strong community boundaries, "
+        "low cross-module coupling, contained blast radius",
+    ),
+]
+
+_HYGIENE_CATEGORIES: list[tuple[str, str, str]] = [
+    (
+        "**HYG-BLD**",
+        "Build system, versioning, entry points, pre-commit, code debt",
+        "Reproducible build, pinned deps, semver, lint + format hooks",
+    ),
+    (
+        "**HYG-CI**",
+        "CI pipeline, test/lint/SAST stages, coverage gates, action pinning",
+        "All quality gates present, SHA-pinned actions, coverage enforced",
+    ),
+    (
+        "**HYG-COM**",
+        "README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, CODEOWNERS",
+        "All community health files present with substantive content",
+    ),
+    (
+        "**HYG-DOC**",
+        "API docs, docs directory, package metadata",
+        "Published API docs, guides, complete metadata (description, license, URLs)",
+    ),
+    (
+        "**HYG-LIC**",
+        "Copyleft risk, license headers, NOTICE, SPDX identifiers",
+        "No unexpected copyleft, consistent headers, machine-readable SPDX",
+    ),
+    (
+        "**HYG-PRV**",
+        "PII patterns, internal reference leaks, tracking IDs",
+        "No PII in source, no internal URLs leaked, no tracking IDs in public code",
+    ),
+]
+
+_PATCHING_CATEGORIES: list[tuple[str, str, str]] = [
+    (
+        "**PATCH-ARCH**",
+        "Singleton avoidance, graceful shutdown, PDB config, update strategy",
+        "No single-replica deploys, shutdown handlers, PDBs, rolling updates",
+    ),
+    (
+        "**PATCH-DEPS**",
+        "Version pinning, vuln scanning, automated update paths",
+        "Pinned deps with lock files, vuln scanning in CI, clear upgrade path",
+    ),
+    (
+        "**PATCH-HEALTH**",
+        "Probe separation, startup probes, trivial-probe detection, termination",
+        "Distinct startup probes, non-trivial health checks, pre-stop hooks",
+    ),
+    (
+        "**PATCH-ROLL**",
+        "Rollback docs, CI rollback tests, forward migration support",
+        "Documented rollback, tested in CI, forward-compatible migrations",
+    ),
+    (
+        "**PATCH-SCOPE**",
+        "Change-set sizing, blast-radius analysis",
+        "Small focused changesets with clear scope boundaries",
+    ),
+    (
+        "**PATCH-TELEM**",
+        "Deployment metrics, canary signals, rollout observability",
+        "Deploy success/failure metrics, canary signals, real-time dashboards",
+    ),
+    (
+        "**PATCH-TRAFFIC**",
+        "Traffic shifting, circuit breakers, rate limiting",
+        "Progressive traffic shifting, circuit breakers, rate limiting configured",
+    ),
+]
+
+_OTEL_CATEGORIES: list[tuple[str, str, str]] = [
+    (
+        "**OTEL**",
+        "OpenTelemetry instrumentation readiness: exporter config, pipeline"
+        " completeness, sampling strategy, W3C propagation, resource attributes,"
+        " test agent setup, integration test coverage, fault injection,"
+        " test observability, dynamic method coverage, call-sequence diagrams,"
+        " correlation-ID propagation verification,"
+        " runtime topology vs ADR drift detection",
+        "OTel SDK configured with OTLP exporter, complete trace/metrics/logs"
+        " pipelines, W3C trace-context propagation, service.name and"
+        " service.version resource attributes, test coverage for"
+        " instrumented paths, fault-injection tests for resilience signals,"
+        " runtime method coverage reported, correlation IDs propagated"
+        " end-to-end, no N+1 query patterns, p95 latency within targets,"
+        " runtime service topology matches ADR-declared architecture",
+    ),
+]
+
+
+def _appendix_category_definitions() -> list[str]:
+    """Render all category definition tables."""
+    lines: list[str] = []
+
+    lines.append("")
+    lines.append("### Category Definitions")
+    lines.append("")
+    lines.append(
         "Categories are assigned automatically from each"
         " rule's ID. There are three groups: core NFR"
         " categories (from keyword matching), repository"
@@ -346,154 +485,18 @@ def _methodology_appendix(
         " (prefix `PATCH-`)."
     )
 
-    def _cat_table(
-        heading: str,
-        rows: list[tuple[str, str, str]],
-    ) -> None:
-        _a("")
-        _a(f"#### {heading}")
-        _a("")
-        _a("| Category | Scope | What maturity looks like |")
-        _a("|----------|-------|-------------------------|")
-        for cat, scope, maturity in rows:
-            _a(f"| {cat} | {scope} | {maturity} |")
+    lines.extend(_cat_table("Core NFR Categories (ISO/IEC 25010)", _CORE_NFR_CATEGORIES))
+    lines.extend(_cat_table("Repository Hygiene Categories (HYG-)", _HYGIENE_CATEGORIES))
+    lines.extend(_cat_table("Patching Readiness Categories (PATCH-)", _PATCHING_CATEGORIES))
+    lines.extend(_cat_table("OTel Readiness Category (OTEL)", _OTEL_CATEGORIES))
 
-    _cat_table(
-        "Core NFR Categories (ISO/IEC 25010)",
-        [
-            (
-                "**security**",
-                "Auth, secrets, supply-chain pinning, PII, container user directives",
-                "No leaked secrets, pinned images/providers, no PII in logs, least-privilege",
-            ),
-            (
-                "**reliability**",
-                "Structured logging, correlation IDs, health probes *(alias: observability)*",
-                "Structured logs with correlation IDs, separate health/readiness",
-            ),
-            (
-                "**performance**",
-                "Timeouts, thread pools, goroutine leaks, async correctness, dep instability",
-                "Explicit timeouts, bounded pools, no fire-and-forget async, stable dep graph",
-            ),
-            (
-                "**maintainability**",
-                "Containers, K8s, Helm, CI, service-mesh, "
-                "Terraform, build tooling, ADR governance, "
-                "package subdivision *(alias: ops)*",
-                "Multi-stage Dockerfiles, resource limits, "
-                "network policies, CI gates, current ADRs, "
-                "well-subdivided packages with no god packages",
-            ),
-            (
-                "**structure**",
-                "Graph topology, community boundaries, "
-                "coupling hotspots, blast radius "
-                "*(requires graphify)*",
-                "No god nodes, strong community boundaries, "
-                "low cross-module coupling, contained blast radius",
-            ),
-        ],
-    )
+    return lines
 
-    _cat_table(
-        "Repository Hygiene Categories (HYG-)",
-        [
-            (
-                "**HYG-BLD**",
-                "Build system, versioning, entry points, pre-commit, code debt",
-                "Reproducible build, pinned deps, semver, lint + format hooks",
-            ),
-            (
-                "**HYG-CI**",
-                "CI pipeline, test/lint/SAST stages, coverage gates, action pinning",
-                "All quality gates present, SHA-pinned actions, coverage enforced",
-            ),
-            (
-                "**HYG-COM**",
-                "README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, CHANGELOG, CODEOWNERS",
-                "All community health files present with substantive content",
-            ),
-            (
-                "**HYG-DOC**",
-                "API docs, docs directory, package metadata",
-                "Published API docs, guides, complete metadata (description, license, URLs)",
-            ),
-            (
-                "**HYG-LIC**",
-                "Copyleft risk, license headers, NOTICE, SPDX identifiers",
-                "No unexpected copyleft, consistent headers, machine-readable SPDX",
-            ),
-            (
-                "**HYG-PRV**",
-                "PII patterns, internal reference leaks, tracking IDs",
-                "No PII in source, no internal URLs leaked, no tracking IDs in public code",
-            ),
-        ],
-    )
 
-    _cat_table(
-        "Patching Readiness Categories (PATCH-)",
-        [
-            (
-                "**PATCH-ARCH**",
-                "Singleton avoidance, graceful shutdown, PDB config, update strategy",
-                "No single-replica deploys, shutdown handlers, PDBs, rolling updates",
-            ),
-            (
-                "**PATCH-DEPS**",
-                "Version pinning, vuln scanning, automated update paths",
-                "Pinned deps with lock files, vuln scanning in CI, clear upgrade path",
-            ),
-            (
-                "**PATCH-HEALTH**",
-                "Probe separation, startup probes, trivial-probe detection, termination",
-                "Distinct startup probes, non-trivial health checks, pre-stop hooks",
-            ),
-            (
-                "**PATCH-ROLL**",
-                "Rollback docs, CI rollback tests, forward migration support",
-                "Documented rollback, tested in CI, forward-compatible migrations",
-            ),
-            (
-                "**PATCH-SCOPE**",
-                "Change-set sizing, blast-radius analysis",
-                "Small focused changesets with clear scope boundaries",
-            ),
-            (
-                "**PATCH-TELEM**",
-                "Deployment metrics, canary signals, rollout observability",
-                "Deploy success/failure metrics, canary signals, real-time dashboards",
-            ),
-            (
-                "**PATCH-TRAFFIC**",
-                "Traffic shifting, circuit breakers, rate limiting",
-                "Progressive traffic shifting, circuit breakers, rate limiting configured",
-            ),
-        ],
-    )
-
-    _cat_table(
-        "OTel Readiness Category (OTEL)",
-        [
-            (
-                "**OTEL**",
-                "OpenTelemetry instrumentation readiness: exporter config, pipeline"
-                " completeness, sampling strategy, W3C propagation, resource attributes,"
-                " test agent setup, integration test coverage, fault injection,"
-                " test observability, dynamic method coverage, call-sequence diagrams,"
-                " correlation-ID propagation verification,"
-                " runtime topology vs ADR drift detection",
-                "OTel SDK configured with OTLP exporter, complete trace/metrics/logs"
-                " pipelines, W3C trace-context propagation, service.name and"
-                " service.version resource attributes, test coverage for"
-                " instrumented paths, fault-injection tests for resilience signals,"
-                " runtime method coverage reported, correlation IDs propagated"
-                " end-to-end, no N+1 query patterns, p95 latency within targets,"
-                " runtime service topology matches ADR-declared architecture",
-            ),
-        ],
-    )
+def _appendix_llm_usage(llm_info: tuple[str, str] | None) -> list[str]:
+    """Render the LLM usage disclosure section."""
+    lines: list[str] = []
+    _a = lines.append
 
     _a("")
     _a("### LLM Usage in This Report")
@@ -541,6 +544,17 @@ def _methodology_appendix(
             " `NFR_LLM_MODEL`)."
         )
 
+    return lines
+
+
+def _methodology_appendix(
+    llm_info: tuple[str, str] | None = None,
+) -> str:
+    """Render the scoring methodology appendix as Markdown."""
+    lines: list[str] = ["## Appendix — Scoring Methodology", ""]
+    lines.extend(_appendix_scoring_methodology())
+    lines.extend(_appendix_category_definitions())
+    lines.extend(_appendix_llm_usage(llm_info))
     return "\n".join(lines) + "\n"
 
 
