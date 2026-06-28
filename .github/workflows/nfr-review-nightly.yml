@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Graphify
-        run: pip install "graphifyy>=0.8"
+        run: pip install "graphifyy==0.8.44"
 
       - name: Run Graphify extraction
         run: |
