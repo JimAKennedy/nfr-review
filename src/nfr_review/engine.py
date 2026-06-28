@@ -179,24 +179,16 @@ class Engine:
                 len(produced),
             )
 
-    # region:engine-run
-    def run(self, target: Path, config: Config) -> RunResult:
-        if not target.exists():
-            raise EngineError(f"target does not exist: {target}")
-        if not target.is_dir():
-            raise EngineError(f"target is not a directory: {target}")
-
-        config = config.model_copy(update={"target": target.resolve()})
-
-        active_collectors = _select_collectors(self._collectors, config.collectors.skip)
-
-        exclude_pats = (
-            compile_exclude_patterns(config.exclude_paths) if config.exclude_paths else None
-        )
-
+    def _run_collection_phase(
+        self,
+        active_collectors: list[Collector],
+        target: Path,
+        config: Config,
+        exclude_pats: Any,
+    ) -> tuple[list[Evidence], list[str], set[str]]:
         evidence: list[Evidence] = []
         warnings: list[str] = []
-        succeeded_collectors: set[str] = set()
+        succeeded: set[str] = set()
 
         n_collectors = len(active_collectors)
         logger.info(
@@ -223,7 +215,7 @@ class Engine:
                     exclude_pats,
                     evidence,
                     warnings,
-                    succeeded_collectors,
+                    succeeded,
                 )
             else:
                 self._collect_parallel(
@@ -233,21 +225,77 @@ class Engine:
                     exclude_pats,
                     evidence,
                     warnings,
-                    succeeded_collectors,
+                    succeeded,
                 )
 
             collect_span.set_attribute("nfr.evidence_count", len(evidence))
-            collect_span.set_attribute("nfr.collectors_succeeded", len(succeeded_collectors))
+            collect_span.set_attribute("nfr.collectors_succeeded", len(succeeded))
 
         collection_elapsed = time.monotonic() - collection_t0
         logger.info(
             "Collection phase complete: %d/%d succeeded, %d evidence items, %.2fs total",
-            len(succeeded_collectors),
+            len(succeeded),
             n_collectors,
             len(evidence),
             collection_elapsed,
         )
 
+        return evidence, warnings, succeeded
+
+    @staticmethod
+    def _check_rule_eligibility(
+        rule: Rule,
+        config: Config,
+        succeeded_collectors: set[str],
+    ) -> str | None:
+        cfg_skip, cfg_reason = _classify_rule(
+            rule, config.rules.skip, config.rules.include_only
+        )
+        if cfg_skip:
+            return cfg_reason
+
+        required_tech: list[str] = getattr(rule, "required_tech", [])
+        missing_tech = [t for t in required_tech if not config.tech.get(t, False)]
+        if missing_tech:
+            return f"tech not declared: {', '.join(missing_tech)}"
+
+        missing = [c for c in rule.required_collectors if c not in succeeded_collectors]
+        if missing:
+            return f"missing required collectors: {', '.join(missing)}"
+
+        return None
+
+    def _evaluate_one_rule(
+        self,
+        rule: Rule,
+        evidence: list[Evidence],
+        config: Config,
+    ) -> tuple[RuleResult, float]:
+        logger.info("  Evaluating rule: %s", rule.id)
+        t0 = time.monotonic()
+        with trace_phase(
+            f"nfr.rule.{rule.id}",
+            **{
+                "nfr.rule_id": rule.id,
+                "code.namespace": "nfr_review.engine",
+                "code.function": f"rule.{rule.id}.evaluate",
+            },
+        ):
+            try:
+                result = rule.evaluate(evidence, config)
+            # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
+            except Exception as exc:  # noqa: BLE001  # R012: never abort
+                reason = str(exc) or type(exc).__name__
+                logger.warning("rule %s failed: %s", rule.id, exc, exc_info=False)
+                result = RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
+        return result, time.monotonic() - t0
+
+    def _run_rules_phase(
+        self,
+        evidence: list[Evidence],
+        config: Config,
+        succeeded_collectors: set[str],
+    ) -> tuple[list[Finding], list[RuleResult], list[str], list[dict[str, Any]]]:
         rule_results: list[RuleResult] = []
         findings: list[Finding] = []
         rules_run: list[str] = []
@@ -258,60 +306,17 @@ class Engine:
         rules_t0 = time.monotonic()
 
         for rule in all_rules:
-            cfg_skip, cfg_reason = _classify_rule(
-                rule, config.rules.skip, config.rules.include_only
-            )
-            if cfg_skip:
-                assert cfg_reason is not None
+            skip_reason = self._check_rule_eligibility(rule, config, succeeded_collectors)
+            if skip_reason:
                 rule_results.append(
-                    RuleResult(rule_id=rule.id, skipped=True, skip_reason=cfg_reason)
+                    RuleResult(rule_id=rule.id, skipped=True, skip_reason=skip_reason)
                 )
-                rules_skipped.append({"rule_id": rule.id, "reason": cfg_reason})
+                rules_skipped.append({"rule_id": rule.id, "reason": skip_reason})
                 continue
 
-            required_tech: list[str] = getattr(rule, "required_tech", [])
-            missing_tech = [t for t in required_tech if not config.tech.get(t, False)]
-            if missing_tech:
-                reason = f"tech not declared: {', '.join(missing_tech)}"
-                rule_results.append(
-                    RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
-                )
-                rules_skipped.append({"rule_id": rule.id, "reason": reason})
-                continue
-
-            missing = [c for c in rule.required_collectors if c not in succeeded_collectors]
-            if missing:
-                reason = f"missing required collectors: {', '.join(missing)}"
-                rule_results.append(
-                    RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
-                )
-                rules_skipped.append({"rule_id": rule.id, "reason": reason})
-                continue
-
-            logger.info("  Evaluating rule: %s", rule.id)
-            t0 = time.monotonic()
-            with trace_phase(
-                f"nfr.rule.{rule.id}",
-                **{
-                    "nfr.rule_id": rule.id,
-                    "code.namespace": "nfr_review.engine",
-                    "code.function": f"rule.{rule.id}.evaluate",
-                },
-            ):
-                try:
-                    result = rule.evaluate(evidence, config)
-                # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
-                except Exception as exc:  # noqa: BLE001  # R012: never abort
-                    reason = str(exc) or type(exc).__name__
-                    logger.warning("rule %s failed: %s", rule.id, exc, exc_info=False)
-                    rule_results.append(
-                        RuleResult(rule_id=rule.id, skipped=True, skip_reason=reason)
-                    )
-                    rules_skipped.append({"rule_id": rule.id, "reason": reason})
-                    continue
-            elapsed = time.monotonic() - t0
-
+            result, elapsed = self._evaluate_one_rule(rule, evidence, config)
             rule_results.append(result)
+
             if result.skipped:
                 rules_skipped.append(
                     {
@@ -339,8 +344,29 @@ class Engine:
             rules_elapsed,
         )
 
-        apply_origin_classification(findings, config.dependency_paths)
+        return findings, rule_results, rules_run, rules_skipped
 
+    # region:engine-run
+    def run(self, target: Path, config: Config) -> RunResult:
+        if not target.exists():
+            raise EngineError(f"target does not exist: {target}")
+        if not target.is_dir():
+            raise EngineError(f"target is not a directory: {target}")
+
+        config = config.model_copy(update={"target": target.resolve()})
+        active_collectors = _select_collectors(self._collectors, config.collectors.skip)
+        exclude_pats = (
+            compile_exclude_patterns(config.exclude_paths) if config.exclude_paths else None
+        )
+
+        evidence, warnings, succeeded = self._run_collection_phase(
+            active_collectors, target, config, exclude_pats
+        )
+        findings, rule_results, rules_run, rules_skipped = self._run_rules_phase(
+            evidence, config, succeeded
+        )
+
+        apply_origin_classification(findings, config.dependency_paths)
         run_metadata = build_run_metadata(target, active_collectors, rules_run, rules_skipped)
 
         return RunResult(
