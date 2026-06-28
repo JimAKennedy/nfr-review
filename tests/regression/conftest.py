@@ -140,37 +140,30 @@ def _verify_head(clone_dir: Path, expected_sha: str, name: str) -> None:
 def _reset_working_tree(clone_dir: Path, name: str) -> None:
     """Reset the working tree to HEAD, discarding any stale modifications.
 
-    Uses ``-fdx`` (not ``-fd``) so gitignored build artifacts (e.g.
-    Maven-generated PackageVersion.java) are also removed.  Stale
-    gitignored files caused CI-only snapshot mismatches when the
-    regression-repo cache persisted them across runs.
+    Always runs ``clean -fdx`` so gitignored build artifacts (e.g.
+    Maven-generated PackageVersion.java) are removed even when the
+    tree looks clean to ``git status --porcelain`` (which hides
+    ignored files).
     """
-    status = subprocess.run(
-        ["git", "-C", str(clone_dir), "status", "--porcelain"],
+    subprocess.run(
+        ["git", "-C", str(clone_dir), "checkout", "--", "."],
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=60,
         check=False,
     )
-    if status.returncode == 0 and status.stdout.strip():
-        dirty_count = len(status.stdout.strip().splitlines())
+    result = subprocess.run(
+        ["git", "-C", str(clone_dir), "clean", "-fdx"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        cleaned = len(result.stdout.strip().splitlines())
         print(
-            f"[checkout] {name}: working tree dirty ({dirty_count} files), resetting",
+            f"[checkout] {name}: cleaned {cleaned} untracked/ignored file(s)",
             flush=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(clone_dir), "checkout", "--", "."],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        subprocess.run(
-            ["git", "-C", str(clone_dir), "clean", "-fdx"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
         )
 
 
