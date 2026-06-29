@@ -48,6 +48,7 @@ export default defineConfig({
 						{ label: 'Finding Fields', slug: 'reference/finding-fields' },
 						{ label: 'Tech Detection', slug: 'reference/tech-detection' },
 						{ label: 'Compliance Matrix', slug: 'reference/compliance' },
+						{ label: 'Architecture Command', slug: 'reference/arch' },
 						{ label: 'Payload Schemas', slug: 'reference/payloads' },
 					],
 				},
