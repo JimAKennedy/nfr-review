@@ -149,38 +149,22 @@ class FieldRule(Generic[P]):
             )
         return self.payload_type.model_validate(raw)  # type: ignore[arg-type]
 
-    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
-        relevant = [
-            e
-            for e in evidence
-            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
-        ]
-        if not relevant:
-            # If the collector emitted skip evidence, propagate its reason.
-            if self.skip_evidence_kind:
-                for ev in evidence:
-                    if (
-                        ev.collector_name == self.collector_name
-                        and ev.kind == self.skip_evidence_kind
-                    ):
-                        payload = ev.payload
-                        reason = (
-                            payload.get("reason", "")
-                            if hasattr(payload, "get")
-                            else getattr(payload, "reason", "")
-                        )
-                        if reason:
-                            return RuleResult(
-                                rule_id=self.id,
-                                skipped=True,
-                                skip_reason=reason,
-                            )
-            return RuleResult(
-                rule_id=self.id,
-                skipped=True,
-                skip_reason=f"no {self.evidence_kind} evidence available",
-            )
+    def _find_skip_reason(self, evidence: list[Evidence]) -> str | None:
+        if not self.skip_evidence_kind:
+            return None
+        for ev in evidence:
+            if ev.collector_name == self.collector_name and ev.kind == self.skip_evidence_kind:
+                payload = ev.payload
+                reason = (
+                    payload.get("reason", "")
+                    if hasattr(payload, "get")
+                    else getattr(payload, "reason", "")
+                )
+                if reason:
+                    return reason
+        return None
 
+    def _build_findings(self, relevant: list[Evidence]) -> list[Finding]:
         findings: list[Finding] = []
         for ev in relevant:
             payload = self._coerce(ev.payload)
@@ -210,8 +194,23 @@ class FieldRule(Generic[P]):
                     ),
                 )
             )
+        return findings
 
-        return RuleResult(rule_id=self.id, findings=findings)
+    def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult:
+        relevant = [
+            e
+            for e in evidence
+            if e.collector_name == self.collector_name and e.kind == self.evidence_kind
+        ]
+        if not relevant:
+            skip_reason = self._find_skip_reason(evidence)
+            return RuleResult(
+                rule_id=self.id,
+                skipped=True,
+                skip_reason=skip_reason or f"no {self.evidence_kind} evidence available",
+            )
+
+        return RuleResult(rule_id=self.id, findings=self._build_findings(relevant))
 
 
 def register(cls: type[T_Rule]) -> type[T_Rule]:

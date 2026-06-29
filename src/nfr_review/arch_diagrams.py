@@ -914,94 +914,68 @@ def _extract_type_refs(type_str: str, known_names: set[str]) -> list[tuple[str, 
     return refs
 
 
-def render_class_diagram(
+def _emit_class_block(cls: dict, indent: str, lines: list[str]) -> None:
+    """Emit a single Mermaid class block with members."""
+    name = cls.get("name", "")
+    if not name:
+        return
+    cid = _safe_id(name)
+
+    annotation = ""
+    if cls.get("is_abstract"):
+        annotation = "<<abstract>>"
+    elif cls.get("is_struct"):
+        annotation = "<<struct>>"
+
+    members: list[str] = []
+    member_count = 0
+    for field in cls.get("fields", []):
+        if member_count >= _MAX_MEMBERS_PER_CLASS:
+            break
+        sym = _ACCESS_SYMBOL.get(field.get("access", "private"), "-")
+        ftype = _sanitize_member_type(field.get("type", ""))
+        fname = field.get("name", "")
+        members.append(f"{sym}{fname} {ftype}")
+        member_count += 1
+
+    for method in cls.get("methods", []):
+        if member_count >= _MAX_MEMBERS_PER_CLASS:
+            break
+        mname = method.get("name", "")
+        if mname.startswith("~"):
+            continue
+        sym = _ACCESS_SYMBOL.get(method.get("access", "public"), "+")
+        rtype = _sanitize_member_type(method.get("return_type", ""))
+        virt = "*" if method.get("is_pure_virtual") else ""
+        members.append(f"{sym}{mname}(){virt} {rtype}")
+        member_count += 1
+
+    if members or annotation:
+        lines.append(f"{indent}class {cid} {{")
+        if annotation:
+            lines.append(f"{indent}    {annotation}")
+        for m in members:
+            lines.append(f"{indent}    {m}")
+        lines.append(f"{indent}}}")
+    else:
+        lines.append(f"{indent}class {cid}")
+
+
+def _emit_class_blocks_grouped(
     class_data: list[dict],
-    title: str | None = None,
+    lines: list[str],
     *,
-    group_by_namespace: bool = False,
-    suppress_external: set[str] | None = None,
-) -> C4Diagram:
-    """Render a Mermaid class diagram from enriched C++ AST class data.
-
-    *class_data* is a list of class dicts as produced by the cpp-ast
-    collector's enriched payload (base_classes, methods, fields,
-    parameters, friends, namespace, outer_class).
-
-    When *group_by_namespace* is True, classes are grouped inside
-    Mermaid ``namespace`` blocks reflecting their C++ namespace.
-    """
-    title = title or "Class Diagram"
-
-    if not class_data:
-        return C4Diagram(
-            level="code",
-            title=title,
-            scope="classes",
-            mermaid="classDiagram\n",
-            component_ids=[],
-        )
-
-    if len(class_data) > _MAX_CLASSES_PER_DIAGRAM:
-        class_data = class_data[:_MAX_CLASSES_PER_DIAGRAM]
-
-    lines: list[str] = ["classDiagram"]
-    known_names = {c["name"] for c in class_data if c.get("name")}
-
-    # -- Namespace grouping (collect classes by ns) --
+    group_by_namespace: bool,
+) -> None:
+    """Emit class blocks, optionally grouped by namespace and repo."""
     ns_groups: dict[str, list[dict]] = {}
     for cls in class_data:
         ns = cls.get("namespace", "") or ""
         ns_groups.setdefault(ns, []).append(cls)
 
-    # -- Detect multi-repo --
     repos = {cls.get("repo", "") or "" for cls in class_data}
     repos.discard("")
     multi_repo = len(repos) > 1
-
-    def _emit_class_block(cls: dict, indent: str) -> None:
-        name = cls.get("name", "")
-        if not name:
-            return
-        cid = _safe_id(name)
-
-        annotation = ""
-        if cls.get("is_abstract"):
-            annotation = "<<abstract>>"
-        elif cls.get("is_struct"):
-            annotation = "<<struct>>"
-
-        members: list[str] = []
-        member_count = 0
-        for field in cls.get("fields", []):
-            if member_count >= _MAX_MEMBERS_PER_CLASS:
-                break
-            sym = _ACCESS_SYMBOL.get(field.get("access", "private"), "-")
-            ftype = _sanitize_member_type(field.get("type", ""))
-            fname = field.get("name", "")
-            members.append(f"{sym}{fname} {ftype}")
-            member_count += 1
-
-        for method in cls.get("methods", []):
-            if member_count >= _MAX_MEMBERS_PER_CLASS:
-                break
-            mname = method.get("name", "")
-            if mname.startswith("~"):
-                continue
-            sym = _ACCESS_SYMBOL.get(method.get("access", "public"), "+")
-            rtype = _sanitize_member_type(method.get("return_type", ""))
-            virt = "*" if method.get("is_pure_virtual") else ""
-            members.append(f"{sym}{mname}(){virt} {rtype}")
-            member_count += 1
-
-        if members or annotation:
-            lines.append(f"{indent}class {cid} {{")
-            if annotation:
-                lines.append(f"{indent}    {annotation}")
-            for m in members:
-                lines.append(f"{indent}    {m}")
-            lines.append(f"{indent}}}")
-        else:
-            lines.append(f"{indent}class {cid}")
 
     if group_by_namespace and multi_repo:
         repo_ns: dict[str, dict[str, list[dict]]] = {}
@@ -1015,34 +989,40 @@ def render_class_diagram(
             for ns in sorted(repo_ns[repo]):
                 group = repo_ns[repo][ns]
                 if ns:
-                    safe_ns = ns.replace("::", "_")
-                    safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", safe_ns)
+                    safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", ns.replace("::", "_"))
                     lines.append(f"        namespace {safe_ns} {{")
                     for cls in group:
-                        _emit_class_block(cls, "            ")
+                        _emit_class_block(cls, "            ", lines)
                     lines.append("        }")
                 else:
                     for cls in group:
-                        _emit_class_block(cls, "        ")
+                        _emit_class_block(cls, "        ", lines)
             lines.append("    }")
     elif group_by_namespace:
         for ns in sorted(ns_groups):
             group = ns_groups[ns]
             if ns:
-                safe_ns = ns.replace("::", "_")
-                safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", safe_ns)
+                safe_ns = re.sub(r"[^a-zA-Z0-9_]", "_", ns.replace("::", "_"))
                 lines.append(f"    namespace {safe_ns} {{")
                 for cls in group:
-                    _emit_class_block(cls, "        ")
+                    _emit_class_block(cls, "        ", lines)
                 lines.append("    }")
             else:
                 for cls in group:
-                    _emit_class_block(cls, "    ")
+                    _emit_class_block(cls, "    ", lines)
     else:
         for cls in class_data:
-            _emit_class_block(cls, "    ")
+            _emit_class_block(cls, "    ", lines)
 
-    # -- Inheritance edges --
+
+def _emit_inheritance_edges(
+    class_data: list[dict],
+    known_names: set[str],
+    lines: list[str],
+    *,
+    suppress_external: set[str] | None = None,
+) -> set[tuple[str, str]]:
+    """Emit inheritance edges, returning the set of inheritance pairs."""
     inheritance_pairs: set[tuple[str, str]] = set()
     for cls in class_data:
         name = cls.get("name", "")
@@ -1064,8 +1044,16 @@ def render_class_diagram(
                 lines.append(f"    {ext_id} <|-- {cid}")
                 known_names.add(base_name)
                 inheritance_pairs.add((name, base_name))
+    return inheritance_pairs
 
-    # -- Composition / aggregation edges (from field types) --
+
+def _emit_composition_edges(
+    class_data: list[dict],
+    known_names: set[str],
+    inheritance_pairs: set[tuple[str, str]],
+    lines: list[str],
+) -> set[tuple[str, str, str]]:
+    """Emit composition/aggregation edges from field types."""
     edge_seen: set[tuple[str, str, str]] = set()
     for cls in class_data:
         name = cls.get("name", "")
@@ -1086,8 +1074,17 @@ def render_class_diagram(
                 edge_seen.add(edge_key)
                 rid = _safe_id(ref_name)
                 lines.append(f"    {cid} {arrow} {rid}")
+    return edge_seen
 
-    # -- Dependency edges (from method return types + parameter types) --
+
+def _emit_dependency_edges(
+    class_data: list[dict],
+    known_names: set[str],
+    inheritance_pairs: set[tuple[str, str]],
+    edge_seen: set[tuple[str, str, str]],
+    lines: list[str],
+) -> None:
+    """Emit dependency edges from method return/parameter types."""
     for cls in class_data:
         name = cls.get("name", "")
         if not name:
@@ -1116,7 +1113,14 @@ def render_class_diagram(
                     rid = _safe_id(ref_name)
                     lines.append(f"    {cid} ..> {rid}")
 
-    # -- Friend edges (dashed dependency) --
+
+def _emit_friend_edges(
+    class_data: list[dict],
+    known_names: set[str],
+    edge_seen: set[tuple[str, str, str]],
+    lines: list[str],
+) -> None:
+    """Emit friend relationship edges."""
     for cls in class_data:
         name = cls.get("name", "")
         if not name:
@@ -1133,7 +1137,14 @@ def render_class_diagram(
             fid = _safe_id(friend_name)
             lines.append(f'    {cid} ..> {fid} : "friend"')
 
-    # -- Nested class edges --
+
+def _emit_nested_class_edges(
+    class_data: list[dict],
+    known_names: set[str],
+    edge_seen: set[tuple[str, str, str]],
+    lines: list[str],
+) -> None:
+    """Emit nested (inner) class edges."""
     for cls in class_data:
         name = cls.get("name", "")
         outer = cls.get("outer_class", "")
@@ -1146,6 +1157,41 @@ def render_class_diagram(
         oid = _safe_id(outer)
         nid = _safe_id(name)
         lines.append(f'    {oid} *-- {nid} : "inner"')
+
+
+def render_class_diagram(
+    class_data: list[dict],
+    title: str | None = None,
+    *,
+    group_by_namespace: bool = False,
+    suppress_external: set[str] | None = None,
+) -> C4Diagram:
+    """Render a Mermaid class diagram from enriched C++ AST class data."""
+    title = title or "Class Diagram"
+
+    if not class_data:
+        return C4Diagram(
+            level="code",
+            title=title,
+            scope="classes",
+            mermaid="classDiagram\n",
+            component_ids=[],
+        )
+
+    if len(class_data) > _MAX_CLASSES_PER_DIAGRAM:
+        class_data = class_data[:_MAX_CLASSES_PER_DIAGRAM]
+
+    lines: list[str] = ["classDiagram"]
+    known_names = {c["name"] for c in class_data if c.get("name")}
+
+    _emit_class_blocks_grouped(class_data, lines, group_by_namespace=group_by_namespace)
+    inheritance_pairs = _emit_inheritance_edges(
+        class_data, known_names, lines, suppress_external=suppress_external
+    )
+    edge_seen = _emit_composition_edges(class_data, known_names, inheritance_pairs, lines)
+    _emit_dependency_edges(class_data, known_names, inheritance_pairs, edge_seen, lines)
+    _emit_friend_edges(class_data, known_names, edge_seen, lines)
+    _emit_nested_class_edges(class_data, known_names, edge_seen, lines)
 
     mermaid = "\n".join(lines) + "\n"
     return C4Diagram(

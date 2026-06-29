@@ -510,6 +510,75 @@ def _md_deps_to_html(md: str) -> str:
     return "\n".join(parts)
 
 
+def _md_section_to_html(
+    md_text: str,
+    heading: str,
+    sections: list[str],
+    *,
+    break_class: str = "section-flow",
+) -> None:
+    """Strip a ``## `` heading from markdown, add an HTML heading, and convert."""
+    body = md_text
+    if body.startswith("## "):
+        body = body.split("\n", 1)[1] if "\n" in body else ""
+    sections.append(f'<div class="{break_class}"></div>')
+    sections.append(f"<h2>{heading}</h2>")
+    sections.append(_md_deps_to_html(body))
+
+
+def _pdf_diagrams_section(
+    sections: list[str],
+    diagram_paths: dict[str, Path] | None,
+    diagrams: dict[str, str] | None,
+) -> None:
+    """Emit the diagrams section of the PDF."""
+    if not (diagram_paths or diagrams):
+        return
+    sections.append('<div class="section-break"></div>')
+    sections.append("<h2>Diagrams</h2>")
+    if diagram_paths:
+        for diagram_title, path in diagram_paths.items():
+            if path.exists():
+                sections.append(
+                    f'<div class="diagram-container">'
+                    f"<h3>{_h(diagram_title)}</h3>"
+                    f"{_embed_image(path)}</div>"
+                )
+    elif diagrams:
+        for diagram_title, mermaid_text in diagrams.items():
+            if mermaid_text.strip():
+                sections.append(_render_diagram_cascade(diagram_title, mermaid_text))
+
+
+def _pdf_appendices(
+    sections: list[str],
+    *,
+    deps_section_md: str,
+    score_section_md: str,
+    llm_info: tuple[str, str] | None,
+) -> None:
+    """Emit dependency and scoring methodology appendices."""
+    if deps_section_md:
+        _md_section_to_html(
+            deps_section_md,
+            "Appendix A &mdash; Dependency Tree",
+            sections,
+            break_class="section-break",
+        )
+
+    if score_section_md:
+        from nfr_review.output.markdown import _methodology_appendix
+
+        appendix_label = "B" if deps_section_md else "A"
+        methodology_md = _methodology_appendix(llm_info=llm_info)
+        _md_section_to_html(
+            methodology_md,
+            f"Appendix {appendix_label} &mdash; Scoring Methodology",
+            sections,
+            break_class="section-break",
+        )
+
+
 def render_pdf(
     *,
     nfr_result: RunResult,
@@ -561,22 +630,7 @@ def render_pdf(
         sections.append('<div class="section-flow"></div>')
         sections.append(_md_deps_to_html(score_section_md))
 
-    has_diagrams = diagram_paths or diagrams
-    if has_diagrams:
-        sections.append('<div class="section-break"></div>')
-        sections.append("<h2>Diagrams</h2>")
-        if diagram_paths:
-            for diagram_title, path in diagram_paths.items():
-                if path.exists():
-                    sections.append(
-                        f'<div class="diagram-container">'
-                        f"<h3>{_h(diagram_title)}</h3>"
-                        f"{_embed_image(path)}</div>"
-                    )
-        elif diagrams:
-            for diagram_title, mermaid_text in diagrams.items():
-                if mermaid_text.strip():
-                    sections.append(_render_diagram_cascade(diagram_title, mermaid_text))
+    _pdf_diagrams_section(sections, diagram_paths, diagrams)
 
     sections.append('<div class="section-flow"></div>')
     sections.append(_test_results_html(pytest_result))
@@ -601,50 +655,24 @@ def render_pdf(
         sections.append(_findings_html(dependency, "Dependency Findings Detail"))
 
     if adr_section_md:
-        sections.append('<div class="section-flow"></div>')
-        adr_body = adr_section_md
-        if adr_body.startswith("## "):
-            adr_body = adr_body.split("\n", 1)[1] if "\n" in adr_body else ""
-        sections.append("<h2>Architecture Decision Records</h2>")
-        sections.append(_md_deps_to_html(adr_body))
+        _md_section_to_html(adr_section_md, "Architecture Decision Records", sections)
 
     if jdepend_section_md:
-        sections.append('<div class="section-flow"></div>')
-        jdepend_body = jdepend_section_md
-        if jdepend_body.startswith("## "):
-            jdepend_body = jdepend_body.split("\n", 1)[1] if "\n" in jdepend_body else ""
-        sections.append("<h2>JDepend Structural Analysis</h2>")
-        sections.append(_md_deps_to_html(jdepend_body))
+        _md_section_to_html(jdepend_section_md, "JDepend Structural Analysis", sections)
 
     if derived_adrs_section_md:
-        sections.append('<div class="section-flow"></div>')
-        derived_body = derived_adrs_section_md
-        if derived_body.startswith("## "):
-            derived_body = derived_body.split("\n", 1)[1] if "\n" in derived_body else ""
-        sections.append("<h2>Derived Architecture Decision Records</h2>")
-        sections.append(_md_deps_to_html(derived_body))
+        _md_section_to_html(
+            derived_adrs_section_md,
+            "Derived Architecture Decision Records",
+            sections,
+        )
 
-    if deps_section_md:
-        sections.append('<div class="section-break"></div>')
-        deps_body = deps_section_md
-        if deps_body.startswith("## "):
-            deps_body = deps_body.split("\n", 1)[1] if "\n" in deps_body else ""
-        sections.append("<h2>Appendix A &mdash; Dependency Tree</h2>")
-        sections.append(_md_deps_to_html(deps_body))
-
-    if score_section_md:
-        from nfr_review.output.markdown import _methodology_appendix
-
-        sections.append('<div class="section-break"></div>')
-        methodology_md = _methodology_appendix(llm_info=llm_info)
-        methodology_body = methodology_md
-        if methodology_body.startswith("## "):
-            methodology_body = (
-                methodology_body.split("\n", 1)[1] if "\n" in methodology_body else ""
-            )
-        appendix_label = "B" if deps_section_md else "A"
-        sections.append(f"<h2>Appendix {appendix_label} &mdash; Scoring Methodology</h2>")
-        sections.append(_md_deps_to_html(methodology_body))
+    _pdf_appendices(
+        sections,
+        deps_section_md=deps_section_md,
+        score_section_md=score_section_md,
+        llm_info=llm_info,
+    )
 
     html_doc = f"""<!DOCTYPE html>
 <html lang="en">

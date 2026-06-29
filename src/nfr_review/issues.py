@@ -332,6 +332,185 @@ def _issue_has_tool_close_comment(repo: str, issue_number: int) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _partition_issues(
+    repo: str,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    """Fetch nfr-review issues and partition them into open/closed dicts by key.
+
+    Returns ``(open_by_key, closed_by_key, all_issues)``.
+    """
+    all_issues = _fetch_nfr_issues(repo) if repo else []
+    open_by_key: dict[str, dict[str, Any]] = {}
+    closed_by_key: dict[str, dict[str, Any]] = {}
+    for issue in all_issues:
+        key = _extract_key(issue.get("body", ""))
+        if key is None:
+            continue
+        if issue.get("state", "").upper() == "OPEN":
+            open_by_key[key] = issue
+        elif issue.get("state", "").upper() == "CLOSED":
+            closed_by_key[key] = issue
+    return open_by_key, closed_by_key, all_issues
+
+
+def _handle_update(
+    rule_id: str,
+    title: str,
+    finding: dict[str, Any],
+    existing: dict[str, Any],
+    repo: str,
+    *,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Handle an open issue whose key matches the current finding.
+
+    Returns an action dict; the ``unchanged`` action means the body was
+    identical and no write was performed.
+    """
+    new_body = generate_issue_body(finding)
+    if new_body.strip() == existing.get("body", "").strip():
+        return _action(rule_id, title, "unchanged", existing.get("url", ""), "body identical")
+
+    if dry_run:
+        return _action(rule_id, title, "update", existing.get("url", ""), "body changed")
+
+    number = existing["number"]
+    try:
+        _gh_run(["issue", "edit", "--repo", repo, str(number), "--body", new_body])
+        return _action(rule_id, title, "update", existing.get("url", ""), "body updated")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return _action(rule_id, title, "error", "", "gh edit failed")
+
+
+def _handle_closed(
+    rule_id: str,
+    title: str,
+    closed_issue: dict[str, Any],
+    repo: str,
+    *,
+    dry_run: bool,
+) -> dict[str, Any] | None:
+    """Handle a closed issue whose key matches the current finding.
+
+    Returns an action dict if the finding should be skipped, or ``None`` if
+    the issue was tool-closed and the finding should fall through to create.
+    """
+    if dry_run:
+        return _action(
+            rule_id, title, "skip", closed_issue.get("url", ""), "previously closed"
+        )
+
+    if not _issue_has_tool_close_comment(repo, closed_issue["number"]):
+        return _action(rule_id, title, "skip", closed_issue.get("url", ""), "manually closed")
+
+    # Tool-closed and finding came back — fall through to create
+    return None
+
+
+def _handle_create(
+    rule_id: str,
+    title: str,
+    finding: dict[str, Any],
+    repo: str,
+    extra_labels: list[str] | None,
+    *,
+    dry_run: bool,
+    is_first_run: bool,
+    first_run_cap: int,
+    create_count: int,
+) -> tuple[dict[str, Any], int]:
+    """Create a new GitHub issue for *finding*.
+
+    Returns ``(action_dict, new_create_count)``.  The count is incremented
+    only when a create action (real or dry-run) is recorded.
+    """
+    if is_first_run and create_count >= first_run_cap:
+        return _action(
+            rule_id, title, "skip", "", f"first-run cap ({first_run_cap})"
+        ), create_count
+
+    if dry_run:
+        return _action(rule_id, title, "create", "", "new finding"), create_count + 1
+
+    body = generate_issue_body(finding)
+    labels = issue_labels(finding, extra_labels)
+    label_args: list[str] = []
+    for lbl in labels:
+        label_args.extend(["--label", lbl])
+
+    try:
+        result = _gh_run(
+            [
+                "issue",
+                "create",
+                "--repo",
+                repo,
+                "--title",
+                title,
+                "--body",
+                body,
+                *label_args,
+            ]
+        )
+        if result.returncode == 0:
+            return (
+                _action(rule_id, title, "create", result.stdout.strip(), "new finding"),
+                create_count + 1,
+            )
+        return _action(rule_id, title, "error", "", result.stderr.strip()[:120]), create_count
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return _action(rule_id, title, "error", "", "gh create failed"), create_count
+
+
+def _close_resolved_issues(
+    open_by_key: dict[str, dict[str, Any]],
+    finding_by_key: dict[str, dict[str, Any]],
+    repo: str,
+    *,
+    dry_run: bool,
+) -> list[dict[str, Any]]:
+    """Close open issues whose finding key is no longer in *finding_by_key*.
+
+    Returns a list of action dicts (close or error).
+    """
+    results: list[dict[str, Any]] = []
+    for key, issue in open_by_key.items():
+        if key in finding_by_key:
+            continue
+        number = issue["number"]
+        url = issue.get("url", "")
+
+        if dry_run:
+            results.append(
+                _action("", f"#{number}", "close", url, "finding no longer present")
+            )
+            continue
+
+        now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+        comment = (
+            f"Finding no longer present in scan results as of {now}.\n\n"
+            f"{_CLOSED_BY_TOOL_MARKER}"
+        )
+        try:
+            _gh_run(
+                [
+                    "issue",
+                    "close",
+                    "--repo",
+                    repo,
+                    str(number),
+                    "--comment",
+                    comment,
+                ]
+            )
+            results.append(
+                _action("", f"#{number}", "close", url, "finding no longer present")
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            results.append(_action("", f"#{number}", "error", url, "gh close failed"))
+    return results
+
+
 def sync_issues(
     findings: list[dict[str, Any]],
     repo: str,
@@ -349,15 +528,9 @@ def sync_issues(
         rule_id, title, action, url, reason
     where *action* is one of create/update/close/skip/unchanged/error.
     """
-    filtered = filter_findings(
-        findings,
-        severity_threshold,
-        rag_min=rag_min,
-    )
+    filtered = filter_findings(findings, severity_threshold, rag_min=rag_min)
 
-    finding_by_key: dict[str, dict[str, Any]] = {}
-    for f in filtered:
-        finding_by_key[_finding_key(f)] = f
+    finding_by_key: dict[str, dict[str, Any]] = {_finding_key(f): f for f in filtered}
 
     if not dry_run and repo and finding_by_key:
         all_labels: set[str] = set()
@@ -365,18 +538,7 @@ def sync_issues(
             all_labels.update(issue_labels(f, extra_labels))
         _ensure_labels(repo, all_labels)
 
-    all_issues = _fetch_nfr_issues(repo) if repo else []
-
-    open_by_key: dict[str, dict[str, Any]] = {}
-    closed_by_key: dict[str, dict[str, Any]] = {}
-    for issue in all_issues:
-        key = _extract_key(issue.get("body", ""))
-        if key is None:
-            continue
-        if issue.get("state", "").upper() == "OPEN":
-            open_by_key[key] = issue
-        elif issue.get("state", "").upper() == "CLOSED":
-            closed_by_key[key] = issue
+    open_by_key, closed_by_key, all_issues = _partition_issues(repo)
 
     is_first_run = len(all_issues) == 0
     results: list[dict[str, Any]] = []
@@ -386,142 +548,38 @@ def sync_issues(
         title = generate_issue_title(finding)
         rule_id = finding.get("rule_id", "")
 
-        # --- open issue with same key → update (or unchanged) ---
         if key in open_by_key:
-            existing = open_by_key[key]
-            new_body = generate_issue_body(finding)
-            if new_body.strip() == existing.get("body", "").strip():
-                results.append(
-                    _action(
-                        rule_id, title, "unchanged", existing.get("url", ""), "body identical"
-                    )
+            results.append(
+                _handle_update(
+                    rule_id, title, finding, open_by_key[key], repo, dry_run=dry_run
                 )
-                continue
-
-            if dry_run:
-                results.append(
-                    _action(rule_id, title, "update", existing.get("url", ""), "body changed")
-                )
-                continue
-
-            number = existing["number"]
-            try:
-                _gh_run(["issue", "edit", "--repo", repo, str(number), "--body", new_body])
-                results.append(
-                    _action(rule_id, title, "update", existing.get("url", ""), "body updated")
-                )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                results.append(_action(rule_id, title, "error", "", "gh edit failed"))
+            )
             continue
 
-        # --- closed issue with same key → skip if manually closed ---
         if key in closed_by_key:
-            closed_issue = closed_by_key[key]
-            if dry_run:
-                results.append(
-                    _action(
-                        rule_id,
-                        title,
-                        "skip",
-                        closed_issue.get("url", ""),
-                        "previously closed",
-                    )
-                )
-                continue
-
-            if not _issue_has_tool_close_comment(repo, closed_issue["number"]):
-                results.append(
-                    _action(
-                        rule_id,
-                        title,
-                        "skip",
-                        closed_issue.get("url", ""),
-                        "manually closed",
-                    )
-                )
+            action = _handle_closed(rule_id, title, closed_by_key[key], repo, dry_run=dry_run)
+            if action is not None:
+                results.append(action)
                 continue
             # Tool-closed and finding came back — fall through to create
 
-        # --- create ---
-        if is_first_run and create_count >= first_run_cap:
-            results.append(
-                _action(rule_id, title, "skip", "", f"first-run cap ({first_run_cap})")
-            )
-            continue
+        action, create_count = _handle_create(
+            rule_id,
+            title,
+            finding,
+            repo,
+            extra_labels,
+            dry_run=dry_run,
+            is_first_run=is_first_run,
+            first_run_cap=first_run_cap,
+            create_count=create_count,
+        )
+        results.append(action)
 
-        if dry_run:
-            results.append(_action(rule_id, title, "create", "", "new finding"))
-            create_count += 1
-            continue
-
-        body = generate_issue_body(finding)
-        labels = issue_labels(finding, extra_labels)
-        label_args: list[str] = []
-        for lbl in labels:
-            label_args.extend(["--label", lbl])
-
-        try:
-            result = _gh_run(
-                [
-                    "issue",
-                    "create",
-                    "--repo",
-                    repo,
-                    "--title",
-                    title,
-                    "--body",
-                    body,
-                    *label_args,
-                ]
-            )
-            if result.returncode == 0:
-                results.append(
-                    _action(rule_id, title, "create", result.stdout.strip(), "new finding")
-                )
-                create_count += 1
-            else:
-                results.append(
-                    _action(rule_id, title, "error", "", result.stderr.strip()[:120])
-                )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            results.append(_action(rule_id, title, "error", "", "gh create failed"))
-
-    # --- close-resolved ---
     if close_resolved:
-        for key, issue in open_by_key.items():
-            if key in finding_by_key:
-                continue
-            number = issue["number"]
-            url = issue.get("url", "")
-
-            if dry_run:
-                results.append(
-                    _action("", f"#{number}", "close", url, "finding no longer present")
-                )
-                continue
-
-            now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-            comment = (
-                f"Finding no longer present in scan results as of {now}.\n\n"
-                f"{_CLOSED_BY_TOOL_MARKER}"
-            )
-            try:
-                _gh_run(
-                    [
-                        "issue",
-                        "close",
-                        "--repo",
-                        repo,
-                        str(number),
-                        "--comment",
-                        comment,
-                    ]
-                )
-                results.append(
-                    _action("", f"#{number}", "close", url, "finding no longer present")
-                )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                results.append(_action("", f"#{number}", "error", url, "gh close failed"))
+        results.extend(
+            _close_resolved_issues(open_by_key, finding_by_key, repo, dry_run=dry_run)
+        )
 
     return results
 

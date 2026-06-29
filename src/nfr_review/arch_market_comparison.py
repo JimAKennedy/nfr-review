@@ -368,35 +368,8 @@ def _validate_maturity(value: str) -> MaturityLevel:
 # ---------------------------------------------------------------------------
 
 
-def generate_basic_maturity_assessment(
-    components: list[Component],
-    integrations: list[IntegrationPoint],
-    test_coverage: list[ComponentTestCoverage],
-) -> MarketAnalysisSection:
-    """Generate a heuristic-based maturity assessment without LLM.
-
-    No market comparisons are produced (those require LLM knowledge).
-    The maturity level is scored based on component count, integration
-    patterns, and test coverage levels.
-
-    Parameters
-    ----------
-    components:
-        Discovered architectural components.
-    integrations:
-        Discovered integration points.
-    test_coverage:
-        Test coverage data for components.
-
-    Returns
-    -------
-    MarketAnalysisSection
-        Section with empty comparisons but populated maturity fields.
-    """
-    score = 0.0
-    rationale_parts: list[str] = []
-
-    # --- Component maturity (0-25 points) ---
+def _score_components(components: list[Component]) -> tuple[float, str]:
+    """Score component count and type diversity (0-25 points)."""
     comp_count = len(components)
     if comp_count == 0:
         comp_score = 0.0
@@ -409,21 +382,20 @@ def generate_basic_maturity_assessment(
     else:
         comp_score = 25.0
 
-    comp_types = {c.component_type for c in components}
-    type_diversity = len(comp_types)
+    type_diversity = len({c.component_type for c in components})
     if type_diversity >= 4:
         comp_score = min(25.0, comp_score + 5.0)
 
-    score += comp_score
-    rationale_parts.append(
+    return comp_score, (
         f"{comp_count} components ({type_diversity} types) "
         f"-> {comp_score:.0f}/25 component score"
     )
 
-    # --- Integration maturity (0-25 points) ---
+
+def _score_integrations(integrations: list[IntegrationPoint]) -> tuple[float, str]:
+    """Score integration count and style diversity (0-25 points)."""
     intg_count = len(integrations)
-    intg_styles = {i.style for i in integrations}
-    style_count = len(intg_styles)
+    style_count = len({i.style for i in integrations})
 
     if intg_count == 0:
         intg_score = 0.0
@@ -434,26 +406,25 @@ def generate_basic_maturity_assessment(
     else:
         intg_score = 20.0
 
-    # Bonus for diverse integration styles
     if style_count >= 3:
         intg_score = min(25.0, intg_score + 5.0)
 
-    score += intg_score
-    rationale_parts.append(
+    return intg_score, (
         f"{intg_count} integrations ({style_count} styles) "
         f"-> {intg_score:.0f}/25 integration score"
     )
 
-    # --- Test coverage maturity (0-30 points) ---
+
+def _score_test_coverage(
+    test_coverage: list[ComponentTestCoverage],
+) -> tuple[float, str]:
+    """Score functional and non-functional test coverage (0-30 points)."""
     if test_coverage:
         func_scores = [_COVERAGE_SCORE.get(tc.functional_coverage, 0) for tc in test_coverage]
         nf_scores = [_COVERAGE_SCORE.get(tc.nonfunctional_coverage, 0) for tc in test_coverage]
         avg_func = sum(func_scores) / len(func_scores)
         avg_nf = sum(nf_scores) / len(nf_scores)
-
-        # Functional coverage: 0-15 points
         func_score = min(15.0, avg_func * 3.75)
-        # Non-functional coverage: 0-15 points
         nf_score = min(15.0, avg_nf * 3.75)
         test_score = func_score + nf_score
     else:
@@ -461,52 +432,64 @@ def generate_basic_maturity_assessment(
         avg_func = 0.0
         avg_nf = 0.0
 
-    score += test_score
-    rationale_parts.append(
+    return test_score, (
         f"Test coverage (func avg={avg_func:.1f}, nf avg={avg_nf:.1f}) -> "
         f"{test_score:.0f}/30 test score"
     )
 
-    # --- Structure maturity (0-20 points) ---
-    has_gateway = any(c.component_type == "gateway" for c in components)
-    has_worker = any(c.component_type == "worker" for c in components)
-    has_queue = any(c.component_type == "queue" for c in components)
-    has_db = any(c.component_type == "database" for c in components)
-    has_async = any(
-        i.style in ("asynchronous", "event_driven", "message_queue") for i in integrations
-    )
 
+def _score_structure(
+    components: list[Component],
+    integrations: list[IntegrationPoint],
+) -> tuple[float, str]:
+    """Score architectural structure features (0-20 points)."""
     struct_score = 0.0
-    if has_gateway:
+    if any(c.component_type == "gateway" for c in components):
         struct_score += 5.0
-    if has_worker:
+    if any(c.component_type == "worker" for c in components):
         struct_score += 4.0
-    if has_queue:
+    if any(c.component_type == "queue" for c in components):
         struct_score += 4.0
-    if has_db:
+    if any(c.component_type == "database" for c in components):
         struct_score += 3.0
-    if has_async:
+    if any(i.style in ("asynchronous", "event_driven", "message_queue") for i in integrations):
         struct_score += 4.0
     struct_score = min(20.0, struct_score)
 
-    score += struct_score
-    rationale_parts.append(f"Structure features -> {struct_score:.0f}/20 structure score")
+    return struct_score, f"Structure features -> {struct_score:.0f}/20 structure score"
 
-    # --- Map score to maturity level ---
-    total = min(100.0, score)
-    if total >= 80:
-        maturity: MaturityLevel = "optimizing"
-    elif total >= 60:
-        maturity = "managed"
-    elif total >= 40:
-        maturity = "defined"
-    elif total >= 20:
-        maturity = "developing"
-    else:
-        maturity = "initial"
+
+_MATURITY_THRESHOLDS: list[tuple[float, MaturityLevel]] = [
+    (80.0, "optimizing"),
+    (60.0, "managed"),
+    (40.0, "defined"),
+    (20.0, "developing"),
+]
+
+
+def generate_basic_maturity_assessment(
+    components: list[Component],
+    integrations: list[IntegrationPoint],
+    test_coverage: list[ComponentTestCoverage],
+) -> MarketAnalysisSection:
+    """Generate a heuristic-based maturity assessment without LLM."""
+    scorers = [
+        _score_components(components),
+        _score_integrations(integrations),
+        _score_test_coverage(test_coverage),
+        _score_structure(components, integrations),
+    ]
+
+    total = min(100.0, sum(s for s, _ in scorers))
+    rationale_parts = [r for _, r in scorers]
+
+    maturity: MaturityLevel = "initial"
+    for threshold, level in _MATURITY_THRESHOLDS:
+        if total >= threshold:
+            maturity = level
+            break
 
     rationale = f"Total score: {total:.0f}/100. " + "; ".join(rationale_parts) + "."
-
     logger.info("Basic maturity assessment: %s (score=%.0f)", maturity, total)
 
     return MarketAnalysisSection(

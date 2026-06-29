@@ -171,76 +171,60 @@ def _extract_category(
     return raw
 
 
+def _count_severities(findings: list[Finding]) -> dict[str, int]:
+    counts: dict[str, int] = {sev: 0 for sev in ("critical", "high", "medium", "low", "info")}
+    for f in findings:
+        counts[f.severity] = counts.get(f.severity, 0) + 1
+    return counts
+
+
+def _score_categories(
+    findings: list[Finding],
+    deductions: dict[str, int],
+    aliases: dict[str, str] | None,
+) -> dict[str, int]:
+    category_findings: dict[str, list[Finding]] = {}
+    for f in findings:
+        cat = _extract_category(f.rule_id, aliases)
+        category_findings.setdefault(cat, []).append(f)
+
+    return {
+        cat: max(0, 100 - sum(deductions.get(f.severity, 0) for f in cat_findings))
+        for cat, cat_findings in category_findings.items()
+    }
+
+
+def _weighted_average(
+    category_scores: dict[str, int],
+    weights: dict[str, float],
+) -> int:
+    all_categories = set(weights) | set(category_scores)
+    total_weight = sum(weights.get(c, 1.0) for c in all_categories)
+    if total_weight <= 0:
+        return 100
+    weighted_sum = sum(
+        category_scores.get(c, 100) * weights.get(c, 1.0) for c in all_categories
+    )
+    return max(0, min(100, round(weighted_sum / total_weight)))
+
+
 def compute_maturity_score(
     findings: list[Finding],
     rules_run: list[str],
     rules_skipped: Sequence[dict[str, Any] | str],
     scoring: ScoringConfig | None = None,
 ) -> MaturityScore:
-    """Compute a design maturity score from findings and rule coverage.
-
-    Parameters
-    ----------
-    findings:
-        The list of findings from the scan.
-    rules_run:
-        List of rule IDs that were executed.
-    rules_skipped:
-        List of skipped rule entries (dicts with ``rule_id`` key, or plain strings).
-    scoring:
-        Optional scoring configuration with weights, deductions, and aliases.
-        Falls back to module-level defaults when ``None``.
-
-    Returns
-    -------
-    MaturityScore
-        The computed score with category breakdown.
-    """
+    """Compute a design maturity score from findings and rule coverage."""
     weights = scoring.category_weights if scoring else DEFAULT_CATEGORY_WEIGHTS
     deductions = scoring.severity_deductions if scoring else DEFAULT_SEVERITY_DEDUCTIONS
     aliases = scoring.category_aliases if scoring else CATEGORY_ALIASES
 
-    # Count severities
-    severity_counts: dict[str, int] = {}
-    for sev in ("critical", "high", "medium", "low", "info"):
-        severity_counts[sev] = 0
-    for f in findings:
-        severity_counts[f.severity] = severity_counts.get(f.severity, 0) + 1
+    severity_counts = _count_severities(findings)
+    category_scores = _score_categories(findings, deductions, aliases)
+    overall = _weighted_average(category_scores, weights)
 
-    # Category scores
-    category_findings: dict[str, list[Finding]] = {}
-    for f in findings:
-        cat = _extract_category(f.rule_id, aliases)
-        category_findings.setdefault(cat, []).append(f)
-
-    category_scores: dict[str, int] = {}
-    for cat, cat_findings in category_findings.items():
-        cat_deduction = 0
-        for f in cat_findings:
-            cat_deduction += deductions.get(f.severity, 0)
-        category_scores[cat] = max(0, 100 - cat_deduction)
-
-    # Overall score: coverage-weighted average of category scores.
-    # Categories with higher weight contribute more to the final score.
-    # Categories with no findings default to 100 and are included if they
-    # have a configured weight.
-    all_categories = set(weights) | set(category_scores)
-    total_weight = sum(weights.get(c, 1.0) for c in all_categories)
-    if total_weight > 0:
-        weighted_sum = sum(
-            category_scores.get(c, 100) * weights.get(c, 1.0) for c in all_categories
-        )
-        overall = round(weighted_sum / total_weight)
-    else:
-        overall = 100
-    overall = max(0, min(100, overall))
-
-    # Rules coverage
     total_rules = len(rules_run) + len(rules_skipped)
-    if total_rules > 0:
-        rules_coverage = len(rules_run) / total_rules
-    else:
-        rules_coverage = 1.0
+    rules_coverage = len(rules_run) / total_rules if total_rules > 0 else 1.0
 
     return MaturityScore(
         overall=overall,
