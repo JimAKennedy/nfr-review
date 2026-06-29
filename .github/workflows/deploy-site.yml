@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'src/nfr_review/rules/**'
+      - 'src/nfr_review/rule_metadata.py'
+      - 'src/nfr_review/compliance_mapping.py'
       - '.github/workflows/deploy-site.yml'
   workflow_dispatch:
 
@@ -22,6 +25,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate rules.json
+        run: |
+          pip install -e . --quiet
+          python -m nfr_review.cli list-rules --format json > site/src/data/rules.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22

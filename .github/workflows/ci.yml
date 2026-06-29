@@ -181,6 +181,23 @@ jobs:
             PSF-2.0;
             Python Software Foundation License'
 
+  doc-lint:
+    name: Documentation Accuracy
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Lint docs
+        run: python scripts/lint_docs.py
+
   # Advisory job — requires GITLEAKS_LICENSE which is unavailable on fork PRs.
   # ci-complete does not gate on secrets-scan.result, so fork PRs are not blocked.
   secrets-scan:
@@ -302,7 +319,7 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, security, test, license-check, secrets-scan, cve-scan, container-e2e]
+    needs: [lint, typecheck, security, test, license-check, doc-lint, secrets-scan, cve-scan, container-e2e]
     if: always()
 
     steps:
@@ -312,7 +329,8 @@ jobs:
              [ "${{ needs.typecheck.result }}" == "failure" ] || \
              [ "${{ needs.security.result }}" == "failure" ] || \
              [ "${{ needs.test.result }}" == "failure" ] || \
-             [ "${{ needs.license-check.result }}" == "failure" ]; then
+             [ "${{ needs.license-check.result }}" == "failure" ] || \
+             [ "${{ needs.doc-lint.result }}" == "failure" ]; then
             echo "CI failed"
             exit 1
           fi
