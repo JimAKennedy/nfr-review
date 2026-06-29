@@ -26,6 +26,7 @@ nfr-review arch --format json --format md /path/to/target/repo
 | `--format FORMAT` | `json` + `md` + `pdf` | Output format(s): `json`, `md`, `pdf`, `dsl` (repeat for multiple) |
 | `--no-llm` | off | Skip LLM-based analysis (domain model enhancement, market comparison) |
 | `--diagram-mode MODE` | `hierarchical` | Component diagram layout: `hierarchical` (overview + detail) or `flat` |
+| `--arch-baseline-dir DIR` | — | Directory for architecture baseline snapshots (drift detection) |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
 ## What it produces
@@ -45,6 +46,25 @@ nfr-review arch --format dsl /path/to/target/repo
 ```
 
 See [structurizr-dsl.md](structurizr-dsl.md) for worked examples, drift detection, and rendering options.
+
+## Architecture drift detection
+
+Use `--arch-baseline-dir` to enable drift detection between consecutive scans. On first run, nfr-review saves the current architecture as a JSON baseline. On subsequent runs, it compares the new scan to the saved baseline and reports:
+
+- **New/removed elements** — undocumented growth or dead architecture
+- **New/removed relationships** — unplanned coupling or broken integrations
+- **Technology changes** — tech-stack drift
+- **Description/tag changes** — metadata evolution
+
+```bash
+# First run saves baseline
+nfr-review arch --arch-baseline-dir .baselines /path/to/repo
+
+# Second run detects drift
+nfr-review arch --arch-baseline-dir .baselines /path/to/repo
+```
+
+Drift findings are written to a separate `{repo}-drift-report.md` in the baseline directory and appended to the main architecture markdown report. Each finding produces a standard `arch-drift` finding with the appropriate severity, which maps to the `structure` scoring category.
 
 ## LLM dependency
 

@@ -140,6 +140,7 @@ _CATEGORY_KEYWORDS: dict[str, str] = {
     "package-subdivision": "maintainability",
     "structure-": "structure",
     "graphify": "structure",
+    "arch-drift": "structure",
 }
 
 
