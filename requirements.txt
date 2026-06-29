@@ -5,7 +5,7 @@
 #    pip-compile --annotation-style=line --output-file=requirements.txt --strip-extras pyproject.toml
 #
 annotated-types==0.7.0    # via pydantic
-click==8.4.1              # via nfr-review (pyproject.toml)
+click==8.4.2              # via nfr-review (pyproject.toml)
 packaging==26.2           # via nfr-review (pyproject.toml)
 pydantic==2.13.4          # via nfr-review (pyproject.toml)
 pydantic-core==2.47.0     # via pydantic
