@@ -21,7 +21,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -n auto -m "not regression" --timeout=300
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
