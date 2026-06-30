@@ -372,10 +372,12 @@ _CORE_NFR_CATEGORIES: list[tuple[str, str, str]] = [
     (
         "**structure**",
         "Graph topology, community boundaries, "
-        "coupling hotspots, blast radius "
-        "*(requires graphify)*",
+        "coupling hotspots, blast radius, "
+        "architecture drift detection "
+        "*(requires graphify or arch baseline)*",
         "No god nodes, strong community boundaries, "
-        "low cross-module coupling, contained blast radius",
+        "low cross-module coupling, contained blast radius, "
+        "architecture matches baseline",
     ),
 ]
 

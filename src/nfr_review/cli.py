@@ -479,6 +479,62 @@ def _handle_design_change(
     _save_structural(new_bl, bl_file)
 
 
+def _handle_arch_baseline(
+    report: Any,
+    repo_names: list[str],
+    arch_baseline_dir: Path | None,
+    *,
+    quiet: bool = False,
+) -> tuple[list[Any], str]:
+    """Build DslWorkspace from ArchReport, save baseline, diff if previous exists.
+
+    Returns (findings_list, drift_markdown_or_empty).
+    """
+    if arch_baseline_dir is None:
+        return [], ""
+    from nfr_review.structurizr_bridge import build_workspace_from_arch
+    from nfr_review.structurizr_diff import (
+        diff_workspaces,
+        findings_from_drift,
+        load_arch_baseline,
+        render_drift_markdown,
+        save_arch_baseline,
+    )
+
+    repo = repo_names[0] if repo_names else "unknown"
+    bl_file = arch_baseline_dir / f"{repo}-arch-baseline.json"
+    workspace = build_workspace_from_arch(report)
+
+    findings: list[Any] = []
+    drift_md = ""
+    try:
+        prev_ws = load_arch_baseline(bl_file)
+        drift_report = diff_workspaces(prev_ws, workspace)
+        if drift_report.has_drift:
+            findings = findings_from_drift(drift_report, str(bl_file))
+            drift_md = render_drift_markdown(drift_report)
+            _ts_echo(
+                f"[arch-drift] {len(findings)} drift finding(s) detected"
+                f" (max severity: {drift_report.max_severity})",
+                quiet=quiet,
+            )
+            drift_md_path = arch_baseline_dir / f"{repo}-drift-report.md"
+            drift_md_path.write_text(drift_md)
+            _ts_echo(f"[arch-drift] Drift report written to {drift_md_path}", quiet=quiet)
+        else:
+            _ts_echo(
+                "[arch-drift] No drift detected. Architecture matches baseline.", quiet=quiet
+            )
+    except FileNotFoundError:
+        _ts_echo(
+            f"[arch-drift] No previous baseline found, saving initial: {bl_file}",
+            quiet=quiet,
+        )
+
+    save_arch_baseline(workspace, bl_file)
+    return findings, drift_md
+
+
 def _display_score(result: RunResult, config: Config, baseline_path: Path | None) -> None:
     """Compute and display the design maturity score."""
     from nfr_review.output.classify import partition_findings_by_origin
@@ -2540,6 +2596,13 @@ def _banner_arch(
     default=None,
     help="Directory containing evidence JSONL files (e.g. OTel traces).",
 )
+@click.option(
+    "--arch-baseline-dir",
+    "arch_baseline_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Directory for architecture baseline snapshots (save after scan, diff on rerun).",
+)
 def arch_cmd(
     targets: tuple[Path, ...],
     verbose: int,
@@ -2550,6 +2613,7 @@ def arch_cmd(
     no_llm: bool,
     diagram_mode: str,
     evidence_dir: Path | None,
+    arch_baseline_dir: Path | None,
 ) -> None:
     """Generate architecture documentation report."""
     from nfr_review.arch_orchestrator import run_arch_review
@@ -2587,6 +2651,10 @@ def arch_cmd(
         raise click.exceptions.Exit(1) from exc
     _phase_done("Architecture review", t0, quiet=quiet)
 
+    drift_findings, drift_md = _handle_arch_baseline(
+        report, repo_names, arch_baseline_dir, quiet=quiet
+    )
+
     t0 = _phase("Rendering output files", quiet=quiet)
     try:
         results = render_arch_report(report, output_dir, formats=list(output_formats) or None)
@@ -2594,6 +2662,12 @@ def arch_cmd(
         click.echo(f"error: report rendering failed: {exc}", err=True)
         raise click.exceptions.Exit(1) from exc
     _phase_done("Output rendering", t0, quiet=quiet)
+
+    if drift_md and "md" in results and results["md"] is not None:
+        md_path = results["md"]
+        with open(md_path, "a", encoding="utf-8") as fh:
+            fh.write("\n\n")
+            fh.write(drift_md)
 
     produced = {k: v for k, v in results.items() if v is not None}
     parts = [
@@ -2603,6 +2677,8 @@ def arch_cmd(
         f"recommendations={len(report.recommendations)}",
         f"files_emitted={len(produced)}",
     ]
+    if drift_findings:
+        parts.append(f"drift_findings={len(drift_findings)}")
     for fmt, path in produced.items():
         parts.append(f"{fmt}={path}")
     _ts_echo(" ".join(parts))

@@ -12,11 +12,28 @@ Compares element sets and relationship sets to surface:
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from nfr_review.models import RAG, Finding
 from nfr_review.structurizr_models import DslElement, DslRelationship, DslWorkspace
+
+logger = logging.getLogger(__name__)
+
+RULE_ID = "arch-drift"
+COLLECTOR_NAME = "arch-drift"
+COLLECTOR_VERSION = "1.0.0"
+
+_DRIFT_RAG: dict[str, RAG] = {
+    "high": "red",
+    "medium": "amber",
+    "low": "amber",
+    "info": "green",
+}
 
 DriftKind = Literal[
     "element_added",
@@ -291,10 +308,87 @@ def render_drift_markdown(report: DriftReport) -> str:
     return "\n".join(lines)
 
 
+_DRIFT_RECOMMENDATION: dict[str, str] = {
+    "element_added": (
+        "Update the architecture baseline to include this element,"
+        " or investigate whether it represents unplanned growth."
+    ),
+    "element_removed": (
+        "Confirm whether this element was intentionally removed."
+        " If so, update the baseline; otherwise restore it."
+    ),
+    "relationship_added": (
+        "Review this new dependency for unplanned coupling."
+        " Update the baseline if the relationship is intentional."
+    ),
+    "relationship_removed": (
+        "Confirm whether this dependency was intentionally removed."
+        " A missing relationship may indicate a broken integration."
+    ),
+    "technology_changed": (
+        "Verify the technology change was intentional and update"
+        " the architecture baseline to reflect it."
+    ),
+    "description_changed": (
+        "Update the architecture baseline description if the"
+        " change accurately reflects the current design."
+    ),
+    "tag_changed": (
+        "Review the tag change and update the architecture"
+        " baseline if it reflects a deliberate reclassification."
+    ),
+}
+
+
+def findings_from_drift(
+    report: DriftReport,
+    baseline_path: str = "",
+) -> list[Finding]:
+    """Convert a DriftReport into standard Finding objects."""
+    findings: list[Finding] = []
+    for df in report.findings:
+        rag = _DRIFT_RAG.get(df.severity, "amber")
+        findings.append(
+            Finding(
+                rule_id=RULE_ID,
+                rag=rag,
+                severity=df.severity if df.severity != "info" else "low",
+                summary=df.message,
+                recommendation=_DRIFT_RECOMMENDATION.get(df.kind, "Review this drift."),
+                evidence_locator=baseline_path,
+                collector_name=COLLECTOR_NAME,
+                collector_version=COLLECTOR_VERSION,
+                confidence=1.0,
+                pattern_tag=f"arch-drift:{df.kind}",
+            )
+        )
+    return findings
+
+
+def save_arch_baseline(workspace: DslWorkspace, path: Path) -> None:
+    """Serialize a DslWorkspace to JSON for use as an architecture baseline."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = workspace.model_dump(mode="json")
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    logger.info("Saved architecture baseline to %s", path)
+
+
+def load_arch_baseline(path: Path) -> DslWorkspace:
+    """Load a DslWorkspace from a previously saved JSON baseline."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return DslWorkspace.model_validate(data)
+
+
 __all__ = [
+    "COLLECTOR_NAME",
+    "COLLECTOR_VERSION",
+    "RULE_ID",
     "DriftFinding",
     "DriftReport",
     "DriftSeverity",
     "diff_workspaces",
+    "findings_from_drift",
+    "load_arch_baseline",
     "render_drift_markdown",
+    "save_arch_baseline",
 ]
