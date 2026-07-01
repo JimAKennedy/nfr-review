@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from nfr_review.models import Evidence
-from nfr_review.rules.dep_freshness import DepFreshnessRule
+from nfr_review.rules.dep_freshness import DepFreshnessRule, _reference_now
 
 # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -387,3 +389,44 @@ class TestConstraintStripping:
         ev = _make_evidence([_make_dep(declared_version=">=1.0.0", latest_version="1.0.3")])
         result = self.rule.evaluate([ev], None)
         assert any(f.pattern_tag == "stale-dep-patch" for f in result.findings)
+
+
+# ── NFR_REFERENCE_DATE env var ──────────────────────────────────────────
+
+
+class TestReferenceDate:
+    def test_env_var_overrides_now(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        frozen = "2025-06-15T12:00:00+00:00"
+        monkeypatch.setenv("NFR_REFERENCE_DATE", frozen)
+        result = _reference_now()
+        assert result == datetime.fromisoformat(frozen)
+
+    def test_falls_back_to_now(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("NFR_REFERENCE_DATE", raising=False)
+        before = datetime.now(UTC)
+        result = _reference_now()
+        after = datetime.now(UTC)
+        assert before <= result <= after
+
+    def test_frozen_time_prevents_dead_library_drift(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("NFR_REFERENCE_DATE", "2025-06-15T00:00:00+00:00")
+        rule = DepFreshnessRule()
+        ev = _make_evidence(
+            [
+                _make_dep(
+                    latest_release_date="2024-07-01T00:00:00+00:00",
+                    declared_version="1.0.0",
+                    latest_version="1.0.0",
+                )
+            ]
+        )
+        result = rule.evaluate([ev], None)
+        dead = [f for f in result.findings if f.pattern_tag == "dead-library"]
+        assert len(dead) == 0
+
+        monkeypatch.setenv("NFR_REFERENCE_DATE", "2025-08-01T00:00:00+00:00")
+        result2 = rule.evaluate([ev], None)
+        dead2 = [f for f in result2.findings if f.pattern_tag == "dead-library"]
+        assert len(dead2) == 1
