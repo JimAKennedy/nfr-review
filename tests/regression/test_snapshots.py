@@ -21,6 +21,7 @@ from tests.regression.conftest import (
     _normalize_structure_finding,
     clone_repo,
     load_manifest,
+    load_snapshot_metadata,
     normalize_findings,
     write_snapshot_metadata,
 )
@@ -80,6 +81,11 @@ def test_regression_snapshot(
 
     api_cache_file = _API_CACHE_DIR / f"{repo_name}.json.gz"
     env = {**os.environ, "NFR_DEPS_DEV_CACHE": str(api_cache_file)}
+
+    if not update_snapshots:
+        meta = load_snapshot_metadata(snapshot_dir)
+        if meta and "generated_at" in meta:
+            env["NFR_REFERENCE_DATE"] = meta["generated_at"]
 
     result = subprocess.run(
         [
