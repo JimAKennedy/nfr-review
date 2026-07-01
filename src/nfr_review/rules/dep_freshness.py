@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime
 from typing import Any
@@ -28,6 +29,18 @@ _DEPS_KINDS = frozenset(
 )
 
 _DEAD_LIBRARY_MONTHS = 12
+
+
+def _reference_now() -> datetime:
+    """Return the evaluation reference time.
+
+    Reads NFR_REFERENCE_DATE (ISO 8601) from the environment to freeze
+    time-based assessments for reproducible regression testing.
+    """
+    ref = os.environ.get("NFR_REFERENCE_DATE")
+    if ref:
+        return datetime.fromisoformat(ref)
+    return datetime.now(UTC)
 
 
 def _strip_constraint(raw: str) -> str:
@@ -77,7 +90,7 @@ class DepFreshnessRule:
                 skip_reason="no dependency evidence available",
             )
 
-        now = datetime.now(UTC)
+        now = _reference_now()
         findings: list[Finding] = []
 
         for ev in dep_evidence:
