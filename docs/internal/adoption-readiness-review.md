@@ -1,12 +1,20 @@
 # Adoption Readiness Review: Codebase, Capabilities, and Market Positioning
 
-**Date:** 2026-07-01
+**Date:** 2026-07-01 (revised same day after a first-hand verification pass)
 **Tool version:** v0.3.1 (`383f2ae`)
 **Scope:** Full codebase (62k LOC src / 89k LOC tests, 324 modules, ~150 rules), all
 docs, CI/CD, packaging, plus a web-researched competitive landscape (20+ tools).
 **Purpose:** Assess fitness for the first adopting organisation — code quality,
 architecture, fitness for purpose (NFR review accelerator + design monitoring),
 open-source fitness, extensibility by the adopting org, and market positioning.
+
+**Verification note:** every load-bearing claim below was re-verified directly against
+the source (not only via review agents): the `content_hash` count, the line-fragile
+identity fallback, the compliance-mapping stub, the goroutine/C#/Java rule logic, the
+mypy configuration, and the absence of collector plugin discovery. Two refinements
+from that pass are folded in: (a) the goroutine collector extracts every `go_statement`
+with no filtering, so the rule's noise is structural, not incidental; (b) the
+`content_hash` remediation is far cheaper than per-rule edits — see Remediate #1.
 
 ## Summary
 
@@ -171,28 +179,97 @@ CI, and observability config — for the resilience, operational-readiness, and 
 concerns that SAST and IaC scanners don't cover, encoding a senior architect's review
 checklist as consistent, trackable findings on every pull request.*
 
-## Prioritized actions before the org relies on it
+## Most urgent actions: remediate / extend / add
 
-### Tier 1 — credibility & the core promise (do first)
-1. Wire `content_hash` across all rules, or the baseline/regression + monitoring story
-   churns on trivial edits.
-2. Fix the `mypy-strict` badge and the stale `SECURITY.md` table — five-minute trust-killers.
-3. Fix the 3 noisy/wrong rules (go-goroutine-leak, csharp-blocking-async, java thread-pool) —
-   they will dominate the org's first-run noise.
-4. Make compliance mapping real (per-framework, control-level) or drop the SOC2/PCI/NIST labels.
+Sequenced by what breaks trust in week 1 of the pilot, what blocks the org's extension
+work in month 1, and what compounds differentiation over the first quarter.
 
-### Tier 2 — the org will extend it
-5. Add a `nfr_review.collectors` entry-point group + a public payload-registration API so the
-   org can add evidence without forking.
-6. Introduce a payload/collector schema-version contract so a core change fails loudly, not
-   silently.
-7. Let rules/plugins declare their own metadata instead of the central 986-line dict.
+### Remediate (fix before the org's first serious run)
 
-### Tier 3 — durability & scale
-8. Address bus factor: recruit/name a co-maintainer, add `GOVERNANCE.md`, route the security
-   contact off a personal Gmail.
-9. Rebuild scoring on `rule_metadata.py` categories; source the deduction weights.
-10. Split `cli.py`; sever the experimental-arch imports from the stable core.
+1. **Wire `content_hash` centrally in `make_finding()`** (`rules/framework.py:68-93`).
+   Verified: only 4 rules + the framework plumbing set it today; all other findings fall
+   back to a line-number-bearing identity (`models.py:183-198`), so baseline diffing
+   churns on trivial edits. Because `make_finding()` constructs every FieldRule finding,
+   the fix is **one function, not 150 rules**: when `hit.content_hash` is empty, compute a
+   default hash from `(rule_id, pattern_tag, line-stripped locator, normalized summary)`.
+   Then audit the ~15 rules whose summaries embed line-varying text. This single change
+   makes the flagship regression/monitoring story real.
+2. **Defuse the three noisy/wrong AST rules.** Verified against collector source:
+   - `go-goroutine-leak`: collector emits every `go_statement` unfiltered
+     (`collectors/go_ast.py:341-357`); rule flags each at amber/medium — one finding per
+     goroutine on any real Go service. Minimum viable fix: detect
+     ctx/WaitGroup/errgroup/channel tokens in the launch expression and enclosing
+     function, downgrade the rest to info, or aggregate to one per-file finding.
+   - `csharp-blocking-async`: fires on **any** property named `Result` on any type and
+     bare `.Wait()` — including correct code (`SemaphoreSlim.Wait()`,
+     `OperationResult.Result`) (`collectors/csharp_ast.py:295-340`). Needs at least
+     heuristic receiver-type filtering (Task-typed expressions, `await` context).
+   - `java-thread-pool`: only matches `ThreadPoolExecutor` constructors; misses the
+     common `Executors.newCachedThreadPool()` unbounded footgun entirely (false
+     negatives) (`collectors/java_ast.py:88-90`).
+3. **Fix the five-minute credibility items:** the `mypy-strict` badge (`README.md:5`) vs
+   the non-strict `[tool.mypy]` config (`pyproject.toml:122`) — enable strict or drop the
+   badge; and the stale `SECURITY.md` supported-versions table (0.1.x at v0.3.1).
+4. **Make compliance mapping honest.** Verified: `compliance_mapping.py:126` maps all four
+   frameworks (SOC2/ISO27001/PCI-DSS/NIST) to the identical rule set. Either build
+   per-framework, control-level mappings or relabel the feature as a generic
+   "compliance-relevant rules" filter until they exist.
+
+### Extend (unblock the adopting org's extension work)
+
+5. **Collector + payload plugin extensibility.** Verified: `discover_plugins` runs only
+   for `nfr_review.rules` and `nfr_review.hygiene_rules` — there is no collector
+   entry-point group and the payload registry is closed. Add `nfr_review.collectors`
+   discovery in `collectors/__init__.py` and a public `register_payload()` API. Without
+   this, any org rule needing new evidence forces a fork.
+6. **Schema-version contract for payloads/collectors.** Today a core payload change
+   silently disables an org's custom rule (graceful skip at `engine.py:287`). Add a
+   `schema_version` to `BasePayload`, warn loudly on mismatch, and document a semver
+   policy for the extension API.
+7. **Config-file suppression/allowlist.** Only inline `nfr-review:skip(...)` comments work
+   today, and not for project-wide findings. A `suppressions:` block in `nfr-review.yaml`
+   (rule + path/pattern + reason + expiry) is table stakes for org rollout.
+8. **Rebuild scoring on `rule_metadata.py`.** The ISO-25010 category is currently a
+   substring guess on `rule_id` that ignores the tool's own authoritative per-rule
+   metadata; deduction weights are unsourced. Reconcile the two taxonomies and document
+   the weighting rationale, or the maturity score won't survive the org's first
+   challenge.
+9. **Decentralize rule metadata** so plugin rules can declare their own
+   `RuleMetadata` (class attribute) and appear fully in `list-rules`/`explain`.
+
+### Add (new features, ranked by differentiation-per-effort)
+
+10. **PR-delta review mode.** A first-class `--diff-base <ref>` that scopes findings to
+    changed files / new-vs-baseline findings. The positioning is "review on every PR";
+    a delta mode cuts runtime and noise and makes the GitHub Action gate genuinely
+    adoptable. Mostly plumbing over the existing baseline machinery.
+11. **Trace-derived topology anti-pattern rules.** The least-contested ground in the
+    entire competitive landscape (only vFunction, code-architecture-rooted; otherwise
+    research). The pieces already exist in-repo: OTLP ingestion (`monitor/`, `dyn_*`)
+    and statistical graph rules (`structure_god_node` on graphify). Build the service
+    graph from traces and reuse the same statistics → cyclic dependencies, god services,
+    chatty pairs as *design* findings. Also: promote broken context-propagation
+    (`dyn_correlation_propagation`) from an observability check to a first-class design
+    smell — no tool on the market frames it that way.
+12. **SARIF ingestion (`--merge-sarif`).** The positioning says "complement
+    SonarQube/Semgrep/Checkov"; ingesting their SARIF into the unified report/score makes
+    "one NFR read-across per portfolio" real without competing on rule depth.
+13. **Backstage Tech Insights fact retriever / scorecard export.** Emits nfr-review
+    maturity scores and finding counts as facts, riding the read-across story into the
+    IDP where platform teams already govern. Small surface, high placement value.
+14. **MCP server for findings/rules/arch model.** Every 2025-26 competitor grew one
+    (Codacy, Semgrep, CodeScene, Structurizr); the changelog shows a graphify MCP query
+    integration already exists — extend it to the findings and architecture surface so
+    AI agents can consume review results in-context.
+
+### Durability (parallel track, org-facing risk)
+
+15. **Bus factor:** recruit/name a co-maintainer, add `GOVERNANCE.md`, move the security
+    contact off a personal address. This is the top item on the *adopting org's* risk
+    register even though it isn't code.
+16. **Structural hygiene:** split the 3,378-line `cli.py` into a `cli/` package; sever the
+    two experimental-arch imports from stable core (`detect.py:11`,
+    `cpp_dormant_classes.py:20`).
 
 ## Competitive landscape reference
 
