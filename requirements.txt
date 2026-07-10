@@ -11,7 +11,7 @@ pydantic==2.13.4          # via nfr-review (pyproject.toml)
 pydantic-core==2.47.0     # via pydantic
 resolvelib==1.2.1         # via nfr-review (pyproject.toml)
 ruamel-yaml==0.19.1       # via nfr-review (pyproject.toml)
-tree-sitter==0.25.2       # via nfr-review (pyproject.toml)
+tree-sitter==0.26.0       # via nfr-review (pyproject.toml)
 tree-sitter-c-sharp==0.23.5  # via nfr-review (pyproject.toml)
 tree-sitter-cpp==0.23.4   # via nfr-review (pyproject.toml)
 tree-sitter-dockerfile==0.2.0  # via nfr-review (pyproject.toml)
@@ -20,5 +20,5 @@ tree-sitter-hcl==1.2.0    # via nfr-review (pyproject.toml)
 tree-sitter-java==0.23.5  # via nfr-review (pyproject.toml)
 tree-sitter-python==0.25.0  # via nfr-review (pyproject.toml)
 tree-sitter-typescript==0.23.2  # via nfr-review (pyproject.toml)
-typing-extensions==4.15.0  # via pydantic, pydantic-core, typing-inspection
+typing-extensions==4.16.0  # via pydantic, pydantic-core, typing-inspection
 typing-inspection==0.4.2  # via pydantic
