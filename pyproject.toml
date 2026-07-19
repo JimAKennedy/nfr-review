@@ -84,7 +84,7 @@ monitor = [
     "aiohttp>=3.9",
 ]
 graphify = [
-    "graphifyy==0.9.14",
+    "graphifyy==0.9.20",
     "networkx>=3.0",
 ]
 full = [
