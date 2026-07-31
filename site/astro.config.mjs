@@ -3,8 +3,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-	site: 'https://jimakennedy.github.io',
-	base: '/nfr-review',
+	site: 'https://nfr.jk.digital',
 	integrations: [
 		starlight({
 			title: 'nfr-review',

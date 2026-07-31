@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,11 @@ from nfr_review.hygiene.rules.com_contributing import ContributingPresenceRule
 from nfr_review.hygiene.rules.com_readme import ReadmePresenceRule
 from nfr_review.hygiene.rules.com_security import SecurityPresenceRule
 from nfr_review.models import Evidence
+
+# A date guaranteed to fall inside the 180-day "recent" window used by
+# _extract_changelog_structure, computed relative to now so the fixtures do
+# not rot as wall-clock time advances past a hard-coded literal date.
+_RECENT_DATE = (datetime.now(tz=UTC) - timedelta(days=30)).strftime("%Y-%m-%d")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -320,7 +326,7 @@ class TestExtractChangelogStructure:
     def test_versioned_headers(self) -> None:
         text = (
             "# Changelog\n\n"
-            "## [1.2.0] - 2026-01-15\n\n"
+            f"## [1.2.0] - {_RECENT_DATE}\n\n"
             "### Added\n- feature\n\n"
             "## [1.1.0] - 2025-12-01\n\n"
             "### Fixed\n- bug\n\n"
@@ -376,7 +382,7 @@ class TestExtractChangelogStructure:
         assert result["has_recent_entries"] is False
 
     def test_version_without_brackets(self) -> None:
-        text = "## 1.0.0 - 2026-05-01\n\n### Added\n- feat\n### Changed\n- x\n"
+        text = f"## 1.0.0 - {_RECENT_DATE}\n\n### Added\n- feat\n### Changed\n- x\n"
         result = _extract_changelog_structure(text)
         assert result["has_versions"] is True
         assert result["version_count"] == 1
@@ -393,7 +399,7 @@ class TestCollectorChangelogStructure:
     def test_changelog_structure_populated(self, tmp_path: Path) -> None:
         (tmp_path / "CHANGELOG.md").write_text(
             "# Changelog\n\n"
-            "## [1.0.0] - 2026-05-01\n\n"
+            f"## [1.0.0] - {_RECENT_DATE}\n\n"
             "### Added\n- feature\n\n"
             "### Fixed\n- bug\n"
         )
