@@ -33,6 +33,7 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
     "java": ("tree_sitter_java", "language"),
     "python": ("tree_sitter_python", "language"),
     "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
     "hcl": ("tree_sitter_hcl", "language"),
     "dockerfile": ("tree_sitter_dockerfile", "language"),
     "typescript": ("tree_sitter_typescript", "language_typescript"),

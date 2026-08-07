@@ -73,6 +73,7 @@ def _populate() -> None:
     from nfr_review.collectors.payloads.proto import ProtoAnalysisPayload
     from nfr_review.collectors.payloads.python_ast import PythonAstFilePayload
     from nfr_review.collectors.payloads.repo_structure import RepoStructureSummaryPayload
+    from nfr_review.collectors.payloads.rust_ast import RustAstFilePayload
     from nfr_review.collectors.payloads.service_mesh import (
         ServiceMeshAnalysisTemplatePayload,
         ServiceMeshDestinationRulePayload,
@@ -129,6 +130,8 @@ def _populate() -> None:
         ("python-ast", "python-ast-file"): PythonAstFilePayload,
         ("python-deps", "python-deps"): DepsPayload,
         ("repo-structure", "repo-structure-summary"): RepoStructureSummaryPayload,
+        ("rust-ast", "rust-ast-file"): RustAstFilePayload,
+        ("rust-deps", "rust-deps"): DepsPayload,
         ("service-mesh", "service-mesh-virtual-service"): ServiceMeshVirtualServicePayload,
         ("service-mesh", "service-mesh-destination-rule"): ServiceMeshDestinationRulePayload,
         ("service-mesh", "service-mesh-rollout"): ServiceMeshRolloutPayload,

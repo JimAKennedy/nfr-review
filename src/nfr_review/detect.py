@@ -23,6 +23,7 @@ ALL_TECH_KEYS: list[str] = [
     "dockerfile",
     "grpc",
     "go",
+    "rust",
     "python",
     "nodejs",
     "csharp",
@@ -183,6 +184,10 @@ def _detect_go(repo: Path) -> bool:
     return _safe_exists(repo / "go.mod")
 
 
+def _detect_rust(repo: Path) -> bool:
+    return _safe_exists(repo / "Cargo.toml")
+
+
 def _detect_python(repo: Path) -> bool:
     for name in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
         if _safe_exists(repo / name):
@@ -260,6 +265,7 @@ _DETECTORS: dict[str, Callable[..., bool]] = {
     "dockerfile": _detect_dockerfile,
     "grpc": _detect_grpc,
     "go": _detect_go,
+    "rust": _detect_rust,
     "python": _detect_python,
     "nodejs": _detect_nodejs,
     "csharp": _detect_csharp,

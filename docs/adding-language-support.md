@@ -21,6 +21,7 @@ config-driven infrastructure), see
 | A deps collector | Only if the ecosystem is supported by deps.dev — see [§3](#3-decision-guide) |
 | Auxiliary collectors (build-config/tool-output parsers) | Only if warranted — see [§3](#3-decision-guide) |
 | One or more `FieldRule[P]` rules | Always |
+| Class-diagram wiring | Optional — only if the language has a struct/class-like construct worth diagramming, see Step 9 |
 
 Everything wires itself in automatically. `src/nfr_review/collectors/__init__.py` and
 `src/nfr_review/rules/__init__.py` both use `pkgutil.iter_modules()` to import every
@@ -222,6 +223,36 @@ to your new payload class.
 Add a row for the language to README's "Supported technologies" table (plus a "Code
 quality" row too, if you added an auxiliary tool-output collector).
 
+### Step 9 — Class-diagram wiring (optional)
+
+Only relevant if the language has a struct/class-like construct worth putting in an
+architecture diagram. Model it as a `structs` (or `classes`) field on the payload,
+shaped exactly like `GoStruct`/`RustStruct`: `name`, `line`, `is_struct`,
+`is_abstract`, `is_interface`, `base_classes`, `fields`, `methods`, `namespace`,
+`outer_class`. Languages without a class keyword still fit this shape — Go models
+structs this way, and Rust models structs *and* traits this way (a trait is
+`is_interface=True`; a method declared without a body, e.g. a trait method with no
+default implementation, is `is_pure_virtual=True`).
+
+Then add one tuple to the collector list in `_collect_class_data()` in
+`src/nfr_review/arch_orchestrator.py`:
+
+```python
+# src/nfr_review/arch_orchestrator.py
+_COLLECTORS: list[tuple[str, str, str, str]] = [
+    ...
+    ("nfr_review.collectors.rust_ast", "RustAstCollector", "structs", "Rust"),
+]
+```
+
+The tuple is `(module_path, collector_class_name, payload_field_name, display_language)`.
+`_collect_class_data()` imports the collector, runs it directly against each target
+(bypassing the engine — this is a standalone diagram-generation path, not a rule
+gate), and only keeps entries that have at least one base class, method, or field —
+so an empty struct with no methods/fields/traits simply won't appear on the diagram.
+No payload-registry entry is needed for this step; it's separate from evidence
+coercion.
+
 ## 3. Decision guide
 
 **Do I need a deps collector?**
@@ -245,6 +276,7 @@ not required.
 | Language | Detector signal | AST extensions | Deps ecosystem key | Auxiliary collectors |
 |---|---|---|---|---|
 | Go | `go.mod` | `.go` | `go` | — |
+| Rust | `Cargo.toml` | `.rs` | `cargo` | — |
 | Python | `pyproject.toml` / `setup.py` / `setup.cfg` / `requirements.txt` | `.py` | `pypi` | — |
 | Node.js/TS | `package.json` | `.js` `.ts` `.jsx` `.tsx` (one TS grammar) | `npm` | — |
 | Java | `pom.xml` / `build.gradle(.kts)` / any `.java` under `src/` | `.java` | `maven` | JaCoCo, JDepend |
