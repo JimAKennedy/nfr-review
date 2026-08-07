@@ -62,7 +62,7 @@ nfr-review uses a three-stage pipeline:
 | | JDepend | `jdepend` | -- | Package cycles, instability, distance from main sequence |
 | **Structural analysis** | Graphify | `graphify` | -- | God nodes (coupling hotspots), weak module boundaries, coupling clusters |
 
-Technologies are auto-detected (18 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
+Technologies are auto-detected (19 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
 
 ## Quick start
 
@@ -517,12 +517,12 @@ version: 1
 
 # Declare which technology stacks the target repo uses.
 # Rules requiring a tech that isn't declared true will be skipped.
-# 18 tech keys are auto-detected; these override detection results.
+# 19 tech keys are auto-detected; these override detection results.
 tech:
   spring_boot: true
   apim: false
   terraform: false
-  cmake: true   # enables C++ rules
+  cpp: true   # enables both C++ and CMake rules (there is no separate "cmake" tech key)
 
 # Control which rules run.
 rules:
