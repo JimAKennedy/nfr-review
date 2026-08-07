@@ -19,6 +19,7 @@ class CSharpBlockingAsyncRule(FieldRule[CSharpAstFilePayload]):
     evidence_kind = "csharp-ast-file"
     payload_type = CSharpAstFilePayload
     pattern_tag = "csharp-blocking-async"
+    required_tech: list[str] = ["csharp"]
     all_clear_summary = "No blocking calls on async operations detected."
 
     def check(self, payload: CSharpAstFilePayload, ev: Evidence) -> Iterable[Hit]:

@@ -35,6 +35,7 @@ class CSharpDisposableNoUsingRule(FieldRule[CSharpAstFilePayload]):
     evidence_kind = "csharp-ast-file"
     payload_type = CSharpAstFilePayload
     pattern_tag = "csharp-disposable-no-using"
+    required_tech: list[str] = ["csharp"]
     default_confidence = 0.85
     all_clear_summary = "All IDisposable objects properly wrapped in using."
 
