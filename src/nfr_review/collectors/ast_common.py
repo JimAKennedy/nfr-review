@@ -33,6 +33,7 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
     "java": ("tree_sitter_java", "language"),
     "python": ("tree_sitter_python", "language"),
     "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
     "hcl": ("tree_sitter_hcl", "language"),
     "dockerfile": ("tree_sitter_dockerfile", "language"),
     "typescript": ("tree_sitter_typescript", "language_typescript"),
@@ -121,7 +122,12 @@ class BaseASTCollector(ABC):
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         if self._get_parser() is None:
-            return []
+            raise RuntimeError(
+                f"tree-sitter grammar for {self.language!r} is not installed on this"
+                f" platform — {self.name} findings will be incomplete or absent;"
+                " re-run on a platform where the grammar package installs"
+                " (see pyproject.toml) for full coverage"
+            )
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         exclude_test = getattr(config, "exclude_test_paths", True)
         evidence: list[Evidence] = []

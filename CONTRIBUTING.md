@@ -227,6 +227,15 @@ conflicts with built-in rules.
    rules). The collector auto-discovers on import via `pkgutil.iter_modules()`.
 4. Add test fixtures and tests.
 
+## Adding Support for a New Language
+
+Adding a new AST-backed programming language (Go, Python, Rust, etc.) touches several
+of the pieces above at once — tech detection, a tree-sitter grammar, an AST collector,
+optionally a deps collector, and rules — plus a couple of things not covered elsewhere
+(grammar wiring, the tech-gating contract). See the
+**[Adding Support for a New Language](docs/adding-language-support.md)** guide for the
+complete, prescriptive step-by-step.
+
 ## License
 
 Contributions are accepted under the [Apache License 2.0](LICENSE). By

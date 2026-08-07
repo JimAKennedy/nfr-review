@@ -276,14 +276,19 @@ def test_collect_handles_parse_error(sample_repo: Path) -> None:
     assert len(results) == 0
 
 
-def test_collect_returns_empty_when_parser_unavailable() -> None:
+def test_collect_raises_informatively_when_parser_unavailable() -> None:
+    """A missing grammar must surface as a run warning (via the engine's
+    existing collector-failure -> warnings path), not be silently swallowed —
+    otherwise a platform gap (e.g. no aarch64 wheel) looks identical to
+    "this repo genuinely has none of this language" instead of an
+    incomplete-scan signal the user can act on."""
     c = _TestCollector()
     with patch(
         "nfr_review.collectors.ast_common.make_parser",
         side_effect=ImportError("nope"),
     ):
-        results = c.collect(Path("/nonexistent"), config=_SimpleConfig())
-    assert results == []
+        with pytest.raises(RuntimeError, match="not installed on this platform"):
+            c.collect(Path("/nonexistent"), config=_SimpleConfig())
 
 
 # ---------------------------------------------------------------------------

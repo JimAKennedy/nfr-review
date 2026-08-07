@@ -19,6 +19,7 @@ class CSharpAsyncVoidRule(FieldRule[CSharpAstFilePayload]):
     evidence_kind = "csharp-ast-file"
     payload_type = CSharpAstFilePayload
     pattern_tag = "csharp-async-void"
+    required_tech: list[str] = ["csharp"]
     default_confidence = 0.95
     all_clear_summary = "No async void methods detected."
 

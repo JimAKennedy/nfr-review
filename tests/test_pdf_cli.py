@@ -14,7 +14,7 @@ from nfr_review.cli import cli  # noqa: E402
 
 @pytest.fixture()
 def fixture_repo() -> Path:
-    return Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+    return Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
 
 
 class TestReportPdfFlag:

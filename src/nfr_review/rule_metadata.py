@@ -866,6 +866,42 @@ RULE_METADATA: dict[str, RuleMetadata] = {
         ["python", "imports"],
         ["ISO 25010:Maintainability"],
     ),
+    # --- Rust rules ---
+    "rust-unwrap-expect": _m(
+        "medium",
+        "reliability",
+        "Flags .unwrap()/.expect() calls outside test code that panic instead of.",
+        ["rust", "error-handling"],
+        ["ISO 25010:Reliability"],
+    ),
+    "rust-mutex-lock-unwrap": _m(
+        "high",
+        "reliability",
+        "Flags .lock()/.read()/.write().unwrap() on std Mutex/RwLock, which panics.",
+        ["rust", "concurrency", "error-handling"],
+        ["ISO 25010:Reliability"],
+    ),
+    "rust-http-no-timeout": _m(
+        "high",
+        "reliability",
+        "Flags reqwest clients built without an explicit timeout.",
+        ["rust", "http", "timeout"],
+        ["ISO 25010:Reliability"],
+    ),
+    "rust-blocking-in-async": _m(
+        "medium",
+        "reliability",
+        "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside.",
+        ["rust", "async", "concurrency"],
+        ["ISO 25010:Reliability"],
+    ),
+    "rust-unbounded-spawn-in-loop": _m(
+        "medium",
+        "reliability",
+        "Flags tokio::spawn calls inside a loop with nothing joining or bounding the.",
+        ["rust", "async", "concurrency"],
+        ["ISO 25010:Reliability"],
+    ),
     # --- Sample rule ---
     "sample-readme-exists": _m(
         "low",

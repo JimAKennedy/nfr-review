@@ -12,9 +12,9 @@ from nfr_review.rules.cmake_build_config import CmakeBuildConfigRule
 from nfr_review.rules.cmake_fetchcontent_pinning import CmakeFetchcontentPinningRule
 from nfr_review.rules.cmake_minimum_version import CmakeMinimumVersionRule
 
-GOOD_REPO = Path(__file__).parent / "fixtures" / "cmake-good-repo"
-BAD_REPO = Path(__file__).parent / "fixtures" / "cmake-bad-repo"
-MIXED_REPO = Path(__file__).parent / "fixtures" / "cmake-fetchcontent-repo"
+GOOD_REPO = Path(__file__).parent / "fixtures" / "cpp-cmake-good-repo"
+BAD_REPO = Path(__file__).parent / "fixtures" / "cpp-cmake-bad-repo"
+MIXED_REPO = Path(__file__).parent / "fixtures" / "cpp-cmake-fetchcontent-repo"
 
 
 @pytest.fixture()

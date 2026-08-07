@@ -2583,26 +2583,26 @@ class TestCmakeIntegrationDiscovery:
         assert len(cmake_intgs) == 0
 
     def test_fixture_repos_cross_repo(self) -> None:
-        """End-to-end test with the cmake-shared-lib and cmake-consumer fixtures."""
+        """End-to-end test with the cpp-cmake-shared-lib and cpp-cmake-consumer fixtures."""
         fixtures = Path(__file__).parent / "fixtures"
-        shared = fixtures / "cmake-shared-lib"
-        consumer_a = fixtures / "cmake-consumer-a"
-        consumer_b = fixtures / "cmake-consumer-b"
+        shared = fixtures / "cpp-cmake-shared-lib"
+        consumer_a = fixtures / "cpp-cmake-consumer-a"
+        consumer_b = fixtures / "cpp-cmake-consumer-b"
 
         lib_comp = _make_component(
             "drumcore",
             comp_type="library",
-            repo="cmake-shared-lib",
+            repo="cpp-cmake-shared-lib",
             boundary_path=".",
         )
         comp_a = _make_component(
-            "cmake-consumer-a",
-            repo="cmake-consumer-a",
+            "cpp-cmake-consumer-a",
+            repo="cpp-cmake-consumer-a",
             boundary_path=".",
         )
         comp_b = _make_component(
-            "cmake-consumer-b",
-            repo="cmake-consumer-b",
+            "cpp-cmake-consumer-b",
+            repo="cpp-cmake-consumer-b",
             boundary_path=".",
         )
         all_comps = [lib_comp, comp_a, comp_b]
@@ -2610,7 +2610,11 @@ class TestCmakeIntegrationDiscovery:
         integrations = discover_integrations_multi_repo(
             [shared, consumer_a, consumer_b],
             all_comps,
-            repo_names=["cmake-shared-lib", "cmake-consumer-a", "cmake-consumer-b"],
+            repo_names=[
+                "cpp-cmake-shared-lib",
+                "cpp-cmake-consumer-a",
+                "cpp-cmake-consumer-b",
+            ],
         )
         cmake_intgs = [i for i in integrations if i.style == "build_dependency"]
         assert len(cmake_intgs) == 2
