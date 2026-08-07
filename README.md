@@ -40,6 +40,7 @@ nfr-review uses a three-stage pipeline:
 | | C++ | `cpp_ast`, `cmake` | tree-sitter | Raw memory, include guards, exception safety, CMake config, sanitizer CI, dormant classes |
 | | C# | `csharp_ast`, `csharp_deps` | tree-sitter | Async void, blocking async, ConfigureAwait, disposable without using |
 | | Node.js / TypeScript | `nodejs_ast`, `nodejs_deps` | tree-sitter | Floating promises, unhandled rejections, sync FS APIs, callback errors ignored |
+| | Rust | `rust_ast`, `rust_deps` | tree-sitter | Panic-prone unwrap/expect, mutex-poisoning unwraps, HTTP client no timeout, blocking calls in async, unbounded task spawn in loops |
 | **Frameworks** | Spring Boot | `spring_config` | -- | Actuator exposure, logging config, profile misconfiguration |
 | | APIM (Azure) | `apim_policy` | -- | Auth policy missing, hardcoded backend URLs, rate limiting |
 | **Infrastructure** | Docker | `dockerfile` | tree-sitter | Base image pinning, multistage builds, USER directive, secret leakage, K8s image drift |
@@ -52,7 +53,7 @@ nfr-review uses a three-stage pipeline:
 | **Architecture** | ADRs | `adr`, `adr_derive` | -- | Lifecycle gaps, coverage gaps, architectural drift (LLM-assisted) |
 | | gRPC / Protobuf | `proto` | -- | Field numbering, method comments, service versioning |
 | **Observability** | OpenTelemetry | `otel`, `otel_trace`, `telemetry_config` | -- | Exporter config, pipeline completeness, sampling, W3C propagation, resource attributes |
-| **Dependencies** | PyPI, Maven, Go modules, npm, NuGet | `*_deps` collectors | -- | Freshness, upgrade paths, transitive resolution |
+| **Dependencies** | PyPI, Maven, Go modules, npm, NuGet, crates.io | `*_deps` collectors | -- | Freshness, upgrade paths, transitive resolution |
 | **Dynamic analysis** | OTel traces | `otel_trace` | -- | Latency P95, N+1 queries, correlation propagation, method coverage, call sequences |
 | **Security** | PII detection | -- | -- | PII in log statements (LLM-assisted) |
 | **Patching** | Deployment readiness | multiple | -- | 22 rules: update strategy, PDB coverage, graceful shutdown, rollback CI, and more |
@@ -576,6 +577,8 @@ nfr-review ships with 153 rules (125 NFR + 28 hygiene) across several domains. A
 | `csharp-blocking-async` | C# | Detect `.Result` / `.Wait()` on async calls |
 | `nodejs-floating-promise` | Node.js | Flag un-awaited promises |
 | `nodejs-sync-fs-api` | Node.js | Flag synchronous filesystem API usage |
+| `rust-unwrap-expect` | Rust | Flag `.unwrap()`/`.expect()` calls outside test code |
+| `rust-mutex-lock-unwrap` | Rust | Flag `.lock()/.read()/.write().unwrap()` on std Mutex/RwLock |
 | `dockerfile-base-pinning` | Docker | Flag unpinned base images |
 | `dockerfile-secret-leakage` | Docker | Detect secrets copied into image layers |
 | `helm-secret-leakage` | Helm | Detect secrets in Helm values and templates |
