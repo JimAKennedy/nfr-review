@@ -19,6 +19,7 @@ class CSharpConfigureAwaitRule(FieldRule[CSharpAstFilePayload]):
     evidence_kind = "csharp-ast-file"
     payload_type = CSharpAstFilePayload
     pattern_tag = "csharp-configure-await"
+    required_tech: list[str] = ["csharp"]
     default_confidence = 0.8
     all_clear_summary = "All await expressions use ConfigureAwait."
 
