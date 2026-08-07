@@ -7,6 +7,7 @@ regenerate baselines after intentional changes.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -27,6 +28,14 @@ from tests.regression.conftest import (
 )
 
 _API_CACHE_DIR = Path(__file__).resolve().parent / "api_cache"
+
+# tree-sitter-dockerfile ships no Linux aarch64 wheel (and no sdist for the
+# pinned version), so the dockerfile collector produces no evidence on that
+# platform — see the platform_machine marker on its pyproject.toml dependency.
+# Excluded below the same way as _UPSTREAM_DRIFT_RULES, but kept separate:
+# this is a deterministic platform gap, not upstream non-determinism, and
+# shouldn't count against that set's drift budget.
+_DOCKERFILE_GRAMMAR_AVAILABLE = importlib.util.find_spec("tree_sitter_dockerfile") is not None
 
 
 def _pair_field_diffs(
@@ -156,8 +165,17 @@ def test_regression_snapshot(
             "structure-god-node",
             "structure-weak-boundary",
         }
-        added_stable = [f for f in added if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
-        removed_stable = [f for f in removed if f.get("rule_id") not in _UPSTREAM_DRIFT_RULES]
+
+        def _is_stable(f: dict) -> bool:
+            rule_id = f.get("rule_id", "")
+            if rule_id in _UPSTREAM_DRIFT_RULES:
+                return False
+            if not _DOCKERFILE_GRAMMAR_AVAILABLE and rule_id.startswith("dockerfile-"):
+                return False
+            return True
+
+        added_stable = [f for f in added if _is_stable(f)]
+        removed_stable = [f for f in removed if _is_stable(f)]
 
         if not added_stable and not removed_stable:
             return
