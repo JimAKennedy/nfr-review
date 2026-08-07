@@ -10,6 +10,8 @@ import pytest
 from nfr_review.collectors.dockerfile import DockerfileCollector
 from nfr_review.models import Evidence
 
+pytest.importorskip("tree_sitter_dockerfile")
+
 FIXTURES = Path(__file__).parent / "fixtures" / "dockerfile-sample-repo"
 
 
