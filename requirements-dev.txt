@@ -43,6 +43,7 @@ tree-sitter-go==0.25.0    # via nfr-review (pyproject.toml)
 tree-sitter-hcl==1.2.0    # via nfr-review (pyproject.toml)
 tree-sitter-java==0.23.5  # via nfr-review (pyproject.toml)
 tree-sitter-python==0.25.0  # via nfr-review (pyproject.toml)
+tree-sitter-rust==0.24.2  # via nfr-review (pyproject.toml)
 tree-sitter-typescript==0.23.2  # via nfr-review (pyproject.toml)
 typing-extensions==4.16.0  # via anthropic, anyio, pydantic, pydantic-core, typing-inspection
 typing-inspection==0.4.2  # via pydantic
