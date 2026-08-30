@@ -4,28 +4,28 @@
 #
 #    pip-compile --annotation-style=line --extra=dev --output-file=requirements-dev.txt --strip-extras pyproject.toml
 #
-annotated-types==0.7.0    # via pydantic
+annotated-types==0.8.0    # via pydantic
 anthropic==0.116.0        # via nfr-review (pyproject.toml)
 anyio==4.14.2             # via anthropic, httpx
 build==1.5.1              # via nfr-review (pyproject.toml)
-certifi==2026.6.17        # via httpcore, httpx
-click==8.4.2              # via nfr-review (pyproject.toml)
-coverage==7.15.1          # via pytest-cov
+certifi==2026.7.22        # via httpcore, httpx
+click==8.5.0              # via nfr-review (pyproject.toml)
+coverage==7.15.4          # via pytest-cov
 distro==1.9.0             # via anthropic
 docstring-parser==0.18.0  # via anthropic
 execnet==2.1.2            # via pytest-xdist
-filelock==3.29.7          # via nfr-review (pyproject.toml)
+filelock==3.32.4          # via nfr-review (pyproject.toml)
 h11==0.16.0               # via httpcore
 httpcore==1.0.9           # via httpx
 httpx==0.28.1             # via anthropic
-idna==3.18                # via anyio, httpx
+idna==3.19                # via anyio, httpx
 iniconfig==2.3.0          # via pytest
 jiter==0.16.0             # via anthropic
-packaging==26.2           # via build, nfr-review (pyproject.toml), pytest
+packaging==26.3           # via build, nfr-review (pyproject.toml), pytest
 pluggy==1.6.0             # via pytest, pytest-cov
 pydantic==2.13.4          # via anthropic, nfr-review (pyproject.toml)
-pydantic-core==2.47.0     # via pydantic
-pygments==2.20.0          # via pytest
+pydantic-core==2.48.0     # via pydantic
+pygments==2.21.0          # via pytest
 pyproject-hooks==1.2.0    # via build
 pytest==9.1.1             # via nfr-review (pyproject.toml), pytest-cov, pytest-timeout, pytest-xdist
 pytest-cov==7.1.0         # via nfr-review (pyproject.toml)
@@ -33,7 +33,7 @@ pytest-timeout==2.4.0     # via nfr-review (pyproject.toml)
 pytest-xdist==3.8.0       # via nfr-review (pyproject.toml)
 resolvelib==1.2.1         # via nfr-review (pyproject.toml)
 ruamel-yaml==0.19.1       # via nfr-review (pyproject.toml)
-ruff==0.15.21             # via nfr-review (pyproject.toml)
+ruff==0.16.4             # via nfr-review (pyproject.toml)
 sniffio==1.3.1            # via anthropic
 tree-sitter==0.26.0       # via nfr-review (pyproject.toml)
 tree-sitter-c-sharp==0.23.5  # via nfr-review (pyproject.toml)
@@ -45,4 +45,4 @@ tree-sitter-java==0.23.5  # via nfr-review (pyproject.toml)
 tree-sitter-python==0.25.0  # via nfr-review (pyproject.toml)
 tree-sitter-typescript==0.23.2  # via nfr-review (pyproject.toml)
 typing-extensions==4.16.0  # via anthropic, anyio, pydantic, pydantic-core, typing-inspection
-typing-inspection==0.4.2  # via pydantic
+typing-inspection==0.4.4  # via pydantic
