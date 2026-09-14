@@ -21,8 +21,9 @@ A rule is any class satisfying the `Rule` protocol (`src/nfr_review/protocols.py
 ```python
 class Rule(Protocol):
     id: str
-    band: Band                       # 1 deterministic, 2 LLM, 3 quantitative
+    band: Band  # 1 deterministic, 2 LLM, 3 quantitative
     required_collectors: list[str]
+
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult: ...
 ```
 
@@ -102,15 +103,16 @@ base class.
 from dataclasses import dataclass
 from nfr_review.models import RAG, Severity
 
+
 @dataclass(frozen=True, slots=True)
 class Hit:
-    rag: RAG                          # "red" | "amber" | "green"
+    rag: RAG  # "red" | "amber" | "green"
     summary: str
     recommendation: str
-    locator: str                      # e.g. f"{payload.file_path}:{node.line}"
+    locator: str  # e.g. f"{payload.file_path}:{node.line}"
     severity: Severity | None = None  # default derived from rag (see precedence)
-    confidence: float | None = None   # default from rule.default_confidence
-    pattern_tag: str | None = None    # default from rule.pattern_tag
+    confidence: float | None = None  # default from rule.default_confidence
+    pattern_tag: str | None = None  # default from rule.pattern_tag
     content_hash: str = ""
 ```
 
@@ -122,9 +124,14 @@ construction and severity hardcoding. Severity precedence is defined once here:
 ```python
 _RAG_SEVERITY: dict[RAG, Severity] = {"red": "high", "amber": "medium", "green": "info"}
 
+
 def make_finding(
-    *, rule_id: str, hit: Hit, ev: Evidence,
-    pattern_tag: str, default_confidence: float = 0.9,
+    *,
+    rule_id: str,
+    hit: Hit,
+    ev: Evidence,
+    pattern_tag: str,
+    default_confidence: float = 0.9,
 ) -> Finding:
     return Finding(
         rule_id=rule_id,
@@ -156,6 +163,7 @@ from nfr_review.models import BasePayload, Evidence, RuleResult
 from nfr_review.protocols import Band
 
 P = TypeVar("P", bound=BasePayload)
+
 
 class FieldRule(Generic[P]):
     """Declarative single-evidence-kind rule with typed payload access.
@@ -192,36 +200,50 @@ class FieldRule(Generic[P]):
     def _coerce(self, raw: object) -> P:
         if isinstance(raw, self.payload_type):
             return raw
-        if isinstance(raw, BasePayload):              # different typed payload
+        if isinstance(raw, BasePayload):  # different typed payload
             return self.payload_type.model_validate(raw.model_dump())
         return self.payload_type.model_validate(raw)  # dict (today's common case)
 
     def evaluate(self, evidence: list[Evidence], context: object) -> RuleResult:
         relevant = [
-            e for e in evidence
+            e
+            for e in evidence
             if e.collector_name == self.collector_name and e.kind == self.evidence_kind
         ]
         if not relevant:
             return RuleResult(
-                rule_id=self.id, skipped=True,
+                rule_id=self.id,
+                skipped=True,
                 skip_reason=f"no {self.evidence_kind} evidence available",
             )
         findings: list[Finding] = []
         for ev in relevant:
             payload = self._coerce(ev.payload)
             for hit in self.check(payload, ev):
-                findings.append(make_finding(
-                    rule_id=self.id, hit=hit, ev=ev,
-                    pattern_tag=self.pattern_tag,
-                    default_confidence=self.default_confidence,
-                ))
+                findings.append(
+                    make_finding(
+                        rule_id=self.id,
+                        hit=hit,
+                        ev=ev,
+                        pattern_tag=self.pattern_tag,
+                        default_confidence=self.default_confidence,
+                    )
+                )
         if not findings:
-            findings.append(make_finding(
-                rule_id=self.id, ev=relevant[0], pattern_tag=self.pattern_tag,
-                hit=Hit(rag="green", summary=self.all_clear_summary,
+            findings.append(
+                make_finding(
+                    rule_id=self.id,
+                    ev=relevant[0],
+                    pattern_tag=self.pattern_tag,
+                    hit=Hit(
+                        rag="green",
+                        summary=self.all_clear_summary,
                         recommendation=self.all_clear_recommendation,
-                        locator="project-wide", confidence=0.9),
-            ))
+                        locator="project-wide",
+                        confidence=0.9,
+                    ),
+                )
+            )
         return RuleResult(rule_id=self.id, findings=findings)
 ```
 
@@ -348,8 +370,8 @@ class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
     all_clear_summary = "No mutable default arguments detected."
 
     def check(self, p: PythonAstFilePayload, ev: Evidence) -> Iterable[Hit]:
-        for func in p.functions:                 # typed — mypy knows .functions
-            for d in func.default_args:           # typed — .default_type, .line
+        for func in p.functions:  # typed — mypy knows .functions
+            for d in func.default_args:  # typed — .default_type, .line
                 if d.default_type in _MUTABLE:
                     yield Hit(
                         rag="amber",
