@@ -205,6 +205,7 @@ def _register() -> None:
     if "my-collector" not in collector_registry:
         collector_registry.register("my-collector", MyCollector())
 
+
 _register()
 ```
 
@@ -264,8 +265,8 @@ A rule implements the `Rule` protocol:
 
 ```python
 class MyRule:
-    id = "my-rule-name"                        # unique, kebab-case
-    band: Band = 1                             # 1 = deterministic, 2 = LLM-augmented
+    id = "my-rule-name"  # unique, kebab-case
+    band: Band = 1  # 1 = deterministic, 2 = LLM-augmented
     required_collectors: list[str] = ["my-collector"]
     required_tech: list[str] = ["relevant_tech"]  # omit for universal rules
 
@@ -292,8 +293,10 @@ These use try/except ImportError with fallback stubs:
 _AVAILABLE = False
 try:
     from heavy_lib import func  # type: ignore[import-untyped]
+
     _AVAILABLE = True
 except ImportError:
+
     def func(**kwargs):  # type: ignore[misc]
         raise RuntimeError("heavy_lib not installed")
 ```
