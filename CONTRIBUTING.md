@@ -173,6 +173,7 @@ Each entry point should reference a module that self-registers rules on import
    from nfr_review.registry import rule_registry
    from nfr_review.models import Evidence, Finding, RuleResult
 
+
    class MyCustomRule:
        id = "CUSTOM-001"
        band = 1
@@ -182,9 +183,11 @@ Each entry point should reference a module that self-registers rules on import
            # ... your logic ...
            return RuleResult(rule_id=self.id, findings=findings)
 
+
    def _register():
        if "CUSTOM-001" not in rule_registry:
            rule_registry.register("CUSTOM-001", MyCustomRule())
+
 
    _register()
    ```
