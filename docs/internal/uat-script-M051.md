@@ -36,10 +36,12 @@ pytest tests/monitor/test_trace_factory.py -v
 from tests.monitor.trace_factory import TraceFactory, TopologySpec, ServiceEdge
 
 factory = TraceFactory(seed=42)
-topo = TopologySpec(edges=[
-    ServiceEdge("gateway", "orders", "GET /orders", "http"),
-    ServiceEdge("orders", "inventory", "gRPC GetStock", "grpc"),
-])
+topo = TopologySpec(
+    edges=[
+        ServiceEdge("gateway", "orders", "GET /orders", "http"),
+        ServiceEdge("orders", "inventory", "gRPC GetStock", "grpc"),
+    ]
+)
 doc = factory.generate(topo)
 print(f"Services: {len(doc['resourceSpans'])}")
 # Expected: 3 resourceSpans (gateway, orders, inventory)
