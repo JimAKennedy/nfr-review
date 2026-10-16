@@ -15,7 +15,7 @@ import aiohttp
 import pytest
 import pytest_asyncio
 
-otel = pytest.importorskip("opentelemetry", reason="opentelemetry not installed")
+otel = pytest.importorskip("opentelemetry.sdk", reason="opentelemetry-sdk not installed")
 
 from nfr_review.collectors.otel_trace import (  # noqa: E402
     _parse_otlp_file,

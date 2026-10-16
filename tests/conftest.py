@@ -3,6 +3,18 @@ import logging
 import pytest
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    # Registered here rather than in tests/regression/conftest.py: pytest only
+    # honours addoption hooks from conftests loaded at startup, and with
+    # testpaths = ["tests"] that is this file, not subdirectory conftests.
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="Regenerate regression snapshot baselines instead of comparing.",
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _load_all_registrations():
     """Ensure all rules and collectors are registered before any test runs.
