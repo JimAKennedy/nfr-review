@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 
 pytestmark = pytest.mark.regression
 
@@ -24,14 +25,20 @@ def graphify_available() -> bool:
 
 
 @pytest.fixture(scope="module")
-def selfscan_evidence(graphify_available: bool) -> list:
+def selfscan_evidence(
+    graphify_available: bool, tmp_path_factory: pytest.TempPathFactory
+) -> list:
     if not graphify_available:
         pytest.skip("graphify not installed")
 
     from nfr_review.collectors.graphify import GraphifyCollector
 
-    collector = GraphifyCollector()
-    return collector.collect(REPO_ROOT, None)
+    # Each xdist worker runs this module-scoped fixture independently, and the
+    # collector reuses REPO_ROOT/graphify-out/graph.json whenever it exists — so
+    # without a lock one worker can read the file while another is still writing it.
+    lock_path = tmp_path_factory.getbasetemp().parent / "graphify-selfscan.lock"
+    with FileLock(lock_path, timeout=900):
+        return GraphifyCollector().collect(REPO_ROOT, None)
 
 
 class TestGraphifySelfScan:

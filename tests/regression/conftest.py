@@ -1,7 +1,8 @@
 """Regression test fixtures and helpers.
 
 Provides clone-on-demand repo management, JSONL snapshot normalization,
-and the --update-snapshots CLI flag for baseline regeneration.
+and the update_snapshots fixture for baseline regeneration (the
+--update-snapshots flag itself is registered in tests/conftest.py).
 """
 
 from __future__ import annotations
@@ -22,15 +23,6 @@ from ruamel.yaml import YAML
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _yaml = YAML(typ="safe")
-
-
-def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption(
-        "--update-snapshots",
-        action="store_true",
-        default=False,
-        help="Regenerate regression snapshot baselines instead of comparing.",
-    )
 
 
 @pytest.fixture(scope="session")
