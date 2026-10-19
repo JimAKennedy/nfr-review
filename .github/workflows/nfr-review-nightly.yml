@@ -2,6 +2,8 @@
 # and validate the dynamic analysis pipeline against synthetic OTel traces.
 # Regression tests clone public repos and diff output against snapshot baselines.
 # They are excluded from PR CI to keep feedback fast (<1 min vs ~6 min).
+# Scheduled failures open (or comment on) a `nightly-failure` issue; the next
+# green scheduled run closes it.
 
 name: Nightly
 
@@ -277,4 +279,40 @@ jobs:
             echo "| Report | Uploaded as artifact |" >> $GITHUB_STEP_SUMMARY
           else
             echo "No report generated." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ── Alert: open/update an issue when a scheduled run fails, close on recovery ──
+  alert:
+    name: Failure alert
+    needs: [nfr-review, regression, dynamic-analysis]
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Open, update, or close nightly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          LABEL="nightly-failure"
+          failed=$(jq -r 'to_entries[]
+            | select(.value.result == "failure" or .value.result == "cancelled")
+            | "- `\(.key)`: \(.value.result)"' <<<"$NEEDS")
+          existing=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [ -n "$failed" ]; then
+            body=$(printf 'Scheduled Nightly run failed: %s\n\n%s\n' "$RUN_URL" "$failed")
+            if [ -n "$existing" ]; then
+              gh issue comment "$existing" --body "$body"
+            else
+              gh label create "$LABEL" --color B60205 \
+                --description "Scheduled Nightly workflow is failing" --force
+              gh issue create --title "Nightly workflow failing" --label "$LABEL" --body "$body"
+            fi
+          elif [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "Nightly recovered: $RUN_URL"
           fi
