@@ -101,8 +101,8 @@ class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
     all_clear_summary = "No mutable default arguments detected."
 
     def check(self, p: PythonAstFilePayload, ev: Evidence) -> Iterable[Hit]:
-        for func in p.functions:                 # typed — mypy knows .functions
-            for d in func.default_args:           # typed — .default_type, .line
+        for func in p.functions:  # typed — mypy knows .functions
+            for d in func.default_args:  # typed — .default_type, .line
                 if d.default_type in _MUTABLE:
                     yield Hit(
                         rag="amber",
@@ -474,7 +474,9 @@ def _make_ci_evidence(steps: list[dict]) -> list[Evidence]:
 
 class TestCiCoverageGateRule:
     def test_green_when_coverage_present(self):
-        evidence = _make_ci_evidence([{"name": "Upload coverage", "uses": "codecov/codecov-action@v4"}])
+        evidence = _make_ci_evidence(
+            [{"name": "Upload coverage", "uses": "codecov/codecov-action@v4"}]
+        )
         result = CiCoverageGateRule().evaluate(evidence, context=None)
 
         assert not result.skipped
@@ -644,8 +646,7 @@ class CiCoverageGateRule:
         for ev in ci_evidence:
             steps = ev.payload.get("steps", [])
             has_coverage = any(
-                "coverage" in str(s).lower() or "codecov" in str(s).lower()
-                for s in steps
+                "coverage" in str(s).lower() or "codecov" in str(s).lower() for s in steps
             )
 
             if has_coverage:
@@ -774,7 +775,7 @@ your rule IDs (e.g. `MYORG-`) to avoid conflicts.
 ```python
 class Rule(Protocol):
     id: str
-    band: Band                        # Literal[1, 2, 3]
+    band: Band  # Literal[1, 2, 3]
     required_collectors: list[str]
 
     def evaluate(self, evidence: list[Evidence], context: Any) -> RuleResult: ...
@@ -786,9 +787,9 @@ class Rule(Protocol):
 class Evidence(BaseModel):
     collector_name: str
     collector_version: str
-    locator: str          # file path or resource identifier
-    kind: str             # evidence type (e.g. "ci-pipeline", "ast-method")
-    payload: Any          # typed payload or dict
+    locator: str  # file path or resource identifier
+    kind: str  # evidence type (e.g. "ci-pipeline", "ast-method")
+    payload: Any  # typed payload or dict
 ```
 
 ### Finding model
@@ -803,10 +804,10 @@ class Finding(BaseModel):
     evidence_locator: str
     collector_name: str
     collector_version: str
-    confidence: float     # 0.0 to 1.0
+    confidence: float  # 0.0 to 1.0
     pattern_tag: str
-    content_hash: str = ""                  # optional, for stable baseline diffing
-    origin: Origin = "first_party"          # "first_party" or "dependency"
+    content_hash: str = ""  # optional, for stable baseline diffing
+    origin: Origin = "first_party"  # "first_party" or "dependency"
 ```
 
 ### RuleResult model
