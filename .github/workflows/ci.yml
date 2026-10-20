@@ -258,6 +258,10 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
+          # Vulnerabilities only: secret scanning of the image flags example
+          # credentials in third-party site-packages (e.g. the anthropic SDK).
+          # Our own source is covered by the Secrets Scanning job.
+          scanners: vuln
 
       - name: Scan skipped
         if: steps.filter.outputs.docker != 'true'
