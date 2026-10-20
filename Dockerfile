@@ -15,6 +15,9 @@ COPY src/ src/
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir .[pdf,diagrams,llm-anthropic,llm-openai]
+# pip is not needed at runtime, and it vendors its own copies of urllib3,
+# setuptools (pkg_resources) and msgpack that lag upstream security fixes.
+RUN pip uninstall --yes --root-user-action=ignore pip
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────
 FROM python:3.14-slim
@@ -35,6 +38,9 @@ RUN apt-get update \
        fonts-liberation \
        git \
     && rm -rf /var/lib/apt/lists/*
+
+# Drop the base image's system pip for the same reason as the venv's.
+RUN python -m pip uninstall --yes --root-user-action=ignore pip
 
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
