@@ -15,6 +15,7 @@ pip install clean-example
 
 ```python
 from clean_example import hello
+
 hello()
 ```
 
