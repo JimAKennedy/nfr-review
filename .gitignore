@@ -48,6 +48,7 @@ package-lock.json
 !site/package-lock.json
 reports/
 docs/research/
+docs/internal/nfr-PLAN.md
 
 # ── Graphify output (generated, 20+ MB) ──
 graphify-out/

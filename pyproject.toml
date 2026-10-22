@@ -27,15 +27,8 @@ dependencies = [
     "pydantic>=2",
     "ruamel.yaml>=0.18",
     "tree-sitter>=0.23",
-    "tree-sitter-java>=0.23",
-    "tree-sitter-python>=0.23",
-    "tree-sitter-go>=0.23",
-    "tree-sitter-rust>=0.23",
     "tree-sitter-hcl>=1.1",
     "tree-sitter-dockerfile>=0.2; platform_machine != 'aarch64'",
-    "tree-sitter-c-sharp>=0.23",
-    "tree-sitter-typescript>=0.23",
-    "tree-sitter-cpp>=0.23",
     "packaging>=24.0",
     "resolvelib>=1.0",
 ]
@@ -59,37 +52,69 @@ dev = [
     "anthropic>=0.40",
     "build>=1.0",
 ]
-diagrams = [
-    "graphviz>=0.20",
-]
-pdf = [
-    "weasyprint>=60",
-]
-llm-anthropic = [
+
+# nfr-utils extras — each independently installable
+llm = [
     "anthropic>=0.40",
 ]
 llm-openai = [
     "openai>=1.0",
 ]
-otel = [
-    "opentelemetry-api>=1.20",
-    "opentelemetry-sdk>=1.20",
-    "opentelemetry-exporter-otlp-proto-common>=1.20",
+monitor = [
+    "aiohttp>=3.9",
+]
+diagrams = [
+    "graphviz>=0.20",
+    "graphifyy==0.9.14",
+    "networkx>=3.0",
+]
+pdf = [
+    "weasyprint>=60",
 ]
 scancode = [
     "scancode-toolkit>=32.0,<34",
     "typecode-libmagic>=5.39",
     "extractcode-libarchive>=3.5",
 ]
-monitor = [
-    "aiohttp>=3.9",
+otel = [
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp-proto-common>=1.20",
 ]
 graphify = [
     "graphifyy==0.9.97",
     "networkx>=3.0",
 ]
+
+# Language pack grammars — one per nfr-lang-* pack
+lang-java = [
+    "tree-sitter-java>=0.23",
+]
+lang-python = [
+    "tree-sitter-python>=0.23",
+]
+lang-go = [
+    "tree-sitter-go>=0.23",
+]
+lang-rust = [
+    "tree-sitter-rust>=0.23",
+]
+lang-csharp = [
+    "tree-sitter-c-sharp>=0.23",
+]
+lang-nodejs = [
+    "tree-sitter-typescript>=0.23",
+]
+lang-cpp = [
+    "tree-sitter-cpp>=0.23",
+]
+
+# Meta-extras
+langs = [
+    "nfr-review[lang-java,lang-python,lang-go,lang-rust,lang-csharp,lang-nodejs,lang-cpp]",
+]
 full = [
-    "nfr-review[pdf,diagrams,llm-anthropic,llm-openai,otel,monitor,graphify]",
+    "nfr-review[langs,llm,llm-openai,monitor,diagrams,pdf,scancode,otel]",
 ]
 
 [project.scripts]
@@ -135,6 +160,7 @@ module = [
     "tree_sitter_c_sharp.*",
     "tree_sitter_typescript.*",
     "tree_sitter_cpp.*",
+    "anthropic.*",
     "scancode.*",
     "openai.*",
     "opentelemetry.*",
