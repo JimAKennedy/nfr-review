@@ -244,7 +244,7 @@ nfr-review includes optional LLM-powered analysis with three backend options:
 
 | Backend | Extra to install | Auth | Best for |
 |---------|-----------------|------|----------|
-| **Anthropic API** (default) | `[llm-anthropic]` | `ANTHROPIC_API_KEY` | CI, production use |
+| **Anthropic API** (default) | `[llm]` | `ANTHROPIC_API_KEY` | CI, production use |
 | **OpenAI-compatible** | `[llm-openai]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
 | **Claude CLI** | None | Claude Code subscription | Local dev, no API key needed |
 
@@ -312,7 +312,7 @@ choose a backend interactively. You can also configure it manually:
 **Option A — Anthropic API:**
 
 ```bash
-pip install "nfr-review[llm-anthropic]"
+pip install "nfr-review[llm]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review report /path/to/repo
 ```
@@ -442,23 +442,43 @@ pip install nfr-review
 
 ### Optional extras
 
+nfr-review ships with Python, HCL and Dockerfile support built in. Additional
+languages and capabilities are available as optional extras.
+
+**Language packs** — install only the languages you scan:
+
 | Extra | What it adds |
 |-------|-------------|
-| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[lang-java]` | Java AST, Spring, Jacoco and JDepend collectors and rules. |
+| `[lang-go]` | Go AST and dependency collectors and rules. |
+| `[lang-rust]` | Rust AST and dependency collectors and rules. |
+| `[lang-csharp]` | C# AST and dependency collectors and rules. |
+| `[lang-nodejs]` | TypeScript/Node.js AST and dependency collectors and rules. |
+| `[lang-cpp]` | C++ AST and CMake collectors and rules. |
+| `[langs]` | All language packs above. |
+
+**Capability extras:**
+
+| Extra | What it adds |
+|-------|-------------|
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
 | `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
-| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
+| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) + [graphifyy](https://pypi.org/project/graphifyy/) + [networkx](https://pypi.org/project/networkx/) for diagram rendering and structural analysis. See the [Graphify usage guide](graphify-guide.md). |
 | `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
 | `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
-| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [Graphify usage guide](graphify-guide.md). |
-| `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor` + `graphify`. |
+| `[full]` | Everything: all language packs + all capability extras. |
 | `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, anthropic, and build — everything needed for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf,scancode]"
+# Java and Go support with LLM features
+pip install "nfr-review[lang-java,lang-go,llm]"
+
+# Enterprise install — only the languages and capabilities your team uses
+pip install "nfr-review[lang-java,lang-csharp,pdf]"
 
 # Or install everything at once:
 pip install "nfr-review[full]"
