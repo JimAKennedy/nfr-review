@@ -38,9 +38,9 @@ with conflict resolution, run `pre-commit run --all-files` before pushing.
 
 The package split is documented in `docs/internal/nfr-PLAN.md` §Package Architecture. Summary:
 
-- `nfr-core` — engine, contracts, CLI, infra/platform collectors and rules, hygiene, design change, arch analysis, output renderers (no optional deps).
+- `nfr-core` — engine, contracts, CLI, infra/platform collectors and rules, hygiene, design change, arch analysis, output renderers, Python/HCL/Dockerfile lang support (no optional deps).
 - `nfr-utils[llm|monitor|diagrams|pdf|scancode]` — optional extras, each independently installable.
-- `nfr-lang-<name>` — one entry-point package per language; self-registers into nfr-core registries on import.
+- `nfr-lang-<name>` — one entry-point package per additive language (Java, Go, Rust, C#, Node.js, C++, Gatling); self-registers into nfr-core registries on import. Python stays in core.
 - `nfr-review` meta-package — `nfr-core` + all lang packs (unchanged install UX for existing users).
 - `nfr-review[full]` — everything.
 
