@@ -165,8 +165,8 @@ class TestCiTestStageMissingRule:
         assert "no ci-pipeline evidence" in (result.skip_reason or "")
 
     def test_live_ctest_fixture_detected(self) -> None:
-        """End-to-end: collector + rule on cmake-ctest-repo with ctest in CI YAML."""
-        fixture = Path(__file__).parent / "fixtures" / "cmake-ctest-repo"
+        """End-to-end: collector + rule on cpp-cmake-ctest-repo with ctest in CI YAML."""
+        fixture = Path(__file__).parent / "fixtures" / "cpp-cmake-ctest-repo"
         collector = CiArtifactCollector()
         evidence = collector.collect(fixture, config=None)
         result = self.rule.evaluate(evidence, context=None)

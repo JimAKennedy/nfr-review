@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from nfr_review.collectors.dockerfile import DockerfileCollector
 from nfr_review.collectors.k8s_manifest import K8sManifestCollector
 from nfr_review.config import Config
@@ -15,6 +17,8 @@ from nfr_review.engine import Engine, RunResult
 from nfr_review.registry import Registry
 from nfr_review.rules.dockerfile_k8s_image_drift import DockerfileK8sImageDriftRule
 from nfr_review.rules.dockerfile_k8s_user_conflict import DockerfileK8sUserConflictRule
+
+pytest.importorskip("tree_sitter_dockerfile")
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFLICT_REPO = FIXTURES / "cross-artifact-conflict"

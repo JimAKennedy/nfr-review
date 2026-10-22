@@ -10,7 +10,7 @@ import pytest
 
 from nfr_review.collectors.ci_artifact import CiArtifactCollector
 
-CTEST_FIXTURES = Path(__file__).parent / "fixtures" / "cmake-ctest-repo"
+CTEST_FIXTURES = Path(__file__).parent / "fixtures" / "cpp-cmake-ctest-repo"
 
 
 @pytest.fixture

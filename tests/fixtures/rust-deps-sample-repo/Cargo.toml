@@ -1,0 +1,12 @@
+[package]
+name = "deps-sample"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = "1.0"
+tokio = { version = "1.35", features = ["full"] }
+local-lib = { path = "../local-lib" }
+
+[dev-dependencies]
+tempfile = "3"

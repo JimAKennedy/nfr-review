@@ -85,7 +85,7 @@ class TestEngineIntegration:
     def full_result(self) -> RunResult:
         cregistry, rregistry = _csharp_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        return engine.run(target=CSHARP_REPO, config=Config(tech={}))
+        return engine.run(target=CSHARP_REPO, config=Config(tech={"csharp": True}))
 
     def test_engine_produces_findings_for_bad_code(self, full_result: RunResult) -> None:
         fired_rule_ids = {f.rule_id for f in full_result.findings}
@@ -99,7 +99,7 @@ class TestEngineIntegration:
         engine = Engine(collectors=cregistry, rules=rregistry)
         good_only = CSHARP_REPO / "good_code.cs"
         assert good_only.exists()
-        result = engine.run(target=CSHARP_REPO, config=Config(tech={}))
+        result = engine.run(target=CSHARP_REPO, config=Config(tech={"csharp": True}))
         good_findings = [
             f
             for f in result.findings
@@ -258,7 +258,7 @@ class TestTechGating:
     def test_rules_fire_when_cs_files_present(self) -> None:
         cregistry, rregistry = _csharp_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=CSHARP_REPO, config=Config(tech={}))
+        result = engine.run(target=CSHARP_REPO, config=Config(tech={"csharp": True}))
         ran = set(result.run_metadata.rules_run)
         for rule_id, _ in CSHARP_SPECIFIC_RULES:
             assert rule_id in ran, f"{rule_id} should have run for C# repo"
@@ -266,7 +266,7 @@ class TestTechGating:
     def test_skip_reason_mentions_csharp_ast(self) -> None:
         cregistry, rregistry = _no_csharp_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=CSHARP_REPO, config=Config(tech={}))
+        result = engine.run(target=CSHARP_REPO, config=Config(tech={"csharp": True}))
         for entry in result.run_metadata.rules_skipped:
             if entry["rule_id"] in {r[0] for r in CSHARP_SPECIFIC_RULES}:
                 assert "csharp-ast" in entry["reason"]
@@ -274,7 +274,7 @@ class TestTechGating:
     def test_no_findings_without_collector(self) -> None:
         cregistry, rregistry = _no_csharp_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=CSHARP_REPO, config=Config(tech={}))
+        result = engine.run(target=CSHARP_REPO, config=Config(tech={"csharp": True}))
         csharp_findings = [
             f for f in result.findings if f.rule_id in {r[0] for r in CSHARP_SPECIFIC_RULES}
         ]

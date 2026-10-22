@@ -18,6 +18,8 @@ from nfr_review.rules.dockerfile_secret_leakage import DockerfileSecretLeakageRu
 from nfr_review.rules.dockerfile_user_directive import DockerfileUserDirectiveRule
 from nfr_review.rules.sample import ReadmeExistsRule
 
+pytest.importorskip("tree_sitter_dockerfile")
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOCKERFILE_REPO = FIXTURES / "dockerfile-sample-repo"
 
