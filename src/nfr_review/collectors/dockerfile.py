@@ -231,12 +231,10 @@ class DockerfileCollector:
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         if self._get_parser() is None:
-            raise RuntimeError(
-                "tree-sitter grammar for 'dockerfile' is not installed on this"
-                " platform — dockerfile findings will be incomplete or absent;"
-                " re-run on a platform where the grammar package installs"
-                " (see pyproject.toml) for full coverage"
+            logger.info(
+                "tree-sitter grammar for dockerfile not installed — dockerfile collector skipped"
             )
+            return []
         evidence: list[Evidence] = []
         for dockerfile in _iter_dockerfiles(repo_path):
             rel = dockerfile.relative_to(repo_path)

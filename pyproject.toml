@@ -28,7 +28,7 @@ dependencies = [
     "ruamel.yaml>=0.18",
     "tree-sitter>=0.23",
     "tree-sitter-hcl>=1.1",
-    "tree-sitter-dockerfile>=0.2; platform_machine != 'aarch64'",
+    "tree-sitter-dockerfile>=0.2; platform_machine != 'aarch64' and python_version < '3.13'",
     "packaging>=24.0",
     "resolvelib>=1.0",
 ]
