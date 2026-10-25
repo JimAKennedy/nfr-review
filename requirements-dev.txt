@@ -5,7 +5,7 @@
 #    pip-compile --annotation-style=line --extra=dev --output-file=requirements-dev.txt --strip-extras pyproject.toml
 #
 annotated-types==0.8.0    # via pydantic
-anthropic==0.116.0        # via nfr-review (pyproject.toml)
+anthropic==2.1.0        # via nfr-review (pyproject.toml)
 anyio==4.15.1             # via anthropic, httpx
 build==1.6.1              # via nfr-review (pyproject.toml)
 certifi==2026.7.22        # via httpcore, httpx
