@@ -436,3 +436,26 @@ class TestRegistryPresence:
         for rule_id in expected:
             assert rule_id in registered, f"{rule_id} not in rule_registry"
         assert len(registered) >= len(expected)
+
+
+# ---------------------------------------------------------------------------
+# Tech gating
+# ---------------------------------------------------------------------------
+
+
+def test_python_rule_skipped_when_tech_disabled(tmp_path):
+    from nfr_review.config import Config
+    from nfr_review.engine import Engine
+    from nfr_review.registry import Registry
+    from nfr_review.rules.python_star_import import PythonStarImportRule
+
+    rule = PythonStarImportRule()
+    assert rule.required_tech == ["python"]
+
+    collector_registry = Registry("collector")
+    rule_registry_local = Registry("rule")
+    rule_registry_local.register(rule.id, rule)
+    engine = Engine(collectors=collector_registry, rules=rule_registry_local)
+    cfg = Config(tech={"python": False})
+    result = engine.run(tmp_path, cfg)
+    assert result.rule_results[0].skipped is True

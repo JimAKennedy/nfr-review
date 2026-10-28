@@ -19,6 +19,7 @@ class GoGoroutineLeakRule(FieldRule[GoAstFilePayload]):
     evidence_kind = "go-ast-file"
     payload_type = GoAstFilePayload
     pattern_tag = "go-goroutine-leak"
+    required_tech = ["go"]
     default_confidence = 0.8
     all_clear_summary = "No goroutine launches detected."
 

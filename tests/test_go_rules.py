@@ -338,3 +338,26 @@ class TestGoDeferInLoopRule:
     def test_skipped_no_go_evidence(self) -> None:
         result = self.rule.evaluate(_non_go_evidence(), None)
         assert result.skipped
+
+
+# ---------------------------------------------------------------------------
+# Tech gating
+# ---------------------------------------------------------------------------
+
+
+def test_go_rule_skipped_when_tech_disabled(tmp_path):
+    from nfr_review.config import Config
+    from nfr_review.engine import Engine
+    from nfr_review.registry import Registry
+    from nfr_review.rules.go_defer_in_loop import GoDeferInLoopRule
+
+    rule = GoDeferInLoopRule()
+    assert rule.required_tech == ["go"]
+
+    collector_registry = Registry("collector")
+    rule_registry_local = Registry("rule")
+    rule_registry_local.register(rule.id, rule)
+    engine = Engine(collectors=collector_registry, rules=rule_registry_local)
+    cfg = Config(tech={"go": False})
+    result = engine.run(tmp_path, cfg)
+    assert result.rule_results[0].skipped is True

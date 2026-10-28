@@ -472,3 +472,26 @@ class TestR007FieldCompliance:
                 assert f.collector_version, f"{rule.id}: empty collector_version"
                 assert f.confidence > 0, f"{rule.id}: zero confidence"
                 assert f.pattern_tag, f"{rule.id}: empty pattern_tag"
+
+
+# ---------------------------------------------------------------------------
+# Tech gating
+# ---------------------------------------------------------------------------
+
+
+def test_nodejs_rule_skipped_when_tech_disabled(tmp_path):
+    from nfr_review.config import Config
+    from nfr_review.engine import Engine
+    from nfr_review.registry import Registry
+    from nfr_review.rules.nodejs_callback_error_ignored import NodejsCallbackErrorIgnoredRule
+
+    rule = NodejsCallbackErrorIgnoredRule()
+    assert rule.required_tech == ["nodejs"]
+
+    collector_registry = Registry("collector")
+    rule_registry_local = Registry("rule")
+    rule_registry_local.register(rule.id, rule)
+    engine = Engine(collectors=collector_registry, rules=rule_registry_local)
+    cfg = Config(tech={"nodejs": False})
+    result = engine.run(tmp_path, cfg)
+    assert result.rule_results[0].skipped is True

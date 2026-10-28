@@ -19,6 +19,7 @@ class NodejsFloatingPromiseRule(FieldRule[NodejsAstFilePayload]):
     evidence_kind = "nodejs-ast-file"
     payload_type = NodejsAstFilePayload
     pattern_tag = "nodejs-floating-promise"
+    required_tech = ["nodejs"]
     all_clear_summary = "No floating promises detected."
 
     def check(self, payload: NodejsAstFilePayload, ev: Evidence) -> Iterable[Hit]:
