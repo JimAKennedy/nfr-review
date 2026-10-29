@@ -1311,7 +1311,7 @@ def _compute_score(
 
 def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
     """Detect available LLM for methodology appendix disclosure."""
-    from nfr_review.llm_client import ClaudeCliClient, create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     resolved_llm = config.llm.resolve()
     _llm_client = create_llm_client(resolved_llm)
@@ -1319,8 +1319,7 @@ def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
         return (resolved_llm.provider, resolved_llm.model)
     _default_client = create_llm_client()
     if _default_client.available:
-        _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
-        return (_prov, resolved_llm.model)
+        return (resolved_llm.provider, resolved_llm.model)
     return None
 
 
@@ -2688,7 +2687,7 @@ def _warn_llm_cost(no_arch: bool, no_llm: bool, quiet: bool) -> None:
     """Warn about LLM cost if architecture analysis will use LLM calls."""
     if no_arch or no_llm or quiet:
         return
-    from nfr_review.llm_client import create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     if create_llm_client().available:
         click.echo(

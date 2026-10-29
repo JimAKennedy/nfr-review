@@ -564,7 +564,7 @@ class TestLlmEnhancement:
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = (
+        llm.call.return_value = (
             '{"entities": [{"name": "Order", "description": '
             '"Represents a customer purchase transaction", '
             '"additional_relationships": [], "suggested_context": "Orders"}], '
@@ -576,7 +576,7 @@ class TestLlmEnhancement:
         result = enhance_domain_model_with_llm(entities, contexts, components, llm)
         assert result.entities[0].description == "Represents a customer purchase transaction"
         assert result.bounded_contexts[0].name == "Order Management"
-        llm.analyze.assert_called_once()
+        llm.call.assert_called_once()
 
     def test_adds_relationships_from_llm(self) -> None:
         entities = [
@@ -587,7 +587,7 @@ class TestLlmEnhancement:
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = (
+        llm.call.return_value = (
             '{"entities": [{"name": "Order", "description": "test", '
             '"additional_relationships": [{"target_entity": "Invoice", '
             '"relationship_type": "has_one", "description": "inferred"}], '
@@ -610,7 +610,7 @@ class TestLlmEnhancement:
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = (
+        llm.call.return_value = (
             "Here is the analysis:\n```json\n"
             '{"entities": [{"name": "Foo", "description": "A foo thing", '
             '"additional_relationships": [], "suggested_context": null}], '
@@ -632,11 +632,11 @@ class TestLlmEnhancement:
             ),
         ]
 
-        from nfr_review.llm_client import LlmUnavailableError
+        from nfr_review.llm_integration import ProviderUnavailableError
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.side_effect = LlmUnavailableError("no key")
+        llm.call.side_effect = ProviderUnavailableError("no key")
 
         result = enhance_domain_model_with_llm(entities, contexts, [], llm)
         assert result.entities[0].description == "original"
@@ -650,7 +650,7 @@ class TestLlmEnhancement:
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.side_effect = RuntimeError("API error")
+        llm.call.side_effect = RuntimeError("API error")
 
         result = enhance_domain_model_with_llm(entities, contexts, [], llm)
         assert result.entities[0].description == "original"
@@ -663,7 +663,7 @@ class TestLlmEnhancement:
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = "This is not valid JSON at all"
+        llm.call.return_value = "This is not valid JSON at all"
 
         result = enhance_domain_model_with_llm(entities, contexts, [], llm)
         assert result.entities[0].description == "original"
@@ -712,11 +712,11 @@ class Item(models.Model):
 
         llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = '{"entities": [], "context_refinements": []}'
+        llm.call.return_value = '{"entities": [], "context_refinements": []}'
 
         result = analyze_domain_model([tmp_repo], [], llm=llm)
         assert result is not None
-        llm.analyze.assert_called_once()
+        llm.call.assert_called_once()
 
     def test_llm_none_skips_enhance(self, tmp_repo: Path) -> None:
         models_dir = tmp_repo / "shop"
@@ -751,7 +751,7 @@ class Item(models.Model):
 
         result = analyze_domain_model([tmp_repo], [], llm=llm)
         assert result is not None
-        llm.analyze.assert_not_called()
+        llm.call.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

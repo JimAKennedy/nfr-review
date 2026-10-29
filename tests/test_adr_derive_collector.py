@@ -141,7 +141,7 @@ class TestEvidenceShape:
     ) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -156,7 +156,7 @@ class TestEvidenceShape:
     def test_derived_evidence_payload_keys(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -170,7 +170,7 @@ class TestEvidenceShape:
     def test_summary_evidence_payload_keys(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -188,7 +188,7 @@ class TestEvidenceShape:
     def test_collector_metadata_on_derived(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -204,26 +204,23 @@ class TestPromptConstruction:
     def test_prompt_includes_repo_context(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         repo = _make_repo(tmp_path)
         collector = AdrDeriveCollector()
         collector.collect(repo, config=None)
 
-        mock_client.analyze.assert_called_once()
-        call_kwargs = mock_client.analyze.call_args
-        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs[1].get("prompt", "")
-        bundle = call_kwargs.kwargs.get("evidence_bundle") or call_kwargs[1].get(
-            "evidence_bundle", ""
-        )
+        mock_client.call.assert_called_once()
+        # run_analysis combines prompt + "\n\n" + serialized_bundle into one positional arg
+        full_arg = mock_client.call.call_args[0][0]
 
         # Prompt should mention architecture decisions
-        assert "architecture" in prompt.lower() or "ADR" in prompt
+        assert "architecture" in full_arg.lower() or "ADR" in full_arg
 
         # Bundle should contain info from the repo config files
-        assert "requirements.txt" in bundle
-        assert "Dockerfile" in bundle
+        assert "requirements.txt" in full_arg
+        assert "Dockerfile" in full_arg
 
     @patch("nfr_review.collectors.adr_derive.create_llm_client")
     def test_analyze_called_with_max_tokens_2048(
@@ -231,14 +228,14 @@ class TestPromptConstruction:
     ) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
         collector.collect(_make_repo(tmp_path), config=None)
 
-        call_kwargs = mock_client.analyze.call_args
-        max_tokens = call_kwargs.kwargs.get("max_tokens") or call_kwargs[1].get("max_tokens")
+        call_kwargs = mock_client.call.call_args
+        max_tokens = call_kwargs.kwargs.get("max_tokens")
         assert max_tokens == 2048
 
     @patch("nfr_review.collectors.adr_derive.create_llm_client")
@@ -247,7 +244,7 @@ class TestPromptConstruction:
     ) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
         mock_cls.return_value = mock_client
 
         repo = _make_repo(tmp_path)
@@ -258,11 +255,8 @@ class TestPromptConstruction:
         collector = AdrDeriveCollector()
         collector.collect(repo, config=None)
 
-        call_kwargs = mock_client.analyze.call_args
-        bundle = call_kwargs.kwargs.get("evidence_bundle") or call_kwargs[1].get(
-            "evidence_bundle", ""
-        )
-        assert "0001-use-flask.md" in bundle
+        full_arg = mock_client.call.call_args[0][0]
+        assert "0001-use-flask.md" in full_arg
 
 
 class TestGracefulDegradation:
@@ -272,7 +266,7 @@ class TestGracefulDegradation:
     ) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = "I don't understand the question. Beep boop."
+        mock_client.call.return_value = "I don't understand the question. Beep boop."
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -286,7 +280,7 @@ class TestGracefulDegradation:
     def test_llm_exception_returns_skip(self, mock_cls: MagicMock, tmp_path: Path) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.side_effect = RuntimeError("API timeout")
+        mock_client.call.side_effect = RuntimeError("API timeout")
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()
@@ -302,7 +296,7 @@ class TestGracefulDegradation:
     ) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = "[]"
+        mock_client.call.return_value = "[]"
         mock_cls.return_value = mock_client
 
         collector = AdrDeriveCollector()

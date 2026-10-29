@@ -21,11 +21,11 @@ from nfr_review.arch_models import (
     MarketComparison,
     MaturityLevel,
 )
-from nfr_review.llm_client import (
-    LlmUnavailableError,
-    serialize_evidence_bundle,
+from nfr_review.llm_integration import (
+    LlmClient,
+    ProviderUnavailableError,
+    run_analysis,
 )
-from nfr_review.protocols import LlmClient
 
 logger = logging.getLogger(__name__)
 
@@ -274,16 +274,15 @@ def generate_market_comparison(
         the LLM response is malformed.
     """
     prompt = _MARKET_COMPARISON_PROMPT.format(max_comparisons=max_comparisons)
-    evidence = serialize_evidence_bundle(
-        [{"solution_profile": profile}],
-        max_bytes=8192,
-    )
+    evidence_items = [{"solution_profile": profile}]
 
     logger.info("Requesting market comparison from LLM (max_comparisons=%d)", max_comparisons)
 
     try:
-        raw_response = llm.analyze(prompt, evidence, max_tokens=2048)
-    except LlmUnavailableError as exc:
+        raw_response = run_analysis(
+            llm, prompt, evidence_items, max_tokens=2048, max_bundle_bytes=8192
+        )
+    except ProviderUnavailableError as exc:
         logger.warning("LLM became unavailable during market comparison: %s", exc)
         return MarketAnalysisSection()
     except Exception:

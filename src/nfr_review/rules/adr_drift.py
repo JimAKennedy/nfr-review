@@ -7,14 +7,15 @@ from __future__ import annotations
 import logging
 from typing import Any, cast
 
-from nfr_review.llm_client import (
-    LlmUnavailableError,
+from nfr_review.llm_integration import (
+    LlmClient,
+    ProviderUnavailableError,
     create_llm_client,
     extract_json,
-    serialize_evidence_bundle,
+    run_analysis,
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult, Severity
-from nfr_review.protocols import Band, LlmClient
+from nfr_review.protocols import Band
 from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
@@ -65,7 +66,7 @@ class ArchitecturalDriftFromAdrRule:
                 skip_reason="no Java AST evidence found",
             )
 
-        bundle = self._build_evidence_bundle(adr_evidence, java_evidence)
+        evidence_items = self._build_evidence_items(adr_evidence, java_evidence)
 
         if not self._llm.available:
             logger.warning("LLM not configured; skipping architectural drift analysis")
@@ -75,13 +76,13 @@ class ArchitecturalDriftFromAdrRule:
                 skip_reason="LLM unavailable — drift analysis requires an LLM backend",
             )
 
-        return self._analyze_with_llm(bundle, adr_evidence)
+        return self._analyze_with_llm(evidence_items, adr_evidence)
 
-    def _build_evidence_bundle(
+    def _build_evidence_items(
         self,
         adr_evidence: list[Evidence],
         java_evidence: list[Evidence],
-    ) -> str:
+    ) -> list[dict[str, Any]]:
         adr_items: list[dict[str, Any]] = []
         for ev in adr_evidence:
             payload = ev.payload
@@ -113,25 +114,24 @@ class ArchitecturalDriftFromAdrRule:
                 }
             )
 
-        bundle_items: list[dict[str, Any]] = [
+        return [
             {"section": "adrs", "items": adr_items},
             {"section": "code_structure", "items": java_items},
         ]
-        return serialize_evidence_bundle(bundle_items)
 
     def _analyze_with_llm(
         self,
-        bundle: str,
+        evidence_items: list[dict[str, Any]],
         adr_evidence: list[Evidence],
     ) -> RuleResult:
         try:
-            response_text = self._llm.analyze(_LLM_PROMPT, bundle)
+            response_text = run_analysis(self._llm, _LLM_PROMPT, evidence_items)
             logger.info(
                 "LLM architectural drift analysis received (%d chars)",
                 len(response_text),
             )
             return self._parse_response(response_text, adr_evidence)
-        except LlmUnavailableError as exc:
+        except ProviderUnavailableError as exc:
             logger.warning("LLM unavailable for architectural drift analysis: %s", exc)
             return RuleResult(
                 rule_id=self.id,

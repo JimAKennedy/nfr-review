@@ -57,6 +57,7 @@ dev = [
 # nfr-utils extras — each independently installable
 llm = [
     "anthropic>=0.40",
+    "ai-tooling @ file:///${PROJECT_ROOT}/../ai-tooling",
 ]
 llm-openai = [
     "openai>=1.0",

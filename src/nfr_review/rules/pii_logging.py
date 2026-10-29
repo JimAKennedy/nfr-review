@@ -8,14 +8,15 @@ import logging
 import re
 from typing import Any, cast
 
-from nfr_review.llm_client import (
-    LlmUnavailableError,
+from nfr_review.llm_integration import (
+    LlmClient,
+    ProviderUnavailableError,
     create_llm_client,
     extract_json,
-    serialize_evidence_bundle,
+    run_analysis,
 )
 from nfr_review.models import RAG, Evidence, Finding, RuleResult
-from nfr_review.protocols import Band, LlmClient
+from nfr_review.protocols import Band
 from nfr_review.rules.framework import register
 from nfr_review.rules.rule_helpers import filter_evidence, make_green_finding
 
@@ -111,7 +112,7 @@ class PiiInLogStatementsRule:
             logger.warning("LLM not configured; skipping LLM confirmation for PII rule")
             return None
 
-        bundle_items = [
+        evidence_items = [
             {
                 "index": i,
                 "file": h["file_path"],
@@ -122,13 +123,12 @@ class PiiInLogStatementsRule:
             }
             for i, h in enumerate(hits)
         ]
-        bundle = serialize_evidence_bundle(bundle_items)
 
         try:
-            response_text = self._llm.analyze(_LLM_PROMPT, bundle)
+            response_text = run_analysis(self._llm, _LLM_PROMPT, evidence_items)
             logger.info("LLM PII confirmation received (%d chars)", len(response_text))
             return self._parse_llm_response(response_text, len(hits))
-        except LlmUnavailableError as exc:
+        except ProviderUnavailableError as exc:
             logger.warning(
                 "LLM unavailable for PII confirmation; falling back to regex-only: %s", exc
             )

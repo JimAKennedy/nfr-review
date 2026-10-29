@@ -26,7 +26,7 @@ from nfr_review.arch_models import (
     MarketAnalysisSection,
     TechStackEntry,
 )
-from nfr_review.llm_client import LlmUnavailableError
+from nfr_review.llm_integration import ProviderUnavailableError
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -95,7 +95,7 @@ def _make_llm_mock(available: bool = True, response: str = "{}") -> MagicMock:
     """Create a mock LlmClient."""
     mock = MagicMock()
     type(mock).available = PropertyMock(return_value=available)
-    mock.analyze.return_value = response
+    mock.call.return_value = response
     return mock
 
 
@@ -275,7 +275,7 @@ class TestGenerateMarketComparison:
         assert result.overall_maturity == "defined"
         assert result.maturity_rationale != ""
         assert result.differentiation_summary != ""
-        llm.analyze.assert_called_once()
+        llm.call.assert_called_once()
 
     def test_comparison_details(self) -> None:
         """Each comparison has expected fields populated."""
@@ -299,13 +299,14 @@ class TestGenerateMarketComparison:
 
         generate_market_comparison(profile, llm, max_comparisons=7)
 
-        prompt_arg = llm.analyze.call_args[0][0]
-        assert "7" in prompt_arg
+        # run_analysis combines prompt + "\n\n" + bundle into one positional arg
+        full_arg = llm.call.call_args[0][0]
+        assert "7" in full_arg
 
     def test_llm_unavailable_error(self) -> None:
-        """LlmUnavailableError produces empty section."""
+        """ProviderUnavailableError produces empty section."""
         llm = _make_llm_mock()
-        llm.analyze.side_effect = LlmUnavailableError("no key")
+        llm.call.side_effect = ProviderUnavailableError("no key")
         profile = {}
 
         result = generate_market_comparison(profile, llm)
@@ -316,7 +317,7 @@ class TestGenerateMarketComparison:
     def test_llm_unexpected_error(self) -> None:
         """Unexpected errors produce empty section."""
         llm = _make_llm_mock()
-        llm.analyze.side_effect = RuntimeError("connection lost")
+        llm.call.side_effect = RuntimeError("connection lost")
         profile = {}
 
         result = generate_market_comparison(profile, llm)
@@ -596,7 +597,7 @@ class TestAnalyzeMarket:
         assert result is not None
         assert len(result.comparisons) == 2
         assert result.overall_maturity == "managed"
-        llm.analyze.assert_called_once()
+        llm.call.assert_called_once()
 
     def test_without_llm_uses_basic(self, tmp_path: Path) -> None:
         """Without LLM, falls back to basic maturity assessment."""
@@ -629,14 +630,14 @@ class TestAnalyzeMarket:
 
         assert result is not None
         assert result.comparisons == []
-        # Should NOT have called analyze
-        llm.analyze.assert_not_called()
+        # Should NOT have called call
+        llm.call.assert_not_called()
 
     def test_llm_failure_fallback(self, tmp_path: Path) -> None:
         """When LLM raises an error, gets an empty section from generate_market_comparison,
         then falls back to basic assessment."""
         llm = _make_llm_mock()
-        llm.analyze.side_effect = RuntimeError("boom")
+        llm.call.side_effect = RuntimeError("boom")
         components = [_make_component("api")]
 
         result = analyze_market(

@@ -279,7 +279,7 @@ def _init_llm_client(skip_llm: bool, cb: ProgressCallback):  # type: ignore[retu
     """Initialise and return an LLM client, or None if unavailable/skipped."""
     if skip_llm:
         return None
-    from nfr_review.llm_client import create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     client = create_llm_client()
     if client.available:
