@@ -7,8 +7,8 @@
 annotated-types==0.8.0    # via pydantic
 click==8.5.0              # via nfr-review (pyproject.toml)
 packaging==26.3           # via nfr-review (pyproject.toml)
-pydantic==2.14.1          # via nfr-review (pyproject.toml)
-pydantic-core==2.50.1     # via pydantic
+pydantic==2.14.2          # via nfr-review (pyproject.toml)
+pydantic-core==2.50.2     # via pydantic
 resolvelib==1.2.1         # via nfr-review (pyproject.toml)
 ruamel-yaml==0.19.1       # via nfr-review (pyproject.toml)
 tree-sitter==0.26.0       # via nfr-review (pyproject.toml)
