@@ -4,8 +4,8 @@
 
 ### Context
 
-Working repo: `TheCharlieKennedy/nfr-review` (dev branch)  
-Target PR destination: `JimAKennedy/nfr-review` (when complete)  
+Working repo: `TheCharlieKennedy/nfr-review` (dev branch)
+Target PR destination: `JimAKennedy/nfr-review` (when complete)
 Branch: `dev`
 
 ---

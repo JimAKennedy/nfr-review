@@ -1,6 +1,6 @@
 # NFR Review — Modular Refactor Report
 
-Date: 2026-10-25  
+Date: 2026-10-25
 Branch: `main` (commits `c323511` → `174ee9c`)
 
 ---

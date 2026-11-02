@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,7 +14,6 @@ from nfr_review.llm_integration import (
     run_analysis,
     serialize_bundle,
 )
-
 
 # ---------------------------------------------------------------------------
 # create_llm_client — stub behaviour when ai-tooling absent
@@ -32,7 +30,11 @@ class TestCreateLlmClientStub:
 
         monkeypatch.setattr(_mod, "_AI_TOOLING_AVAILABLE", False)
         # Re-import stub path by calling the module-level stub directly
-        client = _mod._UnavailableClient() if hasattr(_mod, "_UnavailableClient") else create_llm_client()
+        client = (
+            _mod._UnavailableClient()
+            if hasattr(_mod, "_UnavailableClient")
+            else create_llm_client()
+        )
         assert client.available is False
 
     def test_stub_call_raises_provider_unavailable(

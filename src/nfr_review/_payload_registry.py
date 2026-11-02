@@ -119,8 +119,8 @@ def _populate() -> None:
 
     # ── Optional lang pack payloads — gracefully skipped if not installed ─────
     try:
-        from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
         from nfr_review.collectors.payloads.jacoco import JacocoReportPayload
+        from nfr_review.collectors.payloads.java_ast import JavaAstFilePayload
         from nfr_review.collectors.payloads.jdepend import (
             JDependPackagesPayload,
             JDependSkipPayload,
@@ -128,66 +128,78 @@ def _populate() -> None:
         )
         from nfr_review.collectors.payloads.spring import SpringConfigFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("java-ast", "java-ast-file"): JavaAstFilePayload,
-            ("java-deps", "java-deps"): DepsPayload,
-            ("jacoco-report", "jacoco-report"): JacocoReportPayload,
-            ("jdepend", "jdepend-packages"): JDependPackagesPayload,
-            ("jdepend", "jdepend-summary"): JDependSummaryPayload,
-            ("jdepend", "jdepend-skip"): JDependSkipPayload,
-            ("spring-config", "spring-config-file"): SpringConfigFilePayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("java-ast", "java-ast-file"): JavaAstFilePayload,
+                ("java-deps", "java-deps"): DepsPayload,
+                ("jacoco-report", "jacoco-report"): JacocoReportPayload,
+                ("jdepend", "jdepend-packages"): JDependPackagesPayload,
+                ("jdepend", "jdepend-summary"): JDependSummaryPayload,
+                ("jdepend", "jdepend-skip"): JDependSkipPayload,
+                ("spring-config", "spring-config-file"): SpringConfigFilePayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from nfr_review.collectors.payloads.go_ast import GoAstFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("go-ast", "go-ast-file"): GoAstFilePayload,
-            ("go-deps", "go-deps"): DepsPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("go-ast", "go-ast-file"): GoAstFilePayload,
+                ("go-deps", "go-deps"): DepsPayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from nfr_review.collectors.payloads.rust_ast import RustAstFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("rust-ast", "rust-ast-file"): RustAstFilePayload,
-            ("rust-deps", "rust-deps"): DepsPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("rust-ast", "rust-ast-file"): RustAstFilePayload,
+                ("rust-deps", "rust-deps"): DepsPayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from nfr_review.collectors.payloads.csharp_ast import CSharpAstFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("csharp-ast", "csharp-ast-file"): CSharpAstFilePayload,
-            ("csharp-deps", "csharp-deps"): DepsPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("csharp-ast", "csharp-ast-file"): CSharpAstFilePayload,
+                ("csharp-deps", "csharp-deps"): DepsPayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from nfr_review.collectors.payloads.nodejs_ast import NodejsAstFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("nodejs-ast", "nodejs-ast-file"): NodejsAstFilePayload,
-            ("nodejs-deps", "nodejs-deps"): DepsPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("nodejs-ast", "nodejs-ast-file"): NodejsAstFilePayload,
+                ("nodejs-deps", "nodejs-deps"): DepsPayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
-        from nfr_review.collectors.payloads.cpp_ast import CppAstFilePayload
         from nfr_review.collectors.payloads.cmake import CmakeConfigPayload
+        from nfr_review.collectors.payloads.cpp_ast import CppAstFilePayload
 
-        PAYLOAD_REGISTRY.update({
-            ("cpp-ast", "cpp-ast-file"): CppAstFilePayload,
-            ("cmake", "cmake-config"): CmakeConfigPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("cpp-ast", "cpp-ast-file"): CppAstFilePayload,
+                ("cmake", "cmake-config"): CmakeConfigPayload,
+            }
+        )
     except ImportError:
         pass
 
@@ -197,19 +209,23 @@ def _populate() -> None:
             GatlingSummaryPayload,
         )
 
-        PAYLOAD_REGISTRY.update({
-            ("gatling", "gatling-result"): GatlingResultPayload,
-            ("gatling", "gatling-summary"): GatlingSummaryPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("gatling", "gatling-result"): GatlingResultPayload,
+                ("gatling", "gatling-summary"): GatlingSummaryPayload,
+            }
+        )
     except ImportError:
         pass
 
     try:
         from nfr_review.collectors.payloads.graphify import GraphifyPayload
 
-        PAYLOAD_REGISTRY.update({
-            ("graphify", "graphify-analysis"): GraphifyPayload,
-        })
+        PAYLOAD_REGISTRY.update(
+            {
+                ("graphify", "graphify-analysis"): GraphifyPayload,
+            }
+        )
     except ImportError:
         pass
 

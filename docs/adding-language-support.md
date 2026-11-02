@@ -196,7 +196,13 @@ class GoDeferInLoopRule(FieldRule[GoAstFilePayload]):
     def check(self, payload: GoAstFilePayload, ev: Evidence) -> Iterable[Hit]:
         for stmt in payload.defer_statements:
             if stmt.in_loop:
-                yield Hit(rag="amber", severity="medium", summary=..., recommendation=..., locator=...)
+                yield Hit(
+                    rag="amber",
+                    severity="medium",
+                    summary=...,
+                    recommendation=...,
+                    locator=...,
+                )
 ```
 
 ### Step 6 — Tests + fixtures
@@ -240,8 +246,7 @@ Then add one tuple to the collector list in `_collect_class_data()` in
 ```python
 # src/nfr_review/arch_orchestrator.py
 _COLLECTORS: list[tuple[str, str, str, str]] = [
-    ...
-    ("nfr_review.collectors.rust_ast", "RustAstCollector", "structs", "Rust"),
+    ...("nfr_review.collectors.rust_ast", "RustAstCollector", "structs", "Rust"),
 ]
 ```
 

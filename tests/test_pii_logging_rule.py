@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 from nfr_review.llm_integration import ProviderUnavailableError
 from nfr_review.models import Evidence
-from nfr_review.protocols import LlmClient
 from nfr_review.rules.pii_logging import PiiInLogStatementsRule
 
 
