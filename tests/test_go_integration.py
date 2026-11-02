@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("tree_sitter_go")
+
 from nfr_review.collectors.go_ast import GoAstCollector
 from nfr_review.config import Config
 from nfr_review.engine import Engine, RunResult
@@ -56,7 +58,7 @@ def _no_go_registries() -> tuple[Registry, Registry]:
 def full_result() -> RunResult:
     cregistry, rregistry = _go_registries()
     engine = Engine(collectors=cregistry, rules=rregistry)
-    return engine.run(target=FIXTURES, config=Config(tech={}))
+    return engine.run(target=FIXTURES, config=Config(tech={"go": True}))
 
 
 def _findings_by_rule(result: RunResult, rule_id: str) -> list:
@@ -228,7 +230,7 @@ class TestTechGating:
     def no_go_result(self) -> RunResult:
         cregistry, rregistry = _no_go_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        return engine.run(target=FIXTURES, config=Config(tech={}))
+        return engine.run(target=FIXTURES, config=Config(tech={"go": True}))
 
     def test_go_specific_rules_skipped_without_collector(
         self, no_go_result: RunResult

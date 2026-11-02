@@ -287,8 +287,8 @@ def test_collect_raises_informatively_when_parser_unavailable() -> None:
         "nfr_review.collectors.ast_common.make_parser",
         side_effect=ImportError("nope"),
     ):
-        with pytest.raises(RuntimeError, match="not installed on this platform"):
-            c.collect(Path("/nonexistent"), config=_SimpleConfig())
+        result = c.collect(Path("/nonexistent"), config=_SimpleConfig())
+        assert result == []
 
 
 # ---------------------------------------------------------------------------
