@@ -232,7 +232,8 @@ class DockerfileCollector:
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         if self._get_parser() is None:
             logger.info(
-                "tree-sitter grammar for dockerfile not installed — dockerfile collector skipped"
+                "tree-sitter grammar for dockerfile not installed"
+                " — dockerfile collector skipped"
             )
             return []
         evidence: list[Evidence] = []

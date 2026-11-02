@@ -150,6 +150,7 @@ packages = ["nfr_review"]
 [[tool.mypy.overrides]]
 module = [
     "ruamel.*",
+    "ai_tooling.*",
     "tree_sitter_java.*",
     "tree_sitter_python.*",
     "tree_sitter_go.*",
