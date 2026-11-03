@@ -323,7 +323,7 @@ class TestEdgeCases:
         assert len(evidences) == 1
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "github.com/lib/pq"
-        assert "cmd/server/go.mod" in deps[0]["source_file"]
+        assert "cmd/server/go.mod" in deps[0]["source_file"].replace("\\", "/")
 
     @patch("nfr_review.collectors.go_deps.DepsDevClient")
     def test_empty_go_mod_file(self, mock_cls: MagicMock, tmp_path: Path) -> None:

@@ -330,20 +330,27 @@ class TestEdgeCases:
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        from unittest.mock import patch
+
         f = tmp_path / "otel-collector-config.yaml"
         f.write_text(
             "receivers:\n  otlp: {}\nexporters:\n  debug: {}\n"
             "service:\n  pipelines:\n    traces:\n"
             "      receivers: [otlp]\n      exporters: [debug]\n"
         )
-        f.chmod(0o000)
-        try:
+
+        original_read_bytes = Path.read_bytes
+
+        def _raise_for_secret(self: Path) -> bytes:
+            if self == f:
+                raise OSError("Permission denied")
+            return original_read_bytes(self)
+
+        with patch.object(Path, "read_bytes", _raise_for_secret):
             with caplog.at_level(
                 logging.DEBUG, logger="nfr_review.collectors.telemetry_config"
             ):
                 results = collector.collect(tmp_path, config=None)
-            pipelines = _by_kind(results, "telemetry-pipeline")
-            assert len(pipelines) == 0
-            assert "Cannot read" in caplog.text
-        finally:
-            f.chmod(0o644)
+        pipelines = _by_kind(results, "telemetry-pipeline")
+        assert len(pipelines) == 0
+        assert "Cannot read" in caplog.text

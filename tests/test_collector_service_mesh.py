@@ -402,6 +402,8 @@ class TestEdgeCases:
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
+        from unittest.mock import patch
+
         f = tmp_path / "secret.yaml"
         f.write_text(
             "apiVersion: argoproj.io/v1alpha1\n"
@@ -411,15 +413,20 @@ class TestEdgeCases:
             "spec:\n"
             "  replicas: 1\n"
         )
-        f.chmod(0o000)
-        try:
+
+        original_read_bytes = Path.read_bytes
+
+        def _raise_for_secret(self: Path) -> bytes:
+            if self == f:
+                raise OSError("Permission denied")
+            return original_read_bytes(self)
+
+        with patch.object(Path, "read_bytes", _raise_for_secret):
             with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.service_mesh"):
                 results = collector.collect(tmp_path, config=None)
-            ro = _by_kind(results, "service-mesh-rollout")
-            assert len(ro) == 0
-            assert "Cannot read" in caplog.text
-        finally:
-            f.chmod(0o644)
+        ro = _by_kind(results, "service-mesh-rollout")
+        assert len(ro) == 0
+        assert "Cannot read" in caplog.text
 
     def test_vs_no_weighted_routing(
         self, collector: ServiceMeshCollector, tmp_path: Path

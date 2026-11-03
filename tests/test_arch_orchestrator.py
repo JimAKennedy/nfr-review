@@ -136,7 +136,7 @@ class TestArchCliCommand:
     """Tests for the 'nfr-review arch' CLI command."""
 
     def test_arch_basic_run(self, sample_repo: Path) -> None:
-        runner = CliRunner()
+        runner = CliRunner(mix_stderr=False)
         with runner.isolated_filesystem():
             result = runner.invoke(cli, ["arch", str(sample_repo), "--no-llm"])
             assert result.exit_code == 0, result.output + (

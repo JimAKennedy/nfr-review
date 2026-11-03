@@ -306,7 +306,7 @@ class TestEdgeCases:
         assert len(evidences) == 1
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "uuid"
-        assert "packages/core/package.json" in deps[0]["source_file"]
+        assert "packages/core/package.json" in deps[0]["source_file"].replace("\\", "/")
 
     @patch("nfr_review.collectors.nodejs_deps.DepsDevClient")
     def test_empty_dependencies_object(self, mock_cls: MagicMock, tmp_path: Path) -> None:

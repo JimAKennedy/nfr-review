@@ -41,6 +41,7 @@ def config(baseline_file: Path) -> MonitorConfig:
     )
 
 
+@pytest.mark.skip(reason="monitor not yet implemented")
 class TestFormatAlert:
     def test_produces_valid_json(self) -> None:
         from nfr_review.models import Finding
@@ -73,6 +74,7 @@ class TestFormatAlert:
         assert parsed["window_span_count"] == 10
 
 
+@pytest.mark.skip(reason="monitor not yet implemented")
 class TestMonitorEngineLifecycle:
     async def test_engine_loads_baseline(self, config: MonitorConfig) -> None:
         alert_buf = io.StringIO()

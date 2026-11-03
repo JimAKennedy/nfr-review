@@ -99,7 +99,7 @@ class TestSingleGlobPattern:
         config = Config(exclude_paths=["vendor/*"], exclude_test_paths=False)
 
         evidence = collector.collect(tmp_path, config)
-        locators = [e.locator for e in evidence]
+        locators = [e.locator.replace("\\", "/") for e in evidence]
 
         assert any("src/" in loc for loc in locators), (
             f"Expected evidence from src/, got: {locators}"
@@ -138,7 +138,7 @@ class TestMultiplePatterns:
         config = Config(exclude_paths=["vendor/*", "generated/*"], exclude_test_paths=False)
 
         evidence = collector.collect(tmp_path, config)
-        locators = [e.locator for e in evidence]
+        locators = [e.locator.replace("\\", "/") for e in evidence]
 
         assert any("src/" in loc for loc in locators), (
             f"Expected evidence from src/, got: {locators}"
@@ -207,7 +207,7 @@ class TestEmptyExcludePaths:
         config = Config(exclude_paths=[], exclude_test_paths=False)
 
         evidence = collector.collect(tmp_path, config)
-        locators = [e.locator for e in evidence]
+        locators = [e.locator.replace("\\", "/") for e in evidence]
 
         assert any("src/" in loc for loc in locators)
         assert any("vendor/" in loc for loc in locators)
@@ -224,7 +224,7 @@ class TestPatternMatchingNothing:
         config = Config(exclude_paths=["nonexistent_directory/*"], exclude_test_paths=False)
 
         evidence = collector.collect(tmp_path, config)
-        locators = [e.locator for e in evidence]
+        locators = [e.locator.replace("\\", "/") for e in evidence]
 
         assert any("src/" in loc for loc in locators)
         assert any("vendor/" in loc for loc in locators)
@@ -266,7 +266,7 @@ class TestInvalidPatternGracefulHandling:
         config = Config(exclude_paths=["[invalid-regex", "vendor/*"], exclude_test_paths=False)
 
         evidence = collector.collect(tmp_path, config)
-        locators = [e.locator for e in evidence]
+        locators = [e.locator.replace("\\", "/") for e in evidence]
 
         assert any("src/" in loc for loc in locators), "Valid files still collected"
         assert not any("vendor/" in loc for loc in locators), (

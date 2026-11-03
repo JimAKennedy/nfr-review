@@ -291,10 +291,13 @@ class TestWriteCsv:
         assert skipped_row[1] == "skipped"
 
     def test_output_error_on_bad_path(self) -> None:
+        from unittest.mock import patch
+
         result = _make_result(findings=[_make_finding()])
-        bad_path = Path("/dev/null/impossible/out.csv")
-        with pytest.raises(OutputError, match="failed to write CSV"):
-            write_csv(result, bad_path)
+        out = Path("out.csv")
+        with patch.object(Path, "open", side_effect=OSError("disk full")):
+            with pytest.raises(OutputError, match="failed to write CSV"):
+                write_csv(result, out)
 
     def test_non_skipped_rule_results_ignored(self, tmp_path: Path) -> None:
         rule_results = [
