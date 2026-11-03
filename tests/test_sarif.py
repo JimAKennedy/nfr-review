@@ -311,11 +311,13 @@ class TestOutputError:
     """Test that writing to invalid path raises OutputError."""
 
     def test_sarif_output_error(self) -> None:
+        from unittest.mock import patch
+
         result = _make_result(findings=[_make_finding()])
-        # Use a path inside a non-existent read-only location
-        bad_path = Path("/dev/null/impossible/out.sarif.json")
-        with pytest.raises(OutputError, match="failed to write SARIF"):
-            write_sarif(result, bad_path)
+        out = Path("out.sarif.json")
+        with patch.object(Path, "write_text", side_effect=OSError("disk full")):
+            with pytest.raises(OutputError, match="failed to write SARIF"):
+                write_sarif(result, out)
 
     def test_sarif_none_metadata(self, tmp_path: Path) -> None:
         result = RunResult(findings=[], rule_results=[], run_metadata=None)

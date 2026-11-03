@@ -314,6 +314,8 @@ class TestEdgeCases:
     def test_unreadable_file_skipped(
         self, collector: IstioCollector, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
+        from unittest.mock import patch
+
         f = tmp_path / "secret.yaml"
         f.write_text(
             "apiVersion: security.istio.io/v1beta1\n"
@@ -324,14 +326,19 @@ class TestEdgeCases:
             "  mtls:\n"
             "    mode: STRICT\n"
         )
-        f.chmod(0o000)
-        try:
+
+        original_read_bytes = Path.read_bytes
+
+        def _raise_for_secret(self: Path) -> bytes:
+            if self == f:
+                raise OSError("Permission denied")
+            return original_read_bytes(self)
+
+        with patch.object(Path, "read_bytes", _raise_for_secret):
             with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.istio"):
                 results = collector.collect(tmp_path, config=None)
-            assert results == []
-            assert "Cannot read" in caplog.text
-        finally:
-            f.chmod(0o644)
+        assert results == []
+        assert "Cannot read" in caplog.text
 
     def test_non_yaml_files_ignored(self, collector: IstioCollector, tmp_path: Path) -> None:
         (tmp_path / "readme.md").write_text("# Istio configs\n")

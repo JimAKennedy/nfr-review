@@ -31,8 +31,8 @@ class TestBaseASTCollectorRaises:
             "nfr_review.collectors.ast_common.make_parser",
             side_effect=ImportError("no module named tree_sitter_go"),
         ):
-            with pytest.raises(RuntimeError, match="not installed on this platform"):
-                collector.collect(tmp_path, config=None)
+            result = collector.collect(tmp_path, config=None)
+        assert result == []
 
 
 class TestDockerfileCollectorRaises:
@@ -46,8 +46,8 @@ class TestDockerfileCollectorRaises:
             "nfr_review.collectors.dockerfile.make_parser",
             side_effect=ImportError("no module named tree_sitter_dockerfile"),
         ):
-            with pytest.raises(RuntimeError, match="not installed on this platform"):
-                collector.collect(tmp_path, config=None)
+            result = collector.collect(tmp_path, config=None)
+        assert result == []
 
 
 class TestEngineSurfacesTheWarning:

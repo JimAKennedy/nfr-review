@@ -216,16 +216,22 @@ class DockerfileCollector:
 
     def __init__(self) -> None:
         self._parser: Parser | None = None
+        self.grammar_warnings: list[str] = []
 
     def _get_parser(self) -> Parser | None:
         if self._parser is None:
             try:
                 self._parser = make_parser("dockerfile")
             except (ImportError, ModuleNotFoundError):
+                msg = (
+                    "tree-sitter grammar for dockerfile not installed"
+                    " on this platform — collector disabled"
+                )
                 logger.warning(
                     "tree-sitter grammar for dockerfile not installed"
                     " — dockerfile collector disabled"
                 )
+                self.grammar_warnings.append(msg)
                 return None
         return self._parser
 

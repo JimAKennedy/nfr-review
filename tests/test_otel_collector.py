@@ -231,20 +231,27 @@ class TestEdgeCases:
     def test_unreadable_file_skipped(
         self, collector: OTelCollector, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
+        from unittest.mock import patch
+
         f = tmp_path / "otel-collector-config.yaml"
         f.write_text(
             "receivers:\n  otlp: {}\nexporters:\n  logging: {}\n"
             "service:\n  pipelines:\n    traces:\n"
             "      receivers: [otlp]\n      exporters: [logging]\n"
         )
-        f.chmod(0o000)
-        try:
+
+        original_read_bytes = Path.read_bytes
+
+        def _raise_for_secret(self: Path) -> bytes:
+            if self == f:
+                raise OSError("Permission denied")
+            return original_read_bytes(self)
+
+        with patch.object(Path, "read_bytes", _raise_for_secret):
             with caplog.at_level(logging.DEBUG, logger="nfr_review.collectors.otel"):
                 results = collector.collect(tmp_path, config=None)
-            assert results == []
-            assert "Cannot read" in caplog.text
-        finally:
-            f.chmod(0o644)
+        assert results == []
+        assert "Cannot read" in caplog.text
 
     def test_empty_yaml_file_skipped(self, collector: OTelCollector, tmp_path: Path) -> None:
         (tmp_path / "otel-collector-config.yaml").write_text("")

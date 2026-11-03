@@ -189,7 +189,7 @@ class TestBytecodeDiscovery:
 
         dirs = _find_bytecode_dirs(repo)
         assert len(dirs) >= 1
-        paths_str = [str(d) for d in dirs]
+        paths_str = [d.as_posix() for d in dirs]
         assert any("build/classes/java/main" in p for p in paths_str)
 
     def test_finds_build_classes(self, tmp_path: Path) -> None:
@@ -198,7 +198,7 @@ class TestBytecodeDiscovery:
 
         dirs = _find_bytecode_dirs(repo)
         assert len(dirs) >= 1
-        paths_str = [str(d) for d in dirs]
+        paths_str = [d.as_posix() for d in dirs]
         assert any("build/classes" in p for p in paths_str)
 
     def test_finds_nested_module_bytecode(self, tmp_path: Path) -> None:

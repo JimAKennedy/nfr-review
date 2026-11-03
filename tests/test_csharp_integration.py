@@ -207,6 +207,7 @@ class TestCrossLanguageWithCSharp:
         assert len(findings) > 0, "Cross-language rules should produce Python findings"
 
     def test_cross_language_rules_still_work_for_go(self) -> None:
+        pytest.importorskip("tree_sitter_go")
         from nfr_review.collectors.go_ast import GoAstCollector
 
         go_repo = FIXTURES / "go-sample-repo"
@@ -223,6 +224,7 @@ class TestCrossLanguageWithCSharp:
         assert len(findings) > 0, "Cross-language rules should produce Go findings"
 
     def test_cross_language_rules_still_work_for_java(self) -> None:
+        pytest.importorskip("tree_sitter_java")
         from nfr_review.collectors.java_ast import JavaAstCollector
 
         java_repo = FIXTURES / "java-sample-repo"

@@ -46,6 +46,18 @@ The package split is documented in `docs/internal/nfr-PLAN.md` §Package Archite
 
 When implementing the split, do not move files between packages without updating `_payload_registry.py`, `detect.py`, `collectors/__init__.py`, `rules/__init__.py` and the entry-point declarations in `pyproject.toml`.
 
+## Test Fix Discipline
+
+Tests are a contract, not an obstacle. Only change a test when the production code
+intentionally changed what the test was verifying — a renamed module, a changed API, a
+deliberate behaviour shift. Legitimate reasons to update a test: import renames, API
+signature changes, environment-specific adapters (e.g. `mix_stderr=False` on Windows),
+or skip guards for optional grammars.
+
+Never modify a test fixture, alter expected values, or weaken an assertion to make a
+test pass. If a test is failing and none of the above reasons apply, the fix belongs in
+the production code, not the test.
+
 ## Planning Docs
 
 - Working plans, agentic dev docs: `docs/internal/` (gitignored, do not commit).

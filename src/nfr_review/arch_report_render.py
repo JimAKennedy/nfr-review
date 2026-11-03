@@ -215,7 +215,7 @@ def _render_mermaid_to_img(
 def render_arch_json(report: ArchReport, output_path: Path) -> Path:
     """Serialize *report* as indented JSON and write to *output_path*."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report.model_dump_json(indent=2) + "\n")
+    output_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("JSON report written to %s", output_path)
     return output_path
 
@@ -602,7 +602,7 @@ def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
 
     content = "\n".join(s for s in sections if s)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(content)
+    output_path.write_text(content, encoding="utf-8")
     logger.info("Markdown report written to %s", output_path)
     return output_path
 
@@ -1134,7 +1134,7 @@ def render_arch_report(
         orphans = detect_orphan_nodes(report.diagrams)
         orphan_md = render_orphans_markdown(orphans)
         orphan_path = output_dir / f"{prefix}-orphan-nodes.md"
-        orphan_path.write_text(orphan_md)
+        orphan_path.write_text(orphan_md, encoding="utf-8")
         results["orphans"] = orphan_path
         if orphans:
             logger.info(

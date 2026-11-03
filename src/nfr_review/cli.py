@@ -2462,7 +2462,8 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
-    click.echo("Detecting technologies...", err=True)
+    if not dry_run:
+        click.echo("Detecting technologies...", err=True)
     try:
         detected = detect_technologies(target)
     except Exception as e:  # noqa: BLE001
@@ -2492,14 +2493,15 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         out_path.write_text(yaml_text, encoding="utf-8")
         click.echo(f"Wrote {out_path}", err=True)
 
-    # Summary of detected technologies
-    if active_tech:
-        click.echo(
-            f"Detected: {', '.join(sorted(active_tech.keys()))}",
-            err=True,
-        )
-    else:
-        click.echo("No technologies detected.", err=True)
+    # Summary of detected technologies — only in interactive (non-dry-run) mode
+    if not dry_run:
+        if active_tech:
+            click.echo(
+                f"Detected: {', '.join(sorted(active_tech.keys()))}",
+                err=True,
+            )
+        else:
+            click.echo("No technologies detected.", err=True)
 
 
 def _banner_arch(

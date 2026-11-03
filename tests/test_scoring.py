@@ -387,7 +387,7 @@ def test_cli_score_flag(tmp_path: Path) -> None:
     if not fixture.exists():
         pytest.skip("ci-sample-repo fixture not found")
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
         cli,
         [
@@ -442,7 +442,7 @@ def test_cli_score_with_custom_yaml_config(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
         cli,
         [

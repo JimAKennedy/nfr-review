@@ -493,7 +493,7 @@ class TestEdgeCases:
         assert len(evidences) == 1
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "org.apache:commons-lang3"
-        assert "module-a/pom.xml" in deps[0]["source_file"]
+        assert "module-a/pom.xml" in deps[0]["source_file"].replace("\\", "/")
 
     @patch("nfr_review.collectors.java_deps.DepsDevClient")
     def test_pom_in_target_dir_skipped(self, mock_cls: MagicMock, tmp_path: Path) -> None:

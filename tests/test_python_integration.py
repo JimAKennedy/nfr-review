@@ -113,7 +113,7 @@ class TestTechGatingCollectorAbsent:
         rregistry.register("python-async-fire-and-forget", PythonAsyncFireForgetRule())
 
         engine = Engine(collectors=cregistry, rules=rregistry)
-        cfg = Config(tech={"python": False})
+        cfg = Config(tech={"python": True})
         return engine.run(target=PYTHON_REPO, config=cfg)
 
     def test_all_four_python_rules_skipped(self, result: RunResult) -> None:
