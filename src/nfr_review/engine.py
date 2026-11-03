@@ -91,7 +91,7 @@ class Engine:
         config: Config,
         exclude_pats: Any,
     ) -> tuple[str, list[Evidence], str | None, list[str]]:
-        """Run a single collector and return (name, evidence, error_msg | None, grammar_warnings)."""
+        """Run a single collector; return (name, evidence, error_msg | None, warnings)."""
         try:
             produced = collector.collect(target, config)
         # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
