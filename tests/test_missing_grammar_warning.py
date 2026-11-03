@@ -11,8 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from nfr_review.collectors.dockerfile import DockerfileCollector
 from nfr_review.collectors.go_ast import GoAstCollector
 from nfr_review.config import Config
