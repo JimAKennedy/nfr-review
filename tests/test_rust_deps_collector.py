@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from nfr_review.collectors.rust_deps import RustDepsCollector
+
 from nfr_review.registry import collector_registry
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "rust-deps-sample-repo"
