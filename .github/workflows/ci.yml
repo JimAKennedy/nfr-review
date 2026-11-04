@@ -72,7 +72,7 @@ jobs:
         run: bandit -r src/ -c pyproject.toml
 
   test-core:
-    name: Test core (Python ${{ matrix.python-version }})
+    name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
 
     strategy:
@@ -573,7 +573,7 @@ jobs:
           echo "| Lint & Format | ${{ needs.lint.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Type Check | ${{ needs.typecheck.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security | ${{ needs.security.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests (core) | ${{ needs.test-core.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test-core.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests (Java) | ${{ needs.test-lang-java.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests (Go) | ${{ needs.test-lang-go.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Tests (Rust) | ${{ needs.test-lang-rust.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
