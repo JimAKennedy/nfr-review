@@ -175,13 +175,6 @@ source = ["nfr_review"]
 branch = true
 omit = [
     "src/nfr_review/data/*",
-    "src/nfr_review/collectors/graphify.py",
-    "src/nfr_review/collectors/payloads/graphify.py",
-    "src/nfr_review/llm_integration.py",
-    "src/nfr_review/arch_diagrams.py",
-    "src/nfr_review/output/diagrams.py",
-    "src/nfr_review/mcp_client.py",
-    "src/nfr_review/monitor/*",
 ]
 
 [tool.coverage.report]
