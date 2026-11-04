@@ -21,6 +21,8 @@ from nfr_review.monitor.baseline import load_baseline, save_baseline
 from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
 from nfr_review.monitor.fingerprint import InteractionFingerprint
 
+pytest.importorskip("aiohttp")
+
 MULTI_SVC = Path("tests/fixtures/otel-traces/traces-multi-service.ndjson")
 TOPOLOGY = Path("tests/fixtures/otel-traces/traces-multi-service-topology.json")
 
