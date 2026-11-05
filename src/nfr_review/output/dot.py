@@ -125,9 +125,9 @@ def render_dot_to_file(
     Returns the output path on success, or None if the dot binary is not
     on PATH. Raises RuntimeError if rendering fails for other reasons.
     """
-    import graphviz  # type: ignore[import-untyped]
-
     from pathlib import Path
+
+    import graphviz  # type: ignore[import-untyped]
 
     out = Path(output_path)
     src = graphviz.Source(dot_text)
