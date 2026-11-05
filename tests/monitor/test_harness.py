@@ -29,7 +29,6 @@ def known_baseline() -> InteractionBaseline:
     return InteractionBaseline(source="test", trace_count=1, span_count=1, fingerprints=[fp])
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestHarnessLifecycle:
     async def test_start_and_shutdown(
         self, known_baseline: InteractionBaseline, tmp_path: Path
@@ -49,7 +48,6 @@ class TestHarnessLifecycle:
                     assert resp.status == 200
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestHarnessKnownTraffic:
     async def test_known_traffic_no_alerts(
         self,
@@ -65,7 +63,6 @@ class TestHarnessKnownTraffic:
             assert h.get_novel_alerts() == []
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestHarnessNovelDetection:
     async def test_novel_traffic_produces_alert(
         self,
@@ -108,7 +105,6 @@ class TestHarnessNovelDetection:
             assert "analytics" in summaries
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestHarnessDedup:
     async def test_dedup_same_novel_across_windows(
         self,

@@ -77,7 +77,6 @@ def app(receiver: OtlpReceiver):
     return receiver.create_app()
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_post_valid_traces(
     aiohttp_client,
     app,
@@ -97,7 +96,6 @@ async def test_post_valid_traces(
     assert receiver.requests_total == 1
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_post_invalid_json(
     aiohttp_client,
     app,
@@ -114,7 +112,6 @@ async def test_post_invalid_json(
     assert receiver.spans_received == 0
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_post_empty_resource_spans(
     aiohttp_client,
     app,
@@ -126,7 +123,6 @@ async def test_post_empty_resource_spans(
     assert len(collected_spans) == 0
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_healthz(aiohttp_client, app) -> None:
     client = await aiohttp_client(app)
     resp = await client.get("/healthz")
@@ -135,7 +131,6 @@ async def test_healthz(aiohttp_client, app) -> None:
     assert text == "ok"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_readyz_not_ready(aiohttp_client, app, receiver: OtlpReceiver) -> None:
     client = await aiohttp_client(app)
     assert not receiver.ready
@@ -143,7 +138,6 @@ async def test_readyz_not_ready(aiohttp_client, app, receiver: OtlpReceiver) -> 
     assert resp.status == 503
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_readyz_ready(aiohttp_client, app, receiver: OtlpReceiver) -> None:
     client = await aiohttp_client(app)
     receiver.ready = True
@@ -153,7 +147,6 @@ async def test_readyz_ready(aiohttp_client, app, receiver: OtlpReceiver) -> None
     assert text == "ready"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_multiple_spans_in_payload(
     aiohttp_client,
     app,

@@ -41,11 +41,16 @@ filesystem checks — no parsing.
 ```python
 # src/nfr_review/detect.py
 def _detect_go(repo: Path) -> bool:
-    return _safe_exists(repo / "go.mod")
+    if _safe_exists(repo / "go.mod"):
+        return True
+    return bool(_safe_rglob(repo, "go.mod"))
 ```
 
-A single manifest check is the common case. Checking several candidate files is also
-valid when there's no one canonical manifest.
+Always check the repo root first, then fall back to `_safe_rglob` to find the manifest
+anywhere in the tree. This handles monorepos where manifests live in subdirectories
+(e.g. `services/api/go.mod`) — without the subdirectory search such repos produce "tech
+not declared" and all rules skip. Checking several candidate files is also valid when
+there's no one canonical manifest.
 
 ### Step 2 — Tree-sitter grammar
 

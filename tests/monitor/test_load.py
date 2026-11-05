@@ -84,7 +84,7 @@ def baseline_file(tmp_path: Path) -> Path:
     return p
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
+@pytest.mark.skipif(sys.platform == "win32", reason="resource module unavailable on Windows")
 async def test_sustained_load(baseline_file: Path) -> None:
     """Send ~1000 spans/sec for 5s, verify stable performance."""
     alert_buf = io.StringIO()
@@ -158,7 +158,6 @@ async def test_sustained_load(baseline_file: Path) -> None:
     assert mem_delta_mb < 100, f"memory delta {mem_delta_mb:.1f}MB exceeds 100MB"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_backpressure_under_load(baseline_file: Path) -> None:
     """Fill queue to trigger 429, then drain and accept again."""
     alert_buf = io.StringIO()
@@ -211,7 +210,6 @@ async def test_backpressure_under_load(baseline_file: Path) -> None:
     assert got_200_after_drain, "expected 200 after queue drain"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_graceful_shutdown_flushes(baseline_file: Path) -> None:
     """Shutdown mid-stream should flush pending spans."""
     alert_buf = io.StringIO()

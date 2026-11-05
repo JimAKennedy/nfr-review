@@ -38,14 +38,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Graphify
-        run: pip install "graphifyy==0.8.44"
-
-      - name: Run Graphify extraction
-        run: |
-          graphify update . --no-cluster
-          graphify cluster-only . --no-viz --no-label
-
       - name: Run NFR Review
         id: nfr
         uses: ./
@@ -144,7 +136,7 @@ jobs:
           version: 'latest'
 
       - name: Install dependencies
-        run: pip install -e ".[dev,graphify]"
+        run: pip install -e ".[dev]"
 
       - name: Run regression tests
         if: ${{ github.event.inputs.refresh_snapshots != 'true' }}

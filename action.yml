@@ -140,7 +140,7 @@ runs:
       shell: bash
       run: |
         if [ -n "${{ inputs.anthropic-api-key }}" ]; then
-          pip install "${{ github.action_path }}[llm-anthropic]"
+          pip install "${{ github.action_path }}[llm]"
         else
           pip install "${{ github.action_path }}"
         fi

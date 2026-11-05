@@ -88,7 +88,6 @@ def baseline_file(tmp_path: Path, known_fingerprint: InteractionFingerprint) -> 
     return p
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_full_monitor_lifecycle(baseline_file: Path) -> None:
     """Start monitor, send known + novel spans, verify alert output."""
     alert_buf = io.StringIO()
@@ -144,7 +143,6 @@ async def test_full_monitor_lifecycle(baseline_file: Path) -> None:
     assert any("svc-c" in a["finding_summary"] for a in novel_alerts)
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 async def test_monitor_no_alerts_for_known_traffic(baseline_file: Path) -> None:
     """Known traffic only — no alerts expected."""
     alert_buf = io.StringIO()

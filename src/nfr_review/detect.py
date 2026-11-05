@@ -181,22 +181,31 @@ def _detect_grpc(repo: Path) -> bool:
 
 
 def _detect_go(repo: Path) -> bool:
-    return _safe_exists(repo / "go.mod")
+    if _safe_exists(repo / "go.mod"):
+        return True
+    return bool(_safe_rglob(repo, "go.mod"))
 
 
 def _detect_rust(repo: Path) -> bool:
-    return _safe_exists(repo / "Cargo.toml")
+    if _safe_exists(repo / "Cargo.toml"):
+        return True
+    return bool(_safe_rglob(repo, "Cargo.toml"))
 
 
 def _detect_python(repo: Path) -> bool:
     for name in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
         if _safe_exists(repo / name):
             return True
+    for pattern in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
+        if _safe_rglob(repo, pattern):
+            return True
     return False
 
 
 def _detect_nodejs(repo: Path) -> bool:
-    return _safe_exists(repo / "package.json")
+    if _safe_exists(repo / "package.json"):
+        return True
+    return bool(_safe_rglob(repo, "package.json"))
 
 
 def _detect_csharp(repo: Path) -> bool:

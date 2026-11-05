@@ -110,7 +110,7 @@ nfr-review run /path/to/your/repo
 Optional extras:
 
 ```bash
-pip install "nfr-review[llm-anthropic]"  # LLM via Anthropic API
+pip install "nfr-review[llm]"  # LLM via Anthropic API
 pip install "nfr-review[llm-openai]"     # LLM via OpenAI-compatible APIs (Ollama, Azure, OpenRouter)
 pip install "nfr-review[pdf]"            # PDF report generation
 pip install "nfr-review[scancode]"       # license compliance scanning
@@ -183,7 +183,7 @@ Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` s
 
 ### Optional: LLM features
 
-Three LLM backends are supported: Anthropic API (`[llm-anthropic]` extra), OpenAI-compatible APIs like Ollama (`[llm-openai]` extra), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs like Ollama (`[llm-openai]` extra), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
@@ -197,7 +197,7 @@ pip install nfr-review
 
 | Extra | What it adds |
 |-------|-------------|
-| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
 | `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
@@ -211,7 +211,7 @@ pip install nfr-review
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf]"
+pip install "nfr-review[llm,pdf]"
 ```
 
 ### Development install (from source)
@@ -231,7 +231,7 @@ LLM-assisted rules (PII detection, ADR drift analysis) require an LLM backend. T
 
 **Anthropic API** (default):
 ```bash
-pip install "nfr-review[llm-anthropic]"
+pip install "nfr-review[llm]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review run /path/to/repo
 ```

@@ -31,7 +31,6 @@ pytestmark = pytest.mark.asyncio
 # ---------------------------------------------------------------------------
 # Scenario: new service appears
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestNewServiceDetection:
     async def test_new_service_triggers_novel_alert(
         self,
@@ -76,7 +75,6 @@ class TestNewServiceDetection:
 # ---------------------------------------------------------------------------
 # Scenario: new endpoint on existing service
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestNewEndpointDetection:
     async def test_new_operation_triggers_novel_alert(
         self,
@@ -103,7 +101,6 @@ class TestNewEndpointDetection:
 # ---------------------------------------------------------------------------
 # Scenario: protocol change on existing edge
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestProtocolChangeDetection:
     async def test_protocol_change_triggers_novel_alert(
         self,
@@ -146,7 +143,6 @@ class TestProtocolChangeDetection:
 # ---------------------------------------------------------------------------
 # Scenario: volume-only increase (same topology) → zero alerts
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestVolumeOnlyNoAlert:
     async def test_same_topology_more_volume_no_alerts(
         self,
@@ -167,7 +163,6 @@ class TestVolumeOnlyNoAlert:
 # ---------------------------------------------------------------------------
 # Scenario: zero false positives (known traffic only)
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestZeroFalsePositives:
     async def test_known_multi_service_traffic_no_alerts(
         self,
@@ -201,7 +196,6 @@ class TestZeroFalsePositives:
 # ---------------------------------------------------------------------------
 # Scenario: mixed known + novel in single payload
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestMixedTraffic:
     async def test_only_novel_interactions_alert(
         self,
@@ -236,7 +230,6 @@ class TestMixedTraffic:
 # ---------------------------------------------------------------------------
 # Scenario: severity varies by protocol type
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestSeverityByProtocol:
     @pytest.mark.parametrize(
         "protocol,expected_severity",
@@ -285,7 +278,6 @@ async def test_app() -> AsyncIterator[InstrumentedApp]:
     await app.stop()
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestRealAppE2E:
     async def test_baseline_from_app_traces_detects_novel_factory_traffic(
         self,
@@ -351,7 +343,6 @@ class TestRealAppE2E:
 # ---------------------------------------------------------------------------
 # Scenario: multi-window consistency
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestMultiWindowConsistency:
     async def test_novel_detected_across_separate_windows(
         self,

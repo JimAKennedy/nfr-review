@@ -14,7 +14,7 @@ COPY src/ src/
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir .[pdf,diagrams,llm-anthropic,llm-openai]
+RUN pip install --no-cache-dir .[pdf,diagrams,llm,llm-openai]
 # pip is not needed at runtime, and it vendors its own copies of urllib3,
 # setuptools (pkg_resources) and msgpack that lag upstream security fixes.
 RUN pip uninstall --yes --root-user-action=ignore pip

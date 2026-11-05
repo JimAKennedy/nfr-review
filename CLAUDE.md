@@ -34,17 +34,15 @@ with conflict resolution, run `pre-commit run --all-files` before pushing.
 - Band 2 (LLM-augmented) rule paths must gracefully skip via `LlmClient.available` — never raise, never produce a false PASS.
 - Do not add features, collectors, rules or outputs not covered by the reqs. If something seems missing, flag it — do not implement it.
 
-## Modularisation Plan
+## Package Architecture
 
-The package split is documented in `docs/internal/nfr-PLAN.md` §Package Architecture. Summary:
+`nfr-review` is a single package. All language support, output formats, collectors, and rules ship in core. The only opt-in extras are:
 
-- `nfr-core` — engine, contracts, CLI, infra/platform collectors and rules, hygiene, design change, arch analysis, output renderers, Python/HCL/Dockerfile lang support (no optional deps).
-- `nfr-utils[llm|monitor|diagrams|pdf|scancode]` — optional extras, each independently installable.
-- `nfr-lang-<name>` — one entry-point package per additive language (Java, Go, Rust, C#, Node.js, C++, Gatling); self-registers into nfr-core registries on import. Python stays in core.
-- `nfr-review` meta-package — `nfr-core` + all lang packs (unchanged install UX for existing users).
-- `nfr-review[full]` — everything.
+- `[llm]` — LLM-augmented Band 2 rules, requires API key
+- `[otel]` — OpenTelemetry tracing instrumentation
+- `[scancode]` — Licence scanning via scancode-toolkit
 
-When implementing the split, do not move files between packages without updating `_payload_registry.py`, `detect.py`, `collectors/__init__.py`, `rules/__init__.py` and the entry-point declarations in `pyproject.toml`.
+Do not move language grammars, diagrams, PDF, or monitor into optional extras.
 
 ## Test Fix Discipline
 
@@ -61,5 +59,4 @@ the production code, not the test.
 ## Planning Docs
 
 - Working plans, agentic dev docs: `docs/internal/` (gitignored, do not commit).
-- Formal docs, client comms: `C:\Users\charl\Documents\Business\` (separate location, not this repo).
 - Do not create planning documents in the repo root or outside `docs/internal/`.

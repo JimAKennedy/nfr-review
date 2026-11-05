@@ -15,7 +15,6 @@ from tests.monitor.trace_factory import (
 )
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestTopologySpec:
     def test_auto_collects_services_from_edges(self) -> None:
         spec = TopologySpec(edges=[ServiceEdge("svc-a", "svc-b", "GET /api", "http")])
@@ -45,7 +44,6 @@ class TestTopologySpec:
         assert set(spec.services) == {"svc-a", "svc-b", "svc-c"}
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestTraceFactoryBasic:
     def test_generates_valid_otlp_json(self) -> None:
         factory = TraceFactory(seed=42)
@@ -84,7 +82,6 @@ class TestTraceFactoryBasic:
         assert [s.trace_id for s in spans1] == [s.trace_id for s in spans2]
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestTraceFactoryThreeServiceChain:
     def test_chain_topology_generates_correct_spans(self) -> None:
         factory = TraceFactory(seed=42)
@@ -118,7 +115,6 @@ class TestTraceFactoryThreeServiceChain:
         assert callers == {"gateway", "orders"}
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestProtocolTypes:
     @pytest.mark.parametrize(
         "protocol,expected_fp_protocol,expected_fp_count",
@@ -181,7 +177,6 @@ class TestProtocolTypes:
         assert caller.attributes["rpc.system"] == "grpc"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestFingerprintRoundTrip:
     def test_mixed_topology_fingerprints_match(self) -> None:
         factory = TraceFactory(seed=42)
@@ -226,7 +221,6 @@ class TestFingerprintRoundTrip:
         assert len(fps) == 4
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestNdjsonOutput:
     def test_ndjson_is_valid_json(self) -> None:
         import json

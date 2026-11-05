@@ -35,7 +35,6 @@ async def test_app() -> AsyncIterator[InstrumentedApp]:
     await app.stop()
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestAppLifecycle:
     async def test_services_start_on_ephemeral_ports(self, test_app: InstrumentedApp) -> None:
         assert "gateway" in test_app.ports
@@ -52,7 +51,6 @@ class TestAppLifecycle:
                 assert "gateway" in body
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestTraceProduction:
     async def test_request_produces_spans(self, test_app: InstrumentedApp) -> None:
         async with aiohttp.ClientSession() as session:
@@ -80,7 +78,6 @@ class TestTraceProduction:
         assert parent_ids & span_ids, "cross-service parent-child links"
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestOtlpRoundTrip:
     async def test_otlp_doc_parseable(self, test_app: InstrumentedApp) -> None:
         async with aiohttp.ClientSession() as session:
@@ -110,7 +107,6 @@ class TestOtlpRoundTrip:
         assert ("orders", "inventory") in caller_callee_pairs
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestNdjsonExport:
     async def test_ndjson_round_trips(self, test_app: InstrumentedApp, tmp_path: Path) -> None:
         async with aiohttp.ClientSession() as session:

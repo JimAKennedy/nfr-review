@@ -59,11 +59,11 @@ required for the tool to start.
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf,scancode]"
+pip install "nfr-review[llm,pdf,scancode]"
 pip install "nfr-review[full]"        # everything except scancode and otel
 ```
 
-### `[llm-anthropic]` — Anthropic Claude API
+### `[llm]` — Anthropic Claude API
 
 | Package | Constraint | Purpose |
 |---------|-----------|---------|
@@ -144,7 +144,7 @@ structural rules produce no findings. See the
 
 ### `[full]` — Convenience aggregate
 
-Installs: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` +
+Installs: `pdf` + `diagrams` + `llm` + `llm-openai` + `otel` +
 `monitor` + `graphify`. Does **not** include `scancode` (too heavy) or `dev`
 (test dependencies).
 
@@ -313,7 +313,7 @@ The pre-built Docker image is published to GHCR on each tagged release.
 | **Base image** | `python:3.14-slim` |
 | **Architecture** | `linux/amd64` only |
 | **User** | Non-root `nfr` (UID 1000) |
-| **Python extras** | `pdf`, `diagrams`, `llm-anthropic`, `llm-openai` (excludes `graphify` — add manually if needed) |
+| **Python extras** | `pdf`, `diagrams`, `llm`, `llm-openai` (excludes `graphify` — add manually if needed) |
 
 **System packages in the image:** libpango, libpangocairo, libpangoft2,
 libharfbuzz, libcairo2, libgdk-pixbuf, libffi, shared-mime-info,

@@ -26,7 +26,6 @@ pytestmark = pytest.mark.asyncio
 # ---------------------------------------------------------------------------
 # Malformed / edge-case payloads
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestMalformedPayloads:
     async def test_invalid_json_returns_400(
         self,
@@ -141,7 +140,6 @@ class TestMalformedPayloads:
 # ---------------------------------------------------------------------------
 # Large baseline
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestLargeBaseline:
     async def test_1000_fingerprint_baseline_works(
         self,
@@ -208,7 +206,6 @@ class TestLargeBaseline:
 # ---------------------------------------------------------------------------
 # E2E dedup correctness through HTTP path
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestDedupE2E:
     async def test_same_novel_across_three_windows_alerts_once(
         self,
@@ -292,7 +289,6 @@ class TestDedupE2E:
 # ---------------------------------------------------------------------------
 # Shutdown flush
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestShutdownFlush:
     async def test_shutdown_flushes_pending_spans(
         self,
@@ -316,7 +312,6 @@ class TestShutdownFlush:
 # ---------------------------------------------------------------------------
 # Stats endpoint
 # ---------------------------------------------------------------------------
-@pytest.mark.skip(reason="monitor not yet implemented")
 class TestStatsEndpoint:
     async def test_statsz_reflects_ingested_spans(
         self,

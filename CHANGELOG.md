@@ -250,7 +250,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Parallel collector execution** — `--workers N` flag on `run`, `report`,
   and `all` commands for concurrent evidence gathering.
 - **Multi-backend LLM support** — three backends: Anthropic API
-  (`[llm-anthropic]`), OpenAI-compatible APIs (`[llm-openai]`), and
+  (`[llm]`), OpenAI-compatible APIs (`[llm-openai]`), and
   Claude CLI. Configured via `llm:` in `nfr-review.yaml` or env vars.
 - **`all` command** — runs architecture review (cross-repo) + NFR report
   (per-repo) in a single invocation.

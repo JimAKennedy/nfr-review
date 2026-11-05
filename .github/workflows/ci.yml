@@ -99,7 +99,7 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,graphify]"
+        run: pip install -e ".[dev]"
 
       - name: Run core tests
         run: |
