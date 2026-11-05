@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from nfr_review.collectors.payloads.otel_trace import OtelTraceSpan
 from nfr_review.monitor.baseline import InteractionBaseline
 from nfr_review.monitor.fingerprint import InteractionFingerprint
