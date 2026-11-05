@@ -17,10 +17,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from nfr_review.collectors.payloads.graphify import GraphifyPayload
 
-try:
-    import networkx as nx
-except ImportError:
-    nx = None  # type: ignore[assignment]
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +103,6 @@ class GraphQueryClient:
     def _ensure_graph(self) -> nx.DiGraph:
         if self._graph is not None:
             return self._graph
-        if nx is None:
-            raise RuntimeError("networkx is required for graph queries; pip install networkx")
 
         g: nx.DiGraph = nx.DiGraph()
         for node in self._payload.nodes:

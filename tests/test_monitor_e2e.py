@@ -21,8 +21,6 @@ from nfr_review.monitor.baseline import load_baseline, save_baseline
 from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
 from nfr_review.monitor.fingerprint import InteractionFingerprint
 
-pytest.importorskip("aiohttp")
-
 MULTI_SVC = Path("tests/fixtures/otel-traces/traces-multi-service.ndjson")
 TOPOLOGY = Path("tests/fixtures/otel-traces/traces-multi-service-topology.json")
 
@@ -139,7 +137,6 @@ def _build_otlp_payload(
     }
 
 
-@pytest.mark.skip(reason="monitor not yet implemented")
 @pytest.mark.asyncio
 class TestMonitorE2E:
     """Monitor from CLI-created baseline, post live traffic, verify alerts."""

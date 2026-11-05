@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("tree_sitter_typescript")
-
 from nfr_review.collectors.nodejs_ast import NodejsAstCollector
 from nfr_review.config import Config
 from nfr_review.engine import Engine, RunResult
@@ -200,7 +198,6 @@ class TestCrossLanguageWithNodejs:
         assert len(findings) > 0, "Cross-language rules should produce Python findings"
 
     def test_cross_language_rules_still_work_for_go(self) -> None:
-        pytest.importorskip("tree_sitter_go")
         from nfr_review.collectors.go_ast import GoAstCollector
 
         go_repo = FIXTURES / "go-sample-repo"

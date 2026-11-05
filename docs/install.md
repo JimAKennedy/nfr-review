@@ -245,7 +245,7 @@ nfr-review includes optional LLM-powered analysis with three backend options:
 | Backend | Extra to install | Auth | Best for |
 |---------|-----------------|------|----------|
 | **Anthropic API** (default) | `[llm]` | `ANTHROPIC_API_KEY` | CI, production use |
-| **OpenAI-compatible** | `[llm-openai]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
+| **OpenAI-compatible** | `[llm]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
 | **Claude CLI** | None | Claude Code subscription | Local dev, no API key needed |
 
 When no backend is configured, LLM features are **skipped gracefully** — the
@@ -320,7 +320,7 @@ nfr-review report /path/to/repo
 **Option B — OpenAI-compatible (Ollama):**
 
 ```bash
-pip install "nfr-review[llm-openai]"
+pip install "nfr-review[llm]"
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -442,43 +442,26 @@ pip install nfr-review
 
 ### Optional extras
 
-nfr-review ships with Python, HCL and Dockerfile support built in. Additional
-languages and capabilities are available as optional extras.
-
-**Language packs** — install only the languages you scan:
-
-| Extra | What it adds |
-|-------|-------------|
-| `[lang-java]` | Java AST, Spring, Jacoco and JDepend collectors and rules. |
-| `[lang-go]` | Go AST and dependency collectors and rules. |
-| `[lang-rust]` | Rust AST and dependency collectors and rules. |
-| `[lang-csharp]` | C# AST and dependency collectors and rules. |
-| `[lang-nodejs]` | TypeScript/Node.js AST and dependency collectors and rules. |
-| `[lang-cpp]` | C++ AST and CMake collectors and rules. |
-| `[langs]` | All language packs above. |
-
-**Capability extras:**
+nfr-review ships with all language support, PDF generation, diagram rendering,
+and monitoring capabilities built in. The only extras are for opt-in features
+that require additional configuration:
 
 | Extra | What it adds |
 |-------|-------------|
-| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
-| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection) and [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
-| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) + [graphifyy](https://pypi.org/project/graphifyy/) + [networkx](https://pypi.org/project/networkx/) for diagram rendering and structural analysis. See the [Graphify usage guide](graphify-guide.md). |
-| `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
-| `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
-| `[full]` | Everything: all language packs + all capability extras. |
+| `[full]` | All capability extras: `[llm,scancode,otel]`. |
 | `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, anthropic, and build — everything needed for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
-# Java and Go support with LLM features
-pip install "nfr-review[lang-java,lang-go,llm]"
+# LLM features
+pip install "nfr-review[llm]"
 
-# Enterprise install — only the languages and capabilities your team uses
-pip install "nfr-review[lang-java,lang-csharp,pdf]"
+# Base install — all languages, PDF, diagrams, and monitor included
+pip install nfr-review
 
 # Or install everything at once:
 pip install "nfr-review[full]"
@@ -675,10 +658,10 @@ and CI integration — see [Dynamic Analysis](dynamic-analysis.md).
 
 nfr-review also includes an experimental production interaction monitor that
 continuously compares live traces against a UAT-derived baseline to detect
-novel service interactions. Install the monitor extra to use it:
+novel service interactions. It is included in the base install:
 
 ```bash
-pip install "nfr-review[monitor]"
+pip install nfr-review
 ```
 
 See the [Production Monitor deployment guide](monitor-deployment.md) for

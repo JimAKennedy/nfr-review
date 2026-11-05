@@ -36,13 +36,13 @@ using interactive graph queries for deeper analysis.
 |-------------|---------|-------|
 | Python | 3.11+ | Required by nfr-review |
 | nfr-review | latest | `pip install nfr-review` |
-| graphifyy | >=0.8 | Included in `[graphify]` extra |
-| networkx | >=3.0 | Included in `[graphify]` extra |
+| graphifyy | >=0.8 | Included in core `nfr-review` |
+| networkx | >=3.0 | Included in core `nfr-review` |
 
-Install nfr-review with Graphify support:
+Install nfr-review:
 
 ```bash
-pip install "nfr-review[graphify]"
+pip install nfr-review
 ```
 
 This installs both the `graphify` CLI and the `networkx` library used for
@@ -400,7 +400,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install nfr-review with Graphify
-        run: pip install "nfr-review[graphify]"
+        run: pip install nfr-review
 
       - name: Extract knowledge graph
         run: graphify update . --no-cluster
@@ -475,7 +475,7 @@ git clone https://github.com/example/my-cli-tool.git
 cd my-cli-tool
 
 # Install nfr-review with Graphify
-pip install "nfr-review[graphify]"
+pip install nfr-review
 
 # Extract the knowledge graph
 graphify update . --no-cluster
@@ -539,7 +539,7 @@ if path:
 Graphify is not installed or not on PATH. Install with:
 
 ```bash
-pip install "nfr-review[graphify]"
+pip install nfr-review
 ```
 
 Verify: `which graphify` should return a path.

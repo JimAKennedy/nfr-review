@@ -69,6 +69,6 @@ Start a long-lived OTLP HTTP receiver that compares incoming production traces a
 nfr-review monitor --baseline baseline.json --port 4318
 ```
 
-Requires the `[monitor]` extra (`pip install nfr-review[monitor]`).
+Included in the base `nfr-review` install.
 
 See [monitor-deployment.md](monitor-deployment.md) for deployment configuration and alerting setup.

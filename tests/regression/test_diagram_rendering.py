@@ -101,8 +101,6 @@ def test_corpus_diagram_rendering(
 @pytest.mark.timeout(600)
 def test_self_scan_diagram_rendering(tmp_path: Path) -> None:
     """Run architecture review on the nfr-review repo itself and assert zero mmdc failures."""
-    wp = pytest.importorskip("weasyprint", reason="weasyprint not installed")  # noqa: F841
-
     result = subprocess.run(
         [
             sys.executable,

@@ -122,13 +122,10 @@ def render_dot_to_file(
 ) -> str | None:
     """Render DOT text to a file using the graphviz Python package.
 
-    Returns the output path on success, or None if graphviz is not
-    available. Raises RuntimeError if rendering fails for other reasons.
+    Returns the output path on success, or None if the dot binary is not
+    on PATH. Raises RuntimeError if rendering fails for other reasons.
     """
-    try:
-        import graphviz  # type: ignore[import-untyped,import-not-found]
-    except ImportError:
-        return None
+    import graphviz  # type: ignore[import-untyped]
 
     from pathlib import Path
 

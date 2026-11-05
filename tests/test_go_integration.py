@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("tree_sitter_go")
-
 from nfr_review.collectors.go_ast import GoAstCollector
 from nfr_review.config import Config
 from nfr_review.engine import Engine, RunResult

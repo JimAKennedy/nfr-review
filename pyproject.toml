@@ -136,6 +136,8 @@ module = [
     "aiohttp.*",
     "graphifyy.*",
     "networkx.*",
+    "weasyprint.*",
+    "graphviz.*",
 ]
 ignore_missing_imports = true
 

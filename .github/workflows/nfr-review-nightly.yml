@@ -226,7 +226,7 @@ jobs:
             pip-${{ runner.os }}-3.12-
 
       - name: Install dependencies
-        run: pip install -e ".[dev,pdf]"
+        run: pip install -e ".[dev]"
 
       - name: Run nfr-review with OTel traces
         run: |

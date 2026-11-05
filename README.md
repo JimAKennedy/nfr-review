@@ -110,17 +110,13 @@ nfr-review run /path/to/your/repo
 Optional extras:
 
 ```bash
-pip install "nfr-review[llm]"  # LLM via Anthropic API
-pip install "nfr-review[llm-openai]"     # LLM via OpenAI-compatible APIs (Ollama, Azure, OpenRouter)
-pip install "nfr-review[pdf]"            # PDF report generation
-pip install "nfr-review[scancode]"       # license compliance scanning
-pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
-pip install "nfr-review[graphify]"       # structural analysis (god nodes, weak boundaries)
+pip install "nfr-review[llm]"       # LLM via Anthropic API
+pip install "nfr-review[scancode]"  # license compliance scanning
 ```
 
 ### Docker
 
-A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes all extras (PDF, Mermaid diagram rendering, Graphviz, LLM SDKs) and the `gh` CLI.
+A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes the `[llm]` extra and the `gh` CLI. All other features (PDF, diagrams, structural analysis) are included in core.
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
@@ -177,13 +173,13 @@ These are **not** Python packages — they are standalone binaries that some col
 | Tool | Used by | Install |
 |------|---------|---------|
 | [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
-| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install "nfr-review[graphify]"` (provides both the `graphify` CLI and `networkx`) |
+| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install nfr-review` (included in core; provides both the `graphify` CLI and `networkx`) |
 
 Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
 
 ### Optional: LLM features
 
-Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs like Ollama (`[llm-openai]` extra), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs like Ollama (no extra needed — `openai` is included in core), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
@@ -198,20 +194,15 @@ pip install nfr-review
 | Extra | What it adds |
 |-------|-------------|
 | `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
-| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
-| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
-| `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
 | `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
-| `[monitor]` | [aiohttp](https://docs.aiohttp.org/) for the `nfr-review monitor` production interaction server. |
-| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [usage guide](docs/graphify-guide.md). |
-| `[full]` | All of the above (excluding `[dev]`). |
+| `[full]` | `[llm]` + `[scancode]` + `[otel]`. |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm,pdf]"
+pip install "nfr-review[llm,scancode]"
 ```
 
 ### Development install (from source)
@@ -238,7 +229,6 @@ nfr-review run /path/to/repo
 
 **OpenAI-compatible** (Ollama, Azure OpenAI, OpenRouter):
 ```bash
-pip install "nfr-review[llm-openai]"
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -409,7 +399,7 @@ nfr-review deps --dot deps.dot --render-diagrams /path/to/target/repo
 | `--no-tree` | off | Skip transitive resolution and dependency tree (faster) |
 | `--output PATH` | — | Write Markdown dependency report to FILE |
 | `--dot PATH` | — | Write Graphviz DOT dependency graph to FILE |
-| `--render-diagrams` | off | Render DOT graph to SVG (requires `[diagrams]` extra) |
+| `--render-diagrams` | off | Render DOT graph to SVG (requires the system-level `graphviz` binary) |
 | `--max-resolve-rounds N` | `2000` | Maximum resolver iterations for dependency analysis |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 

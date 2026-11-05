@@ -1349,15 +1349,7 @@ def _render_pdf(
     quiet: bool,
 ) -> Path | None:
     """Generate PDF report with optional LLM executive summary."""
-    try:
-        from nfr_review.output.pdf import render_pdf
-    except ImportError as exc:
-        click.echo(
-            "error: weasyprint is required for PDF output — "
-            "install with 'pip install nfr-review[pdf]'",
-            err=True,
-        )
-        raise click.exceptions.Exit(1) from exc
+    from nfr_review.output.pdf import render_pdf
 
     exec_summary = None
     if not no_summary:
@@ -1959,9 +1951,7 @@ def _write_dot_output(
             click.echo(f"SVG rendered to {rendered}", err=True)
         else:
             click.echo(
-                "info: graphviz not available — install with "
-                "'pip install nfr-review[diagrams]' and ensure the "
-                "'dot' binary is on PATH",
+                "info: graphviz rendering failed — ensure the 'dot' binary is on PATH",
                 err=True,
             )
 
@@ -3209,14 +3199,9 @@ def monitor_cmd(
     traces against a UAT baseline and emits JSON alerts for novel
     interactions to stdout.
     """
-    try:
-        from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
-    except ImportError as err:
-        raise click.ClickException(
-            "monitor requires the [monitor] extra: pip install nfr-review[monitor]"
-        ) from err
-
     import asyncio
+
+    from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
 
     config = MonitorConfig(
         baseline_path=baseline_path,

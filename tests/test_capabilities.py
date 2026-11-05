@@ -37,17 +37,10 @@ class TestDetectCapabilities:
         assert caps.mmdc is False
         assert caps.dot is False
 
-    def test_weasyprint_detected_when_importable(self) -> None:
-        with patch("shutil.which", return_value=None):
-            caps = detect_capabilities()
-        # weasyprint may or may not be installed in test env;
-        # just verify the field exists and is bool
-        assert isinstance(caps.weasyprint, bool)
-
 
 class TestLogCapabilities:
     def test_logs_at_debug_level(self, caplog: pytest.LogCaptureFixture) -> None:
-        caps = Capabilities(git=True, mmdc=False, dot=True, weasyprint=False)
+        caps = Capabilities(git=True, mmdc=False, dot=True)
         with caplog.at_level(logging.DEBUG, logger="nfr_review.capabilities"):
             log_capabilities(caps)
 
@@ -55,17 +48,3 @@ class TestLogCapabilities:
         assert "git=available" in caplog.text
         assert "mmdc=not found" in caplog.text
         assert "dot=available" in caplog.text
-
-    def test_pdf_unavailable_message(self, caplog: pytest.LogCaptureFixture) -> None:
-        caps = Capabilities(weasyprint=False)
-        with caplog.at_level(logging.DEBUG, logger="nfr_review.capabilities"):
-            log_capabilities(caps)
-
-        assert "PDF generation unavailable" in caplog.text
-
-    def test_no_pdf_warning_when_available(self, caplog: pytest.LogCaptureFixture) -> None:
-        caps = Capabilities(weasyprint=True, mmdc=True)
-        with caplog.at_level(logging.DEBUG, logger="nfr_review.capabilities"):
-            log_capabilities(caps)
-
-        assert "PDF generation unavailable" not in caplog.text

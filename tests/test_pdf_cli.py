@@ -7,9 +7,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
-
-from nfr_review.cli import cli  # noqa: E402
+from nfr_review.cli import cli
 
 
 @pytest.fixture()

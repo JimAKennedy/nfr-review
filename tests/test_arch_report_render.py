@@ -7,8 +7,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from nfr_review.arch_models import (
     ArchReport,
     ArchReportMetadata,
@@ -609,31 +607,6 @@ class TestRenderArchMarkdown:
 
 
 class TestRenderArchPdf:
-    def test_returns_none_without_weasyprint(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When weasyprint is not importable, render_arch_pdf returns None."""
-        import builtins
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if name == "weasyprint":
-                raise ImportError("no weasyprint")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-        report = _make_full_report()
-        out = tmp_path / "report.pdf"
-        result = render_arch_pdf(report, out)
-        assert result is None
-        assert not out.exists()
-
-    @pytest.fixture()
-    def _requires_weasyprint(self) -> None:
-        pytest.importorskip("weasyprint")
-
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_created(self, tmp_path: Path) -> None:
         report = _make_full_report()
         out = tmp_path / "report.pdf"
@@ -644,7 +617,6 @@ class TestRenderArchPdf:
         # PDF magic bytes
         assert out.read_bytes()[:5] == b"%PDF-"
 
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_empty_report(self, tmp_path: Path) -> None:
         report = _make_empty_report()
         out = tmp_path / "report.pdf"
@@ -652,7 +624,6 @@ class TestRenderArchPdf:
         assert result == out
         assert out.read_bytes()[:5] == b"%PDF-"
 
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_without_llm_sections(self, tmp_path: Path) -> None:
         report = _make_report_without_llm_sections()
         out = tmp_path / "report.pdf"
@@ -797,11 +768,6 @@ class TestRenderArchReport:
         assert results["json"] is not None
         assert results["md"] is not None
 
-    @pytest.fixture()
-    def _requires_weasyprint(self) -> None:
-        pytest.importorskip("weasyprint")
-
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_all_three_formats(self, tmp_path: Path) -> None:
         report = _make_full_report()
         results = render_arch_report(report, tmp_path, formats=["json", "md", "pdf"])
