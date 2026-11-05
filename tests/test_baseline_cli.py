@@ -33,7 +33,7 @@ class TestBaselineCreateCLI:
 
     def test_prints_summary_to_stderr(self, tmp_path: Path) -> None:
         out = tmp_path / "bl.json"
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli, ["baseline", "create", "--otel-traces", str(MULTI_SVC_TRACES), "-o", str(out)]
         )
         assert result.exit_code == 0

@@ -129,7 +129,7 @@ class TestBaselineDiffCLI:
 
     def test_diff_stats_to_stderr(self, tmp_path: Path) -> None:
         bl = _make_partial_baseline(tmp_path)
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli,
             [
                 "baseline",

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import os
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nfr_review.collectors.payloads.graphify import (
     CommunityStats,
@@ -24,11 +20,6 @@ from nfr_review.output.summarize import (
     generate_executive_summary,
 )
 from nfr_review.output.summary_models import ExecSummary
-
-_needs_networkx = pytest.mark.skipif(
-    importlib.util.find_spec("networkx") is None,
-    reason="networkx not installed",
-)
 
 
 def _make_finding(
@@ -98,23 +89,17 @@ _VALID_LLM_RESPONSE = json.dumps(
 
 class TestGenerateExecSummary:
     def test_returns_none_when_no_api_key(self) -> None:
-        import nfr_review.llm_client as _lc
+        mock_client = MagicMock()
+        mock_client.available = False
 
-        with (
-            patch.dict(
-                os.environ,
-                {"ANTHROPIC_API_KEY": "", "NFR_LLM_PROVIDER": "anthropic"},
-                clear=False,
-            ),
-            patch.object(_lc, "_ENV_LOADED", True),
-        ):
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
         assert result is None
 
     def test_returns_exec_summary_on_valid_response(self) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -130,7 +115,7 @@ class TestGenerateExecSummary:
         fenced = f"```json\n{_VALID_LLM_RESPONSE}\n```"
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = fenced
+        mock_client.call.return_value = fenced
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -146,7 +131,7 @@ class TestGenerateExecSummary:
         )
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = wrapped
+        mock_client.call.return_value = wrapped
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -158,7 +143,7 @@ class TestGenerateExecSummary:
     def test_returns_none_on_invalid_json(self) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = "This is not JSON at all"
+        mock_client.call.return_value = "This is not JSON at all"
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -169,7 +154,7 @@ class TestGenerateExecSummary:
         bad_response = json.dumps({"verdict": "maybe", "foo": "bar"})
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = bad_response
+        mock_client.call.return_value = bad_response
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -179,7 +164,7 @@ class TestGenerateExecSummary:
     def test_returns_none_on_llm_exception(self) -> None:
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.side_effect = RuntimeError("API down")
+        mock_client.call.side_effect = RuntimeError("API down")
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result())
@@ -194,14 +179,17 @@ class TestGenerateExecSummary:
         ]
         mock_client = MagicMock()
         mock_client.available = True
-        mock_client.analyze.return_value = _VALID_LLM_RESPONSE
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
 
         with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
             result = generate_executive_summary(_make_run_result(findings))
 
         assert result is not None
-        call_args = mock_client.analyze.call_args
-        prompt_data = json.loads(call_args.kwargs["evidence_bundle"])
+        # run_analysis appends "\n\n" + bundle at the end of the prompt
+        full_arg = mock_client.call.call_args[0][0]
+        # Split on the last "\n\n" to isolate the serialized bundle
+        bundle_str = full_arg.rsplit("\n\n", 1)[1]
+        prompt_data = json.loads(bundle_str)[0]
         assert prompt_data["findings_summary"]["total_findings"] == 3
         assert "critical" in prompt_data["findings_summary"]["severity_distribution"]
 
@@ -313,7 +301,6 @@ class TestExtractGraphifyPayload:
         assert _extract_graphify_payload(result) is None
 
 
-@_needs_networkx
 class TestBuildStructuralContext:
     def test_includes_god_nodes(self) -> None:
         payload = _make_graphify_payload()
@@ -369,7 +356,6 @@ class TestBuildStructuralContext:
             assert len(ctx["critical_component_paths"]) >= 1
 
 
-@_needs_networkx
 class TestPromptDataWithStructuralContext:
     def test_prompt_includes_structural_context(self) -> None:
         result = _make_run_with_graphify()

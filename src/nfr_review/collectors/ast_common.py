@@ -33,6 +33,7 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
     "java": ("tree_sitter_java", "language"),
     "python": ("tree_sitter_python", "language"),
     "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
     "hcl": ("tree_sitter_hcl", "language"),
     "dockerfile": ("tree_sitter_dockerfile", "language"),
     "typescript": ("tree_sitter_typescript", "language_typescript"),
@@ -90,21 +91,29 @@ class BaseASTCollector(ABC):
 
     def __init__(self) -> None:
         self._parser: Parser | None = None  # type: ignore[assignment]
+        self.grammar_warnings: list[str] = []
 
     def _get_parser(self) -> Parser | None:
         """Return the tree-sitter parser, creating it on first use.
 
         Returns ``None`` if the grammar package is not installed.
+        Records a warning string in ``grammar_warnings`` so the engine can
+        surface it in ``RunResult.warnings``.
         """
         if self._parser is None:
             try:
                 self._parser = make_parser(self.language)  # type: ignore[assignment]
             except (ImportError, ModuleNotFoundError):
+                msg = (
+                    f"tree-sitter grammar for {self.language} not installed"
+                    " on this platform — collector disabled"
+                )
                 logger.warning(
                     "tree-sitter grammar for %s not installed — %s collector disabled",
                     self.language,
                     self.name,
                 )
+                self.grammar_warnings.append(msg)
                 return None
         return self._parser
 
@@ -121,6 +130,11 @@ class BaseASTCollector(ABC):
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
         if self._get_parser() is None:
+            logger.info(
+                "tree-sitter grammar for %s not installed — %s collector skipped",
+                self.language,
+                self.name,
+            )
             return []
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         exclude_test = getattr(config, "exclude_test_paths", True)

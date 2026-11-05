@@ -19,6 +19,7 @@ class NodejsCallbackErrorIgnoredRule(FieldRule[NodejsAstFilePayload]):
     evidence_kind = "nodejs-ast-file"
     payload_type = NodejsAstFilePayload
     pattern_tag = "nodejs-callback-error-ignored"
+    required_tech = ["nodejs"]
     default_confidence = 0.85
     all_clear_summary = "No ignored callback errors detected."
 

@@ -44,7 +44,7 @@ covered by UAT.
 
 ## Prerequisites
 
-- Python 3.11+ with `nfr-review[monitor]` installed (`pip install "nfr-review[monitor]"`)
+- Python 3.11+ with `nfr-review` installed (`pip install "nfr-review"`)
 - A baseline JSON file created from UAT trace data
 - (Optional) `otelcol-contrib` for collector-mediated trace forwarding
 

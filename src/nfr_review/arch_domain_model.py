@@ -23,11 +23,11 @@ from nfr_review.arch_models import (
     EntityRelationship,
 )
 from nfr_review.arch_utils import safe_read_text as _safe_read_text
-from nfr_review.llm_client import (
-    LlmUnavailableError,
-    serialize_evidence_bundle,
+from nfr_review.llm_integration import (
+    LlmClient,
+    ProviderUnavailableError,
+    run_analysis,
 )
-from nfr_review.protocols import LlmClient
 
 logger = logging.getLogger(__name__)
 
@@ -599,15 +599,15 @@ def enhance_domain_model_with_llm(
             }
         )
 
-    bundle = serialize_evidence_bundle(evidence_items, max_bytes=8192)
-
     try:
-        response = llm.analyze(
-            prompt=_LLM_DOMAIN_PROMPT,
-            evidence_bundle=bundle,
+        response = run_analysis(
+            llm,
+            _LLM_DOMAIN_PROMPT,
+            evidence_items,
             max_tokens=2048,
+            max_bundle_bytes=8192,
         )
-    except LlmUnavailableError as exc:
+    except ProviderUnavailableError as exc:
         logger.warning("LLM unavailable; returning structural model only: %s", exc)
         mermaid = generate_context_map_mermaid(contexts)
         return DomainModelSection(

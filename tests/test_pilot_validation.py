@@ -34,7 +34,7 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, object]:
     """Run the full pilot scan, return (csv_path, jsonl_path, result)."""
     csv_path = tmp_path / "findings.csv"
     jsonl_path = tmp_path / "findings.jsonl"
-    runner = CliRunner()
+    runner = CliRunner(mix_stderr=False)
     result = runner.invoke(
         cli,
         [
@@ -154,9 +154,9 @@ def test_pilot_band2_graceful_degradation(
 ) -> None:
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("NFR_LLM_BACKEND", "api")
-    import nfr_review.llm_client as _lc
+    import nfr_review.llm_integration as _lc
 
-    monkeypatch.setattr(_lc, "_ENV_LOADED", True)
+    monkeypatch.setattr(_lc, "_AI_TOOLING_AVAILABLE", True)
 
     _, jsonl_path, result = _run_pilot(tmp_path)
     assert result.exit_code in (0, 2), f"exit_code={result.exit_code} stderr={result.stderr!r}"

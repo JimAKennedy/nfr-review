@@ -23,6 +23,7 @@ ALL_TECH_KEYS: list[str] = [
     "dockerfile",
     "grpc",
     "go",
+    "rust",
     "python",
     "nodejs",
     "csharp",
@@ -180,18 +181,31 @@ def _detect_grpc(repo: Path) -> bool:
 
 
 def _detect_go(repo: Path) -> bool:
-    return _safe_exists(repo / "go.mod")
+    if _safe_exists(repo / "go.mod"):
+        return True
+    return bool(_safe_rglob(repo, "go.mod"))
+
+
+def _detect_rust(repo: Path) -> bool:
+    if _safe_exists(repo / "Cargo.toml"):
+        return True
+    return bool(_safe_rglob(repo, "Cargo.toml"))
 
 
 def _detect_python(repo: Path) -> bool:
     for name in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
         if _safe_exists(repo / name):
             return True
+    for pattern in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
+        if _safe_rglob(repo, pattern):
+            return True
     return False
 
 
 def _detect_nodejs(repo: Path) -> bool:
-    return _safe_exists(repo / "package.json")
+    if _safe_exists(repo / "package.json"):
+        return True
+    return bool(_safe_rglob(repo, "package.json"))
 
 
 def _detect_csharp(repo: Path) -> bool:
@@ -260,6 +274,7 @@ _DETECTORS: dict[str, Callable[..., bool]] = {
     "dockerfile": _detect_dockerfile,
     "grpc": _detect_grpc,
     "go": _detect_go,
+    "rust": _detect_rust,
     "python": _detect_python,
     "nodejs": _detect_nodejs,
     "csharp": _detect_csharp,

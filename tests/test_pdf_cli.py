@@ -7,14 +7,12 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
-
-from nfr_review.cli import cli  # noqa: E402
+from nfr_review.cli import cli
 
 
 @pytest.fixture()
 def fixture_repo() -> Path:
-    return Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+    return Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
 
 
 class TestReportPdfFlag:

@@ -36,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Design Maturity Score.
 - **SARIF origin tagging** — dependency-origin findings carry
   `properties.origin: "dependency"` so SARIF consumers can filter them.
-- **CI graphify integration** — `[graphify]` extra installed in test jobs so
-  graph-related tests run in CI.
+- **CI graphify integration** — graphify packages added to core so
+  graph-related tests run in CI without a separate extra.
 
 ### Fixed
 
@@ -136,8 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Monitor test framework** — 109 tests covering the full monitor pipeline:
   fingerprinting, baseline comparison, alert classification, backpressure,
   and end-to-end OTLP ingestion.
-- **`[monitor]` optional extra** — `pip install nfr-review[monitor]` for the
-  production monitor (aiohttp-based OTLP receiver).
+- **Production monitor** — aiohttp-based OTLP receiver included in core
+  (`nfr-review monitor`).
 - **Lightweight reports** — `--slim` flag for minimal Markdown-only reports
   without PDF, diagrams, or LLM summaries.
 - **Coverage at 88%** — formal coverage threshold enforced in CI.
@@ -206,8 +206,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PDF report generation** — `report` produces a PDF by default (skip with `--no-pdf`) with rendered
   Mermaid diagrams and an LLM-generated executive summary (`output/pdf.py`,
   `output/render.py`, `output/summarize.py`, `output/summary_models.py`).
-  Use `--no-summary` to omit the summary section. Requires `[pdf]` extra
-  (weasyprint-based).
+  Use `--no-summary` to omit the summary section. PDF rendering uses
+  weasyprint (included in core).
 - **Dependency analysis** — `deps` command with transitive resolution via
   resolvelib (`deps_analysis.py`, `dep_solver.py`, `deps_dev_client.py`),
   upgrade summary table, Graphviz DOT graph output (`output/dot.py`), and
@@ -250,7 +250,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Parallel collector execution** — `--workers N` flag on `run`, `report`,
   and `all` commands for concurrent evidence gathering.
 - **Multi-backend LLM support** — three backends: Anthropic API
-  (`[llm-anthropic]`), OpenAI-compatible APIs (`[llm-openai]`), and
+  (`[llm]` extra), OpenAI-compatible APIs (openai SDK included in core), and
   Claude CLI. Configured via `llm:` in `nfr-review.yaml` or env vars.
 - **`all` command** — runs architecture review (cross-repo) + NFR report
   (per-repo) in a single invocation.

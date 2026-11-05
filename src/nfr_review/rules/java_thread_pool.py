@@ -19,6 +19,7 @@ class ThreadPoolMisconfigurationRule(FieldRule[JavaAstFilePayload]):
     evidence_kind = "java-ast-file"
     payload_type = JavaAstFilePayload
     pattern_tag = "thread-pool-config"
+    required_tech = ["java"]
     default_confidence = 0.8
     all_clear_summary = "No misconfigured thread pools detected."
     all_clear_recommendation = "No action required."

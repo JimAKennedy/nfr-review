@@ -19,6 +19,7 @@ class GoErrorIgnoredRule(FieldRule[GoAstFilePayload]):
     evidence_kind = "go-ast-file"
     payload_type = GoAstFilePayload
     pattern_tag = "go-error-ignored"
+    required_tech = ["go"]
     all_clear_summary = "No ignored error return values detected."
 
     def check(self, payload: GoAstFilePayload, ev: Evidence) -> Iterable[Hit]:

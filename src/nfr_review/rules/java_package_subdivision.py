@@ -90,6 +90,7 @@ class JavaPackageSubdivisionRule(FieldRule[JavaAstFilePayload]):
     evidence_kind = "java-ast-file"
     payload_type = JavaAstFilePayload
     pattern_tag = "java-god-package"
+    required_tech = ["java"]
     default_confidence = 0.85
     all_clear_summary = "Java package structure is well-subdivided."
 

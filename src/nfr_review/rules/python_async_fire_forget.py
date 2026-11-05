@@ -19,6 +19,7 @@ class PythonAsyncFireForgetRule(FieldRule[PythonAstFilePayload]):
     evidence_kind = "python-ast-file"
     payload_type = PythonAstFilePayload
     pattern_tag = "async-fire-and-forget"
+    required_tech = ["python"]
     default_confidence = 0.85
     all_clear_summary = "No fire-and-forget async patterns detected."
     all_clear_recommendation = "No action required."

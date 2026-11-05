@@ -24,6 +24,7 @@ class ExceptionHandlingAntipatternRule(FieldRule[JavaAstFilePayload]):
     evidence_kind = "java-ast-file"
     payload_type = JavaAstFilePayload
     pattern_tag = "exception-handling"
+    required_tech = ["java"]
     default_confidence = 0.85
     all_clear_summary = "No broad exception swallowing detected."
     all_clear_recommendation = "No action required."

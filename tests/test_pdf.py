@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
 from nfr_review.output.pdf import (
@@ -19,8 +17,6 @@ from nfr_review.output.pdf import (
     render_pdf,
 )
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
-
-weasyprint = pytest.importorskip("weasyprint", reason="weasyprint not installed")
 
 
 def _make_finding(

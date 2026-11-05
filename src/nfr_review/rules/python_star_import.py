@@ -20,6 +20,7 @@ class PythonStarImportRule(FieldRule[PythonAstFilePayload]):
     evidence_kind = "python-ast-file"
     payload_type = PythonAstFilePayload
     pattern_tag = "star-import"
+    required_tech = ["python"]
     default_confidence = 0.95
     all_clear_summary = "No wildcard imports detected."
 

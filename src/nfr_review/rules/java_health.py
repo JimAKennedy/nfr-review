@@ -21,6 +21,7 @@ class HealthEndpointMissingRule(FieldRule[JavaAstFilePayload]):
     evidence_kind = "java-ast-file"
     payload_type = JavaAstFilePayload
     pattern_tag = "health-endpoint"
+    required_tech = ["java"]
     default_confidence = 0.9
     all_clear_summary = (
         "No health endpoint (/health or /actuator/health) detected in any @RestController."

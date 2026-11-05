@@ -49,6 +49,7 @@ jobs:
         run: |
           pip install -e ".[dev]"
           pip install mypy
+          pip install "ai-tooling @ git+https://github.com/TheCharlieKennedy/ai-tooling"
 
       - name: Run mypy
         run: mypy src/
@@ -70,7 +71,7 @@ jobs:
       - name: Run bandit
         run: bandit -r src/ -c pyproject.toml
 
-  test:
+  test-core:
     name: Test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
 
@@ -89,20 +90,27 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            pip-${{ runner.os }}-${{ matrix.python-version }}-
+          key: pip-core-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: pip-core-${{ runner.os }}-${{ matrix.python-version }}-
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
-          version: 'latest'
+          version: "latest"
 
       - name: Install dependencies
-        run: pip install -e ".[dev,graphify]"
+        run: pip install -e ".[dev,otel]"
 
-      - name: Run tests with coverage
-        run: pytest -n auto -m "not regression" --cov --cov-report=term-missing --cov-report=xml --junitxml=test-results.xml
+      - name: Run core tests
+        run: |
+          pytest -n auto -m "not regression" \
+            --ignore=tests/test_llm_client.py \
+            --ignore=tests/test_s04_integration.py \
+            --ignore=tests/test_pii_logging_rule.py \
+            --ignore=tests/test_adr_drift_rule.py \
+            --ignore=tests/test_adr_gap_rule.py \
+            --cov --cov-report=term-missing --cov-report=xml \
+            --junitxml=test-results.xml
 
       - name: Coverage threshold check
         run: coverage report --fail-under=88
@@ -111,7 +119,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: matrix.python-version == '3.12'
         with:
-          name: coverage-report
+          name: coverage-report-core
           path: coverage.xml
           retention-days: 14
 
@@ -124,7 +132,11 @@ jobs:
           echo "Coverage: ${COV_PCT}%"
 
       - name: Update coverage badge
-        if: matrix.python-version == '3.12' && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.COVERAGE_GIST_ID != ''
+        if: >
+          matrix.python-version == '3.12' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          env.COVERAGE_GIST_ID != ''
         uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
@@ -137,15 +149,30 @@ jobs:
           maxColorRange: 90
           namedLogo: pytest
 
-      - name: Test summary
-        if: always()
+  test-llm:
+    name: Test LLM integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
         run: |
-          echo "## Test Results (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f coverage.xml ]; then
-            COV_PCT="${{ steps.cov.outputs.pct }}"
-            echo "Coverage: ${COV_PCT:-unknown}%" >> $GITHUB_STEP_SUMMARY
-          fi
+          pip install -e ".[dev]"
+          pip install "ai-tooling @ git+https://github.com/TheCharlieKennedy/ai-tooling"
+
+      - name: Run LLM integration tests
+        run: |
+          pytest -n auto -m "not regression" \
+            tests/test_llm_client.py \
+            tests/test_s04_integration.py \
+            tests/test_pii_logging_rule.py \
+            tests/test_adr_drift_rule.py \
+            tests/test_adr_gap_rule.py
 
   license-check:
     name: License Compliance
@@ -169,6 +196,7 @@ jobs:
             Apache Software License;
             Apache Software License; MIT License;
             Apache-2.0;
+            Apache-2.0 AND MIT;
             Apache-2.0 OR BSD-2-Clause;
             BSD License;
             BSD-2-Clause;
@@ -193,7 +221,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -e .
+        run: pip install -e ".[dev]"
 
       - name: Lint docs
         run: python scripts/lint_docs.py
@@ -254,13 +282,10 @@ jobs:
         with:
           image-ref: nfr-review:cve-scan
           format: table
-          exit-code: '1'
+          exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
-          # Vulnerabilities only: secret scanning of the image flags example
-          # credentials in third-party site-packages (e.g. the anthropic SDK).
-          # Our own source is covered by the Secrets Scanning job.
           scanners: vuln
 
       - name: Scan skipped
@@ -323,7 +348,17 @@ jobs:
   ci-complete:
     name: CI Complete
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, security, test, license-check, doc-lint, secrets-scan, cve-scan, container-e2e]
+    needs:
+      - lint
+      - typecheck
+      - security
+      - test-core
+      - test-llm
+      - license-check
+      - doc-lint
+      - secrets-scan
+      - cve-scan
+      - container-e2e
     if: always()
 
     steps:
@@ -332,7 +367,8 @@ jobs:
           if [ "${{ needs.lint.result }}" == "failure" ] || \
              [ "${{ needs.typecheck.result }}" == "failure" ] || \
              [ "${{ needs.security.result }}" == "failure" ] || \
-             [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.test-core.result }}" == "failure" ] || \
+             [ "${{ needs.test-llm.result }}" == "failure" ] || \
              [ "${{ needs.license-check.result }}" == "failure" ] || \
              [ "${{ needs.doc-lint.result }}" == "failure" ]; then
             echo "CI failed"
@@ -349,7 +385,8 @@ jobs:
           echo "| Lint & Format | ${{ needs.lint.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Type Check | ${{ needs.typecheck.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security | ${{ needs.security.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ needs.test.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests | ${{ needs.test-core.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tests (LLM) | ${{ needs.test-llm.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| License Compliance | ${{ needs.license-check.result == 'success' && '✓' || '✗' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Secrets Scan | ${{ needs.secrets-scan.result == 'success' && '✓' || '⚠' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker CVE Scan | ${{ needs.cve-scan.result == 'success' && '✓' || (needs.cve-scan.result == 'skipped' && '—' || '⚠') }} |" >> $GITHUB_STEP_SUMMARY

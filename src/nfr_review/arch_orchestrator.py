@@ -206,7 +206,7 @@ def _build_dynamic_analysis(
 
 
 def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
-    """Collect enriched class data from C++, Java, Python, and Go files."""
+    """Collect enriched class data from C++, Java, Python, Go, and Rust files."""
     import importlib
 
     _COLLECTORS: list[tuple[str, str, str, str]] = [
@@ -214,6 +214,7 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
         ("nfr_review.collectors.java_ast", "JavaAstCollector", "classes", "Java"),
         ("nfr_review.collectors.python_ast", "PythonAstCollector", "classes", "Python"),
         ("nfr_review.collectors.go_ast", "GoAstCollector", "structs", "Go"),
+        ("nfr_review.collectors.rust_ast", "RustAstCollector", "structs", "Rust"),
     ]
 
     all_classes: list[dict] = []
@@ -278,7 +279,7 @@ def _init_llm_client(skip_llm: bool, cb: ProgressCallback):  # type: ignore[retu
     """Initialise and return an LLM client, or None if unavailable/skipped."""
     if skip_llm:
         return None
-    from nfr_review.llm_client import create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     client = create_llm_client()
     if client.available:

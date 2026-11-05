@@ -52,7 +52,7 @@ class TestFindsProtoFiles:
         (visible / "svc.proto").write_text('syntax = "proto3";')
         results = collector.collect(tmp_path, config=None)
         assert len(results) == 1
-        assert results[0].locator == "api/svc.proto"
+        assert results[0].locator.replace("\\", "/") == "api/svc.proto"
 
     def test_empty_repo_returns_empty(self, collector: ProtoCollector, tmp_path: Path) -> None:
         results = collector.collect(tmp_path, config=None)

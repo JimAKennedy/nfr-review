@@ -244,8 +244,8 @@ nfr-review includes optional LLM-powered analysis with three backend options:
 
 | Backend | Extra to install | Auth | Best for |
 |---------|-----------------|------|----------|
-| **Anthropic API** (default) | `[llm-anthropic]` | `ANTHROPIC_API_KEY` | CI, production use |
-| **OpenAI-compatible** | `[llm-openai]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
+| **Anthropic API** (default) | `[llm]` | `ANTHROPIC_API_KEY` | CI, production use |
+| **OpenAI-compatible** | `[llm]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
 | **Claude CLI** | None | Claude Code subscription | Local dev, no API key needed |
 
 When no backend is configured, LLM features are **skipped gracefully** — the
@@ -312,7 +312,7 @@ choose a backend interactively. You can also configure it manually:
 **Option A — Anthropic API:**
 
 ```bash
-pip install "nfr-review[llm-anthropic]"
+pip install "nfr-review[llm]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review report /path/to/repo
 ```
@@ -320,7 +320,7 @@ nfr-review report /path/to/repo
 **Option B — OpenAI-compatible (Ollama):**
 
 ```bash
-pip install "nfr-review[llm-openai]"
+pip install "nfr-review[llm]"
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -442,23 +442,26 @@ pip install nfr-review
 
 ### Optional extras
 
+nfr-review ships with all language support, PDF generation, diagram rendering,
+and monitoring capabilities built in. The only extras are for opt-in features
+that require additional configuration:
+
 | Extra | What it adds |
 |-------|-------------|
-| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
-| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection) and [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
-| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for diagram rendering. |
-| `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation. |
-| `[monitor]` | [aiohttp](https://pypi.org/project/aiohttp/) for the production interaction monitor. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
-| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [Graphify usage guide](graphify-guide.md). |
-| `[full]` | All of the above (except `scancode`): `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` + `monitor` + `graphify`. |
+| `[full]` | All capability extras: `[llm,scancode,otel]`. |
 | `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, anthropic, and build — everything needed for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf,scancode]"
+# LLM features
+pip install "nfr-review[llm]"
+
+# Base install — all languages, PDF, diagrams, and monitor included
+pip install nfr-review
 
 # Or install everything at once:
 pip install "nfr-review[full]"
@@ -655,10 +658,10 @@ and CI integration — see [Dynamic Analysis](dynamic-analysis.md).
 
 nfr-review also includes an experimental production interaction monitor that
 continuously compares live traces against a UAT-derived baseline to detect
-novel service interactions. Install the monitor extra to use it:
+novel service interactions. It is included in the base install:
 
 ```bash
-pip install "nfr-review[monitor]"
+pip install nfr-review
 ```
 
 See the [Production Monitor deployment guide](monitor-deployment.md) for

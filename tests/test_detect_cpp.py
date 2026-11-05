@@ -63,7 +63,7 @@ class TestDetectCpp:
         assert detect_technologies(tmp_path)["cpp"] is False
 
     def test_fixture_cmake_sample_repo(self) -> None:
-        fixture = Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+        fixture = Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
         result = detect_technologies(fixture)
         assert result["cpp"] is True
 

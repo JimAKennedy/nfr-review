@@ -19,6 +19,7 @@ class NodejsPromiseNoCatchRule(FieldRule[NodejsAstFilePayload]):
     evidence_kind = "nodejs-ast-file"
     payload_type = NodejsAstFilePayload
     pattern_tag = "nodejs-promise-no-catch"
+    required_tech = ["nodejs"]
     default_confidence = 0.85
     all_clear_summary = "All .then() chains have proper .catch() handling."
 

@@ -70,8 +70,9 @@ class TestPythonDepsPathFilter:
         assert len(results) == 1
         manifest_files = results[0].payload["manifest_files_found"]
         assert len(manifest_files) == 2
-        assert "requirements.txt" in manifest_files
-        assert "tests/fixtures/sample/requirements.txt" in manifest_files
+        norm_manifest_files = [f.replace("\\", "/") for f in manifest_files]
+        assert "requirements.txt" in norm_manifest_files
+        assert "tests/fixtures/sample/requirements.txt" in norm_manifest_files
 
 
 # ---------------------------------------------------------------------------

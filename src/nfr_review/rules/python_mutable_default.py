@@ -21,6 +21,7 @@ class PythonMutableDefaultRule(FieldRule[PythonAstFilePayload]):
     evidence_kind = "python-ast-file"
     payload_type = PythonAstFilePayload
     pattern_tag = "mutable-default"
+    required_tech = ["python"]
     default_confidence = 0.9
     all_clear_summary = "No mutable default arguments detected."
 

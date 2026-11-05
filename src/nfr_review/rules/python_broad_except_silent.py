@@ -21,6 +21,7 @@ class PythonBroadExceptSilentRule(FieldRule[PythonAstFilePayload]):
     evidence_kind = "python-ast-file"
     payload_type = PythonAstFilePayload
     pattern_tag = "broad-except-silent"
+    required_tech = ["python"]
     default_confidence = 0.9
     all_clear_summary = "No silently swallowed broad exceptions detected."
 

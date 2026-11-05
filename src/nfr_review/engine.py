@@ -90,13 +90,14 @@ class Engine:
         target: Path,
         config: Config,
         exclude_pats: Any,
-    ) -> tuple[str, list[Evidence], str | None]:
-        """Run a single collector and return (name, evidence, error_msg | None)."""
+    ) -> tuple[str, list[Evidence], str | None, list[str]]:
+        """Run a single collector; return (name, evidence, error_msg | None, warnings)."""
         try:
             produced = collector.collect(target, config)
         # nfr-review:skip(bare-except-catch-all, python-broad-except-silent)
         except Exception as exc:  # noqa: BLE001  # R012: never abort the run
-            return collector.name, [], f"collector {collector.name} failed: {exc}"
+            return collector.name, [], f"collector {collector.name} failed: {exc}", []
+        grammar_warnings: list[str] = list(getattr(collector, "grammar_warnings", []))
         produced = [
             e
             for e in produced
@@ -106,7 +107,7 @@ class Engine:
                 exclude_patterns=exclude_pats,
             )
         ]
-        return collector.name, produced, None
+        return collector.name, produced, None, grammar_warnings
 
     def _collect_sequential(
         self,
@@ -122,13 +123,14 @@ class Engine:
         for i, collector in enumerate(collectors, 1):
             logger.info("[%d/%d] Running collector: %s", i, total, collector.name)
             t0 = time.monotonic()
-            name, produced, err = self._run_one_collector(
+            name, produced, err, grammar_warns = self._run_one_collector(
                 collector,
                 target,
                 config,
                 exclude_pats,
             )
             elapsed = time.monotonic() - t0
+            warnings.extend(grammar_warns)
             if err:
                 logger.warning("%s", err, exc_info=False)
                 warnings.append(err)
@@ -154,8 +156,8 @@ class Engine:
     ) -> None:
         total = len(collectors)
         logger.info("Dispatching %d collectors across %d threads", total, self._workers)
-        ordered_results: list[tuple[str, list[Evidence], str | None]] = [
-            ("", [], None) for _ in range(total)
+        ordered_results: list[tuple[str, list[Evidence], str | None, list[str]]] = [
+            ("", [], None, []) for _ in range(total)
         ]
         with ThreadPoolExecutor(max_workers=self._workers) as pool:
             future_to_idx = {
@@ -166,7 +168,8 @@ class Engine:
                 idx = future_to_idx[future]
                 ordered_results[idx] = future.result()
 
-        for name, produced, err in ordered_results:
+        for name, produced, err, grammar_warns in ordered_results:
+            warnings.extend(grammar_warns)
             if err:
                 logger.warning("%s", err, exc_info=False)
                 warnings.append(err)

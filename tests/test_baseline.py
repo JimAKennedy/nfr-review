@@ -410,9 +410,9 @@ class TestCLIBaseline:
         # Suppress LLM-powered rules (adr-gap etc.) which are non-deterministic
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.setenv("NFR_LLM_BACKEND", "api")
-        import nfr_review.llm_client as _lc
+        import nfr_review.llm_integration as _lc
 
-        monkeypatch.setattr(_lc, "_ENV_LOADED", True)
+        monkeypatch.setattr(_lc, "_AI_TOOLING_AVAILABLE", True)
 
         target = tmp_path / "repo"
         target.mkdir()
@@ -421,7 +421,7 @@ class TestCLIBaseline:
         # First run: generate JSONL baseline
         jsonl_first = tmp_path / "first.jsonl"
         csv_first = tmp_path / "first.csv"
-        runner = CliRunner()
+        runner = CliRunner(mix_stderr=False)
         result1 = runner.invoke(
             cli,
             [
@@ -482,7 +482,7 @@ class TestCLIBaseline:
 
         csv_path = tmp_path / "out.csv"
         jsonl_path = tmp_path / "out.jsonl"
-        runner = CliRunner()
+        runner = CliRunner(mix_stderr=False)
         result = runner.invoke(
             cli,
             [

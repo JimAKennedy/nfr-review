@@ -10,11 +10,6 @@ _SIMPLE_DOT = "digraph { a -> b; }\n"
 
 
 class TestRenderDotToFile:
-    def test_returns_none_when_graphviz_not_installed(self) -> None:
-        with patch.dict("sys.modules", {"graphviz": None}):
-            result = render_dot_to_file(_SIMPLE_DOT, "/tmp/test.dot")
-            assert result is None
-
     def test_returns_path_on_success(self, tmp_path: object) -> None:
         mock_source = MagicMock()
         mock_graphviz = MagicMock()

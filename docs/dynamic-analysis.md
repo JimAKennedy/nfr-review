@@ -73,14 +73,13 @@ Two optional extras are available for OTel-related workflows:
 | Extra | What it adds | When to install |
 |-------|-------------|-----------------|
 | `[otel]` | OpenTelemetry API, SDK, and OTLP exporter bindings | You want to instrument your own tests to emit traces that nfr-review can consume |
-| `[monitor]` | aiohttp for the production interaction monitor | You want to run `nfr-review monitor` (see [Production Monitor](monitor-deployment.md)) |
+
+The production interaction monitor (`nfr-review monitor`) is included in the
+base install — no extra required.
 
 ```bash
 # Install with the OTel SDK (for trace generation in tests)
 pip install "nfr-review[otel]"
-
-# Install with the monitor extra (for production topology monitoring)
-pip install "nfr-review[monitor]"
 
 # Install everything
 pip install "nfr-review[full]"
@@ -465,7 +464,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install nfr-review
-        run: pip install "nfr-review[pdf]"
+        run: pip install nfr-review
 
       - name: Run dynamic analysis with pre-collected traces
         run: |

@@ -1311,7 +1311,7 @@ def _compute_score(
 
 def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
     """Detect available LLM for methodology appendix disclosure."""
-    from nfr_review.llm_client import ClaudeCliClient, create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     resolved_llm = config.llm.resolve()
     _llm_client = create_llm_client(resolved_llm)
@@ -1319,8 +1319,7 @@ def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
         return (resolved_llm.provider, resolved_llm.model)
     _default_client = create_llm_client()
     if _default_client.available:
-        _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
-        return (_prov, resolved_llm.model)
+        return (resolved_llm.provider, resolved_llm.model)
     return None
 
 
@@ -1350,15 +1349,7 @@ def _render_pdf(
     quiet: bool,
 ) -> Path | None:
     """Generate PDF report with optional LLM executive summary."""
-    try:
-        from nfr_review.output.pdf import render_pdf
-    except ImportError as exc:
-        click.echo(
-            "error: weasyprint is required for PDF output — "
-            "install with 'pip install nfr-review[pdf]'",
-            err=True,
-        )
-        raise click.exceptions.Exit(1) from exc
+    from nfr_review.output.pdf import render_pdf
 
     exec_summary = None
     if not no_summary:
@@ -1960,9 +1951,7 @@ def _write_dot_output(
             click.echo(f"SVG rendered to {rendered}", err=True)
         else:
             click.echo(
-                "info: graphviz not available — install with "
-                "'pip install nfr-review[diagrams]' and ensure the "
-                "'dot' binary is on PATH",
+                "info: graphviz rendering failed — ensure the 'dot' binary is on PATH",
                 err=True,
             )
 
@@ -2463,7 +2452,8 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
-    click.echo("Detecting technologies...", err=True)
+    if not dry_run:
+        click.echo("Detecting technologies...", err=True)
     try:
         detected = detect_technologies(target)
     except Exception as e:  # noqa: BLE001
@@ -2493,14 +2483,15 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         out_path.write_text(yaml_text, encoding="utf-8")
         click.echo(f"Wrote {out_path}", err=True)
 
-    # Summary of detected technologies
-    if active_tech:
-        click.echo(
-            f"Detected: {', '.join(sorted(active_tech.keys()))}",
-            err=True,
-        )
-    else:
-        click.echo("No technologies detected.", err=True)
+    # Summary of detected technologies — only in interactive (non-dry-run) mode
+    if not dry_run:
+        if active_tech:
+            click.echo(
+                f"Detected: {', '.join(sorted(active_tech.keys()))}",
+                err=True,
+            )
+        else:
+            click.echo("No technologies detected.", err=True)
 
 
 def _banner_arch(
@@ -2688,7 +2679,7 @@ def _warn_llm_cost(no_arch: bool, no_llm: bool, quiet: bool) -> None:
     """Warn about LLM cost if architecture analysis will use LLM calls."""
     if no_arch or no_llm or quiet:
         return
-    from nfr_review.llm_client import create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     if create_llm_client().available:
         click.echo(
@@ -3208,14 +3199,9 @@ def monitor_cmd(
     traces against a UAT baseline and emits JSON alerts for novel
     interactions to stdout.
     """
-    try:
-        from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
-    except ImportError as err:
-        raise click.ClickException(
-            "monitor requires the [monitor] extra: pip install nfr-review[monitor]"
-        ) from err
-
     import asyncio
+
+    from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
 
     config = MonitorConfig(
         baseline_path=baseline_path,

@@ -177,8 +177,9 @@ class MonitorEngine:
         )
 
         loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, self._request_shutdown)
+        if sys.platform != "win32":
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                loop.add_signal_handler(sig, self._request_shutdown)
 
         try:
             await self._window_loop()

@@ -98,6 +98,7 @@ class PythonPackageSubdivisionRule(FieldRule[PythonAstFilePayload]):
     evidence_kind = "python-ast-file"
     payload_type = PythonAstFilePayload
     pattern_tag = "python-god-package"
+    required_tech = ["python"]
     default_confidence = 0.85
     all_clear_summary = "Python package structure is well-subdivided."
 

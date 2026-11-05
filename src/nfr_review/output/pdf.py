@@ -598,8 +598,7 @@ def render_pdf(
 ) -> Path:
     """Render a complete PDF report from scan results.
 
-    Returns the output path on success. Raises ``ImportError`` if weasyprint
-    is not installed.
+    Returns the output path on success.
     """
     from nfr_review.output.classify import partition_findings, partition_findings_by_origin
 
@@ -681,7 +680,7 @@ def render_pdf(
 <body>{"".join(sections)}</body>
 </html>"""
 
-    import weasyprint  # type: ignore[import-not-found,import-untyped]
+    import weasyprint  # type: ignore[import-untyped]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     weasyprint.HTML(string=html_doc).write_pdf(str(output_path))

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,9 @@ class TestSetupScriptStructure:
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="execute bits are not meaningful on Windows"
+    )
     def test_is_executable(self) -> None:
         mode = SETUP_SCRIPT.stat().st_mode
         assert mode & stat.S_IXUSR, "setup.sh is missing owner-execute bit"
@@ -69,6 +73,9 @@ class TestSetupAllScriptStructure:
         )
         assert result.returncode == 0, f"bash -n failed:\n{result.stderr}"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="execute bits are not meaningful on Windows"
+    )
     def test_is_executable(self) -> None:
         mode = SETUP_ALL_SCRIPT.stat().st_mode
         assert mode & stat.S_IXUSR, "setup-all.sh is missing owner-execute bit"

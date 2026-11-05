@@ -82,7 +82,7 @@ class TestCollectOnFixtures:
         (tmp_path / "src" / "main.cs").write_text("class Y {}\n")
         results = collector.collect(tmp_path, config=None)
         assert len(results) == 1
-        assert results[0].locator == "src/main.cs"
+        assert results[0].locator.replace("\\", "/") == "src/main.cs"
 
 
 class TestCatchBlockExtraction:

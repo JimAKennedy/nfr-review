@@ -396,10 +396,13 @@ def test_non_skipped_rule_results_not_emitted(tmp_path: Path):
 
 
 def test_oserror_wrapped_as_output_error():
+    from unittest.mock import patch
+
     result = _make_result(findings=[_make_finding()])
-    bad_path = Path("/dev/null/impossible/out.jsonl")
-    with pytest.raises(OutputError, match="failed to write JSONL"):
-        write_jsonl(result, bad_path)
+    out = Path("out.jsonl")
+    with patch.object(Path, "open", side_effect=OSError("disk full")):
+        with pytest.raises(OutputError, match="failed to write JSONL"):
+            write_jsonl(result, out)
 
 
 # --- Ordering ---

@@ -97,6 +97,7 @@ class GoPackageSubdivisionRule(FieldRule[GoAstFilePayload]):
     evidence_kind = "go-ast-file"
     payload_type = GoAstFilePayload
     pattern_tag = "go-god-package"
+    required_tech = ["go"]
     default_confidence = 0.85
     all_clear_summary = "Go package structure is well-subdivided."
 

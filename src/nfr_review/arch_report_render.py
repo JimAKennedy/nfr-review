@@ -215,7 +215,7 @@ def _render_mermaid_to_img(
 def render_arch_json(report: ArchReport, output_path: Path) -> Path:
     """Serialize *report* as indented JSON and write to *output_path*."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report.model_dump_json(indent=2) + "\n")
+    output_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
     logger.info("JSON report written to %s", output_path)
     return output_path
 
@@ -602,7 +602,7 @@ def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
 
     content = "\n".join(s for s in sections if s)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(content)
+    output_path.write_text(content, encoding="utf-8")
     logger.info("Markdown report written to %s", output_path)
     return output_path
 
@@ -1001,14 +1001,9 @@ def _pdf_recommendations_html(report: ArchReport) -> str:
 def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
     """Render *report* as a PDF document using weasyprint.
 
-    Returns the output path on success, or ``None`` if weasyprint is not
-    importable.
+    Returns the output path on success.
     """
-    try:
-        import weasyprint  # type: ignore[import-not-found,import-untyped]
-    except ImportError:
-        logger.warning("weasyprint not installed; skipping PDF generation")
-        return None
+    import weasyprint  # type: ignore[import-untyped]
 
     # High-res diagram PNGs can exceed Pillow's default decompression-bomb
     # threshold.  Raise it so weasyprint doesn't choke on large images.
@@ -1084,9 +1079,7 @@ def render_arch_report(
 ) -> dict[str, Path | None]:
     """Render *report* in multiple formats to *output_dir*.
 
-    *formats* defaults to ``["json", "md"]``.  ``"pdf"`` is included only if
-    weasyprint is importable (or if explicitly requested — in which case it
-    will be ``None`` in the result when weasyprint is unavailable).
+    *formats* defaults to ``["json", "md", "pdf"]``.
 
     Filenames include the repo name(s) and generation timestamp, e.g.
     ``opentelemetry-demo-2026-05-26T1230-architecture-report.pdf``.
@@ -1095,13 +1088,7 @@ def render_arch_report(
     format could not be produced).
     """
     if formats is None:
-        formats = ["json", "md"]
-        try:
-            import weasyprint  # type: ignore[import-not-found,import-untyped] # noqa: F401
-
-            formats.append("pdf")
-        except ImportError:
-            pass
+        formats = ["json", "md", "pdf"]
 
     output_dir.mkdir(parents=True, exist_ok=True)
     prefix = _build_filename_prefix(report)
@@ -1134,7 +1121,7 @@ def render_arch_report(
         orphans = detect_orphan_nodes(report.diagrams)
         orphan_md = render_orphans_markdown(orphans)
         orphan_path = output_dir / f"{prefix}-orphan-nodes.md"
-        orphan_path.write_text(orphan_md)
+        orphan_path.write_text(orphan_md, encoding="utf-8")
         results["orphans"] = orphan_path
         if orphans:
             logger.info(

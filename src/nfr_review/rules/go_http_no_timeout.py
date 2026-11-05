@@ -21,6 +21,7 @@ class GoHttpNoTimeoutRule(FieldRule[GoAstFilePayload]):
     evidence_kind = "go-ast-file"
     payload_type = GoAstFilePayload
     pattern_tag = "go-http-no-timeout"
+    required_tech = ["go"]
     default_confidence = 0.9
     all_clear_summary = "No HTTP calls without timeouts detected."
 

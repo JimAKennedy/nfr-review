@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 
 import pydantic
 
-from nfr_review.llm_client import LlmUnavailableError, create_llm_client, extract_json
+from nfr_review.llm_integration import (
+    ProviderUnavailableError,
+    create_llm_client,
+    extract_json,
+)
 from nfr_review.output.summary_models import ExecSummary
 
 if TYPE_CHECKING:
@@ -253,6 +257,8 @@ def generate_executive_summary(
 
     Returns ``None`` when no LLM backend is configured or available.
     """
+    from nfr_review.llm_integration import run_analysis
+
     client = create_llm_client()
     if not client.available:
         logger.info(
@@ -260,15 +266,16 @@ def generate_executive_summary(
         )
         return None
 
-    prompt_data = _build_prompt_data(nfr_result, hygiene_result, pytest_result, deps_summary)
+    prompt_data_str = _build_prompt_data(
+        nfr_result, hygiene_result, pytest_result, deps_summary
+    )
+    # _build_prompt_data returns a JSON string; parse it so run_analysis can
+    # re-serialize it into the evidence bundle alongside the prompt.
+    evidence_items = [json.loads(prompt_data_str)]
 
     try:
-        raw = client.analyze(
-            prompt=_SYSTEM_PROMPT,
-            evidence_bundle=prompt_data,
-            max_tokens=2048,
-        )
-    except LlmUnavailableError as exc:
+        raw = run_analysis(client, _SYSTEM_PROMPT, evidence_items, max_tokens=2048)
+    except ProviderUnavailableError as exc:
         logger.warning("LLM unavailable for executive summary: %s", exc)
         return None
     except Exception:  # noqa: BLE001

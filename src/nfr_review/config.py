@@ -348,3 +348,10 @@ __all__ = [
     "ScoringConfig",
     "load_config",
 ]
+
+try:
+    from ai_tooling.config import ProviderConfig as _ProviderConfig  # noqa: F401
+
+    __all__ = list(__all__)
+except ImportError:
+    pass

@@ -45,7 +45,7 @@ class TestDetection:
         assert "terraform" in ALL_TECH_KEYS
 
     def test_all_tech_keys_count(self) -> None:
-        assert len(ALL_TECH_KEYS) == 18
+        assert len(ALL_TECH_KEYS) == 19
 
 
 class TestCollectSampleRepo:
@@ -214,14 +214,21 @@ class TestEdgeCases:
     def test_unreadable_file_skipped(
         self, collector: TerraformCollector, tmp_path: Path
     ) -> None:
+        from unittest.mock import patch
+
         f = tmp_path / "secret.tf"
         f.write_text('resource "aws_instance" "x" { ami = "abc" }\n')
-        f.chmod(0o000)
-        try:
+
+        original_read_bytes = Path.read_bytes
+
+        def _raise_for_secret(self: Path) -> bytes:
+            if self == f:
+                raise OSError("Permission denied")
+            return original_read_bytes(self)
+
+        with patch.object(Path, "read_bytes", _raise_for_secret):
             results = collector.collect(tmp_path, config=None)
-            assert results == []
-        finally:
-            f.chmod(0o644)
+        assert results == []
 
     def test_collector_name_and_version(self, collector: TerraformCollector) -> None:
         assert collector.name == "terraform"
