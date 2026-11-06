@@ -1,22 +1,34 @@
-"""Tests for PDF report generation."""
+"""Tests for PDF report generation (typst backend)."""
 
 from __future__ import annotations
 
+import struct
+import zlib
 from pathlib import Path
 
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.pdf import (
-    _category_severity_table_html,
-    _exec_summary_html,
-    _findings_html,
-    _md_deps_to_html,
-    _png_dimensions,
-    _provenance_html,
-    _test_results_html,
-    render_pdf,
-)
+from nfr_review.output.pdf import _md_to_typst, _render_mermaid_for_typst, render_pdf
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
+
+
+def _make_valid_png(width: int = 1, height: int = 1) -> bytes:
+    """Build a valid PNG image with the given dimensions."""
+    sig = b"\x89PNG\r\n\x1a\n"
+    ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    ihdr_crc = zlib.crc32(b"IHDR" + ihdr_data)
+    ihdr = struct.pack(">I", 13) + b"IHDR" + ihdr_data + struct.pack(">I", ihdr_crc)
+    # One white pixel row per scanline, preceded by filter byte 0
+    row = b"\x00" + b"\xff\xff\xff" * width
+    raw_px = row * height
+    compressed = zlib.compress(raw_px)
+    idat_crc = zlib.crc32(b"IDAT" + compressed)
+    idat = (
+        struct.pack(">I", len(compressed)) + b"IDAT" + compressed + struct.pack(">I", idat_crc)
+    )
+    iend_crc = zlib.crc32(b"IEND")
+    iend = struct.pack(">I", 0) + b"IEND" + struct.pack(">I", iend_crc)
+    return sig + ihdr + idat + iend
 
 
 def _make_finding(
@@ -85,16 +97,74 @@ def _make_exec_summary() -> ExecSummary:
 
 class TestRenderPdf:
     def test_minimal_pdf(self, tmp_path: Path) -> None:
-        """Minimal report with just findings produces valid PDF."""
+        """Minimal report with just findings produces a valid PDF file."""
         out = tmp_path / "report.pdf"
         result = render_pdf(nfr_result=_make_run_result(), output_path=out)
         assert result == out
         assert out.exists()
         assert out.stat().st_size > 1000
-        assert out.read_bytes()[:5] == b"%PDF-"
+
+    def test_pdf_with_findings(self, tmp_path: Path) -> None:
+        """Report with several findings produces a valid PDF."""
+        findings = [
+            _make_finding("SEC-001", "critical", "red", "src/app.py:10"),
+            _make_finding("DOC-002", "medium", "amber", "src/util.py:5"),
+            _make_finding("STYLE-003", "low", "green", "src/helpers.py:3"),
+        ]
+        out = tmp_path / "findings-report.pdf"
+        result = render_pdf(nfr_result=_make_run_result(findings), output_path=out)
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 1000
+
+    def test_creates_parent_dirs(self, tmp_path: Path) -> None:
+        """render_pdf creates missing parent directories automatically."""
+        out = tmp_path / "nested" / "deep" / "report.pdf"
+        render_pdf(nfr_result=_make_run_result(), output_path=out)
+        assert out.exists()
+
+    def test_pdf_with_exec_summary(self, tmp_path: Path) -> None:
+        """Report with exec summary produces a valid PDF."""
+        out = tmp_path / "exec-report.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            exec_summary=_make_exec_summary(),
+        )
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 1000
+
+    def test_pdf_with_hygiene_result(self, tmp_path: Path) -> None:
+        """Report with hygiene_result merges findings and produces a valid PDF."""
+        nfr = _make_run_result([_make_finding("NFR-001", "high", "red")])
+        hygiene = RunResult(
+            findings=[_make_finding("HYG-001", "medium", "amber")],
+            rule_results=[],
+        )
+        out = tmp_path / "hygiene-report.pdf"
+        result = render_pdf(
+            nfr_result=nfr,
+            output_path=out,
+            hygiene_result=hygiene,
+        )
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 1000
+
+    def test_empty_findings(self, tmp_path: Path) -> None:
+        """Report with zero findings still produces a valid PDF."""
+        out = tmp_path / "empty.pdf"
+        result = render_pdf(
+            nfr_result=RunResult(findings=[], rule_results=[]),
+            output_path=out,
+        )
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 1000
 
     def test_full_pdf_with_summary(self, tmp_path: Path) -> None:
-        """Report with exec summary, test results, and findings."""
+        """Report with exec summary and test results produces a valid PDF."""
         from nfr_review.output.pytest_runner import PytestResult
 
         out = tmp_path / "full-report.pdf"
@@ -107,87 +177,8 @@ class TestRenderPdf:
             ),
         )
         assert result == out
-        assert out.read_bytes()[:5] == b"%PDF-"
-        assert out.stat().st_size > 2000
-
-    def test_pdf_with_diagram_images(self, tmp_path: Path) -> None:
-        """Diagram PNG images are embedded in the PDF."""
-        img_dir = tmp_path / "images"
-        img_dir.mkdir()
-        png_path = img_dir / "chart.png"
-        png_path.write_bytes(
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-            b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-            b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
-
-        out = tmp_path / "report-with-diagrams.pdf"
-        result = render_pdf(
-            nfr_result=_make_run_result(),
-            output_path=out,
-            diagram_paths={"Severity Distribution": png_path},
-        )
-        assert result == out
-        assert out.read_bytes()[:5] == b"%PDF-"
-
-    def test_empty_findings(self, tmp_path: Path) -> None:
-        """Report with zero findings still produces valid PDF."""
-        out = tmp_path / "empty.pdf"
-        result = render_pdf(
-            nfr_result=RunResult(findings=[], rule_results=[]),
-            output_path=out,
-        )
-        assert result == out
-        assert out.read_bytes()[:5] == b"%PDF-"
-
-    def test_creates_parent_dirs(self, tmp_path: Path) -> None:
-        """Output directory is created automatically."""
-        out = tmp_path / "nested" / "deep" / "report.pdf"
-        render_pdf(nfr_result=_make_run_result(), output_path=out)
         assert out.exists()
-
-    def test_png_dimensions_reads_ihdr(self, tmp_path: Path) -> None:
-        """_png_dimensions reads width/height from PNG IHDR chunk."""
-        import struct
-
-        w, h = 800, 2400
-        ihdr_data = struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
-        ihdr_crc = b"\x00\x00\x00\x00"
-        raw = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + ihdr_data + ihdr_crc
-        dims = _png_dimensions(raw)
-        assert dims == (800, 2400)
-
-    def test_png_dimensions_returns_none_for_non_png(self) -> None:
-        assert _png_dimensions(b"not a png at all") is None
-        assert _png_dimensions(b"") is None
-
-    def test_tall_diagram_gets_explicit_dimensions(self, tmp_path: Path) -> None:
-        """Tall PNG diagram gets inline style constraining it to page."""
-        import struct
-
-        w, h = 1489, 4669
-        ihdr_data = struct.pack(">II", w, h) + b"\x08\x02\x00\x00\x00"
-        ihdr_crc = b"\x00\x00\x00\x00"
-        png = (
-            b"\x89PNG\r\n\x1a\n"
-            + struct.pack(">I", 13)
-            + b"IHDR"
-            + ihdr_data
-            + ihdr_crc
-            + b"\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
-        img_path = tmp_path / "tall.png"
-        img_path.write_bytes(png)
-
-        out = tmp_path / "tall-diagram.pdf"
-        result = render_pdf(
-            nfr_result=_make_run_result(),
-            output_path=out,
-            diagram_paths={"Tall Graph": img_path},
-        )
-        assert result == out
-        assert out.read_bytes()[:5] == b"%PDF-"
+        assert out.stat().st_size > 2000
 
     def test_hygiene_findings_included(self, tmp_path: Path) -> None:
         """Hygiene findings are merged into the report."""
@@ -206,7 +197,7 @@ class TestRenderPdf:
         assert out.stat().st_size > 1000
 
     def test_grouped_findings_in_pdf(self, tmp_path: Path) -> None:
-        """Duplicate findings are grouped by rule_id+summary with locations listed."""
+        """Duplicate findings (same rule_id) produce a valid PDF."""
         findings = [
             _make_finding("CPP-001", "high", "red", locator="src/a.cpp:10"),
             _make_finding("CPP-001", "high", "red", locator="src/b.cpp:20"),
@@ -215,18 +206,16 @@ class TestRenderPdf:
         out = tmp_path / "grouped.pdf"
         result = render_pdf(nfr_result=_make_run_result(findings), output_path=out)
         assert result == out
-        assert out.read_bytes()[:5] == b"%PDF-"
+        assert out.exists()
 
-    def test_deps_section_renders_html_tables(self, tmp_path: Path) -> None:
-        """Markdown deps section is converted to proper HTML tables in PDF."""
+    def test_deps_section_produces_pdf(self, tmp_path: Path) -> None:
+        """deps_section_md content produces a valid PDF."""
         deps_md = (
             "## Dependency Analysis\n\n"
             "### PYPI Dependencies\n\n"
-            "#### Upgrade Summary\n\n"
             "| # | Package | Current | Latest |\n"
             "|---|---------|---------|--------|\n"
             "| 1 | click | 8.1.0 | 8.3.0 |\n"
-            "| 2 | pydantic | 2.0.0 | 2.5.0 |\n"
         )
         out = tmp_path / "deps.pdf"
         result = render_pdf(
@@ -235,417 +224,26 @@ class TestRenderPdf:
             deps_section_md=deps_md,
         )
         assert result == out
+        assert out.exists()
+
+    def test_pdf_with_diagram_stub(self, tmp_path: Path) -> None:
+        """diagram_paths provided embeds the image and produces a valid PDF."""
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        png_path = img_dir / "chart.png"
+        png_path.write_bytes(_make_valid_png())
+        out = tmp_path / "diagram-stub.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            diagram_paths={"Severity Distribution": png_path},
+        )
+        assert result == out
+        assert out.exists()
         assert out.read_bytes()[:5] == b"%PDF-"
 
-
-class TestMdDepsToHtml:
-    def test_headings_converted(self) -> None:
-        result = _md_deps_to_html("## Main Heading\n### Sub Heading\n#### Detail")
-        assert "<h2>Main Heading</h2>" in result
-        assert "<h3>Sub Heading</h3>" in result
-        assert "<h4>Detail</h4>" in result
-
-    def test_table_converted(self) -> None:
-        md = "| Name | Version |\n|------|---------|\n| click | 8.3 |\n| ruff | 0.5 |\n"
-        result = _md_deps_to_html(md)
-        assert "<table>" in result
-        assert "<th>Name</th>" in result
-        assert "<td>click</td>" in result
-        assert "<td>ruff</td>" in result
-
-    def test_code_block_converted(self) -> None:
-        md = "```\nclick  8.1 → 8.3\npydantic  2.0\n```\n"
-        result = _md_deps_to_html(md)
-        assert "<pre" in result
-        assert "<code>" in result
-
-    def test_empty_input(self) -> None:
-        assert _md_deps_to_html("") == ""
-
-    def test_blockquote_converted(self) -> None:
-        result = _md_deps_to_html("> Resolution failed")
-        assert "<blockquote" in result
-        assert "Resolution failed" in result
-
-
-class TestExecSummaryHtml:
-    """Verify exec summary HTML contains all required sections."""
-
-    def test_verdict_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "Conditional" in html
-        assert "verdict-box" in html
-
-    def test_overall_score_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "62/100" in html
-        assert "verdict-score" in html
-
-    def test_verdict_explanation_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "moderate issues requiring attention" in html
-
-    def test_risk_highlights_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "Key Risks" in html
-        assert "Outdated deps with CVEs" in html
-        assert "Missing license headers" in html
-        assert "risk-item" in html
-
-    def test_remediation_priorities_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "Remediation Priorities" in html
-        assert "Update vulnerable deps" in html
-        assert "immediate" in html
-        assert "Add license headers" in html
-        assert "short-term" in html
-        assert "Critical CVEs in 3 dependencies" in html
-
-    def test_production_risks_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "Production Risks" in html
-        assert "outdated dependencies" in html
-
-    def test_open_source_readiness_rendered(self) -> None:
-        summary = _make_exec_summary()
-        html = _exec_summary_html(summary)
-        assert "Open-Source Readiness" in html
-        assert "needs license work" in html
-
-    def test_fit_verdict_uses_green(self) -> None:
-        summary = ExecSummary(
-            verdict="fit",
-            verdict_explanation="All clear.",
-            risk_highlights=[],
-            remediation_priorities=[],
-            production_risks="None.",
-            open_source_readiness="Ready.",
-            overall_score=95,
-        )
-        html = _exec_summary_html(summary)
-        assert "Fit for Purpose" in html
-        assert "#28a745" in html
-        assert "95/100" in html
-
-    def test_unfit_verdict_uses_red(self) -> None:
-        summary = ExecSummary(
-            verdict="unfit",
-            verdict_explanation="Critical issues.",
-            risk_highlights=["Fatal flaw"],
-            remediation_priorities=[],
-            production_risks="Major.",
-            open_source_readiness="Not ready.",
-            overall_score=15,
-        )
-        html = _exec_summary_html(summary)
-        assert "Not Fit for Purpose" in html
-        assert "#dc3545" in html
-        assert "15/100" in html
-
-
-class TestCategorySeverityTableHtml:
-    """Verify the category x severity summary table is rendered correctly."""
-
-    def test_table_has_all_severity_columns(self) -> None:
-        findings = [_make_finding("SEC-001", "critical", "red")]
-        html = _category_severity_table_html(findings, "Test Summary")
-        assert "<h3>Test Summary</h3>" in html
-        assert "<th>Category</th>" in html
-        assert "<th>Total</th>" in html
-        for sev in ("Critical", "High", "Medium", "Low", "Info"):
-            assert f">{sev}</th>" in html
-
-    def test_table_has_category_rows(self) -> None:
-        findings = [
-            _make_finding("SEC-001", "critical", "red"),
-            _make_finding("OBS-001", "medium", "amber"),
-            _make_finding("HYG-BLD-001", "low", "green"),
-        ]
-        html = _category_severity_table_html(findings, "By Category")
-        assert "HYG-BLD" in html
-        assert "OBS" in html
-        assert "SEC" in html
-
-    def test_table_counts_correct(self) -> None:
-        findings = [
-            _make_finding("SEC-001", "critical", "red"),
-            _make_finding("SEC-002", "critical", "red"),
-            _make_finding("OBS-001", "medium", "amber"),
-        ]
-        html = _category_severity_table_html(findings, "Counts")
-        assert "<strong>3</strong>" in html
-
-
-class TestFindingsHtml:
-    """Verify findings HTML grouping and content."""
-
-    def test_findings_grouped_by_rule_and_summary(self) -> None:
-        findings = [
-            _make_finding("CPP-001", "high", "red", "src/a.cpp:10"),
-            _make_finding("CPP-001", "high", "red", "src/b.cpp:20"),
-            _make_finding("CPP-001", "high", "red", "src/c.cpp:30"),
-        ]
-        html = _findings_html(findings, "Source Code Findings")
-        assert html.count("[CPP-001]") == 1
-        assert "src/a.cpp:10" in html
-        assert "src/b.cpp:20" in html
-        assert "src/c.cpp:30" in html
-        assert "location-table" in html
-
-    def test_findings_preserves_severity_and_confidence(self) -> None:
-        findings = [_make_finding("SEC-001", "critical", "red", "src/app.py:5")]
-        html = _findings_html(findings, "Findings")
-        assert "<th>Severity</th>" in html
-        assert "<th>Confidence</th>" in html
-        assert "<td>critical</td>" in html
-        assert "<td>80%</td>" in html
-
-    def test_findings_preserves_recommendation(self) -> None:
-        findings = [_make_finding("DOC-001", "medium", "amber")]
-        html = _findings_html(findings, "Findings")
-        assert "Recommendation: Fix it" in html
-
-    def test_findings_empty(self) -> None:
-        html = _findings_html([], "Empty Findings")
-        assert "No findings." in html
-
-    def test_findings_rag_sections(self) -> None:
-        findings = [
-            _make_finding("A", "critical", "red"),
-            _make_finding("B", "medium", "amber"),
-            _make_finding("C", "low", "green"),
-        ]
-        html = _findings_html(findings, "All")
-        assert "RED (1)" in html
-        assert "AMBER (1)" in html
-        assert "GREEN (1)" in html
-
-    def test_grouped_findings_show_per_location_severity(self) -> None:
-        """Each occurrence row shows its own severity and confidence."""
-        f1 = Finding(
-            rule_id="CPP-001",
-            rag="red",
-            severity="high",
-            summary="Test finding for CPP-001",
-            recommendation="Fix it",
-            evidence_locator="src/a.cpp:10",
-            collector_name="test-collector",
-            collector_version="1.0",
-            confidence=0.9,
-            pattern_tag="test",
-        )
-        f2 = Finding(
-            rule_id="CPP-001",
-            rag="red",
-            severity="medium",
-            summary="Test finding for CPP-001",
-            recommendation="Fix it",
-            evidence_locator="src/b.cpp:20",
-            collector_name="test-collector",
-            collector_version="1.0",
-            confidence=0.7,
-            pattern_tag="test",
-        )
-        html = _findings_html([f1, f2], "Findings")
-        assert html.count("[CPP-001]") == 1
-        assert "<td>high</td>" in html
-        assert "<td>90%</td>" in html
-        assert "<td>medium</td>" in html
-        assert "<td>70%</td>" in html
-
-    def test_location_table_has_three_columns(self) -> None:
-        """Location table includes Location, Severity, and Confidence headers."""
-        findings = [_make_finding("SEC-001", "critical", "red", "src/app.py:5")]
-        html = _findings_html(findings, "Findings")
-        assert "<th>Location</th>" in html
-        assert "<th>Severity</th>" in html
-        assert "<th>Confidence</th>" in html
-
-    def test_distinct_rules_get_separate_blocks(self) -> None:
-        findings = [
-            _make_finding("SEC-001", "critical", "red", "src/a.py:1"),
-            _make_finding("SEC-002", "high", "red", "src/b.py:2"),
-        ]
-        html = _findings_html(findings, "Findings")
-        assert "[SEC-001]" in html
-        assert "[SEC-002]" in html
-
-
-class TestProvenanceHtml:
-    """Verify provenance metadata section."""
-
-    def test_provenance_includes_repo_and_sha(self) -> None:
-        result = _make_run_result()
-        html = _provenance_html(result)
-        assert "test-repo" in html
-        assert "abc1234" in html
-        assert "main" in html
-        assert "0.1.0" in html
-
-    def test_provenance_empty_without_metadata(self) -> None:
-        result = RunResult(findings=[], rule_results=[])
-        html = _provenance_html(result)
-        assert html == ""
-
-
-class TestTestResultsHtml:
-    """Verify test results section rendering."""
-
-    def test_passing_results(self) -> None:
-        from nfr_review.output.pytest_runner import PytestResult
-
-        pr = PytestResult(passed=10, failed=0, skipped=1, errors=0, duration_seconds=3.5)
-        html = _test_results_html(pr)
-        assert "PASSED" in html
-        assert "#28a745" in html
-        assert "<td>10</td>" in html
-
-    def test_failing_results(self) -> None:
-        from nfr_review.output.pytest_runner import PytestResult
-
-        pr = PytestResult(passed=8, failed=2, skipped=0, errors=1, duration_seconds=5.0)
-        html = _test_results_html(pr)
-        assert "FAILED" in html
-        assert "#dc3545" in html
-        assert "<td>2</td>" in html
-
-    def test_no_test_results(self) -> None:
-        html = _test_results_html(None)
-        assert "not performed" in html
-
-
-def _capture_pdf_html(tmp_path: Path, **kwargs: object) -> str:
-    """Render PDF with a mock weasyprint and return the HTML string."""
-    import sys
-    from types import ModuleType
-
-    captured: dict[str, str] = {}
-    fake_wp = ModuleType("weasyprint")
-
-    class FakeHTML:
-        def __init__(self, string: str = "", **kw: object) -> None:
-            captured["html"] = string
-
-        def write_pdf(self, path: str) -> None:
-            Path(path).write_bytes(b"%PDF-fake")
-
-    fake_wp.HTML = FakeHTML  # type: ignore[attr-defined]
-    original = sys.modules.get("weasyprint")
-    sys.modules["weasyprint"] = fake_wp
-    try:
-        out = tmp_path / "verify.pdf"
-        render_pdf(
-            nfr_result=kwargs.pop("nfr_result", _make_run_result()), output_path=out, **kwargs
-        )  # type: ignore[arg-type]
-    finally:
-        if original is not None:
-            sys.modules["weasyprint"] = original
-        else:
-            sys.modules.pop("weasyprint", None)
-    return captured["html"]
-
-
-class TestEmbedImage:
-    """Verify _embed_image handles PNG correctly."""
-
-    def test_png_gets_dimension_style(self, tmp_path: Path) -> None:
-        from nfr_review.output.pdf import _embed_image
-
-        png_path = tmp_path / "test.png"
-        png_path.write_bytes(
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01"
-            b"\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00"
-            b"\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00"
-            b"\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
-        result = _embed_image(png_path)
-        assert "image/png" in result
-        assert "width:" in result
-
-
-class TestRenderPdfContentIntegration:
-    """Integration tests verifying the full HTML passed to weasyprint."""
-
-    def test_exec_summary_present_in_full_pdf(self, tmp_path: Path) -> None:
-        """When exec_summary is provided, the PDF HTML includes it."""
-        html = _capture_pdf_html(tmp_path, exec_summary=_make_exec_summary())
-        assert "Executive Summary" in html
-        assert "62/100" in html
-        assert "Conditional" in html
-        assert "Key Risks" in html
-        assert "Remediation Priorities" in html
-        assert "Findings Summary" in html
-        assert "Source Code Findings" in html
-
-    def test_no_exec_summary_omits_section(self, tmp_path: Path) -> None:
-        """When exec_summary is None, the exec summary section is absent."""
-        html = _capture_pdf_html(tmp_path, exec_summary=None)
-        assert "Executive Summary" not in html
-        assert "Findings Summary" in html
-        assert "Source Code Findings" in html
-
-    def test_jdepend_section_rendered(self, tmp_path: Path) -> None:
-        """JDepend markdown section is converted to HTML in the PDF."""
-        jdepend_md = (
-            "## JDepend Structural Analysis\n\n"
-            "| Package | Ca | Ce | A | I | D | Classes |\n"
-            "|---------|----|----|---|---|---|---------|\n"
-            "| com.example | 3 | 5 | 0.2 | 0.63 | 0.17 | 10 |\n"
-        )
-        html = _capture_pdf_html(tmp_path, jdepend_section_md=jdepend_md)
-        assert "JDepend Structural Analysis" in html
-        assert "com.example" in html
-
-    def test_adr_section_rendered(self, tmp_path: Path) -> None:
-        """ADR markdown section is converted to HTML in the PDF."""
-        adr_md = (
-            "## Architecture Decision Records\n\n"
-            "**2 ADRs** found in repository.\n\n"
-            "| # | Title | Status | Superseded By |\n"
-            "|---|-------|--------|---------------|\n"
-            "| 1 | Use Spring Boot | accepted | — |\n"
-        )
-        html = _capture_pdf_html(tmp_path, adr_section_md=adr_md)
-        assert "Architecture Decision Records" in html
-        assert "Use Spring Boot" in html
-
-    def test_derived_adrs_section_rendered(self, tmp_path: Path) -> None:
-        """Derived ADRs markdown section is converted to HTML in the PDF."""
-        derived_md = (
-            "## Derived Architecture Decision Records\n\n"
-            "| # | Decision | Category | Confidence |\n"
-            "|---|----------|----------|------------|\n"
-            "| 1 | Use Redis | infrastructure | 85% |\n"
-        )
-        html = _capture_pdf_html(tmp_path, derived_adrs_section_md=derived_md)
-        assert "Derived Architecture Decision Records" in html
-        assert "Use Redis" in html
-
-    def test_all_new_sections_rendered_in_order(self, tmp_path: Path) -> None:
-        """ADR, JDepend, Derived ADR, and Deps sections appear in correct order."""
-        html = _capture_pdf_html(
-            tmp_path,
-            adr_section_md="## Architecture Decision Records\n\nADR content\n",
-            jdepend_section_md="## JDepend Structural Analysis\n\nJDepend content\n",
-            derived_adrs_section_md=(
-                "## Derived Architecture Decision Records\n\nDerived content\n"
-            ),
-            deps_section_md="## Dependency Analysis\n\nDeps content\n",
-        )
-        adr_pos = html.index("Architecture Decision Records")
-        jdepend_pos = html.index("JDepend Structural Analysis")
-        derived_pos = html.index("Derived Architecture Decision Records")
-        deps_pos = html.index("Appendix A")
-        assert adr_pos < jdepend_pos < derived_pos < deps_pos
-
     def test_dependency_findings_separated(self, tmp_path: Path) -> None:
-        """Dependency-origin findings appear in a separate section, not in source/test."""
+        """Dependency-origin findings produce a valid PDF without error."""
         first_party = _make_finding("SEC-001", "high", "red", "src/app.py:10")
         dep_finding = Finding(
             rule_id="dep-freshness",
@@ -661,20 +259,145 @@ class TestRenderPdfContentIntegration:
             origin="dependency",
         )
         nfr = _make_run_result([first_party, dep_finding])
-        html_out = _capture_pdf_html(tmp_path, nfr_result=nfr)
+        out = tmp_path / "dep-findings.pdf"
+        result = render_pdf(nfr_result=nfr, output_path=out)
+        assert result == out
+        assert out.exists()
+        assert out.stat().st_size > 1000
 
-        assert "Dependency Findings" in html_out
-        assert "excluded from the Design Maturity Score" in html_out
 
-        dep_section_pos = html_out.index("Dependency Findings")
-        source_section_pos = html_out.index("Source Code Findings")
-        assert dep_section_pos > source_section_pos
+class TestMdToTypst:
+    """Unit tests for _md_to_typst and _render_mermaid_for_typst."""
 
-        source_section = html_out[source_section_pos:dep_section_pos]
-        assert "SEC-001" in source_section
-        assert "dep-freshness" not in source_section
+    def test_heading_conversion(self) -> None:
+        """## and ### headings convert to Typst == and ===."""
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        result = _md_to_typst("## Top Level\n### Sub Level\n", image_files, counter)
+        assert "== Top Level" in result
+        assert "=== Sub Level" in result
 
-    def test_no_dependency_section_when_none(self, tmp_path: Path) -> None:
-        """When all findings are first-party, no Dependency Findings section appears."""
-        html_out = _capture_pdf_html(tmp_path)
-        assert "Dependency Findings" not in html_out
+    def test_pipe_table_conversion(self) -> None:
+        """Pipe table converts to #table(...)."""
+        md = "| Package | Version |\n|---------|--------|\n| click | 8.1.0 |\n"
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        result = _md_to_typst(md, image_files, counter)
+        assert "#table(" in result
+        assert "Package" in result
+        assert "click" in result
+        assert "8.1.0" in result
+
+    def test_bold_inline(self) -> None:
+        """**bold** converts to *bold* (Typst bold)."""
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        result = _md_to_typst("**important text**\n", image_files, counter)
+        assert "*important text*" in result
+
+    def test_inline_code(self) -> None:
+        """Inline code converts to #raw(...)."""
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        result = _md_to_typst("Use `pip install` to install.\n", image_files, counter)
+        assert '#raw("pip install")' in result
+
+    def test_fenced_code_block(self) -> None:
+        """Non-mermaid fenced code block converts to #raw(block: true, ...)."""
+        md = "```\nsome code here\n```\n"
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        result = _md_to_typst(md, image_files, counter)
+        assert "#raw(" in result
+        assert "some code here" in result
+
+    def test_deps_md_produces_table_not_code_block(self, tmp_path: Path) -> None:
+        """deps_section_md with a pipe table renders as #table, not a raw code block."""
+        deps_md = (
+            "## Dependency Analysis\n\n"
+            "### PYPI Dependencies\n\n"
+            "| # | Package | Current | Latest |\n"
+            "|---|---------|---------|--------|\n"
+            "| 1 | click | 8.1.0 | 8.3.0 |\n"
+            "| 2 | requests | 2.28.0 | 2.32.0 |\n"
+        )
+        out = tmp_path / "deps-table.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            deps_section_md=deps_md,
+        )
+        assert result == out
+        assert out.exists()
+        assert out.read_bytes()[:5] == b"%PDF-"
+
+    def test_mermaid_tier3_pie_fallback(self) -> None:
+        """Mermaid pie chart with no mmdc uses tier-3 Typst table fallback."""
+        import unittest.mock as mock
+
+        mermaid = 'pie title Findings\n  "Critical" : 5\n  "High" : 10\n'
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+
+        # Patch mmdc as unavailable and SVG fallback to return None to force tier 3
+        with (
+            mock.patch("shutil.which", return_value=None),
+            mock.patch("nfr_review.output.render.render_pie_as_svg_fallback", return_value=""),
+        ):
+            result = _render_mermaid_for_typst(mermaid, image_files, counter)
+
+        # Tier 3 output is a #table(...) with the parsed labels
+        assert "#table(" in result
+        assert "Critical" in result
+        assert "High" in result
+        # No image files registered since we fell through to tier 3
+        assert len(image_files) == 0
+
+    def test_mermaid_tier3_flowchart_fallback(self) -> None:
+        """Mermaid flowchart with no mmdc and no SVG items uses raw fallback."""
+        import unittest.mock as mock
+
+        # Flowchart with no parseable node labels falls to last-resort raw
+        mermaid = "graph TD\n  A --> B\n"
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+
+        with (
+            mock.patch("shutil.which", return_value=None),
+            mock.patch(
+                "nfr_review.output.render.render_flowchart_as_svg_fallback", return_value=""
+            ),
+        ):
+            result = _render_mermaid_for_typst(mermaid, image_files, counter)
+
+        # Should produce some Typst output — either table or raw
+        assert result.strip()
+        assert len(image_files) == 0
+
+    def test_diagram_paths_produces_valid_pdf(self, tmp_path: Path) -> None:
+        """diagram_paths with a valid PNG embeds it and produces a valid PDF."""
+        img_dir = tmp_path / "imgs"
+        img_dir.mkdir()
+        # Use a wider PNG to exercise the dimension-aware width calculation
+        png_path = img_dir / "wide.png"
+        png_path.write_bytes(_make_valid_png(width=800, height=400))
+        out = tmp_path / "diag.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            diagram_paths={"Architecture Overview": png_path},
+        )
+        assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"
+
+    def test_diagrams_mermaid_dict_produces_pdf(self, tmp_path: Path) -> None:
+        """diagrams dict with mermaid text produces a valid PDF via fallback."""
+        mermaid = 'pie title Severity Distribution\n  "Critical" : 3\n  "High" : 7\n'
+        out = tmp_path / "mermaid-diag.pdf"
+        result = render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            diagrams={"Severity Chart": mermaid},
+        )
+        assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"

@@ -29,7 +29,7 @@ dependencies = [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
     "tree-sitter-hcl>=1.1",
-    "tree-sitter-dockerfile>=0.2; platform_machine != 'aarch64'",
+    "tree-sitter-dockerfile>=0.0.0a1; platform_machine != 'aarch64'",
     "tree-sitter-java>=0.23",
     "tree-sitter-go>=0.23",
     "tree-sitter-rust>=0.23",
@@ -40,8 +40,7 @@ dependencies = [
     "graphifyy==0.9.97",
     "networkx>=3.0",
     "aiohttp>=3.9",
-    "weasyprint>=60",
-    "openai>=1.0",
+    "typst>=0.15",
     "packaging>=24.0",
     "resolvelib>=1.0",
 ]
@@ -131,12 +130,10 @@ module = [
     "tree_sitter_cpp.*",
     "anthropic.*",
     "scancode.*",
-    "openai.*",
     "opentelemetry.*",
     "aiohttp.*",
     "graphifyy.*",
     "networkx.*",
-    "weasyprint.*",
     "graphviz.*",
 ]
 ignore_missing_imports = true

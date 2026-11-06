@@ -14,7 +14,7 @@ COPY src/ src/
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir .[llm]
+RUN pip install --no-cache-dir .
 # pip is not needed at runtime, and it vendors its own copies of urllib3,
 # setuptools (pkg_resources) and msgpack that lag upstream security fixes.
 RUN pip uninstall --yes --root-user-action=ignore pip
@@ -27,14 +27,9 @@ LABEL org.opencontainers.image.source="https://github.com/JimAKennedy/nfr-review
       org.opencontainers.image.documentation="https://github.com/JimAKennedy/nfr-review/blob/main/docs/install.md" \
       org.opencontainers.image.description="Automated non-functional requirements review for polyglot codebases"
 
-# WeasyPrint needs Cairo/Pango; git is needed for repo analysis.
-# No Node.js, Chromium, npm, or mermaid-cli — diagrams use bundled
-# Mermaid.js (HTML) or pure-Python SVG fallbacks (PDF).
+# fonts-liberation provides Liberation Sans used by typst; git is needed for repo analysis.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
-       libharfbuzz0b libcairo2 libgdk-pixbuf-2.0-0 \
-       libffi8 shared-mime-info \
        fonts-liberation \
        git \
     && rm -rf /var/lib/apt/lists/*

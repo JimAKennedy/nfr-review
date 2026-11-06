@@ -1,17 +1,14 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""PDF report generator using weasyprint.
+"""PDF report generator using typst.
 
-Composes an HTML document from scan results, optional executive summary,
-and optional rendered diagram images, then converts to PDF.
+Composes a Typst document from scan results, optional executive summary,
+and optional diagram stubs, then compiles to PDF.
 """
 
 from __future__ import annotations
 
-import base64
-import html
 import logging
-import re
 import struct
 import tempfile
 from collections import Counter, defaultdict
@@ -52,72 +49,6 @@ _VERDICT_STYLES = {
     "unfit": ("Not Fit for Purpose", "#dc3545", "#f8d7da"),
 }
 
-_CSS = (  # noqa: E501
-    "@page { size: A4; margin: 2cm 1.5cm;"
-    " @bottom-center { content: counter(page) ' / ' counter(pages);"
-    " font-size: 9pt; color: #666; } }\n"
-    "* { box-sizing: border-box; }\n"
-    "body { font-family: -apple-system, 'Segoe UI', Roboto,"
-    " Helvetica, Arial, sans-serif;"
-    " font-size: 10pt; line-height: 1.5; color: #1a1a1a; }\n"
-    "h1 { font-size: 20pt; color: #1a1a1a; margin-bottom: 0.2em;"
-    " border-bottom: 2px solid #333; padding-bottom: 0.3em; }\n"
-    "h2 { font-size: 14pt; color: #333; margin-top: 1.5em;"
-    " border-bottom: 1px solid #ccc; padding-bottom: 0.2em;"
-    " page-break-after: avoid; }\n"
-    "h3 { font-size: 12pt; color: #444; margin-top: 1em;"
-    " page-break-after: avoid; }\n"
-    "table { width: 100%; border-collapse: collapse;"
-    " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
-    " font-size: 9pt; }\n"
-    "th, td { border: 1px solid #ddd; padding: 4px 8px;"
-    " text-align: left; overflow-wrap: break-word; }\n"
-    ".nowrap { white-space: nowrap; }\n"
-    ".jdepend-metrics td:first-child { overflow-wrap: anywhere; }\n"
-    ".jdepend-metrics td:not(:first-child),"
-    " .jdepend-metrics th:not(:first-child)"
-    " { white-space: nowrap; text-align: right; }\n"
-    "th { background: #f5f5f5; font-weight: 600; }\n"
-    "tr:nth-child(even) { background: #fafafa; }\n"
-    ".verdict-box { padding: 12px 16px; border-radius: 6px;"
-    " margin: 1em 0; }\n"
-    ".verdict-label { font-size: 14pt; font-weight: 700; }\n"
-    ".verdict-score { float: right; font-size: 20pt;"
-    " font-weight: 700; }\n"
-    ".risk-item { margin: 0.3em 0; padding-left: 1em;"
-    " border-left: 3px solid #dc3545; }\n"
-    ".remediation { margin: 0.5em 0; padding: 8px 12px;"
-    " background: #f8f9fa; border-radius: 4px; }\n"
-    ".remediation-title { font-weight: 600; }\n"
-    ".urgency-immediate { color: #dc3545; font-weight: 600; }\n"
-    ".urgency-short-term { color: #fd7e14; }\n"
-    ".urgency-medium-term { color: #6c757d; }\n"
-    ".diagram-container { page-break-inside: avoid;"
-    " margin: 0.5em 0; }\n"
-    ".diagram-img { display: block; margin: 0 auto; }\n"
-    ".finding { margin: 0.4em 0; padding: 6px 10px;"
-    " border-left: 3px solid #ddd; font-size: 9pt; }\n"
-    ".finding-red { border-left-color: #dc3545; }\n"
-    ".finding-amber { border-left-color: #fd7e14; }\n"
-    ".finding-green { border-left-color: #28a745; }\n"
-    ".location-table { margin: 4px 0 0 0; width: auto; }\n"
-    ".location-table th { background: none; border: none;"
-    " padding: 2px 8px; font-weight: 600; font-size: 8pt;"
-    " color: #666; }\n"
-    ".location-table td { border: none; border-top: 1px solid #eee;"
-    " padding: 2px 8px; font-size: 8pt; }\n"
-    ".provenance { font-size: 9pt; color: #666; }\n"
-    ".provenance code { background: #f5f5f5; padding: 1px 4px;"
-    " border-radius: 2px; }\n"
-    ".section-break { page-break-before: always; }\n"
-    ".section-flow { page-break-before: auto; margin-top: 1.5em; }\n"
-)
-
-
-def _h(text: str) -> str:
-    return html.escape(str(text))
-
-
 _PAGE_CONTENT_W_MM = 210.0 - 30  # A4 width minus 1.5cm margins each side
 _PAGE_CONTENT_H_MM = 297.0 - 40  # A4 height minus 2cm margins top/bottom
 _DIAGRAM_MAX_H_MM = _PAGE_CONTENT_H_MM - 25  # room for heading + padding
@@ -130,32 +61,351 @@ def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
     return w, h
 
 
-def _embed_image(path: Path) -> str:
-    raw = path.read_bytes()
-    suffix = path.suffix.lstrip(".")
-    data = base64.b64encode(raw).decode("ascii")
-    mime = {"png": "image/png", "jpg": "image/jpeg"}.get(suffix, "image/png")
+def _t(text: str) -> str:
+    """Escape text for Typst markup."""
+    text = str(text)
+    text = text.replace("\\", "\\\\")
+    text = text.replace("#", "\\#")
+    text = text.replace("@", "\\@")
+    text = text.replace("*", "\\*")
+    text = text.replace("_", "\\_")
+    text = text.replace("<", "\\<")
+    text = text.replace(">", "\\>")
+    return text
 
-    dims = _png_dimensions(raw) if suffix == "png" else None
-    style = ""
+
+def _image_typst(filename: str, raw_bytes: bytes) -> str:
+    """Return a Typst #image(...) call for a registered image file."""
+    dims = _png_dimensions(raw_bytes)
     if dims:
-        img_w, img_h = dims
-        if img_w > 0 and img_h > 0:
-            aspect = img_w / img_h
-            max_aspect = _PAGE_CONTENT_W_MM / _DIAGRAM_MAX_H_MM
-            if aspect >= max_aspect:
-                fw = _PAGE_CONTENT_W_MM
-                fh = fw / aspect
+        w_px, h_px = dims
+        # Scale to fit within page content width, preserving aspect ratio
+        w_mm = min(_PAGE_CONTENT_W_MM, w_px / 3.78)  # 96dpi → mm approx
+        h_mm = w_mm * h_px / w_px
+        if h_mm > _DIAGRAM_MAX_H_MM:
+            h_mm = _DIAGRAM_MAX_H_MM
+            w_mm = h_mm * w_px / h_px
+        return f'#image("{filename}", width: {w_mm:.1f}mm)\n'
+    return f'#image("{filename}", width: 100%)\n'
+
+
+def _render_mermaid_for_typst(
+    mermaid_text: str,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render a mermaid code block to a Typst image or fallback.
+
+    Tier 1: mmdc → PNG → #image(...)
+    Tier 2: SVG fallback (pure Python) → #image(...)
+    Tier 3: Typst table/list from parsed diagram content
+    """
+    from nfr_review.output.render import (
+        render_flowchart_as_svg_fallback,
+        render_mermaid_to_png,
+        render_pie_as_svg_fallback,
+    )
+
+    counter[0] += 1
+    idx = counter[0]
+
+    # --- Tier 1: mmdc PNG ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_path = Path(tmpdir) / f"mermaid_{idx}.png"
+        result = render_mermaid_to_png(mermaid_text, out_path)
+        if result is not None and result.exists():
+            raw = result.read_bytes()
+            filename = f"mermaid_{idx}.png"
+            image_files[filename] = raw
+            return _image_typst(filename, raw)
+
+    # --- Tier 2: SVG fallback ---
+    lines = [ln.strip() for ln in mermaid_text.strip().splitlines() if ln.strip()]
+    svg_bytes: bytes | None = None
+    svg_filename = f"mermaid_{idx}.svg"
+
+    if any(ln.startswith("pie") for ln in lines):
+        data: dict[str, int] = {}
+        for line in lines:
+            if '"' in line and ":" in line:
+                label = line.split('"')[1]
+                try:
+                    val = int(float(line.split(":")[-1].strip()))
+                except ValueError:
+                    val = 0
+                data[label] = val
+        if data:
+            svg_str = render_pie_as_svg_fallback(data)
+            svg_bytes = svg_str.encode("utf-8")
+
+    elif any("-->" in ln for ln in lines):
+        items: list[str] = []
+        for line in lines:
+            if "-->" in line:
+                for part in line.split("-->"):
+                    part = part.strip()
+                    if "[" in part:
+                        label = part.split("[")[1].rstrip("]").strip('"')
+                        if label not in items:
+                            items.append(label)
+        if items:
+            svg_str = render_flowchart_as_svg_fallback(items)
+            svg_bytes = svg_str.encode("utf-8")
+
+    if svg_bytes:
+        image_files[svg_filename] = svg_bytes
+        return f'#image("{svg_filename}", width: 100%)\n'
+
+    # --- Tier 3: Typst table ---
+    if any(ln.startswith("pie") for ln in lines):
+        rows: list[tuple[str, str]] = []
+        for line in lines:
+            if '"' in line and ":" in line:
+                label = line.split('"')[1]
+                val = line.split(":")[-1].strip()
+                rows.append((_t(label), _t(val)))
+        if rows:
+            cells = "".join(f"  [{label}], [{val}],\n" for label, val in rows)
+            return (
+                "#table(\n"
+                "  columns: (1fr, auto),\n"
+                '  stroke: 0.5pt + rgb("dddddd"),\n'
+                "  [*Category*], [*Count*],\n"
+                f"{cells}"
+                ")\n"
+            )
+
+    if any("-->" in ln for ln in lines):
+        seen: list[str] = []
+        for line in lines:
+            if "-->" in line:
+                for part in line.split("-->"):
+                    part = part.strip()
+                    if "[" in part:
+                        label = part.split("[")[1].rstrip("]").strip('"')
+                        if label not in seen:
+                            seen.append(label)
+        if seen:
+            cells = "".join(f"  [{_t(item)}],\n" for item in seen)
+            return (
+                "#table(\n"
+                "  columns: (1fr,),\n"
+                '  stroke: 0.5pt + rgb("dddddd"),\n'
+                "  [*Component*],\n"
+                f"{cells}"
+                ")\n"
+            )
+
+    # Last resort: show as raw code
+    escaped = mermaid_text.replace('"', '\\"')
+    return f'#raw(lang: "none", block: true, "{escaped}")\n'
+
+
+def _md_to_typst(
+    md: str,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Convert a markdown string to Typst markup.
+
+    Handles: headings, pipe tables, fenced code blocks (including mermaid),
+    blockquotes, bold inline, inline code, plain paragraphs.
+    """
+    lines = md.splitlines()
+    out: list[str] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+
+        # --- Fenced code block ---
+        if line.strip().startswith("```"):
+            fence_marker = line.strip()
+            lang = fence_marker[3:].strip().lower()
+            body_lines: list[str] = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                body_lines.append(lines[i])
+                i += 1
+            i += 1  # consume closing fence
+            body = "\n".join(body_lines)
+            if lang == "mermaid":
+                out.append(_render_mermaid_for_typst(body, image_files, counter))
             else:
-                fh = _DIAGRAM_MAX_H_MM
-                fw = fh * aspect
-            style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
+                # Escape for Typst raw string: backslash then quote
+                escaped = body.replace("\\", "\\\\").replace('"', '\\"')
+                out.append(f'#raw(lang: "none", block: true, "{escaped}")\n')
+            continue
 
-    return f'<img class="diagram-img" src="data:{mime};base64,{data}"{style} />'
+        # --- Pipe table ---
+        if "|" in line and line.strip().startswith("|"):
+            # Collect all table lines
+            table_lines: list[str] = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip().startswith("|"):
+                table_lines.append(lines[i])
+                i += 1
+            # Parse: first row = headers, second row = separator, rest = data
+            if len(table_lines) >= 2:
+                header_cells = [c.strip() for c in table_lines[0].split("|") if c.strip()]
+                # skip separator row (index 1)
+                data_rows_raw = table_lines[2:]
+                n_cols = len(header_cells)
+                col_spec = "(" + ", ".join(["1fr"] * n_cols) + ")"
+                header_row = "".join(
+                    f"  [*{_inline_md_to_typst(h)}*],\n" for h in header_cells
+                )
+                data_cells = ""
+                for row_line in data_rows_raw:
+                    cells = [c.strip() for c in row_line.split("|") if c.strip() != ""]
+                    # Pad or trim to expected column count
+                    while len(cells) < n_cols:
+                        cells.append("")
+                    cells = cells[:n_cols]
+                    data_cells += "".join(f"  [{_inline_md_to_typst(c)}],\n" for c in cells)
+                out.append(
+                    f"#table(\n"
+                    f"  columns: {col_spec},\n"
+                    f'  stroke: 0.5pt + rgb("dddddd"),\n'
+                    f"{header_row}"
+                    f"{data_cells}"
+                    f")\n\n"
+                )
+            continue
+
+        # --- Headings ---
+        if line.startswith("#### "):
+            out.append(f"==== {_inline_md_to_typst(line[5:])}\n\n")
+            i += 1
+            continue
+        if line.startswith("### "):
+            out.append(f"=== {_inline_md_to_typst(line[4:])}\n\n")
+            i += 1
+            continue
+        if line.startswith("## "):
+            out.append(f"== {_inline_md_to_typst(line[3:])}\n\n")
+            i += 1
+            continue
+        if line.startswith("# "):
+            out.append(f"= {_inline_md_to_typst(line[2:])}\n\n")
+            i += 1
+            continue
+
+        # --- Blockquote ---
+        if line.startswith("> "):
+            bq_text = line[2:]
+            bq_inner = _inline_md_to_typst(bq_text)
+            out.append(
+                '#rect(stroke: (left: 3pt + rgb("#dc3545")), '
+                f"inset: (left: 8pt, top: 2pt, bottom: 2pt, right: 4pt))[{bq_inner}]\n\n"
+            )
+            i += 1
+            continue
+
+        # --- Blank line ---
+        if not line.strip():
+            out.append("\n")
+            i += 1
+            continue
+
+        # --- Plain paragraph ---
+        out.append(_inline_md_to_typst(line) + "\n\n")
+        i += 1
+
+    return "".join(out)
 
 
-def _category_severity_table_html(findings: list[Finding], title: str) -> str:
-    """Render a category x severity count table as HTML."""
+def _inline_md_to_typst(text: str) -> str:
+    """Convert inline markdown (bold, inline code) to Typst inline markup."""
+    # Bold: **text** → *text*
+    # Process inline code first to avoid escaping content inside backticks
+    result = ""
+    pos = 0
+    while pos < len(text):
+        # Inline code: `text`
+        if text[pos] == "`":
+            end = text.find("`", pos + 1)
+            if end != -1:
+                inner = text[pos + 1 : end]
+                # Escape for Typst raw inline
+                inner_escaped = inner.replace("\\", "\\\\").replace('"', '\\"')
+                result += f'#raw("{inner_escaped}")'
+                pos = end + 1
+                continue
+        # Bold: **text**
+        if text[pos : pos + 2] == "**":
+            end = text.find("**", pos + 2)
+            if end != -1:
+                inner = text[pos + 2 : end]
+                result += f"*{_t(inner)}*"
+                pos = end + 2
+                continue
+        # Regular character — escape it
+        result += _t(text[pos])
+        pos += 1
+    return result
+
+
+def _provenance_section(nfr_result: RunResult) -> str:
+    """Render run metadata as a Typst table."""
+    meta = nfr_result.run_metadata
+    if not meta:
+        return ""
+    repo_label = Path(meta.target_repo).name
+    rows = [
+        f"  [*Repository*], [`{_t(repo_label)}`],",
+        f"  [*Target path*], [`{_t(meta.target_repo)}`],",
+        f"  [*Report generated*], [{_t(meta.timestamp)}],",
+    ]
+    if meta.git_sha:
+        dirty = " (dirty)" if meta.git_dirty else ""
+        sha_short = meta.git_sha[:10]
+        rows.append(f"  [*Commit*], [`{_t(sha_short)}{_t(dirty)}`],")
+    if meta.git_branch:
+        rows.append(f"  [*Branch / tag*], [{_t(meta.git_branch)}],")
+    rows.append(f"  [*Tool version*], [{_t(meta.tool_version)}],")
+
+    rows_str = "\n".join(rows)
+    return f"""#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + rgb("dddddd"),
+{rows_str}
+)
+"""
+
+
+def _test_results_section(pytest_result: PytestResult | None) -> str:
+    """Render test results as Typst markup."""
+    if pytest_result is None:
+        return "== Test Results\n\n_Test execution was not performed._\n\n"
+
+    if pytest_result.exit_code == -1:
+        return f"== Test Results\n\n{_t(pytest_result.raw_output)}\n\n"
+
+    all_green = pytest_result.failed == 0 and pytest_result.errors == 0
+    icon = "✓" if all_green else "✗"
+    status = "PASSED" if all_green else "FAILED"
+    color = "#28a745" if all_green else "#dc3545"
+
+    return f"""== Test Results
+
+#text(fill: rgb("{color}"), weight: "bold")[{icon} {status}]
+
+#table(
+  columns: (auto, auto),
+  stroke: 0.5pt + rgb("dddddd"),
+  [*Metric*], [*Count*],
+  [Passed], [{pytest_result.passed}],
+  [Failed], [{pytest_result.failed}],
+  [Skipped], [{pytest_result.skipped}],
+  [Errors], [{pytest_result.errors}],
+  [Duration], [{pytest_result.duration_seconds:.2f}s],
+)
+
+"""
+
+
+def _category_severity_table(findings: list[Finding], title: str) -> str:
+    """Render category x severity count table as Typst markup."""
     counts: dict[str, Counter[Severity]] = defaultdict(Counter)
     for f in findings:
         cat = _extract_category(f.rule_id)
@@ -164,94 +414,66 @@ def _category_severity_table_html(findings: list[Finding], title: str) -> str:
     categories = sorted(counts.keys())
     col_totals: Counter[Severity] = Counter()
 
-    rows = []
-    for idx, cat in enumerate(categories):
+    # Build header row
+    sev_headers = "".join(
+        f'  [#text(fill: rgb("{_SEVERITY_COLORS[sev]}"))[*{sev.capitalize()}*]],\n'
+        for sev in _SEVERITY_ORDER
+    )
+    header_row = f"  [*Category*],\n{sev_headers}  [*Total*],"
+
+    # Build data rows
+    data_rows: list[str] = []
+    for cat in categories:
         row_total = 0
         cells = []
         for sev in _SEVERITY_ORDER:
             n = counts[cat].get(sev, 0)
             row_total += n
             col_totals[sev] += n
-            cells.append(f"<td>{n if n else '-'}</td>")
-        bg = ' style="background:#fafafa"' if idx % 2 == 1 else ""
-        rows.append(
-            f"<tr{bg}><td><strong>{_h(cat)}</strong></td>"
-            f"{''.join(cells)}<td><strong>{row_total}</strong></td></tr>"
-        )
+            cells.append(f"  [{n if n else '-'}],")
+        data_rows.append(f"  [*{_t(cat)}*],\n" + "\n".join(cells) + f"\n  [*{row_total}*],")
 
+    # Total row
     grand_total = sum(col_totals.values())
     total_cells = []
     for sev in _SEVERITY_ORDER:
         n = col_totals.get(sev, 0)
-        total_cells.append(f"<td><strong>{n}</strong></td>" if n else "<td>-</td>")
-    rows.append(
-        f'<tr style="background:#f5f5f5"><td><strong>Total</strong></td>'
-        f"{''.join(total_cells)}<td><strong>{grand_total}</strong></td></tr>"
-    )
+        total_cells.append(f"  [*{n}*]," if n else "  [-],")
+    data_rows.append("  [*Total*],\n" + "\n".join(total_cells) + f"\n  [*{grand_total}*],")
 
-    sev_headers = "".join(
-        f'<th style="color:{_SEVERITY_COLORS[sev]}">{sev.capitalize()}</th>'
-        for sev in _SEVERITY_ORDER
-    )
+    col_spec = "(auto, " + ", ".join(["auto"] * len(_SEVERITY_ORDER)) + ", auto)"
 
-    return f"""<h3>{_h(title)}</h3>
-<table>
-<thead><tr><th>Category</th>{sev_headers}<th>Total</th></tr></thead>
-<tbody>{"".join(rows)}</tbody>
-</table>"""
+    rows_str = "\n".join(data_rows)
+    return f"""=== {_t(title)}
 
+#table(
+  columns: {col_spec},
+  stroke: 0.5pt + rgb("dddddd"),
+{header_row}
+{rows_str}
+)
 
-def _exec_summary_html(summary: ExecSummary) -> str:
-    label, color, bg = _VERDICT_STYLES.get(summary.verdict, ("Unknown", "#666", "#f0f0f0"))
-
-    parts = [
-        f'<div class="verdict-box" style="background:{bg};border:2px solid {color}">',
-        f'<span class="verdict-score">{summary.overall_score}/100</span>',
-        f'<span class="verdict-label" style="color:{color}">{_h(label)}</span>',
-        f"<p>{_h(summary.verdict_explanation)}</p>",
-        '<p style="font-size:8pt;color:#666;margin-top:4px">'
-        "This score is an AI-generated holistic assessment and may differ from"
-        " the deterministic Design Maturity Score. See the LLM Usage and"
-        " Scoring Methodology sections in the appendix for details.</p>",
-        "</div>",
-    ]
-
-    if summary.risk_highlights:
-        parts.append("<h3>Key Risks</h3>")
-        for risk in summary.risk_highlights:
-            parts.append(f'<div class="risk-item">{_h(risk)}</div>')
-
-    if summary.remediation_priorities:
-        parts.append("<h3>Remediation Priorities</h3>")
-        for item in summary.remediation_priorities:
-            urgency_cls = f"urgency-{item.urgency}"
-            parts.append(
-                f'<div class="remediation">'
-                f'<span class="remediation-title">{_h(item.title)}</span> '
-                f'<span class="{urgency_cls}">({_h(item.urgency)})</span>'
-                f"<br/>{_h(item.description)}</div>"
-            )
-
-    parts.append(f"<h3>Production Risks</h3><p>{_h(summary.production_risks)}</p>")
-    parts.append(f"<h3>Open-Source Readiness</h3><p>{_h(summary.open_source_readiness)}</p>")
-
-    return "\n".join(parts)
+"""
 
 
-def _findings_html(findings: list[Finding], title: str) -> str:
+def _findings_section(findings: list[Finding], title: str) -> str:
+    """Render findings grouped by RAG and rule, as Typst markup."""
     if not findings:
-        return f"<h2>{_h(title)}</h2><p>No findings.</p>"
+        return f"== {_t(title)}\n\n_No findings._\n\n"
 
     by_rag: dict[RAG, list[Finding]] = {}
     for f in findings:
         by_rag.setdefault(f.rag, []).append(f)
 
-    parts = [f"<h2>{_h(title)}</h2>"]
+    parts = [f"== {_t(title)}\n"]
     for rag in _RAG_ORDER:
         group = by_rag.get(rag, [])
         if not group:
             continue
-        parts.append(f"<h3>{_h(rag.upper())} ({len(group)})</h3>")
+        rag_color = _RAG_COLORS.get(rag, "#666666")
+        parts.append(
+            f'=== #text(fill: rgb("{rag_color}"))[{_t(rag.upper())}] ({len(group)})\n'
+        )
 
         issue_groups: dict[tuple[str, str], list[Finding]] = {}
         for f in group:
@@ -260,323 +482,129 @@ def _findings_html(findings: list[Finding], title: str) -> str:
 
         for (rule_id, summary), occurrences in issue_groups.items():
             representative = occurrences[0]
+            border_color = _RAG_COLORS.get(representative.rag, "#dddddd")
+            inset = "inset: (left: 8pt, top: 4pt, bottom: 4pt, right: 4pt)"
             parts.append(
-                f'<div class="finding finding-{representative.rag}">'
-                f"<strong>[{_h(rule_id)}]</strong> {_h(summary)}<br/>"
-                f"Recommendation: {_h(representative.recommendation)}"
+                f'#rect(stroke: (left: 3pt + rgb("{border_color}")), {inset})[\n'
+                f"*[{_t(rule_id)}]* {_t(summary)}\n\n"
+                f"Recommendation: {_t(representative.recommendation)}\n\n"
             )
-            parts.append('<table class="location-table">')
+            # Occurrences table
+            occ_rows = "".join(
+                f"  [`{_t(occ.evidence_locator)}`], "
+                f"[{_t(occ.severity)}], [{occ.confidence:.0%}],\n"
+                for occ in occurrences
+            )
             parts.append(
-                "<thead><tr>"
-                "<th>Location</th><th>Severity</th><th>Confidence</th>"
-                "</tr></thead><tbody>"
+                "#table(\n"
+                "  columns: (1fr, auto, auto),\n"
+                '  stroke: 0.5pt + rgb("eeeeee"),\n'
+                "  [*Location*], [*Severity*], [*Confidence*],\n"
+                f"{occ_rows}"
+                ")\n]\n\n"
             )
-            for occ in occurrences:
-                parts.append(
-                    f"<tr>"
-                    f"<td><code>{_h(occ.evidence_locator)}</code></td>"
-                    f"<td>{_h(occ.severity)}</td>"
-                    f"<td>{occ.confidence:.0%}</td>"
-                    f"</tr>"
-                )
-            parts.append("</tbody></table></div>")
 
     return "\n".join(parts)
 
 
-def _provenance_html(nfr_result: RunResult) -> str:
-    meta = nfr_result.run_metadata
-    if not meta:
-        return ""
-    repo_label = Path(meta.target_repo).name
+def _exec_summary_section(summary: ExecSummary) -> str:
+    """Render executive summary as Typst markup."""
+    label, color, bg = _VERDICT_STYLES.get(summary.verdict, ("Unknown", "#666666", "#f0f0f0"))
+
     parts = [
-        '<div class="provenance">',
-        "<table>",
-        f"<tr><td><strong>Repository</strong></td><td><code>{_h(repo_label)}</code></td></tr>",
-        "<tr><td><strong>Target path</strong></td>"
-        f"<td><code>{_h(meta.target_repo)}</code></td></tr>",
-        f"<tr><td><strong>Report generated</strong></td><td>{_h(meta.timestamp)}</td></tr>",
+        "== Executive Summary (AI-generated)\n",
+        f'#rect(fill: rgb("{bg}"), stroke: 2pt + rgb("{color}"), radius: 4pt, width: 100%)[',
+        "#grid(columns: (1fr, auto),",
+        f'  [#text(fill: rgb("{color}"), weight: "bold", size: 14pt)[{_t(label)}]],',
+        f'  [#text(fill: rgb("{color}"), weight: "bold", size: 20pt)'
+        f"[{summary.overall_score}/100]],",
+        ")",
+        f"\n{_t(summary.verdict_explanation)}\n",
+        '#text(size: 8pt, fill: rgb("666666"))'
+        "[This score is an AI-generated holistic assessment"
+        " and may differ from the deterministic Design Maturity Score."
+        " See the LLM Usage and Scoring Methodology sections in the appendix for details.]",
+        "]\n",
     ]
-    if meta.git_sha:
-        dirty = " (dirty)" if meta.git_dirty else ""
-        sha_short = meta.git_sha[:10]
-        parts.append(
-            f"<tr><td><strong>Commit</strong></td>"
-            f"<td><code>{_h(sha_short)}</code>{dirty}</td></tr>"
-        )
-    if meta.git_branch:
-        parts.append(
-            f"<tr><td><strong>Branch / tag</strong></td><td>{_h(meta.git_branch)}</td></tr>"
-        )
-    parts.append(
-        f"<tr><td><strong>Tool version</strong></td><td>{_h(meta.tool_version)}</td></tr>"
-    )
-    parts.append("</table>")
-    parts.append("</div>")
-    return "\n".join(parts)
 
-
-def _test_results_html(pytest_result: PytestResult | None) -> str:
-    if pytest_result is None:
-        return "<h2>Test Results</h2><p>Test execution was not performed.</p>"
-
-    if pytest_result.exit_code == -1:
-        return f"<h2>Test Results</h2><p>&#9888; {_h(pytest_result.raw_output)}</p>"
-
-    all_green = pytest_result.failed == 0 and pytest_result.errors == 0
-    icon = "&#10003;" if all_green else "&#10007;"
-    status = "PASSED" if all_green else "FAILED"
-    color = "#28a745" if all_green else "#dc3545"
-
-    return f"""<h2>Test Results</h2>
-<p style="color:{color};font-weight:600">{icon} {status}</p>
-<table>
-<tr><th>Metric</th><th>Count</th></tr>
-<tr><td>Passed</td><td>{pytest_result.passed}</td></tr>
-<tr><td>Failed</td><td>{pytest_result.failed}</td></tr>
-<tr><td>Skipped</td><td>{pytest_result.skipped}</td></tr>
-<tr><td>Errors</td><td>{pytest_result.errors}</td></tr>
-<tr><td>Duration</td><td>{pytest_result.duration_seconds:.2f}s</td></tr>
-</table>"""
-
-
-def _inline_md(text: str) -> str:
-    """Convert inline markdown (bold, code) to HTML."""
-
-    escaped = _h(text)
-    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
-    escaped = re.sub(r"`(.+?)`", r"<code>\1</code>", escaped)
-    return escaped
-
-
-def _render_mermaid_inline(mermaid_text: str) -> str | None:
-    """Render Mermaid text to an inline high-res PNG, or ``None``."""
-    from nfr_review.output.render import render_mermaid_to_png
-
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-    try:
-        result = render_mermaid_to_png(
-            mermaid_text, tmp_path, scale=3, width=2400, height=1600
-        )
-        if result is None:
-            return None
-        return f'<div class="diagram-container">{_embed_image(tmp_path)}</div>'
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-
-def _parse_pie_data(mermaid_text: str) -> dict[str, int]:
-    """Extract label→count from Mermaid pie chart text."""
-    data: dict[str, int] = {}
-    for line in mermaid_text.splitlines():
-        line = line.strip()
-        if '"' in line and ":" in line:
-            label = line.split('"')[1]
-            try:
-                val = int(line.split(":")[-1].strip())
-            except ValueError:
-                continue
-            data[label] = val
-    return data
-
-
-def _parse_flowchart_items(mermaid_text: str) -> list[str]:
-    """Extract node labels from Mermaid flowchart text."""
-    items: list[str] = []
-    for line in mermaid_text.splitlines():
-        if "-->" in line:
-            for part in line.split("-->"):
-                part = part.strip()
-                if "[" in part:
-                    label = part.split("[")[1].rstrip("]").strip('"')
-                    if label and label not in items:
-                        items.append(label)
-    return items
-
-
-def _render_diagram_cascade(
-    title: str,
-    mermaid_text: str,
-) -> str:
-    """3-tier rendering cascade for PDF diagram embedding.
-
-    Tier 1: mmdc PNG (best quality, requires Node.js + Chromium).
-    Tier 2: Pure-Python SVG (no external tools, decent quality).
-    Tier 3: Styled HTML table (always works).
-    """
-    from nfr_review.output.render import (
-        render_diagram_as_html_table,
-        render_flowchart_as_svg_fallback,
-        render_pie_as_svg_fallback,
-    )
-
-    img_html = _render_mermaid_inline(mermaid_text)
-    if img_html is not None:
-        logger.info("diagram '%s': rendered via mmdc (tier 1)", title)
-        return f'<div class="diagram-container"><h3>{_h(title)}</h3>{img_html}</div>'
-
-    stripped = mermaid_text.strip()
-    svg: str | None = None
-    if stripped.startswith("pie"):
-        data = _parse_pie_data(mermaid_text)
-        if data:
-            svg = render_pie_as_svg_fallback(data)
-    elif "flowchart" in stripped.split("\n")[0]:
-        items = _parse_flowchart_items(mermaid_text)
-        if items:
-            svg = render_flowchart_as_svg_fallback(items, title=title)
-
-    if svg:
-        logger.info("diagram '%s': rendered via SVG fallback (tier 2)", title)
-        encoded = base64.b64encode(svg.encode()).decode("ascii")
-        return (
-            f'<div class="diagram-container">'
-            f"<h3>{_h(title)}</h3>"
-            f'<img class="diagram-img" '
-            f'src="data:image/svg+xml;base64,{encoded}" /></div>'
-        )
-
-    logger.info("diagram '%s': rendered via HTML table (tier 3)", title)
-    return render_diagram_as_html_table(mermaid_text, title)
-
-
-def _md_deps_to_html(md: str) -> str:
-    """Convert the markdown dependency section to proper HTML tables."""
-    lines = md.split("\n")
-    parts: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        if line.startswith("## "):
-            parts.append(f"<h2>{_h(line[3:].strip())}</h2>")
-        elif line.startswith("### "):
-            parts.append(f"<h3>{_h(line[4:].strip())}</h3>")
-        elif line.startswith("#### "):
-            parts.append(f"<h4>{_h(line[5:].strip())}</h4>")
-        elif line.startswith("| ") and i + 1 < len(lines) and lines[i + 1].startswith("|--"):
-            headers = [c.strip() for c in line.split("|")[1:-1]]
-            parts.append("<table><thead><tr>")
-            parts.append("".join(f"<th>{_inline_md(h)}</th>" for h in headers))
-            parts.append("</tr></thead><tbody>")
-            i += 2  # skip separator
-            while i < len(lines) and lines[i].startswith("| "):
-                cells = [c.strip() for c in lines[i].split("|")[1:-1]]
-                parts.append("<tr>")
-                parts.append("".join(f"<td>{_inline_md(c)}</td>" for c in cells))
-                parts.append("</tr>")
-                i += 1
-            parts.append("</tbody></table>")
-            continue
-        elif line.startswith("```"):
-            lang = line.lstrip("`").strip().lower()
-            i += 1
-            code_lines = []
-            while i < len(lines) and not lines[i].startswith("```"):
-                code_lines.append(lines[i])
-                i += 1
-            code_text = chr(10).join(code_lines)
-            if lang == "mermaid" and code_text.strip():
-                img_html = _render_mermaid_inline(code_text)
-                if img_html:
-                    parts.append(img_html)
-                else:
-                    parts.append(
-                        f'<pre style="font-size:8pt;background:#f5f5f5;'
-                        f'padding:8px;border-radius:4px;overflow-x:auto">'
-                        f"<code>{_h(code_text)}</code></pre>"
-                    )
-            else:
-                parts.append(
-                    f'<pre style="font-size:8pt;background:#f5f5f5;'
-                    f'padding:8px;border-radius:4px;overflow-x:auto">'
-                    f"<code>{_h(code_text)}</code></pre>"
-                )
-        elif line.startswith("> "):
+    if summary.risk_highlights:
+        parts.append("=== Key Risks\n")
+        _bq_inset = "inset: (left: 8pt, top: 2pt, bottom: 2pt, right: 4pt)"
+        for risk in summary.risk_highlights:
             parts.append(
-                f'<blockquote style="border-left:3px solid #dc3545;'
-                f'padding:4px 8px;margin:0.5em 0;color:#721c24">'
-                f"{_h(line[2:])}</blockquote>"
+                f'#rect(stroke: (left: 3pt + rgb("#dc3545")), {_bq_inset})[{_t(risk)}]\n'
             )
-        elif line.lstrip().startswith("<"):
-            # Pass through raw HTML (e.g. tables rendered by diagrams.py)
-            parts.append(line)
-        elif line.strip():
-            parts.append(f"<p>{_inline_md(line)}</p>")
 
-        i += 1
+    if summary.remediation_priorities:
+        parts.append("\n=== Remediation Priorities\n")
+        for item in summary.remediation_priorities:
+            urgency_colors = {
+                "immediate": "#dc3545",
+                "short-term": "#fd7e14",
+                "medium-term": "#6c757d",
+            }
+            urg_color = urgency_colors.get(item.urgency, "#666666")
+            urgency_line = (
+                f"*{_t(item.title)}* "
+                f'#text(fill: rgb("{urg_color}"))[(urgency: {_t(item.urgency)})]'
+            )
+            parts.append(
+                '#rect(fill: rgb("f8f9fa"), radius: 4pt, inset: 8pt, width: 100%)[\n'
+                f"{urgency_line}\n\n"
+                f"{_t(item.description)}\n]\n"
+            )
+
+    parts.append(f"\n=== Production Risks\n\n{_t(summary.production_risks)}\n")
+    parts.append(f"\n=== Open-Source Readiness\n\n{_t(summary.open_source_readiness)}\n")
 
     return "\n".join(parts)
 
 
-def _md_section_to_html(
-    md_text: str,
-    heading: str,
-    sections: list[str],
-    *,
-    break_class: str = "section-flow",
-) -> None:
-    """Strip a ``## `` heading from markdown, add an HTML heading, and convert."""
-    body = md_text
-    if body.startswith("## "):
-        body = body.split("\n", 1)[1] if "\n" in body else ""
-    sections.append(f'<div class="{break_class}"></div>')
-    sections.append(f"<h2>{heading}</h2>")
-    sections.append(_md_deps_to_html(body))
-
-
-def _pdf_diagrams_section(
-    sections: list[str],
+def _diagrams_section(
     diagram_paths: dict[str, Path] | None,
     diagrams: dict[str, str] | None,
-) -> None:
-    """Emit the diagrams section of the PDF."""
-    if not (diagram_paths or diagrams):
-        return
-    sections.append('<div class="section-break"></div>')
-    sections.append("<h2>Diagrams</h2>")
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render diagrams section from pre-rendered PNGs and/or mermaid text."""
+    if not diagram_paths and not diagrams:
+        return ""
+
+    parts = ["== Diagrams\n\n"]
+
     if diagram_paths:
-        for diagram_title, path in diagram_paths.items():
-            if path.exists():
-                sections.append(
-                    f'<div class="diagram-container">'
-                    f"<h3>{_h(diagram_title)}</h3>"
-                    f"{_embed_image(path)}</div>"
-                )
-    elif diagrams:
-        for diagram_title, mermaid_text in diagrams.items():
-            if mermaid_text.strip():
-                sections.append(_render_diagram_cascade(diagram_title, mermaid_text))
+        for name, path in diagram_paths.items():
+            counter[0] += 1
+            idx = counter[0]
+            try:
+                raw = path.read_bytes()
+            except OSError:
+                logger.warning("Could not read diagram file: %s", path)
+                parts.append(f"=== {_t(name)}\n\n_Image file not found._\n\n")
+                continue
+            filename = f"diagram_path_{idx}{path.suffix}"
+            image_files[filename] = raw
+            parts.append(f"=== {_t(name)}\n\n")
+            parts.append(_image_typst(filename, raw))
+            parts.append("\n")
+
+    if diagrams:
+        for name, mermaid_text in diagrams.items():
+            parts.append(f"=== {_t(name)}\n\n")
+            parts.append(_render_mermaid_for_typst(mermaid_text, image_files, counter))
+            parts.append("\n")
+
+    return "".join(parts)
 
 
-def _pdf_appendices(
-    sections: list[str],
-    *,
-    deps_section_md: str,
-    score_section_md: str,
-    llm_info: tuple[str, str] | None,
-) -> None:
-    """Emit dependency and scoring methodology appendices."""
-    if deps_section_md:
-        _md_section_to_html(
-            deps_section_md,
-            "Appendix A &mdash; Dependency Tree",
-            sections,
-            break_class="section-break",
-        )
-
-    if score_section_md:
-        from nfr_review.output.markdown import _methodology_appendix
-
-        appendix_label = "B" if deps_section_md else "A"
-        methodology_md = _methodology_appendix(llm_info=llm_info)
-        _md_section_to_html(
-            methodology_md,
-            f"Appendix {appendix_label} &mdash; Scoring Methodology",
-            sections,
-            break_class="section-break",
-        )
+def _build_typst_document(sections: list[str], title: str) -> str:
+    """Assemble the full Typst document."""
+    preamble = (
+        '#set page(paper: "a4", margin: (x: 1.5cm, y: 2cm), numbering: "1 / 1")\n'
+        '#set text(font: "Liberation Sans", size: 10pt)\n'
+        "#set heading(numbering: none)\n\n"
+    )
+    return preamble + "\n".join(sections)
 
 
 def render_pdf(
@@ -609,81 +637,90 @@ def render_pdf(
     first_party, dependency = partition_findings_by_origin(all_findings)
     source_findings, test_findings = partition_findings(first_party)
 
+    # Image files collected during document assembly; written to temp dir before compile
+    image_files: dict[str, bytes] = {}
+    # Shared counter for unique image filenames
+    counter: list[int] = [0]
+
     sections: list[str] = []
 
     meta = nfr_result.run_metadata
     repo_label = Path(meta.target_repo).name if meta else ""
-    heading = f"{_h(title)} — {_h(repo_label)}" if repo_label else _h(title)
-    sections.append(f"<h1>{heading}</h1>")
-    sections.append(_provenance_html(nfr_result))
+    heading = f"{_t(title)} --- {_t(repo_label)}" if repo_label else _t(title)
+    sections.append(f"= {heading}\n\n")
+    sections.append(_provenance_section(nfr_result))
 
     if exec_summary:
-        sections.append('<div class="section-break"></div>')
-        sections.append("<h2>Executive Summary (AI-generated)</h2>")
-        sections.append(_exec_summary_html(exec_summary))
+        sections.append("#pagebreak()\n\n")
+        sections.append(_exec_summary_section(exec_summary))
 
-    sections.append('<div class="section-flow"></div>')
-    sections.append(_category_severity_table_html(first_party, "Findings Summary"))
+    sections.append(_category_severity_table(first_party, "Findings Summary"))
 
     if score_section_md:
-        sections.append('<div class="section-flow"></div>')
-        sections.append(_md_deps_to_html(score_section_md))
+        body = score_section_md
+        if body.startswith("## "):
+            body = body.split("\n", 1)[1] if "\n" in body else ""
+        sections.append(_md_to_typst(body, image_files, counter))
 
-    _pdf_diagrams_section(sections, diagram_paths, diagrams)
+    # Diagrams section
+    diag_section = _diagrams_section(diagram_paths, diagrams, image_files, counter)
+    if diag_section:
+        sections.append(diag_section)
 
-    sections.append('<div class="section-flow"></div>')
-    sections.append(_test_results_html(pytest_result))
+    sections.append(_test_results_section(pytest_result))
 
-    sections.append('<div class="section-break"></div>')
-    sections.append(_findings_html(source_findings, "Source Code Findings"))
+    sections.append("#pagebreak()\n\n")
+    sections.append(_findings_section(source_findings, "Source Code Findings"))
 
-    sections.append('<div class="section-flow"></div>')
-    sections.append(_findings_html(test_findings, "Test Code Findings"))
+    sections.append(_findings_section(test_findings, "Test Code Findings"))
 
     if dependency:
-        sections.append('<div class="section-break"></div>')
-        sections.append(
-            "<h2>Dependency Findings</h2>"
-            '<p style="font-size:9pt;color:#666">'
-            "The following findings originate from dependency or vendored code."
-            " They are excluded from the Design Maturity Score.</p>"
+        sections.append("#pagebreak()\n\n")
+        sections.append("== Dependency Findings\n\n")
+        _dep_note = (
+            "The following findings originate from dependency or vendored code. "
+            "They are excluded from the Design Maturity Score."
         )
-        sections.append(
-            _category_severity_table_html(dependency, "Dependency Findings Summary")
-        )
-        sections.append(_findings_html(dependency, "Dependency Findings Detail"))
+        sections.append(f'#text(size: 9pt, fill: rgb("666666"))[{_dep_note}]\n\n')
+        sections.append(_category_severity_table(dependency, "Dependency Findings Summary"))
+        sections.append(_findings_section(dependency, "Dependency Findings Detail"))
 
-    if adr_section_md:
-        _md_section_to_html(adr_section_md, "Architecture Decision Records", sections)
+    # Markdown sections — convert to Typst
+    for md_content, md_title in [
+        (adr_section_md, "Architecture Decision Records"),
+        (jdepend_section_md, "JDepend Structural Analysis"),
+        (derived_adrs_section_md, "Derived Architecture Decision Records"),
+    ]:
+        if md_content:
+            body = md_content
+            if body.startswith("## "):
+                body = body.split("\n", 1)[1] if "\n" in body else ""
+            sections.append(f"== {_t(md_title)}\n\n")
+            sections.append(_md_to_typst(body, image_files, counter))
 
-    if jdepend_section_md:
-        _md_section_to_html(jdepend_section_md, "JDepend Structural Analysis", sections)
+    if deps_section_md:
+        body = deps_section_md
+        if body.startswith("## "):
+            body = body.split("\n", 1)[1] if "\n" in body else ""
+        sections.append("#pagebreak()\n\n")
+        sections.append("== Appendix A --- Dependency Tree\n\n")
+        sections.append(_md_to_typst(body, image_files, counter))
 
-    if derived_adrs_section_md:
-        _md_section_to_html(
-            derived_adrs_section_md,
-            "Derived Architecture Decision Records",
-            sections,
-        )
+    typst_doc = _build_typst_document(sections, title)
 
-    _pdf_appendices(
-        sections,
-        deps_section_md=deps_section_md,
-        score_section_md=score_section_md,
-        llm_info=llm_info,
-    )
-
-    html_doc = f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>{_h(title)}</title>
-<style>{_CSS}</style></head>
-<body>{"".join(sections)}</body>
-</html>"""
-
-    import weasyprint  # type: ignore[import-untyped]
+    import typst
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    weasyprint.HTML(string=html_doc).write_pdf(str(output_path))
+
+    if image_files:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for filename, raw in image_files.items():
+                (Path(tmpdir) / filename).write_bytes(raw)
+            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)
+    else:
+        pdf_bytes = typst.compile(typst_doc.encode())
+
+    output_path.write_bytes(pdf_bytes)
     logger.info("PDF written to %s (%d bytes)", output_path, output_path.stat().st_size)
     return output_path
 
