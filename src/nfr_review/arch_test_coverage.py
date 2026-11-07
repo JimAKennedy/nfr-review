@@ -283,7 +283,7 @@ def _detect_gaps(
             if base_dir in f.parents or f.parent == base_dir
         }
         test_rel_paths = {
-            str(f.relative_to(base_dir)).lower()
+            f.relative_to(base_dir).as_posix().lower()
             for f in test_files
             if base_dir in f.parents or f.parent == base_dir
         }
@@ -435,17 +435,17 @@ def _assess_single_component(
         # Classify test types
         for tf in test_files:
             try:
-                rel = str(tf.relative_to(scan_dir))
+                rel = tf.relative_to(scan_dir).as_posix()
             except ValueError:
                 rel = tf.name
             types = _classify_test_type(rel)
             all_test_types.update(types)
-            evidence.append(str(tf.relative_to(repo_path)))
+            evidence.append(tf.relative_to(repo_path).as_posix())
 
         # Check for JS test config files at scan root
         for config_name in _JS_TEST_CONFIGS:
             if (scan_dir / config_name).is_file():
-                evidence.append(str((scan_dir / config_name).relative_to(repo_path)))
+                evidence.append((scan_dir / config_name).relative_to(repo_path).as_posix())
 
     # Compute ratio
     source_count = len(all_source_files)

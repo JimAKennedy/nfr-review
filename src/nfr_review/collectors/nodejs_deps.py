@@ -36,7 +36,7 @@ class NodejsDepsCollector:
         for pkg_path in sorted(repo_path.rglob("package.json")):
             if "node_modules" in pkg_path.parts:
                 continue
-            rel = str(pkg_path.relative_to(repo_path))
+            rel = pkg_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

@@ -109,7 +109,7 @@ def _parse_policy(xml_path: Path, repo_path: Path) -> ApimPolicyPayload | None:
 
     rel_path = xml_path.relative_to(repo_path)
     return ApimPolicyPayload(
-        file_path=str(rel_path),
+        file_path=rel_path.as_posix(),
         has_rate_limit=has_rate_limit,
         has_auth_policy=has_auth_policy,
         backend_urls=backend_urls,
@@ -148,7 +148,7 @@ class ApimPolicyCollector:
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="apim-policy",
                     payload=payload,
                 )

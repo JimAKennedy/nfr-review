@@ -170,13 +170,14 @@ class SpringConfigCollector:
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
 
-            payload = _extract_payload(data, str(rel), profile)
+            rel_posix = rel.as_posix()
+            payload = _extract_payload(data, rel_posix, profile)
 
             evidence.append(
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel_posix,
                     kind="spring-config-file",
                     payload=payload,
                 )

@@ -255,12 +255,12 @@ class DockerfileCollector:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
-            payload["file_path"] = str(rel)
+            payload["file_path"] = rel.as_posix()
             evidence.append(
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="dockerfile-analysis",
                     payload=DockerfileAnalysisPayload(**payload),
                 )

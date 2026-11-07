@@ -95,7 +95,7 @@ class JavaDepsCollector:
         for pom_path in sorted(repo_path.rglob("pom.xml")):
             if _should_skip(pom_path):
                 continue
-            rel = str(pom_path.relative_to(repo_path))
+            rel = pom_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):
@@ -112,7 +112,7 @@ class JavaDepsCollector:
         ):
             if _should_skip(gradle_path):
                 continue
-            rel = str(gradle_path.relative_to(repo_path))
+            rel = gradle_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

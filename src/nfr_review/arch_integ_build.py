@@ -276,7 +276,7 @@ def discover_cmake_integrations(
 
     cmake_files: list[Path] = []
     for cmake_path in repo_path.rglob("CMakeLists.txt"):
-        if should_exclude_path(str(cmake_path.relative_to(repo_path))):
+        if should_exclude_path(cmake_path.relative_to(repo_path).as_posix()):
             continue
         cmake_files.append(cmake_path)
 

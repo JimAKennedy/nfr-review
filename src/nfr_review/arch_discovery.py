@@ -252,7 +252,7 @@ def _discover_monorepo_components(
                     boundaries=[
                         ComponentBoundary(
                             boundary_type="directory",
-                            path=str(child.relative_to(repo_path)),
+                            path=child.relative_to(repo_path).as_posix(),
                             repo=effective_name,
                         )
                     ],
@@ -281,7 +281,7 @@ def _discover_k8s_components(repo_path: Path, repo_name: str | None = None) -> l
             continue
 
         for yaml_file in yaml_files:
-            rel_path = str(yaml_file.relative_to(repo_path))
+            rel_path = yaml_file.relative_to(repo_path).as_posix()
             if should_exclude_path(rel_path):
                 continue
 
@@ -509,7 +509,7 @@ def _discover_source_subdirectories(
                 continue
 
             comp_type = _SUBDIR_TYPE_HINTS.get(child.name.lower(), "library")
-            rel_path = str(child.relative_to(repo_path))
+            rel_path = child.relative_to(repo_path).as_posix()
             comp_id = _make_id("src", f"{effective_name}/{rel_path}")
 
             components.append(
@@ -569,7 +569,7 @@ def _discover_ml_pipeline_components(
         if has_dvc and not any(t.name == "DVC" for t in tech):
             tech.append(TechStackEntry(name="DVC", role="tool"))
 
-        rel_path = str(child.relative_to(repo_path))
+        rel_path = child.relative_to(repo_path).as_posix()
         comp_id = _make_id("ml", f"{effective_name}/{rel_path}")
 
         desc = "ML training pipeline"
@@ -628,7 +628,7 @@ def _discover_nested_build_components(
 
         tech = _infer_tech_stack(child)
         comp_type = _infer_component_type(child.name, child, tech)
-        rel_path = str(child.relative_to(repo_path))
+        rel_path = child.relative_to(repo_path).as_posix()
         comp_id = _make_id("nested", f"{effective_name}/{rel_path}")
 
         components.append(

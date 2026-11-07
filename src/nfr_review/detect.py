@@ -81,7 +81,7 @@ def _safe_rglob(base: Path, pattern: str) -> list[Path]:
         results = list(base.rglob(pattern))
     except OSError:
         return []
-    return [p for p in results if not should_exclude_path(str(p.relative_to(base)))]
+    return [p for p in results if not should_exclude_path(p.relative_to(base).as_posix())]
 
 
 def _detect_java(repo: Path) -> bool:

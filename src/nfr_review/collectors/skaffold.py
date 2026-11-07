@@ -67,10 +67,10 @@ class SkaffoldCollector:
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="skaffold-analysis",
                     payload=SkaffoldAnalysisPayload(
-                        file_path=str(rel),
+                        file_path=rel.as_posix(),
                         api_version=api_version,
                         build=build,
                         deploy=deploy,

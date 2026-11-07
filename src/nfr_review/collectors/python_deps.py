@@ -34,7 +34,7 @@ class PythonDepsCollector:
         raw_deps: list[tuple[str, Requirement]] = []
 
         for req_path in sorted(repo_path.rglob("requirements.txt")):
-            rel = str(req_path.relative_to(repo_path))
+            rel = req_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):
@@ -44,7 +44,7 @@ class PythonDepsCollector:
 
         pyproject_path = repo_path / "pyproject.toml"
         if pyproject_path.is_file():
-            rel = str(pyproject_path.relative_to(repo_path))
+            rel = pyproject_path.relative_to(repo_path).as_posix()
             if not should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

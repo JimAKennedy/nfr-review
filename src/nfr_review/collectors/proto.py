@@ -258,12 +258,12 @@ class ProtoCollector:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
-            payload = ProtoAnalysisPayload(file_path=str(rel), **parsed)
+            payload = ProtoAnalysisPayload(file_path=rel.as_posix(), **parsed)
             evidence.append(
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="proto-analysis",
                     payload=payload,
                 )

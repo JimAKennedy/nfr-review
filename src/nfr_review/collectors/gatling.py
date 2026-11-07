@@ -135,7 +135,7 @@ class GatlingCollector:
                     continue
 
                 # Use the simulation directory as the locator
-                sim_dir = str(rel.parent)
+                sim_dir = rel.parent.as_posix()
                 simulation_dirs.append(sim_dir)
 
                 payload = GatlingResultPayload(simulation_dir=sim_dir, **metrics)
@@ -144,7 +144,7 @@ class GatlingCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="gatling-result",
                         payload=payload,
                     )

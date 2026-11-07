@@ -155,18 +155,19 @@ class BaseASTCollector(ABC):
                 except OSError as exc:
                     logger.debug("Cannot read %s: %s", rel, exc)
                     continue
+                rel_posix = rel.as_posix()
                 try:
-                    payload = self._parse_file(source, str(rel))
+                    payload = self._parse_file(source, rel_posix)
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Parse error in %s: %s", rel, exc)
                     continue
                 if not isinstance(payload, BasePayload):
-                    payload["file_path"] = str(rel)
+                    payload["file_path"] = rel_posix
                 evidence.append(
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel_posix,
                         kind=self.evidence_kind,
                         payload=payload,
                     )

@@ -35,7 +35,7 @@ class RustDepsCollector:
         raw_deps: list[tuple[str, str, str]] = []  # (source_file, name, declared_version)
 
         for cargo_path in sorted(repo_path.rglob("Cargo.toml")):
-            rel = str(cargo_path.relative_to(repo_path))
+            rel = cargo_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

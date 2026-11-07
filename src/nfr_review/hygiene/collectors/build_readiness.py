@@ -127,7 +127,7 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> Versio
             continue
         m = _VERSION_RE.search(text)
         if m:
-            rel = str(init_path.relative_to(repo_path))
+            rel = init_path.relative_to(repo_path).as_posix()
             return VersionInfo(declared=True, value=m.group(1), source=rel)
 
     for init_path in repo_path.glob("*/__init__.py"):
@@ -140,7 +140,7 @@ def _detect_version(repo_path: Path, pyproject: dict[str, Any] | None) -> Versio
             continue
         m = _VERSION_RE.search(text)
         if m:
-            rel = str(init_path.relative_to(repo_path))
+            rel = init_path.relative_to(repo_path).as_posix()
             return VersionInfo(declared=True, value=m.group(1), source=rel)
 
     # --- Maven (pom.xml) ---

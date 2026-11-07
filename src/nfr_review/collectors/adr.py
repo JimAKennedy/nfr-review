@@ -106,7 +106,7 @@ def _parse_adr(file_path: Path, repo_path: Path) -> AdrDocumentPayload:
     body = _FRONTMATTER_RE.sub("", text).strip() if has_frontmatter else text.strip()
 
     return AdrDocumentPayload(
-        file_path=str(rel),
+        file_path=rel.as_posix(),
         title=title,
         status=status,
         date=date,
@@ -138,7 +138,7 @@ class AdrCollector:
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="adr-document",
                     payload=payload,
                 )

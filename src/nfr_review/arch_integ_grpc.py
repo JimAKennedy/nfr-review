@@ -45,7 +45,7 @@ def discover_grpc_integrations(
     # Build proto service name -> component mapping
     proto_services: dict[str, str] = {}  # ProtoServiceName -> proto_file_path
     for pf in proto_files:
-        rel_path = str(pf.relative_to(repo_path))
+        rel_path = pf.relative_to(repo_path).as_posix()
         if should_exclude_path(rel_path):
             continue
         content = safe_read_text(pf)

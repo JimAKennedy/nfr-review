@@ -257,7 +257,7 @@ class PrivacyCollector:
             if _is_binary(path):
                 continue
 
-            rel = str(path.relative_to(repo_path))
+            rel = path.relative_to(repo_path).as_posix()
             text = _read_safe(path)
             if text is None:
                 continue
