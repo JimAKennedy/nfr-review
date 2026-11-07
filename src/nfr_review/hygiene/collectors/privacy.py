@@ -68,6 +68,9 @@ _BINARY_EXTENSIONS = frozenset(
 )
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}")
+_SCM_USERNAMES = frozenset(
+    {"git", "hg", "svn", "deploy", "ci", "bitbucket", "github", "gitlab"}
+)
 _PHONE_RE = re.compile(
     r"(?<!\d)"
     r"(?:\+?1[-.\s]?)?"
@@ -169,6 +172,9 @@ def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[PrivacyMatch
                 )
         if not is_config:
             for _m in _EMAIL_RE.finditer(line):
+                local_part = _m.group().split("@")[0].lower()
+                if local_part in _SCM_USERNAMES:
+                    continue
                 matches.append(
                     PrivacyMatch(
                         file=rel_path,

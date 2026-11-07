@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -370,7 +371,9 @@ class TestDetectSkaffold:
 
 
 class TestErrorHandling:
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can read any file")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.getuid() == 0, reason="Unix only; root can read any file"
+    )
     def test_unreadable_file_skipped_gracefully(self, tmp_path: Path) -> None:
         marker = tmp_path / "pom.xml"
         marker.write_text("<project/>")
@@ -382,7 +385,9 @@ class TestErrorHandling:
         finally:
             marker.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can read any file")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.getuid() == 0, reason="Unix only; root can read any file"
+    )
     def test_unreadable_spring_boot_marker_returns_false(self, tmp_path: Path) -> None:
         pom = tmp_path / "pom.xml"
         pom.write_text("<project>spring-boot</project>")

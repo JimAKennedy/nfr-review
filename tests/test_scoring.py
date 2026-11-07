@@ -405,16 +405,9 @@ def test_cli_score_flag(tmp_path: Path) -> None:
     assert result.exit_code in (0, 2), (
         f"Unexpected exit code: {result.exit_code}\n{result.output}"
     )
-    # Score should appear in stderr output
-    combined = (result.output or "") + (getattr(result, "stderr", "") or "")
-    # With -q, score output still goes to stderr. In CliRunner without
-    # mix_stderr separation, it all ends up in output.
-    # The score is always displayed when --score is given.
-    # Since -q suppresses phase output but not score output, we check
-    # for the score text in the combined output.
-    assert "Design Maturity Score:" in combined or "Design Maturity Score:" in (
-        result.stderr if hasattr(result, "stderr") else ""
-    ), f"Score not found in output:\n{combined}"
+    assert "Design Maturity Score:" in result.stderr, (
+        f"Score not found in stderr:\n{result.stderr}"
+    )
 
 
 def test_cli_score_with_custom_yaml_config(tmp_path: Path) -> None:
@@ -461,8 +454,7 @@ def test_cli_score_with_custom_yaml_config(tmp_path: Path) -> None:
     assert result.exit_code in (0, 2), (
         f"Unexpected exit code: {result.exit_code}\n{result.output}"
     )
-    combined = (result.output or "") + (getattr(result, "stderr", "") or "")
-    assert "Design Maturity Score:" in combined
+    assert "Design Maturity Score:" in result.stderr
 
 
 def test_config_to_score_integration() -> None:

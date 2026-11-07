@@ -117,7 +117,7 @@ class CollectorManager:
         logger.info("Stopping OTel Collector: pid=%d", pid)
 
         try:
-            self._process.send_signal(signal.SIGTERM)
+            self._process.terminate()
             self._process.wait(timeout=_SHUTDOWN_TIMEOUT_S)
             logger.info("OTel Collector stopped gracefully: pid=%d", pid)
         except subprocess.TimeoutExpired:

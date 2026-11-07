@@ -19,7 +19,7 @@ TOPOLOGY_TRACES = Path("tests/fixtures/otel-traces/traces-multi-service-topology
 class TestBaselineCreateCLI:
     def test_creates_valid_baseline(self, tmp_path: Path) -> None:
         out = tmp_path / "baseline.json"
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli, ["baseline", "create", "--otel-traces", str(MULTI_SVC_TRACES), "-o", str(out)]
         )
         assert result.exit_code == 0, result.output
@@ -43,7 +43,7 @@ class TestBaselineCreateCLI:
 
     def test_prints_output_path_to_stdout(self, tmp_path: Path) -> None:
         out = tmp_path / "bl.json"
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli, ["baseline", "create", "--otel-traces", str(MULTI_SVC_TRACES), "-o", str(out)]
         )
         assert result.exit_code == 0
@@ -53,7 +53,7 @@ class TestBaselineCreateCLI:
         out1 = tmp_path / "bl1.json"
         out2 = tmp_path / "bl2.json"
         for out in (out1, out2):
-            result = CliRunner().invoke(
+            result = CliRunner(mix_stderr=False).invoke(
                 cli,
                 ["baseline", "create", "--otel-traces", str(MULTI_SVC_TRACES), "-o", str(out)],
             )
@@ -67,7 +67,7 @@ class TestBaselineCreateCLI:
 
     def test_topology_fixture(self, tmp_path: Path) -> None:
         out = tmp_path / "topo.json"
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli, ["baseline", "create", "--otel-traces", str(TOPOLOGY_TRACES), "-o", str(out)]
         )
         assert result.exit_code == 0
@@ -76,7 +76,7 @@ class TestBaselineCreateCLI:
         assert len(data["fingerprints"]) >= 3
 
     def test_missing_file(self, tmp_path: Path) -> None:
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli,
             [
                 "baseline",
@@ -93,8 +93,8 @@ class TestBaselineCreateCLI:
         empty = tmp_path / "empty.json"
         empty.write_text("{}")
         out = tmp_path / "out.json"
-        result = CliRunner().invoke(
+        result = CliRunner(mix_stderr=False).invoke(
             cli, ["baseline", "create", "--otel-traces", str(empty), "-o", str(out)]
         )
         assert result.exit_code != 0
-        assert "no spans" in result.output.lower()
+        assert "no spans" in (result.output + result.stderr).lower()

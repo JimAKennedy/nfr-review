@@ -135,7 +135,7 @@ class TestCollectorManager:
             mgr.start()
             mgr.stop()
 
-        mock_proc.send_signal.assert_called_once_with(signal.SIGTERM)
+        mock_proc.terminate.assert_called_once()
         mock_proc.wait.assert_called_once()
         assert mgr._process is None
         mgr.cleanup()
@@ -176,7 +176,7 @@ class TestCollectorManager:
             with CollectorManager(binary, config) as mgr:
                 assert mgr._process is mock_proc
 
-        mock_proc.send_signal.assert_called_once_with(signal.SIGTERM)
+        mock_proc.terminate.assert_called_once()
 
     def test_context_manager_stops_on_exception(self, tmp_path: Path):
         binary = tmp_path / "otelcol"
@@ -193,7 +193,7 @@ class TestCollectorManager:
                 with CollectorManager(binary, config):
                     raise ValueError("boom")
 
-        mock_proc.send_signal.assert_called_once_with(signal.SIGTERM)
+        mock_proc.terminate.assert_called_once()
 
     def test_cleanup_removes_temp_file(self, tmp_path: Path):
         binary = tmp_path / "otelcol"
