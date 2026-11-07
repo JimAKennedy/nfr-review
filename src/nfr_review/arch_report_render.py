@@ -4,11 +4,8 @@
 
 from __future__ import annotations
 
-import base64
-import html
 import logging
 import re
-import struct
 import tempfile
 from collections import defaultdict
 from pathlib import Path
@@ -38,86 +35,13 @@ _SEVERITY_EMOJI: dict[str, str] = {
     "low": "LOW",
 }
 
-# --- CSS for PDF (follows existing pdf.py patterns) ---
+# --- Typst helpers imported from pdf.py ---
 
-_CSS = (
-    "@page { size: A4; margin: 2cm 1.5cm;"
-    " @bottom-center { content: counter(page) ' / ' counter(pages);"
-    " font-size: 9pt; color: #666; } }\n"
-    "@page landscape { size: A4 landscape; margin: 1.5cm 2cm;"
-    " @bottom-center { content: counter(page) ' / ' counter(pages);"
-    " font-size: 9pt; color: #666; } }\n"
-    "* { box-sizing: border-box; }\n"
-    "body { font-family: -apple-system, 'Segoe UI', Roboto,"
-    " Helvetica, Arial, sans-serif;"
-    " font-size: 10pt; line-height: 1.5; color: #1a1a1a; }\n"
-    "h1 { font-size: 20pt; color: #1a1a1a; margin-bottom: 0.2em;"
-    " border-bottom: 2px solid #333; padding-bottom: 0.3em; }\n"
-    "h2 { font-size: 14pt; color: #333; margin-top: 1.5em;"
-    " border-bottom: 1px solid #ccc; padding-bottom: 0.2em;"
-    " page-break-after: avoid; }\n"
-    "h3 { font-size: 12pt; color: #444; margin-top: 1em;"
-    " page-break-after: avoid; }\n"
-    "h4 { font-size: 10pt; color: #555; margin-top: 0.8em;"
-    " page-break-after: avoid; }\n"
-    "table { width: 100%; border-collapse: collapse;"
-    " margin: 0.5em 0 1em 0; page-break-inside: avoid;"
-    " font-size: 9pt; }\n"
-    "th, td { border: 1px solid #ddd; padding: 4px 8px;"
-    " text-align: left; overflow-wrap: anywhere; }\n"
-    "th { background: #f5f5f5; font-weight: 600; }\n"
-    "tr:nth-child(even) { background: #fafafa; }\n"
-    "pre { font-size: 8pt; background: #f5f5f5;"
-    " padding: 8px; border-radius: 4px;"
-    " overflow-x: auto; white-space: pre-wrap; }\n"
-    "code { font-size: 8pt; background: #f5f5f5;"
-    " padding: 1px 4px; border-radius: 2px; }\n"
-    ".severity-badge { display: inline-block; padding: 2px 8px;"
-    " border-radius: 3px; color: white; font-weight: 600;"
-    " font-size: 8pt; }\n"
-    ".risk-card { margin: 0.5em 0; padding: 8px 12px;"
-    " border-left: 4px solid #ddd; background: #fafafa; }\n"
-    ".section-break { page-break-before: always; }\n"
-    ".landscape-page { page: landscape; page-break-before: always; }\n"
-    ".diagram-page { page-break-before: always; margin: 0; padding: 0; }\n"
-    ".diagram-page-landscape { page: landscape;"
-    " page-break-before: always; margin: 0; padding: 0; }\n"
-    ".diagram-img { display: block; margin: 0.5em auto 0 auto; }\n"
-    ".meta-table { width: auto; }\n"
-    ".meta-table td { border: none; padding: 2px 12px 2px 0; }\n"
-    ".meta-table td:first-child { font-weight: 600; color: #555; }\n"
-    ".wide-table th:first-child,"
-    " .wide-table td:first-child { min-width: 90px; white-space: nowrap; }\n"
-    ".wide-table th:nth-child(2),"
-    " .wide-table td:nth-child(2) { min-width: 75px; white-space: nowrap; }\n"
-    ".wide-table th:nth-child(3),"
-    " .wide-table td:nth-child(3) { min-width: 75px; white-space: nowrap; }\n"
-    ".wide-table td:last-child { word-break: break-word; }\n"
-    ".comparison-table { table-layout: fixed; width: 100%; }\n"
-    ".comparison-table th:nth-child(1) { width: 14%; }\n"
-    ".comparison-table th:nth-child(2) { width: 36%; }\n"
-    ".comparison-table th:nth-child(3) { width: 10%; }\n"
-    ".comparison-table th:nth-child(4) { width: 40%; }\n"
-    ".comparison-table td { word-break: break-word;"
-    " vertical-align: top; }\n"
-    ".coverage-summary { margin-bottom: 0.3em; }\n"
-    ".coverage-summary span { display: inline-block;"
-    " margin-right: 1.5em; }\n"
-    ".gaps-table { table-layout: fixed; width: 100%; }\n"
-    ".gaps-table td { word-break: break-word; vertical-align: top; }\n"
-    ".domain-table { table-layout: fixed; width: 100%; }\n"
-    ".domain-table th:nth-child(1) { width: 12%; }\n"
-    ".domain-table th:nth-child(2) { width: 38%; }\n"
-    ".domain-table th:nth-child(3) { width: 15%; }\n"
-    ".domain-table th:nth-child(4) { width: 35%; }\n"
-    ".domain-table td { word-break: break-word; vertical-align: top; }\n"
+from nfr_review.output.pdf import (  # noqa: E402
+    _build_typst_document,
+    _render_mermaid_for_typst,
+    _t,
 )
-
-
-def _h(text: str) -> str:
-    """HTML-escape a string."""
-    return html.escape(str(text))
-
 
 _PAGE_CONTENT_W_MM = 210.0 - 30  # A4 portrait: width minus 1.5 cm margins
 _PAGE_CONTENT_H_MM = 297.0 - 40  # A4 portrait: height minus 2 cm margins
@@ -128,83 +52,6 @@ _LANDSCAPE_CONTENT_H_MM = 210.0 - 30  # A4 landscape: height minus 1.5 cm margin
 _LANDSCAPE_DIAGRAM_MAX_H_MM = _LANDSCAPE_CONTENT_H_MM - 25
 
 _WIDE_DIAGRAM_ASPECT_THRESHOLD = 1.8
-
-
-def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
-    if raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
-        return None
-    w, h = struct.unpack(">II", raw[16:24])
-    return w, h
-
-
-def _is_wide_diagram(img_w: int, img_h: int) -> bool:
-    """Return True if the diagram is wide enough to benefit from landscape."""
-    if img_h <= 0:
-        return False
-    aspect = img_w / img_h
-    return aspect >= _WIDE_DIAGRAM_ASPECT_THRESHOLD
-
-
-def _embed_png(path: Path) -> tuple[str, bool]:
-    """Base64-embed a PNG, sized to fit within a single A4 page.
-
-    Returns ``(html, is_landscape)`` where *is_landscape* is True when the
-    diagram is wide enough to warrant a landscape page.
-    """
-    raw = path.read_bytes()
-    data = base64.b64encode(raw).decode("ascii")
-    dims = _png_dimensions(raw)
-    style = ""
-    landscape = False
-    if dims:
-        img_w, img_h = dims
-        if img_w > 0 and img_h > 0:
-            landscape = _is_wide_diagram(img_w, img_h)
-            if landscape:
-                cw = _LANDSCAPE_CONTENT_W_MM
-                ch = _LANDSCAPE_DIAGRAM_MAX_H_MM
-            else:
-                cw = _PAGE_CONTENT_W_MM
-                ch = _DIAGRAM_MAX_H_MM
-            aspect = img_w / img_h
-            max_aspect = cw / ch
-            if aspect >= max_aspect:
-                fw = cw
-                fh = fw / aspect
-            else:
-                fh = ch
-                fw = fh * aspect
-            style = f' style="width:{fw:.1f}mm;height:{fh:.1f}mm"'
-    img_tag = f'<img class="diagram-img" src="data:image/png;base64,{data}"{style} />'
-    return img_tag, landscape
-
-
-def _render_mermaid_to_img(
-    mermaid_text: str,
-    *,
-    width: int = 2400,
-    height: int = 1600,
-) -> tuple[str, bool] | None:
-    """Render mermaid text to a high-res inline PNG.
-
-    Uses a wide viewport (default 2400×1600) so complex diagrams have
-    enough room for legible node layout before the scale factor is applied.
-
-    Returns ``(html, is_landscape)`` or ``None`` on failure.
-    """
-    from nfr_review.output.render import render_mermaid_to_png
-
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-        tmp_path = Path(tmp.name)
-    try:
-        result = render_mermaid_to_png(
-            mermaid_text, tmp_path, scale=4, width=width, height=height
-        )
-        if result is None:
-            return None
-        return _embed_png(tmp_path)
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -608,273 +455,266 @@ def render_arch_markdown(report: ArchReport, output_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# PDF rendering
+# PDF rendering (Typst)
 # ---------------------------------------------------------------------------
 
 
-def _pdf_metadata_html(report: ArchReport) -> str:
-    """Render metadata as an HTML table."""
+def _arch_metadata_typst(report: ArchReport) -> str:
+    """Render metadata as a Typst table."""
     meta = report.metadata
     rows = [
-        f"<tr><td>Generated</td><td>{_h(meta.timestamp)}</td></tr>",
-        f"<tr><td>Tool version</td><td>{_h(meta.tool_version)}</td></tr>",
-        f"<tr><td>Schema version</td><td>{_h(meta.schema_version)}</td></tr>",
+        f"  [*Generated*], [{_t(meta.timestamp)}],",
+        f"  [*Tool version*], [{_t(meta.tool_version)}],",
+        f"  [*Schema version*], [{_t(meta.schema_version)}],",
     ]
     if meta.repos_analyzed:
-        repos = ", ".join(_h(r.name) for r in meta.repos_analyzed)
-        rows.append(f"<tr><td>Repositories</td><td>{repos}</td></tr>")
-    llm_status = f"Yes ({_h(meta.llm_model or '')})" if meta.llm_available else "No"
-    rows.append(f"<tr><td>LLM available</td><td>{llm_status}</td></tr>")
-    return f'<table class="meta-table">{"".join(rows)}</table>'
+        repos = ", ".join(_t(r.name) for r in meta.repos_analyzed)
+        rows.append(f"  [*Repositories*], [{repos}],")
+    llm_status = f"Yes ({_t(meta.llm_model or '')})" if meta.llm_available else "No"
+    rows.append(f"  [*LLM available*], [{llm_status}],")
+    rows_str = "\n".join(rows)
+    return f"""#table(
+  columns: (auto, 1fr),
+  stroke: 0.5pt + rgb("dddddd"),
+{rows_str}
+)
+"""
 
 
-def _pdf_executive_summary_html(report: ArchReport) -> str:
-    """Render executive summary as HTML."""
-    parts = [
-        "<h2>Executive Summary</h2>",
-        "<table>",
-        "<tr><th>Metric</th><th>Count</th></tr>",
-        f"<tr><td>Components</td><td>{len(report.components)}</td></tr>",
-        f"<tr><td>Integration points</td><td>{len(report.integration_points)}</td></tr>",
-        f"<tr><td>Dynamic scenarios</td><td>{len(report.dynamic_scenarios)}</td></tr>",
-        f"<tr><td>C4 diagrams</td><td>{len(report.diagrams)}</td></tr>",
-        f"<tr><td>Risk findings</td><td>{len(report.risk_findings)}</td></tr>",
-        f"<tr><td>Recommendations</td><td>{len(report.recommendations)}</td></tr>",
-        "</table>",
-    ]
-    return "\n".join(parts)
+def _arch_executive_summary_typst(report: ArchReport) -> str:
+    """Render executive summary as Typst markup."""
+    return f"""== Executive Summary
+
+#table(
+  columns: (1fr, auto),
+  stroke: 0.5pt + rgb("dddddd"),
+  [*Metric*], [*Count*],
+  [Components], [{len(report.components)}],
+  [Integration points], [{len(report.integration_points)}],
+  [Dynamic scenarios], [{len(report.dynamic_scenarios)}],
+  [C4 diagrams], [{len(report.diagrams)}],
+  [Risk findings], [{len(report.risk_findings)}],
+  [Recommendations], [{len(report.recommendations)}],
+)
+"""
 
 
-def _pdf_components_html(report: ArchReport) -> str:
-    """Render components table as HTML on a landscape page."""
+def _arch_components_typst(report: ArchReport) -> str:
+    """Render components table as Typst on a new page."""
     if not report.components:
         return ""
     rows = []
     for comp in report.components:
         rows.append(
-            f"<tr><td>{_h(comp.id)}</td><td>{_h(comp.name)}</td>"
-            f"<td>{_h(comp.component_type)}</td>"
-            f"<td>{_h(comp.description)}</td></tr>"
+            f"  [{_t(comp.id)}], [{_t(comp.name)}],"
+            f" [{_t(comp.component_type)}], [{_t(comp.description)}],"
         )
-    return (
-        '<div class="landscape-page">'
-        "<h2>Components</h2>"
-        '<table class="wide-table"><thead><tr><th>ID</th><th>Name</th>'
-        "<th>Type</th><th>Description</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div>"
-    )
+    rows_str = "\n".join(rows)
+    return f"""#pagebreak()
+
+== Components
+
+#table(
+  columns: (auto, auto, auto, 1fr),
+  stroke: 0.5pt + rgb("dddddd"),
+  [*ID*], [*Name*], [*Type*], [*Description*],
+{rows_str}
+)
+"""
 
 
-def _pdf_integrations_html(report: ArchReport) -> str:
-    """Render integration points table as HTML on a landscape page."""
+def _arch_integrations_typst(report: ArchReport) -> str:
+    """Render integration points table as Typst on a new page."""
     if not report.integration_points:
         return ""
     rows = []
     for ip in report.integration_points:
-        protocol = _h(ip.protocol) if ip.protocol else "-"
+        protocol = _t(ip.protocol) if ip.protocol else "-"
         rows.append(
-            f"<tr><td>{_h(ip.source_component_id)}</td>"
-            f"<td>{_h(ip.target_component_id)}</td>"
-            f"<td>{_h(ip.style)}</td><td>{protocol}</td>"
-            f"<td>{_h(ip.description)}</td></tr>"
+            f"  [{_t(ip.source_component_id)}], [{_t(ip.target_component_id)}],"
+            f" [{_t(ip.style)}], [{protocol}], [{_t(ip.description)}],"
         )
-    return (
-        '<div class="landscape-page">'
-        "<h2>Integration Points</h2>"
-        '<table class="wide-table"><thead><tr><th>Source</th><th>Target</th>'
-        "<th>Style</th><th>Protocol</th><th>Description</th>"
-        "</tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div>"
-    )
+    rows_str = "\n".join(rows)
+    return f"""#pagebreak()
+
+== Integration Points
+
+#table(
+  columns: (auto, auto, auto, auto, 1fr),
+  stroke: 0.5pt + rgb("dddddd"),
+  [*Source*], [*Target*], [*Style*], [*Protocol*], [*Description*],
+{rows_str}
+)
+"""
 
 
-def _pdf_diagrams_html(report: ArchReport) -> str:
-    """Render C4 diagrams as high-res PNG images, one per page."""
+def _arch_diagrams_typst(
+    report: ArchReport,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render C4 diagrams as images, one per page."""
     if not report.diagrams:
         return ""
     parts: list[str] = []
     for diagram in report.diagrams:
-        result = _render_mermaid_to_img(diagram.mermaid)
-        if result:
-            img_html, is_landscape = result
-            page_cls = "diagram-page-landscape" if is_landscape else "diagram-page"
-        else:
-            img_html = None
-            page_cls = "diagram-page"
-        parts.append(f'<div class="{page_cls}">')
-        parts.append(f"<h2>{_h(diagram.title)}</h2>")
+        parts.append("#pagebreak()\n\n")
+        parts.append(f"== {_t(diagram.title)}\n\n")
         if diagram.scope:
-            parts.append(f"<p><em>Scope: {_h(diagram.scope)}</em></p>")
-        parts.append(f"<p><em>Level: {_h(diagram.level)}</em></p>")
-        if img_html:
-            parts.append(img_html)
-        else:
-            parts.append(f"<pre><code>{_h(diagram.mermaid)}</code></pre>")
-        parts.append("</div>")
-    return "\n".join(parts)
+            parts.append(f"_Scope: {_t(diagram.scope)}_\n\n")
+        parts.append(f"_Level: {_t(diagram.level)}_\n\n")
+        parts.append(_render_mermaid_for_typst(diagram.mermaid, image_files, counter))
+        parts.append("\n")
+    return "".join(parts)
 
 
-def _pdf_test_coverage_html(report: ArchReport) -> str:
+def _arch_test_coverage_typst(report: ArchReport) -> str:
     """Render test coverage as per-component subsections with gap tables."""
     if not report.test_coverage:
         return ""
-    parts = ['<div class="section-break">', "<h2>Test Coverage</h2>"]
+    parts = ["#pagebreak()\n\n== Test Coverage\n\n"]
     for tc in report.test_coverage:
-        parts.append(f"<h4>{_h(tc.component_id)}</h4>")
+        parts.append(f"=== {_t(tc.component_id)}\n\n")
         parts.append(
-            f'<p class="coverage-summary">'
-            f"<span><strong>Functional:</strong> {_h(tc.functional_coverage)}</span>"
-            f"<span><strong>NFR:</strong> {_h(tc.nonfunctional_coverage)}</span>"
-            f"</p>"
+            f"*Functional:* {_t(tc.functional_coverage)} "
+            f"#h(1em) *NFR:* {_t(tc.nonfunctional_coverage)}\n\n"
         )
         if tc.gaps:
-            gap_rows = "".join(f"<tr><td>{_h(g)}</td></tr>" for g in tc.gaps)
+            gap_rows = "".join(f"  [{_t(g)}],\n" for g in tc.gaps)
             parts.append(
-                '<table class="gaps-table"><thead><tr>'
-                "<th>Gap</th></tr></thead>"
-                f"<tbody>{gap_rows}</tbody></table>"
+                "#table(\n"
+                "  columns: (1fr,),\n"
+                '  stroke: 0.5pt + rgb("dddddd"),\n'
+                "  [*Gap*],\n"
+                f"{gap_rows}"
+                ")\n\n"
             )
         else:
-            parts.append("<p>No gaps identified.</p>")
-    parts.append("</div>")
-    return "\n".join(parts)
+            parts.append("No gaps identified.\n\n")
+    return "".join(parts)
 
 
-def _pdf_risk_findings_html(report: ArchReport) -> str:
-    """Render risk findings grouped by severity as HTML."""
+def _arch_risk_findings_typst(report: ArchReport) -> str:
+    """Render risk findings grouped by severity as Typst markup."""
     if not report.risk_findings:
-        return (
-            '<div class="section-break">'
-            "<h2>Risk Findings</h2><p>No risks identified.</p>"
-            "</div>"
-        )
+        return "#pagebreak()\n\n== Risk Findings\n\nNo risks identified.\n\n"
 
     by_severity: dict[str, list] = defaultdict(list)
     for risk in report.risk_findings:
         by_severity[risk.severity].append(risk)
 
-    parts = ['<div class="section-break">', "<h2>Risk Findings</h2>"]
+    parts = ["#pagebreak()\n\n== Risk Findings\n\n"]
     for sev in _SEVERITY_ORDER:
         group = by_severity.get(sev, [])
         if not group:
             continue
-        color = _SEVERITY_COLORS.get(sev, "#666")
-        parts.append(f"<h3>{_h(sev.upper())} ({len(group)})</h3>")
+        color = _SEVERITY_COLORS.get(sev, "#666666")
+        parts.append(f'=== #text(fill: rgb("{color}"))[{_t(sev.upper())}] ({len(group)})\n\n')
         for risk in group:
+            inset = "inset: (left: 8pt, top: 4pt, bottom: 4pt, right: 4pt)"
             parts.append(
-                f'<div class="risk-card" style="border-left-color:{color}">'
-                f"<strong>[{_h(risk.id)}] {_h(risk.title)}</strong><br/>"
-                f"Category: {_h(risk.category)}<br/>"
-                f"{_h(risk.description)}"
+                f'#rect(stroke: (left: 3pt + rgb("{color}")), {inset})[\n'
+                f"*[{_t(risk.id)}] {_t(risk.title)}*\n\n"
+                f"Category: {_t(risk.category)}\n\n"
+                f"{_t(risk.description)}\n"
             )
             if risk.evidence:
-                parts.append(f"<br/>Evidence: {_h(risk.evidence)}")
+                parts.append(f"\nEvidence: {_t(risk.evidence)}\n")
             if risk.recommendation:
-                parts.append(f"<br/>Recommendation: {_h(risk.recommendation)}")
+                parts.append(f"\nRecommendation: {_t(risk.recommendation)}\n")
             if risk.affected_component_ids:
-                parts.append(f"<br/>Affected: {_h(', '.join(risk.affected_component_ids))}")
-            parts.append("</div>")
-    parts.append("</div>")
-    return "\n".join(parts)
+                parts.append(f"\nAffected: {_t(', '.join(risk.affected_component_ids))}\n")
+            parts.append("]\n\n")
+    return "".join(parts)
 
 
-def _pdf_domain_model_html(report: ArchReport) -> str:
-    """Render domain model section as HTML."""
+def _arch_domain_model_typst(
+    report: ArchReport,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render domain model section as Typst markup."""
     if report.domain_model is None:
         return ""
 
     dm = report.domain_model
-    parts: list[str] = []
+    parts: list[str] = ["#pagebreak()\n\n== Domain Model\n\n"]
 
     if dm.entities:
         rows = []
         for entity in dm.entities:
-            ctx = _h(entity.bounded_context) if entity.bounded_context else "-"
-            attrs = _h(", ".join(entity.attributes)) if entity.attributes else "-"
+            ctx = _t(entity.bounded_context) if entity.bounded_context else "-"
+            attrs = _t(", ".join(entity.attributes)) if entity.attributes else "-"
             rows.append(
-                f"<tr><td>{_h(entity.name)}</td>"
-                f"<td>{_h(entity.description)}</td>"
-                f"<td>{ctx}</td><td>{attrs}</td></tr>"
+                f"  [{_t(entity.name)}], [{_t(entity.description)}], [{ctx}], [{attrs}],"
             )
+        rows_str = "\n".join(rows)
         parts.append(
-            '<div class="landscape-page">'
-            "<h2>Domain Model</h2>"
-            "<h3>Entities</h3>"
-            '<table class="domain-table"><thead><tr><th>Name</th><th>Description</th>'
-            "<th>Bounded Context</th><th>Attributes</th>"
-            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
-            "</div>"
+            "=== Entities\n\n"
+            "#table(\n"
+            "  columns: (auto, 1fr, auto, auto),\n"
+            '  stroke: 0.5pt + rgb("dddddd"),\n'
+            "  [*Name*], [*Description*], [*Bounded Context*], [*Attributes*],\n"
+            f"{rows_str}\n"
+            ")\n\n"
         )
-    else:
-        parts.append('<div class="section-break"><h2>Domain Model</h2></div>')
 
     if dm.bounded_contexts:
-        parts.append('<div class="section-break">')
-        parts.append("<h3>Bounded Contexts</h3>")
+        parts.append("=== Bounded Contexts\n\n")
         for bc in dm.bounded_contexts:
-            parts.append(f"<p><strong>{_h(bc.name)}</strong> &mdash; {_h(bc.description)}</p>")
+            parts.append(f"*{_t(bc.name)}* --- {_t(bc.description)}\n\n")
             if bc.entities:
-                parts.append(f"<p>Entities: {_h(', '.join(bc.entities))}</p>")
-        parts.append("</div>")
+                parts.append(f"Entities: {_t(', '.join(bc.entities))}\n\n")
 
     if dm.context_map_mermaid:
-        result = _render_mermaid_to_img(dm.context_map_mermaid)
-        if result:
-            img_html, is_landscape = result
-            page_cls = "diagram-page-landscape" if is_landscape else "diagram-page"
-        else:
-            img_html = None
-            page_cls = "diagram-page"
-        parts.append(f'<div class="{page_cls}">')
-        parts.append("<h3>Context Map</h3>")
-        if img_html:
-            parts.append(img_html)
-        else:
-            parts.append(f"<pre><code>{_h(dm.context_map_mermaid)}</code></pre>")
-        parts.append("</div>")
+        parts.append("=== Context Map\n\n")
+        parts.append(_render_mermaid_for_typst(dm.context_map_mermaid, image_files, counter))
+        parts.append("\n")
 
-    return "\n".join(parts)
+    return "".join(parts)
 
 
-def _pdf_market_analysis_html(report: ArchReport) -> str:
-    """Render market analysis section as HTML."""
+def _arch_market_analysis_typst(report: ArchReport) -> str:
+    """Render market analysis section as Typst markup."""
     if report.market_analysis is None:
         return ""
 
     ma = report.market_analysis
-    parts = ['<div class="section-break">', "<h2>Market Analysis</h2>"]
+    parts = ["#pagebreak()\n\n== Market Analysis\n\n"]
 
-    parts.append(f"<p><strong>Overall maturity:</strong> {_h(ma.overall_maturity)}</p>")
+    parts.append(f"*Overall maturity:* {_t(ma.overall_maturity)}\n\n")
     if ma.maturity_rationale:
-        parts.append(f"<p><strong>Rationale:</strong> {_h(ma.maturity_rationale)}</p>")
+        parts.append(f"*Rationale:* {_t(ma.maturity_rationale)}\n\n")
     if ma.differentiation_summary:
-        parts.append(
-            f"<p><strong>Differentiation:</strong> {_h(ma.differentiation_summary)}</p>"
-        )
-    parts.append("</div>")
+        parts.append(f"*Differentiation:* {_t(ma.differentiation_summary)}\n\n")
 
     if ma.comparisons:
         rows = []
         for comp in ma.comparisons:
             rows.append(
-                f"<tr><td>{_h(comp.name)}</td><td>{_h(comp.description)}</td>"
-                f"<td>{_h(comp.maturity)}</td>"
-                f"<td>{_h(comp.relative_positioning)}</td></tr>"
+                f"  [{_t(comp.name)}], [{_t(comp.description)}],"
+                f" [{_t(comp.maturity)}], [{_t(comp.relative_positioning)}],"
             )
+        rows_str = "\n".join(rows)
         parts.append(
-            '<div class="landscape-page">'
-            "<h3>Comparisons</h3>"
-            '<table class="comparison-table"><thead><tr><th>Name</th>'
-            "<th>Description</th><th>Maturity</th><th>Positioning</th>"
-            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
-            "</div>"
+            "=== Comparisons\n\n"
+            "#table(\n"
+            "  columns: (auto, 1fr, auto, 1fr),\n"
+            '  stroke: 0.5pt + rgb("dddddd"),\n'
+            "  [*Name*], [*Description*], [*Maturity*], [*Positioning*],\n"
+            f"{rows_str}\n"
+            ")\n\n"
         )
 
-    return "\n".join(parts)
+    return "".join(parts)
 
 
-def _pdf_repo_dependencies_html(report: ArchReport) -> str:
-    """Render repo-to-repo dependency diagram as HTML for PDF."""
+def _arch_repo_dependencies_typst(
+    report: ArchReport,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render repo-to-repo dependency diagram as Typst for PDF."""
     if not report.metadata.repos_analyzed or len(report.metadata.repos_analyzed) <= 1:
         return ""
 
@@ -884,163 +724,151 @@ def _pdf_repo_dependencies_html(report: ArchReport) -> str:
     if not mermaid:
         return ""
 
-    parts: list[str] = ['<div class="section-break">', "<h2>Repository Dependencies</h2>"]
-
-    result = _render_mermaid_to_img(mermaid)
-    if result:
-        img_html, is_landscape = result
-        if is_landscape:
-            parts[0] = '<div class="diagram-page-landscape">'
-        parts.append(img_html)
-    else:
-        parts.append(f"<pre><code>{_h(mermaid)}</code></pre>")
+    parts: list[str] = ["#pagebreak()\n\n== Repository Dependencies\n\n"]
+    parts.append(_render_mermaid_for_typst(mermaid, image_files, counter))
+    parts.append("\n")
 
     cross_repo = [ip for ip in report.integration_points if ip.is_cross_repo]
     if cross_repo:
         rows = []
         for ip in cross_repo:
             rows.append(
-                f"<tr><td>{_h(ip.source_component_id)}</td>"
-                f"<td>{_h(ip.target_component_id)}</td>"
-                f"<td>{_h(ip.style)}</td>"
-                f"<td>{_h(ip.description)}</td></tr>"
+                f"  [{_t(ip.source_component_id)}], [{_t(ip.target_component_id)}],"
+                f" [{_t(ip.style)}], [{_t(ip.description)}],"
             )
-        parts.append("<h3>Cross-Repository Integration Points</h3>")
+        rows_str = "\n".join(rows)
         parts.append(
-            '<table class="wide-table"><thead><tr>'
-            "<th>Source</th><th>Target</th><th>Style</th><th>Description</th>"
-            f"</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+            "=== Cross-Repository Integration Points\n\n"
+            "#table(\n"
+            "  columns: (auto, auto, auto, 1fr),\n"
+            '  stroke: 0.5pt + rgb("dddddd"),\n'
+            "  [*Source*], [*Target*], [*Style*], [*Description*],\n"
+            f"{rows_str}\n"
+            ")\n\n"
         )
 
-    parts.append("</div>")
-    return "\n".join(parts)
+    return "".join(parts)
 
 
-def _pdf_cross_repo_edges_html(report: ArchReport) -> str:
-    """Render cross-repository edges as an HTML table."""
+def _arch_cross_repo_edges_typst(report: ArchReport) -> str:
+    """Render cross-repository edges as a Typst table."""
     if not report.cross_repo_edges:
         return ""
     rows = []
     for edge in report.cross_repo_edges:
         rows.append(
-            f"<tr><td>{_h(edge.source_repo)}</td><td>{_h(edge.source_class)}</td>"
-            f"<td>{_h(edge.target_repo)}</td><td>{_h(edge.target_class)}</td></tr>"
+            f"  [{_t(edge.source_repo)}], [{_t(edge.source_class)}],"
+            f" [{_t(edge.target_repo)}], [{_t(edge.target_class)}],"
         )
+    rows_str = "\n".join(rows)
     return (
-        '<div class="section-break">'
-        "<h2>Cross-Repository Edges</h2>"
-        f"<p>Total cross-repo edges: {len(report.cross_repo_edges)}</p>"
-        "<table><thead><tr><th>Source Repo</th><th>Source Class</th>"
-        "<th>Target Repo</th><th>Target Class</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        "#pagebreak()\n\n"
+        "== Cross-Repository Edges\n\n"
+        f"Total cross-repo edges: {len(report.cross_repo_edges)}\n\n"
+        "#table(\n"
+        "  columns: (auto, auto, auto, auto),\n"
+        '  stroke: 0.5pt + rgb("dddddd"),\n'
+        "  [*Source Repo*], [*Source Class*], [*Target Repo*], [*Target Class*],\n"
+        f"{rows_str}\n"
+        ")\n\n"
     )
 
 
-def _pdf_dynamic_analysis_html(report: ArchReport) -> str:
-    """Render dynamic analysis (OTel topology) as HTML."""
+def _arch_dynamic_analysis_typst(
+    report: ArchReport,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render dynamic analysis (OTel topology) as Typst markup."""
     if not report.dynamic_analysis:
         return ""
     da = report.dynamic_analysis
     parts = [
-        '<div class="section-break">',
-        "<h2>Dynamic Analysis</h2>",
-        f"<p><strong>Services observed:</strong> {da.service_count} &nbsp; "
-        f"<strong>Cross-service edges:</strong> {da.edge_count}</p>",
+        "#pagebreak()\n\n"
+        "== Dynamic Analysis\n\n"
+        f"*Services observed:* {da.service_count} #h(1em) "
+        f"*Cross-service edges:* {da.edge_count}\n\n"
     ]
     if da.services:
-        svc_items = "".join(f"<li>{_h(s)}</li>" for s in da.services)
-        parts.append(f"<h3>Observed Services</h3><ul>{svc_items}</ul>")
+        svc_items = "".join(f"- {_t(s)}\n" for s in da.services)
+        parts.append(f"=== Observed Services\n\n{svc_items}\n")
     if da.topology_mermaid:
-        result = _render_mermaid_to_img(da.topology_mermaid)
-        if result:
-            img_html, _ = result
-            parts.append("<h3>Service Topology</h3>")
-            parts.append(img_html)
-        else:
-            parts.append(
-                f"<h3>Service Topology</h3><pre><code>{_h(da.topology_mermaid)}</code></pre>"
-            )
-    parts.append("</div>")
-    return "\n".join(parts)
+        parts.append("=== Service Topology\n\n")
+        parts.append(_render_mermaid_for_typst(da.topology_mermaid, image_files, counter))
+        parts.append("\n")
+    return "".join(parts)
 
 
-def _pdf_recommendations_html(report: ArchReport) -> str:
-    """Render recommendations grouped by priority as HTML."""
+def _arch_recommendations_typst(report: ArchReport) -> str:
+    """Render recommendations grouped by priority as Typst markup."""
     if not report.recommendations:
-        return (
-            '<div class="section-break">'
-            "<h2>Recommendations</h2><p>No recommendations.</p>"
-            "</div>"
-        )
+        return "#pagebreak()\n\n== Recommendations\n\nNo recommendations.\n\n"
 
     by_priority: dict[str, list] = defaultdict(list)
     for rec in report.recommendations:
         by_priority[rec.priority].append(rec)
 
-    parts = ['<div class="section-break">', "<h2>Recommendations</h2>"]
+    parts = ["#pagebreak()\n\n== Recommendations\n\n"]
     for pri in _PRIORITY_ORDER:
         group = by_priority.get(pri, [])
         if not group:
             continue
-        parts.append(f"<h3>{_h(pri.upper())} ({len(group)})</h3>")
+        parts.append(f"=== {_t(pri.upper())} ({len(group)})\n\n")
         for rec in group:
+            inset = "inset: (left: 8pt, top: 4pt, bottom: 4pt, right: 4pt)"
             parts.append(
-                f'<div class="risk-card">'
-                f"<strong>[{_h(rec.id)}] {_h(rec.title)}</strong><br/>"
-                f"Category: {_h(rec.category)}<br/>"
-                f"{_h(rec.description)}<br/>"
-                f"Rationale: {_h(rec.rationale)}"
+                f'#rect(stroke: (left: 3pt + rgb("#6c757d")), {inset})[\n'
+                f"*[{_t(rec.id)}] {_t(rec.title)}*\n\n"
+                f"Category: {_t(rec.category)}\n\n"
+                f"{_t(rec.description)}\n\n"
+                f"Rationale: {_t(rec.rationale)}\n"
             )
             if rec.affected_component_ids:
-                parts.append(f"<br/>Affected: {_h(', '.join(rec.affected_component_ids))}")
-            parts.append("</div>")
-    parts.append("</div>")
-    return "\n".join(parts)
+                parts.append(f"\nAffected: {_t(', '.join(rec.affected_component_ids))}\n")
+            parts.append("]\n\n")
+    return "".join(parts)
 
 
 def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
-    """Render *report* as a PDF document using weasyprint.
+    """Render *report* as a PDF document using typst.
 
     Returns the output path on success.
     """
-    import weasyprint  # type: ignore[import-untyped]
+    import typst
 
-    # High-res diagram PNGs can exceed Pillow's default decompression-bomb
-    # threshold.  Raise it so weasyprint doesn't choke on large images.
-    try:
-        from PIL import Image as _PILImage  # type: ignore[import-not-found]
+    image_files: dict[str, bytes] = {}
+    counter: list[int] = [0]
 
-        _PILImage.MAX_IMAGE_PIXELS = 300_000_000
-    except ImportError:
-        pass
-
-    sections = [
-        "<h1>Architecture Report</h1>",
-        _pdf_metadata_html(report),
-        _pdf_executive_summary_html(report),
-        _pdf_components_html(report),
-        _pdf_integrations_html(report),
-        _pdf_repo_dependencies_html(report),
-        _pdf_diagrams_html(report),
-        _pdf_cross_repo_edges_html(report),
-        _pdf_dynamic_analysis_html(report),
-        _pdf_test_coverage_html(report),
-        _pdf_risk_findings_html(report),
-        _pdf_domain_model_html(report),
-        _pdf_market_analysis_html(report),
-        _pdf_recommendations_html(report),
+    sections: list[str] = [
+        f"= {_t('Architecture Report')}\n\n",
+        _arch_metadata_typst(report),
+        _arch_executive_summary_typst(report),
+        _arch_components_typst(report),
+        _arch_integrations_typst(report),
+        _arch_repo_dependencies_typst(report, image_files, counter),
+        _arch_diagrams_typst(report, image_files, counter),
+        _arch_cross_repo_edges_typst(report),
+        _arch_dynamic_analysis_typst(report, image_files, counter),
+        _arch_test_coverage_typst(report),
+        _arch_risk_findings_typst(report),
+        _arch_domain_model_typst(report, image_files, counter),
+        _arch_market_analysis_typst(report),
+        _arch_recommendations_typst(report),
     ]
 
-    html_doc = (
-        '<!DOCTYPE html>\n<html lang="en">\n'
-        '<head><meta charset="utf-8">'
-        "<title>Architecture Report</title>\n"
-        f"<style>{_CSS}</style></head>\n"
-        f"<body>{''.join(s for s in sections if s)}</body>\n</html>"
-    )
+    typst_doc = _build_typst_document([s for s in sections if s], "Architecture Report")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    weasyprint.HTML(string=html_doc).write_pdf(str(output_path))
+
+    if image_files:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for filename, raw in image_files.items():
+                (Path(tmpdir) / filename).write_bytes(raw)
+            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)
+    else:
+        pdf_bytes = typst.compile(typst_doc.encode())
+
+    output_path.write_bytes(pdf_bytes)
     logger.info(
         "PDF report written to %s (%d bytes)",
         output_path,
