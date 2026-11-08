@@ -34,7 +34,7 @@ def _run_pilot(tmp_path: Path) -> tuple[Path, Path, object]:
     """Run the full pilot scan, return (csv_path, jsonl_path, result)."""
     csv_path = tmp_path / "findings.csv"
     jsonl_path = tmp_path / "findings.jsonl"
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         [

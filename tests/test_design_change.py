@@ -659,7 +659,7 @@ class TestCLIDesignBaselineRoundTrip:
             pytest.skip("ci-sample-repo fixture not available")
 
         baseline_dir = tmp_path / "baselines"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         result1 = runner.invoke(
             cli,
@@ -3594,7 +3594,7 @@ class TestCLIDesignChangeDetection:
         shutil.copytree(fixture_src, fixture)
 
         baseline_dir = tmp_path / "baselines"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
 
         # -- First run: creates the initial baseline -----------------------
         result1 = runner.invoke(

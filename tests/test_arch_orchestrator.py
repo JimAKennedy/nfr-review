@@ -136,7 +136,7 @@ class TestArchCliCommand:
     """Tests for the 'nfr-review arch' CLI command."""
 
     def test_arch_basic_run(self, sample_repo: Path) -> None:
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(cli, ["arch", str(sample_repo), "--no-llm"])
             assert result.exit_code == 0, result.output + (
@@ -145,7 +145,7 @@ class TestArchCliCommand:
 
     def test_arch_json_output(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -164,7 +164,7 @@ class TestArchCliCommand:
 
     def test_arch_markdown_output(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -183,7 +183,7 @@ class TestArchCliCommand:
 
     def test_arch_multiple_formats(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -203,23 +203,23 @@ class TestArchCliCommand:
         assert len(list(out_dir.glob("*-architecture-report.md"))) == 1
 
     def test_arch_no_target_fails(self) -> None:
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(cli, ["arch"])
         assert result.exit_code != 0
 
     def test_arch_nonexistent_target_fails(self) -> None:
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(cli, ["arch", "/nonexistent/path"])
         assert result.exit_code != 0
 
     def test_arch_verbose_quiet_conflict(self, sample_repo: Path) -> None:
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(cli, ["arch", str(sample_repo), "-v", "-q"])
         assert result.exit_code != 0
 
     def test_arch_quiet_mode(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -237,7 +237,7 @@ class TestArchCliCommand:
 
     def test_arch_dsl_output(self, sample_repo: Path, tmp_path: Path) -> None:
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
@@ -266,7 +266,7 @@ class TestArchCliCommand:
         (repo_b / "app.py").write_text("y = 2\n")
 
         out_dir = tmp_path / "out"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [

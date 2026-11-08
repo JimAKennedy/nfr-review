@@ -23,7 +23,7 @@ from nfr_review.collectors.jdepend import JDependCollector
 
 
 def _runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 # ──────────────────────────────────────────────────────────────────────

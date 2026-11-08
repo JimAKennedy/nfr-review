@@ -61,7 +61,7 @@ def test_e2e_run_produces_csv_and_jsonl_with_full_provenance(
     csv_path = tmp_path / "findings.csv"
     jsonl_path = tmp_path / "findings.jsonl"
 
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         [
@@ -116,7 +116,7 @@ def test_e2e_stderr_summary_line_is_emitted(tmp_path: Path) -> None:
     shutil.copytree(FIXTURE_DIR, repo)
     _init_repo(repo)
 
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(
         cli,
         [
@@ -141,6 +141,6 @@ def test_e2e_stderr_summary_line_is_emitted(tmp_path: Path) -> None:
     ],
 )
 def test_e2e_explain_unknown_rule_exits_1(argv: list[str], expected_exit: int) -> None:
-    runner = CliRunner(mix_stderr=False)
+    runner = CliRunner()
     result = runner.invoke(cli, argv)
     assert result.exit_code == expected_exit

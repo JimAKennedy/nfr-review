@@ -19,7 +19,7 @@ TOPOLOGY_TRACES = Path("tests/fixtures/otel-traces/traces-multi-service-topology
 
 def _create_baseline_from_fixture(fixture: Path, out: Path) -> None:
     """Helper: create a baseline from a fixture trace file."""
-    result = CliRunner(mix_stderr=False).invoke(
+    result = CliRunner().invoke(
         cli, ["baseline", "create", "--otel-traces", str(fixture), "-o", str(out)]
     )
     assert result.exit_code == 0, result.output
@@ -49,7 +49,7 @@ class TestBaselineDiffCLI:
     def test_diff_identical_no_findings(self, tmp_path: Path) -> None:
         bl = tmp_path / "bl.json"
         _create_baseline_from_fixture(MULTI_SVC_TRACES, bl)
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -65,7 +65,7 @@ class TestBaselineDiffCLI:
 
     def test_diff_with_novel_interactions_md(self, tmp_path: Path) -> None:
         bl = _make_partial_baseline(tmp_path)
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -82,7 +82,7 @@ class TestBaselineDiffCLI:
     def test_diff_json_format(self, tmp_path: Path) -> None:
         bl = _make_partial_baseline(tmp_path)
         out = tmp_path / "diff.jsonl"
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -109,7 +109,7 @@ class TestBaselineDiffCLI:
     def test_diff_output_to_file(self, tmp_path: Path) -> None:
         bl = _make_partial_baseline(tmp_path)
         out = tmp_path / "diff.md"
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -129,7 +129,7 @@ class TestBaselineDiffCLI:
 
     def test_diff_stats_to_stderr(self, tmp_path: Path) -> None:
         bl = _make_partial_baseline(tmp_path)
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -145,7 +145,7 @@ class TestBaselineDiffCLI:
         assert "disappeared" in result.stderr
 
     def test_diff_missing_baseline(self, tmp_path: Path) -> None:
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             [
                 "baseline",
@@ -162,7 +162,7 @@ class TestBaselineDiffCLI:
         bl = _make_partial_baseline(tmp_path)
         empty = tmp_path / "empty.json"
         empty.write_text("{}")
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             ["baseline", "diff", "--baseline", str(bl), "--otel-traces", str(empty)],
         )
@@ -173,7 +173,7 @@ class TestBaselineDiffCLI:
         """Diff topology traces against multi-service baseline."""
         bl = tmp_path / "bl.json"
         _create_baseline_from_fixture(MULTI_SVC_TRACES, bl)
-        result = CliRunner(mix_stderr=False).invoke(
+        result = CliRunner().invoke(
             cli,
             ["baseline", "diff", "--baseline", str(bl), "--otel-traces", str(TOPOLOGY_TRACES)],
         )

@@ -19,7 +19,7 @@ from nfr_review.registry import rule_registry
 
 
 def _runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def test_version_command_prints_version() -> None:

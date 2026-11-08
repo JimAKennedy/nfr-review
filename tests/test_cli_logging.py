@@ -29,7 +29,7 @@ def _reset_nfr_logger():
 
 
 def _runner() -> CliRunner:
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 def _run_args(tmp_path: Path) -> list[str]:

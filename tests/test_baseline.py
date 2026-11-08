@@ -421,7 +421,7 @@ class TestCLIBaseline:
         # First run: generate JSONL baseline
         jsonl_first = tmp_path / "first.jsonl"
         csv_first = tmp_path / "first.csv"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result1 = runner.invoke(
             cli,
             [
@@ -482,7 +482,7 @@ class TestCLIBaseline:
 
         csv_path = tmp_path / "out.csv"
         jsonl_path = tmp_path / "out.jsonl"
-        runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
         result = runner.invoke(
             cli,
             [
