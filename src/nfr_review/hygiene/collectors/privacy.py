@@ -69,7 +69,7 @@ _BINARY_EXTENSIONS = frozenset(
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}")
 _SCM_USERNAMES = frozenset(
-    {"git", "hg", "svn", "deploy", "ci", "bitbucket", "github", "gitlab"}
+    {"git", "hg", "svn", "deploy", "ci", "bitbucket", "github", "gitlab", "ssh"}
 )
 _PHONE_RE = re.compile(
     r"(?<!\d)"
