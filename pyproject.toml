@@ -61,7 +61,6 @@ dev = [
     "pytest-aiohttp>=1.0",
     "filelock>=3.12",
     "ruff>=0.6",
-    "anthropic>=0.40",
     "build>=1.0",
 ]
 llm = [
