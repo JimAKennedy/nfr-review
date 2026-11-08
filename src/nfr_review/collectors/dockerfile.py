@@ -222,7 +222,7 @@ class DockerfileCollector:
         if self._parser is None:
             try:
                 self._parser = make_parser("dockerfile")
-            except (ImportError, ModuleNotFoundError):
+            except (ImportError, ModuleNotFoundError, AttributeError):
                 msg = (
                     "tree-sitter grammar for dockerfile not installed"
                     " on this platform — collector disabled"

@@ -103,7 +103,7 @@ class BaseASTCollector(ABC):
         if self._parser is None:
             try:
                 self._parser = make_parser(self.language)  # type: ignore[assignment]
-            except (ImportError, ModuleNotFoundError):
+            except (ImportError, ModuleNotFoundError, AttributeError):
                 msg = (
                     f"tree-sitter grammar for {self.language} not installed"
                     " on this platform — collector disabled"

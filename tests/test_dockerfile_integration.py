@@ -8,6 +8,21 @@ from pathlib import Path
 import pytest
 
 from nfr_review.collectors.dockerfile import DockerfileCollector
+
+
+def _dockerfile_grammar_available() -> bool:
+    try:
+        import tree_sitter_dockerfile
+
+        return hasattr(tree_sitter_dockerfile, "language")
+    except ImportError:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _dockerfile_grammar_available(),
+    reason="tree-sitter-dockerfile grammar not available (stub package — see M.0 backlog)",
+)
 from nfr_review.collectors.repo_structure import RepoStructureCollector
 from nfr_review.config import Config
 from nfr_review.engine import Engine, RunResult
