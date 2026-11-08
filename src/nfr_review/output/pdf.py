@@ -162,8 +162,8 @@ def _render_mermaid_for_typst(
         for line in lines:
             if '"' in line and ":" in line:
                 label = line.split('"')[1]
-                val = line.split(":")[-1].strip()
-                rows.append((_t(label), _t(val)))
+                val_str = line.split(":")[-1].strip()
+                rows.append((_t(label), _t(val_str)))
         if rows:
             cells = "".join(f"  [{label}], [{val}],\n" for label, val in rows)
             return (
@@ -716,7 +716,7 @@ def render_pdf(
         with tempfile.TemporaryDirectory() as tmpdir:
             for filename, raw in image_files.items():
                 (Path(tmpdir) / filename).write_bytes(raw)
-            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)
+            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)  # type: ignore[type-var]
     else:
         pdf_bytes = typst.compile(typst_doc.encode())
 

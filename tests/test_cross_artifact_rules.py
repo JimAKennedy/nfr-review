@@ -11,6 +11,12 @@ from pathlib import Path
 import pytest
 
 from nfr_review.collectors.dockerfile import DockerfileCollector
+from nfr_review.collectors.k8s_manifest import K8sManifestCollector
+from nfr_review.config import Config
+from nfr_review.engine import Engine, RunResult
+from nfr_review.registry import Registry
+from nfr_review.rules.dockerfile_k8s_image_drift import DockerfileK8sImageDriftRule
+from nfr_review.rules.dockerfile_k8s_user_conflict import DockerfileK8sUserConflictRule
 
 
 def _dockerfile_grammar_available() -> bool:
@@ -26,12 +32,6 @@ _skip_dockerfile = pytest.mark.skipif(
     not _dockerfile_grammar_available(),
     reason="tree-sitter-dockerfile grammar not available (stub package — see M.0 backlog)",
 )
-from nfr_review.collectors.k8s_manifest import K8sManifestCollector
-from nfr_review.config import Config
-from nfr_review.engine import Engine, RunResult
-from nfr_review.registry import Registry
-from nfr_review.rules.dockerfile_k8s_image_drift import DockerfileK8sImageDriftRule
-from nfr_review.rules.dockerfile_k8s_user_conflict import DockerfileK8sUserConflictRule
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONFLICT_REPO = FIXTURES / "cross-artifact-conflict"

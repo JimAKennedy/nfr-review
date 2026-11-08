@@ -8,6 +8,15 @@ from pathlib import Path
 import pytest
 
 from nfr_review.collectors.dockerfile import DockerfileCollector
+from nfr_review.collectors.repo_structure import RepoStructureCollector
+from nfr_review.config import Config
+from nfr_review.engine import Engine, RunResult
+from nfr_review.registry import Registry
+from nfr_review.rules.dockerfile_base_pinning import DockerfileBasePinningRule
+from nfr_review.rules.dockerfile_multistage import DockerfileMultistageRule
+from nfr_review.rules.dockerfile_secret_leakage import DockerfileSecretLeakageRule
+from nfr_review.rules.dockerfile_user_directive import DockerfileUserDirectiveRule
+from nfr_review.rules.sample import ReadmeExistsRule
 
 
 def _dockerfile_grammar_available() -> bool:
@@ -23,15 +32,6 @@ pytestmark = pytest.mark.skipif(
     not _dockerfile_grammar_available(),
     reason="tree-sitter-dockerfile grammar not available (stub package — see M.0 backlog)",
 )
-from nfr_review.collectors.repo_structure import RepoStructureCollector
-from nfr_review.config import Config
-from nfr_review.engine import Engine, RunResult
-from nfr_review.registry import Registry
-from nfr_review.rules.dockerfile_base_pinning import DockerfileBasePinningRule
-from nfr_review.rules.dockerfile_multistage import DockerfileMultistageRule
-from nfr_review.rules.dockerfile_secret_leakage import DockerfileSecretLeakageRule
-from nfr_review.rules.dockerfile_user_directive import DockerfileUserDirectiveRule
-from nfr_review.rules.sample import ReadmeExistsRule
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOCKERFILE_REPO = FIXTURES / "dockerfile-sample-repo"

@@ -10,10 +10,13 @@
 
 ## Auto-Mode Code Quality
 
-After writing or modifying any `.py` file, run `ruff format <file>` before finishing the
-task. This prevents pre-commit hook reformatting from creating dirty working-tree state
-after git commits. This applies to all agents and subagents — format is not a git command
-and is safe to run during task execution.
+After writing or modifying any `.py` file, run ALL THREE before finishing the task:
+1. `ruff format <file>` — prevents pre-commit hook reformatting dirty working-tree state
+2. `ruff check src/ tests/` — catches lint errors
+3. `mypy src/` — catches type errors
+
+This applies to all agents and subagents. Do not commit or hand back until all three pass.
+Before any push, confirm all three pass on the full codebase — not just the files touched.
 
 ## Branch Discipline
 

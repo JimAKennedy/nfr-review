@@ -864,7 +864,7 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
         with tempfile.TemporaryDirectory() as tmpdir:
             for filename, raw in image_files.items():
                 (Path(tmpdir) / filename).write_bytes(raw)
-            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)
+            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)  # type: ignore[type-var]
     else:
         pdf_bytes = typst.compile(typst_doc.encode())
 
