@@ -188,7 +188,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install pip-licenses
+          pip install pip-licenses==5.5.5
 
       - name: Check licenses
         run: |
@@ -207,7 +207,8 @@ jobs:
             MIT License;
             Mozilla Public License 2.0 (MPL 2.0);
             PSF-2.0;
-            Python Software Foundation License'
+            Python Software Foundation License;
+            BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0'
 
   doc-lint:
     name: Documentation Accuracy

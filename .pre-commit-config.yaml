@@ -57,6 +57,7 @@ repos:
           - networkx>=3.0
           - PyYAML>=6.0
           - types-PyYAML>=6.0
+          - typst>=0.15
         args: [--config-file=pyproject.toml, src/]
         pass_filenames: false
         files: ^src/
