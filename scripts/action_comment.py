@@ -169,7 +169,15 @@ def _classify_records(
     shifted: list[dict[str, Any]] = []
     resolved: list[dict[str, Any]] = []
 
-    findings = [r for r in records if r.get("record_type") == "finding"]
+    # Skipped-rule and suppressed records are never actionable and carry no
+    # classification tag, so they must not fall through to "new" below.
+    findings = [
+        r
+        for r in records
+        if r.get("record_type") == "finding"
+        and r.get("rag") != "skipped"
+        and r.get("suppressed") is not True
+    ]
     has_classification = any(r.get("classification") for r in findings)
 
     if not has_classification:
