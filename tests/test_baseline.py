@@ -500,3 +500,114 @@ class TestCLIBaseline:
         assert "New findings:" in result.stderr
         # The "New findings" count should be > 0
         assert "New findings: 0" not in result.stderr
+
+
+# ---- Baseline noise: hashless shifts, unstable locators, suppressed records ----
+
+
+def _write_records(path: Path, records: list[dict]) -> None:
+    with path.open("w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"record_type": "run_metadata", "tool_version": "0.1.0"}) + "\n")
+        for rec in records:
+            fh.write(json.dumps(rec) + "\n")
+
+
+class TestBaselineNoise:
+    """Findings that did not change must not be reported as new."""
+
+    def test_suppressed_and_resolved_baseline_records_are_ignored(
+        self, tmp_path: Path
+    ) -> None:
+        suppressed = {
+            "record_type": "finding",
+            **_make_finding(rule_id="R001", evidence_locator="a.py:3").model_dump(),
+            "suppressed": True,
+        }
+        resolved = {
+            "record_type": "finding",
+            "classification": "resolved",
+            "rule_id": "R002",
+            "evidence_locator": "b.py:9",
+            "pattern_tag": "missing-readme",
+        }
+        path = tmp_path / "baseline.jsonl"
+        _write_records(path, [suppressed, resolved])
+
+        baseline = load_baseline(path)
+
+        assert baseline.legacy_keys == set()
+        assert classify_findings([], baseline).resolved == []
+
+    def test_hashless_finding_moved_lines_is_shifted(self, tmp_path: Path) -> None:
+        old = _make_finding(
+            rule_id="python-dormant-classes",
+            evidence_locator="src/pkg/manager.py:53",
+            summary="Class 'Manager' has no relationships with other classes",
+        )
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [old])
+        moved = old.model_copy(update={"evidence_locator": "src/pkg/manager.py:52"})
+
+        result = classify_findings([moved], load_baseline(path))
+
+        assert result.new == []
+        assert [s.baseline_locator for s in result.shifted] == ["src/pkg/manager.py:53"]
+        assert result.resolved == []
+
+    def test_hashless_finding_with_different_summary_is_new(self, tmp_path: Path) -> None:
+        old = _make_finding(
+            evidence_locator="src/pkg/manager.py:53", summary="Class 'A' dormant"
+        )
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [old])
+        other = old.model_copy(
+            update={
+                "evidence_locator": "src/pkg/manager.py:80",
+                "summary": "Class 'B' dormant",
+            }
+        )
+
+        result = classify_findings([other], load_baseline(path))
+
+        assert result.new == [other]
+        assert result.resolved == [(old.rule_id, "src/pkg/manager.py:53", old.pattern_tag)]
+
+    def test_renumbered_communities_pair_one_to_one(self, tmp_path: Path) -> None:
+        def community(locator: str, summary: str) -> Finding:
+            return _make_finding(
+                rule_id="structure-weak-boundary",
+                pattern_tag="weak-boundary",
+                evidence_locator=locator,
+                summary=summary,
+            )
+
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(
+            path,
+            [
+                community("community:97", "'Community 97' has 44.5% cross-boundary edges"),
+                community("community:8", "'Community 8' has 48.6% cross-boundary edges"),
+            ],
+        )
+        current = [
+            community("community:91", "'Community 91' has 49.7% cross-boundary edges"),
+            community("community:9", "'Community 9' has 57.6% cross-boundary edges"),
+            community("community:84", "'Community 84' has 56.5% cross-boundary edges"),
+        ]
+
+        baseline = load_baseline(path)
+        result = classify_findings(current, baseline)
+
+        assert len(result.new) == 1
+        assert len(result.shifted) == 2
+        assert result.resolved == []
+        assert filter_new_findings(current, baseline) == result.new
+
+    def test_community_pair_does_not_match_single_community(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [_make_finding(rule_id="S1", evidence_locator="community:4")])
+        pair = _make_finding(rule_id="S1", evidence_locator="community-pair:1-2")
+
+        result = classify_findings([pair], load_baseline(path))
+
+        assert result.new == [pair]

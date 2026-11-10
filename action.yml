@@ -370,14 +370,30 @@ runs:
         body-includes: "<!-- nfr-review-comment -->"
 
     # ── 10. Post / update sticky PR comment ─────────────────────────────
+    # Fork PRs get a read-only GITHUB_TOKEN, so posting would fail with 403.
+    # They get the comment body in the job summary instead (next step).
     - name: Post PR comment
-      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      if: >-
+        inputs.comment == 'true' && github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
       uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5
       with:
         issue-number: ${{ github.event.pull_request.number }}
         comment-id: ${{ steps.find-comment.outputs.comment-id }}
         body-path: ${{ steps.comment-body.outputs.body-path }}
         edit-mode: replace
+
+    - name: Write PR comment to job summary (fork PRs)
+      if: >-
+        inputs.comment == 'true' && github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name != github.repository
+      shell: bash
+      env:
+        BODY_PATH: ${{ steps.comment-body.outputs.body-path }}
+      run: |
+        echo "::notice::Fork PR: GITHUB_TOKEN is read-only, so results are in the job summary instead of a PR comment."
+        cat "$BODY_PATH" >> "$GITHUB_STEP_SUMMARY"
 
     # ── 11. Sync GitHub issues ──────────────────────────────────────────
     - name: Sync remediation issues
