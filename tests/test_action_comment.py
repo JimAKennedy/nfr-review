@@ -381,3 +381,39 @@ class TestBaselineExclusion:
         p = _write_jsonl(tmp_path, [_METADATA, baseline_red, new_amber, resolved])
         md = action_comment.generate_comment(p)
         assert "Full finding details (1 findings)" in md
+
+
+class TestUnclassifiedRecordsWithBaseline:
+    """Skipped and suppressed records carry no classification; they are not new."""
+
+    def test_skipped_and_suppressed_not_counted_as_new(self, tmp_path: Path) -> None:
+        new_amber = {**_AMBER_FINDING, "classification": "new"}
+        skipped = {
+            "record_type": "finding",
+            "rule_id": "R009",
+            "rag": "skipped",
+            "summary": "rule skipped: tech not declared: cpp",
+        }
+        suppressed = {**_RED_FINDING, "suppressed": True}
+        resolved = {**_GREEN_FINDING, "classification": "resolved"}
+        p = _write_jsonl(tmp_path, [_METADATA, new_amber, skipped, suppressed, resolved])
+
+        md = action_comment.generate_comment(p)
+
+        assert "**1 new** | 1 resolved" in md
+        assert "Full finding details (1 findings)" in md
+        assert "rule skipped" not in md
+
+    def test_skipped_rules_omitted_from_details_without_baseline(self, tmp_path: Path) -> None:
+        skipped = {
+            "record_type": "finding",
+            "rule_id": "R009",
+            "rag": "skipped",
+            "summary": "rule skipped: tech not declared: cpp",
+        }
+        p = _write_jsonl(tmp_path, [_METADATA, _AMBER_FINDING, skipped])
+
+        md = action_comment.generate_comment(p)
+
+        assert "Full finding details (1 findings)" in md
+        assert "rule skipped" not in md
