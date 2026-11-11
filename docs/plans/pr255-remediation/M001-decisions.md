@@ -50,3 +50,4 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 ## 2026-11-11 — executing M001/S03
 
 - **Decision:** the G1 dry-run resolution is recorded in the evidence file at Task 1, not copied in at Task 4. — **Why:** the ledger standard appends evidence per task as it lands; Task 4 then appends only the gate results and the row-to-test map.
+- **Decision:** T1 stays `open` after Task 2 and is set `done` at Task 3. — **Why:** both tasks list T1; Task 3 adds the remaining `*records_warning` cases.

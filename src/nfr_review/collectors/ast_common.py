@@ -113,7 +113,8 @@ class BaseASTCollector(ABC):
                     self.language,
                     self.name,
                 )
-                self.grammar_warnings.append(msg)
+                if msg not in self.grammar_warnings:
+                    self.grammar_warnings.append(msg)
                 return None
         return self._parser
 
@@ -129,6 +130,9 @@ class BaseASTCollector(ABC):
         ...
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        # Registered collectors are process-wide singletons: start each run
+        # with no warnings so the engine reports only this run's.
+        self.grammar_warnings = []
         if self._get_parser() is None:
             logger.info(
                 "tree-sitter grammar for %s not installed — %s collector skipped",

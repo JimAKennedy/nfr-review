@@ -231,11 +231,15 @@ class DockerfileCollector:
                     "tree-sitter grammar for dockerfile not installed"
                     " — dockerfile collector disabled"
                 )
-                self.grammar_warnings.append(msg)
+                if msg not in self.grammar_warnings:
+                    self.grammar_warnings.append(msg)
                 return None
         return self._parser
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        # Registered at import as a process-wide singleton: start each run
+        # with no warnings so the engine reports only this run's.
+        self.grammar_warnings = []
         if self._get_parser() is None:
             logger.info(
                 "tree-sitter grammar for dockerfile not installed"
