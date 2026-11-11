@@ -156,7 +156,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| W1 | Forward-slash locators change fingerprints for existing Windows baselines and issue markers | `baseline.py` (`load_baseline`), `issues.py` (`_finding_key`) | Cases in `tests/test_baseline.py` and `tests/test_issues.py` loading `\`-locator records and asserting a match | `open` |
+| W1 | Forward-slash locators change fingerprints for existing Windows baselines and issue markers | `baseline.py` (`load_baseline`), `issues.py` (`_finding_key`) | Cases in `tests/test_baseline.py` and `tests/test_issues.py` loading `\`-locator records and asserting a match | `done` |
 | W2 | 18 assertions across 12 test files apply `.replace("\\", "/")` to the actual value | the 12 test modules (`test_*_deps_collector.py`, `test_path_filter*.py`, …) | `grep` for that pattern over `tests/` returns no assertion-side hits; new Windows-path case passes | `open` |
 
 ### Slice M001/S06 — Report fidelity and LLM payloads

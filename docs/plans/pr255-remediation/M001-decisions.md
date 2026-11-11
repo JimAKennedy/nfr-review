@@ -56,3 +56,7 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 
 - **Decision:** targeted test runs use `-n0` instead of the plan's `-p no:xdist`. — **Why:** `pyproject.toml` `addopts` passes `-n`/`--dist`, so disabling the xdist plugin makes pytest reject those options; `-n0` runs serially with the same effect.
 - **Decision:** Task 1 also rewords `docs/graphify-guide.md` §3 item 2 ("reads that `graph.json`") and replaces the nightly-regression lead sentence with the plan's new one, keeping the GitHub Actions "Add Graphify to your nfr-review workflow:" line after the new sentence. — **Why:** the plan's goal for the guide is that it no longer describes reuse of `graphify-out/graph.json`; §3 item 2 still did, and the old nightly sentence would have duplicated the new one.
+
+## 2026-11-11 — executing M001/S05
+
+- **Decision:** W1 stays `open` after Tasks 1 and 2 and is set `done` at Task 3. — **Why:** Tasks 1–3 all list W1; Task 3 adds the structural-baseline half.
