@@ -28,11 +28,12 @@ regression: python -m pytest -n auto -m regression --timeout=600 tests/regressio
 # tree-sitter-dockerfile grammar has no aarch64 wheel) and scan the C++
 # fixture on a read-only mount, exactly as CI does. Owed by any slice touching
 # the Dockerfile, dependencies, or anything that writes into the scanned repo.
+# --strict-collectors makes any collector crash fail the run (M001/S04).
 container-e2e: >
   podman build --platform linux/amd64 -t nfr-review:e2e-test . &&
   podman run --rm --platform linux/amd64 --entrypoint sh
   -v "$PWD/tests/fixtures/cpp-integration-repo:/repo:ro" -w /repo nfr-review:e2e-test
-  -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+  -c 'nfr-review run --strict-collectors --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
 
 # Ledger conformance for docs/plans/*/ledger.md.
 discipline: jk-standards ledger

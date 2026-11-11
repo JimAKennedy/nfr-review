@@ -336,7 +336,39 @@ jobs:
             -v "${{ github.workspace }}/tests/fixtures/cpp-integration-repo:/repo:ro" \
             -w /repo \
             nfr-review:e2e-test \
-            -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+            -c 'nfr-review run --strict-collectors --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+
+      - name: E2E — strict-collectors fails on an injected collector crash
+        if: steps.filter.outputs.docker == 'true'
+        env:
+          INJECT: |
+            from nfr_review.cli import cli
+            from nfr_review.registry import collector_registry
+
+
+            class Boom:
+                name = "boom"
+                version = "0"
+
+                def collect(self, repo_path, config):
+                    raise RuntimeError("injected collector crash")
+
+
+            collector_registry.register("boom", Boom())
+            cli.main(["run", "--strict-collectors", "--csv", "/tmp/out.csv",
+                      "--jsonl", "/tmp/out.jsonl", "."])
+        run: |
+          set +e
+          docker run --rm --entrypoint python \
+            -v "${{ github.workspace }}/tests/fixtures/cpp-integration-repo:/repo:ro" \
+            -w /repo \
+            nfr-review:e2e-test \
+            -c "$INJECT" 2> inject-stderr.txt
+          code=$?
+          set -e
+          cat inject-stderr.txt
+          test "$code" -eq 1
+          grep -q "collector(s) failed: boom" inject-stderr.txt
 
       - name: E2E skipped
         if: steps.filter.outputs.docker != 'true'
@@ -367,6 +399,7 @@ jobs:
              [ "${{ needs.test-core.result }}" == "failure" ] || \
              [ "${{ needs.test-llm.result }}" == "failure" ] || \
              [ "${{ needs.license-check.result }}" == "failure" ] || \
+             [ "${{ needs.container-e2e.result }}" == "failure" ] || \
              [ "${{ needs.doc-lint.result }}" == "failure" ]; then
             echo "CI failed"
             exit 1
