@@ -303,6 +303,23 @@ class TestGenerateMarketComparison:
         full_arg = llm.call.call_args[0][0]
         assert "7" in full_arg
 
+    def test_oversized_profile_reaches_llm(self) -> None:
+        """A profile over 8 KB is sent whole, not dropped to "[]"."""
+        llm = _make_llm_mock(response=_make_valid_llm_response(1))
+        profile = {
+            "architecture_style": "microservices",
+            "domain_hints": [f"domain-hint-{i:04d}" for i in range(600)],
+        }
+        assert len(json.dumps(profile).encode()) > 8192
+
+        generate_market_comparison(profile, llm)
+
+        sent = llm.call.call_args[0][0]
+        assert not sent.rstrip().endswith("[]")
+        assert '"architecture_style":"microservices"' in sent
+        assert "domain-hint-0599" in sent
+        assert llm.call.call_args.kwargs["max_tokens"] == 2048
+
     def test_llm_unavailable_error(self) -> None:
         """ProviderUnavailableError produces empty section."""
         llm = _make_llm_mock()

@@ -24,7 +24,6 @@ from nfr_review.arch_models import (
 from nfr_review.llm_integration import (
     LlmClient,
     ProviderUnavailableError,
-    run_analysis,
 )
 
 logger = logging.getLogger(__name__)
@@ -274,14 +273,16 @@ def generate_market_comparison(
         the LLM response is malformed.
     """
     prompt = _MARKET_COMPARISON_PROMPT.format(max_comparisons=max_comparisons)
-    evidence_items = [{"solution_profile": profile}]
+    # Send the profile whole. It is already a bounded summary (counts and
+    # name lists), and must not go through run_analysis: its byte-capped
+    # bundle drops whole items, so this single-item payload became "[]"
+    # once it exceeded 8 KB and the LLM compared nothing.
+    payload = json.dumps([{"solution_profile": profile}], separators=(",", ":"))
 
     logger.info("Requesting market comparison from LLM (max_comparisons=%d)", max_comparisons)
 
     try:
-        raw_response = run_analysis(
-            llm, prompt, evidence_items, max_tokens=2048, max_bundle_bytes=8192
-        )
+        raw_response = llm.call(prompt + "\n\n" + payload, max_tokens=2048)
     except ProviderUnavailableError as exc:
         logger.warning("LLM became unavailable during market comparison: %s", exc)
         return MarketAnalysisSection()
