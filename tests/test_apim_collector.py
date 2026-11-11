@@ -129,7 +129,7 @@ class TestApimEdgeCases:
 
         evidence = collector.collect(tmp_path, config=None)
         assert len(evidence) == 1
-        assert evidence[0].payload["file_path"].replace("\\", "/") == "policies/test.xml"
+        assert evidence[0].payload["file_path"] == "policies/test.xml"
 
     def test_file_discovery_via_policy_glob(
         self, collector: ApimPolicyCollector, tmp_path: Path

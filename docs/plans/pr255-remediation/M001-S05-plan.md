@@ -13,7 +13,7 @@
 - [x] Task 1 — W1: normalise baseline locators on load
 - [x] Task 2 — W1: issue keys survive the separator change
 - [x] Task 3 — W1: structural design baseline file items
-- [ ] Task 4 — W2: assert raw locators and add the Windows-path case
+- [x] Task 4 — W2: assert raw locators and add the Windows-path case
 - [ ] Task 5 — Slice gate and evidence
 
 ## Definition of Done

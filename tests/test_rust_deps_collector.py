@@ -174,7 +174,7 @@ class TestEdgeCases:
         assert len(evidences) == 1
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "log"
-        assert "crates/core/Cargo.toml" in deps[0]["source_file"].replace("\\", "/")
+        assert deps[0]["source_file"] == "crates/core/Cargo.toml"
 
 
 def _read_text_spy(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, Any]]:

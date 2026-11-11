@@ -76,11 +76,10 @@ def test_engine_excludes_test_path_findings(tmp_path: Path) -> None:
     non_green = [f for f in result.findings if f.rag != "green"]
     assert len(non_green) > 0, "Expected at least one non-green finding from src/"
     for f in non_green:
-        norm = f.evidence_locator.replace("\\", "/")
-        assert not norm.startswith("tests/"), (
+        assert not f.evidence_locator.startswith("tests/"), (
             f"Finding from test path should have been filtered: {f.evidence_locator}"
         )
-        assert norm.startswith("src/"), (
+        assert f.evidence_locator.startswith("src/"), (
             f"Expected finding from src/ path: {f.evidence_locator}"
         )
 
@@ -99,7 +98,7 @@ def test_engine_includes_test_path_findings_with_flag(tmp_path: Path) -> None:
     result = engine.run(tmp_path, config)
 
     non_green = [f for f in result.findings if f.rag != "green"]
-    locators = {f.evidence_locator.replace("\\", "/") for f in non_green}
+    locators = {f.evidence_locator for f in non_green}
     src_locators = {loc for loc in locators if loc.startswith("src/")}
     test_locators = {loc for loc in locators if loc.startswith("tests/")}
     assert len(src_locators) > 0, "Expected findings from src/ paths"

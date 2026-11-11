@@ -290,7 +290,7 @@ class TestIterRepoFiles:
         )
 
         files = iter_repo_files(tmp_path)
-        rel_paths = {str(f.relative_to(tmp_path)).replace("\\", "/") for f in files}
+        rel_paths = {f.relative_to(tmp_path).as_posix() for f in files}
         assert "src/main.py" in rel_paths
         assert ".gitignore" in rel_paths
         assert "node_modules/pkg.js" not in rel_paths
@@ -305,7 +305,7 @@ class TestIterRepoFiles:
         (tmp_path / "__pycache__" / "mod.pyc").write_bytes(b"\x00")
 
         files = iter_repo_files(tmp_path)
-        rel_paths = {str(f.relative_to(tmp_path)).replace("\\", "/") for f in files}
+        rel_paths = {f.relative_to(tmp_path).as_posix() for f in files}
         assert "src/main.py" in rel_paths
         assert "node_modules/pkg.js" not in rel_paths
         assert "__pycache__/mod.pyc" not in rel_paths
