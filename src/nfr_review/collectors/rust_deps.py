@@ -1,26 +1,34 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Rust dependency collector — parses Cargo.toml [dependencies] /
-[dev-dependencies] tables, enriches each dependency with version metadata
-from deps.dev.
+"""Rust dependency collector — parses Cargo.toml dependency tables (including
+`[target.<cfg>]` tables, workspace-inherited and renamed dependencies),
+enriches each dependency with version metadata from deps.dev. Build output
+under `target/` is never read.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import tomllib
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from nfr_review.collectors.payloads.deps import DependencyItem, DepsPayload
 from nfr_review.deps_dev_client import DepsDevClient, pick_latest_version
 from nfr_review.models import Evidence
-from nfr_review.path_filter import compile_exclude_patterns, should_exclude_path
+from nfr_review.path_filter import (
+    ALWAYS_SKIP_DIRS,
+    compile_exclude_patterns,
+    should_exclude_path,
+)
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger(__name__)
 
 _DEP_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
+_PRUNE_DIRS = ALWAYS_SKIP_DIRS | {"target"}
 
 
 class RustDepsCollector:
@@ -34,13 +42,18 @@ class RustDepsCollector:
         manifest_files: list[str] = []
         raw_deps: list[tuple[str, str, str]] = []  # (source_file, name, declared_version)
 
-        for cargo_path in sorted(repo_path.rglob("Cargo.toml")):
+        manifests = _find_cargo_tomls(repo_path)
+        loaded = {path: _load_cargo_toml(path) for path in manifests}
+        for cargo_path in manifests:
             rel = cargo_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):
                 continue
-            parsed = _parse_cargo_toml(cargo_path)
+            data = loaded[cargo_path]
+            if data is None:
+                continue
+            parsed = _cargo_deps(data, _workspace_dependencies(cargo_path, repo_path, loaded))
             if not parsed:
                 continue
             manifest_files.append(rel)
@@ -77,24 +90,77 @@ class RustDepsCollector:
         ]
 
 
-def _parse_cargo_toml(path: Path) -> list[tuple[str, str]]:
-    """Return (name, declared_version) pairs. Git/path-only deps (no version
-    string, since they aren't published to a registry) are skipped."""
+def _find_cargo_tomls(repo_path: Path) -> list[Path]:
+    """Every Cargo.toml under *repo_path*, never descending into build output."""
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(repo_path):
+        dirnames[:] = [d for d in dirnames if d not in _PRUNE_DIRS]
+        if "Cargo.toml" in filenames:
+            found.append(Path(dirpath) / "Cargo.toml")
+    return sorted(found)
+
+
+def _load_cargo_toml(path: Path) -> dict[str, Any] | None:
     try:
-        data = tomllib.loads(path.read_text())
+        return tomllib.loads(path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         logger.debug("Failed to parse %s", path)
-        return []
+        return None
 
-    deps: list[tuple[str, str]] = []
-    for table_name in _DEP_TABLES:
-        table = data.get(table_name, {})
-        if not isinstance(table, dict):
+
+def _iter_dep_tables(data: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    """Top-level dependency tables, then the same tables under each [target.<spec>]."""
+    sections: list[Any] = [data]
+    target = data.get("target")
+    if isinstance(target, dict):
+        sections.extend(target.values())
+    for section in sections:
+        if not isinstance(section, dict):
             continue
-        for name, spec in table.items():
-            version = _dep_version(spec)
-            if version is not None:
-                deps.append((name, version))
+        for table_name in _DEP_TABLES:
+            table = section.get(table_name)
+            if isinstance(table, dict):
+                yield table
+
+
+def _workspace_dependencies(
+    manifest: Path, repo_path: Path, loaded: dict[Path, dict[str, Any] | None]
+) -> dict[str, Any]:
+    """[workspace.dependencies] of the nearest ancestor workspace manifest."""
+    directory = manifest.parent
+    while True:
+        data = loaded.get(directory / "Cargo.toml")
+        if data is not None:
+            workspace = data.get("workspace")
+            if isinstance(workspace, dict):
+                deps = workspace.get("dependencies", {})
+                return deps if isinstance(deps, dict) else {}
+        if directory == repo_path or directory.parent == directory:
+            return {}
+        directory = directory.parent
+
+
+def _resolve_dep(
+    key: str, spec: Any, workspace_deps: dict[str, Any]
+) -> tuple[str, str] | None:
+    """(crate name, declared version) for one dependency entry, or None
+    for git/path-only deps and unresolvable workspace references."""
+    if isinstance(spec, dict) and spec.get("workspace") is True:
+        spec = workspace_deps.get(key)
+    version = _dep_version(spec)
+    if version is None:
+        return None
+    package = spec.get("package") if isinstance(spec, dict) else None
+    return (package if isinstance(package, str) else key), version
+
+
+def _cargo_deps(data: dict[str, Any], workspace_deps: dict[str, Any]) -> list[tuple[str, str]]:
+    deps: list[tuple[str, str]] = []
+    for table in _iter_dep_tables(data):
+        for key, spec in table.items():
+            resolved = _resolve_dep(key, spec, workspace_deps)
+            if resolved is not None:
+                deps.append(resolved)
     return deps
 
 

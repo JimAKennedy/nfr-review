@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nfr_review.collectors.rust_deps import RustDepsCollector
 from nfr_review.registry import collector_registry
 
@@ -173,3 +175,115 @@ class TestEdgeCases:
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "log"
         assert "crates/core/Cargo.toml" in deps[0]["source_file"].replace("\\", "/")
+
+
+def _read_text_spy(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, Any]]:
+    """Record (path, encoding) for every Path.read_text call."""
+    seen: list[tuple[Path, Any]] = []
+    original = Path.read_text
+
+    def spy(self: Path, *args: Any, **kwargs: Any) -> str:
+        seen.append((self, kwargs.get("encoding", args[0] if args else None)))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy)
+    return seen
+
+
+class TestCargoResolution:
+    @patch("nfr_review.collectors.rust_deps.DepsDevClient")
+    def test_workspace_inherited_dependency_resolves_from_root(
+        self, mock_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["crates/app"]\n\n'
+            "[workspace.dependencies]\n"
+            'serde = { version = "1.0.190", features = ["derive"] }\n'
+            'json = { package = "serde_json", version = "1.0.108" }\n'
+        )
+        member = tmp_path / "crates" / "app"
+        member.mkdir(parents=True)
+        (member / "Cargo.toml").write_text(
+            '[package]\nname = "app"\nversion = "0.1.0"\n\n'
+            "[dependencies]\n"
+            "serde = { workspace = true }\n"
+            "json = { workspace = true }\n"
+        )
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        evidences = RustDepsCollector().collect(tmp_path, None)
+        by_name = {d["name"]: d for d in evidences[0].payload["dependencies"]}
+        assert set(by_name) == {"serde", "serde_json"}
+        assert by_name["serde"]["declared_version"] == "1.0.190"
+        assert by_name["serde_json"]["declared_version"] == "1.0.108"
+        assert by_name["serde"]["source_file"] == "crates/app/Cargo.toml"
+
+    @patch("nfr_review.collectors.rust_deps.DepsDevClient")
+    def test_target_cfg_dependency_tables_parsed(
+        self, mock_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[package]\nname = "x"\nversion = "0.1.0"\n\n'
+            "[target.'cfg(unix)'.dependencies]\n"
+            'nix = "0.27"\n\n'
+            "[target.'cfg(windows)'.dev-dependencies]\n"
+            'winapi = { version = "0.3" }\n'
+        )
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        evidences = RustDepsCollector().collect(tmp_path, None)
+        by_name = {d["name"]: d for d in evidences[0].payload["dependencies"]}
+        assert by_name["nix"]["declared_version"] == "0.27"
+        assert by_name["winapi"]["declared_version"] == "0.3"
+
+    @patch("nfr_review.collectors.rust_deps.DepsDevClient")
+    def test_package_rename_resolves_to_real_crate(
+        self, mock_cls: MagicMock, tmp_path: Path
+    ) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[package]\nname = "x"\nversion = "0.1.0"\n\n'
+            "[dependencies]\n"
+            'http1 = { package = "hyper", version = "0.14" }\n'
+        )
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        evidences = RustDepsCollector().collect(tmp_path, None)
+        names = [d["name"] for d in evidences[0].payload["dependencies"]]
+        assert names == ["hyper"]
+        looked_up = [
+            c[0][1] for c in mock_cls.return_value.get_package_versions.call_args_list
+        ]
+        assert looked_up == ["hyper"]
+
+    @patch("nfr_review.collectors.rust_deps.DepsDevClient")
+    def test_target_dir_is_never_read(
+        self, mock_cls: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[package]\nname = "x"\nversion = "0.1.0"\n\n[dependencies]\nlog = "0.4"\n'
+        )
+        decoy = tmp_path / "target" / "package" / "vendored-0.1.0"
+        decoy.mkdir(parents=True)
+        (decoy / "Cargo.toml").write_text(
+            '[package]\nname = "vendored"\nversion = "0.1.0"\n\n'
+            '[dependencies]\nbogus-crate = "1"\n'
+        )
+        seen = _read_text_spy(monkeypatch)
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        evidences = RustDepsCollector().collect(tmp_path, None)
+        assert [d["name"] for d in evidences[0].payload["dependencies"]] == ["log"]
+        assert evidences[0].payload["manifest_files_found"] == ["Cargo.toml"]
+        read = [p.relative_to(tmp_path).parts for p, _ in seen]
+        assert all("target" not in parts for parts in read)
+
+    @patch("nfr_review.collectors.rust_deps.DepsDevClient")
+    def test_manifest_read_as_utf8(
+        self, mock_cls: MagicMock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "Cargo.toml").write_text(
+            '[package]\nname = "x"\nversion = "0.1.0"\ndescription = "café ✓"\n\n'
+            '[dependencies]\nlog = "0.4"\n',
+            encoding="utf-8",
+        )
+        seen = _read_text_spy(monkeypatch)
+        mock_cls.return_value.get_package_versions = _mock_get_versions()
+        RustDepsCollector().collect(tmp_path, None)
+        cargo_reads = [enc for p, enc in seen if p.name == "Cargo.toml"]
+        assert cargo_reads == ["utf-8"]

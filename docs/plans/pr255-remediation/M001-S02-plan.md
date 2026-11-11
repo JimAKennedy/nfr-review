@@ -7,7 +7,7 @@
 - [x] Task 1 — Lock-call arity and async-context boundary
 - [x] Task 2 — Exact test-code detection, mutex `in_test`, bounded unwrap summary
 - [x] Task 3 — `use`-declaration alias resolution for HTTP-client and spawn extractors
-- [ ] Task 4 — Cargo.toml workspace inheritance, target-cfg tables, renames, `target/` pruning
+- [x] Task 4 — Cargo.toml workspace inheritance, target-cfg tables, renames, `target/` pruning
 - [ ] Task 5 — Complete Rust rule descriptions and regenerated `rules.json`
 
 ## Definition of Done
