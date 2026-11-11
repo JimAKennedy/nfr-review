@@ -611,3 +611,72 @@ class TestBaselineNoise:
         result = classify_findings([pair], load_baseline(path))
 
         assert result.new == [pair]
+
+
+# ---- Windows baselines: locators recorded with backslashes ------------------
+
+
+class TestWindowsBaselineLocators:
+    """Baselines written on Windows before locators used ``/`` still match."""
+
+    def test_backslash_locators_are_normalised_on_load(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(
+            path,
+            [
+                _make_finding(evidence_locator="src\\pkg\\a.py:3"),
+                _make_finding(
+                    rule_id="R002",
+                    evidence_locator="src\\pkg\\b.py:7",
+                    content_hash="abc123def456",
+                ),
+            ],
+        )
+
+        baseline = load_baseline(path)
+
+        assert baseline.legacy_keys == {
+            ("R001", "src/pkg/a.py:3", "missing-readme"),
+            ("R002", "src/pkg/b.py:7", "missing-readme"),
+        }
+        assert baseline.stable_keys == {
+            ("R002", "src/pkg/b.py", "missing-readme", "abc123def456")
+        }
+        assert set(baseline.hashless_summaries) == {
+            ("R001", "src/pkg/a.py:3", "missing-readme")
+        }
+
+    def test_backslash_legacy_key_matches_same_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [_make_finding(evidence_locator="src\\foo.py:12")])
+        current = _make_finding(evidence_locator="src/foo.py:12")
+
+        result = classify_findings([current], load_baseline(path))
+
+        assert result.new == []
+        assert result.shifted == []
+        assert result.resolved == []
+
+    def test_backslash_stable_key_matches_shifted_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(
+            path,
+            [_make_finding(evidence_locator="src\\foo.py:12", content_hash="abc123def456")],
+        )
+        current = _make_finding(evidence_locator="src/foo.py:15", content_hash="abc123def456")
+
+        result = classify_findings([current], load_baseline(path))
+
+        assert result.new == []
+        assert [s.baseline_locator for s in result.shifted] == ["src/foo.py:12"]
+
+    def test_backslash_hashless_entry_matches_moved_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [_make_finding(evidence_locator="src\\foo.py:12")])
+        moved = _make_finding(evidence_locator="src/foo.py:20")
+
+        result = classify_findings([moved], load_baseline(path))
+
+        assert result.new == []
+        assert [s.baseline_locator for s in result.shifted] == ["src/foo.py:12"]
+        assert result.resolved == []

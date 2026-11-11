@@ -235,6 +235,16 @@ def _strip_line_from_locator(locator: str) -> str:
     return _LINE_SUFFIX_RE.sub("", locator)
 
 
+def normalise_locator(locator: str) -> str:
+    """Return *locator* with Windows path separators replaced by ``/``.
+
+    Locators use ``/`` on every platform; records written by earlier Windows
+    runs carry ``\\`` and must be normalised before they are compared with
+    current findings.
+    """
+    return locator.replace("\\", "/")
+
+
 def compute_content_hash(text: str) -> str:
     """Compute a short stable hash from source text for content-based fingerprinting."""
     normalized = text.strip()
@@ -253,4 +263,5 @@ __all__ = [
     "RuleResult",
     "RunMetadata",
     "compute_content_hash",
+    "normalise_locator",
 ]
