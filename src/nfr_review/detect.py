@@ -84,25 +84,30 @@ def _safe_rglob(base: Path, pattern: str) -> list[Path]:
     return [p for p in results if not should_exclude_path(p.relative_to(base).as_posix())]
 
 
+_JAVA_BUILD_FILES = ("pom.xml", "build.gradle", "build.gradle.kts")
+
+
 def _detect_java(repo: Path) -> bool:
-    for name in ("pom.xml", "build.gradle", "build.gradle.kts"):
+    for name in _JAVA_BUILD_FILES:
         if _safe_exists(repo / name):
             return True
-    if _safe_glob(repo / "src", "**/*.java"):
-        return True
-    return False
+    # Monorepos commonly nest Java modules in subdirectories.
+    for name in _JAVA_BUILD_FILES:
+        if _safe_rglob(repo, name):
+            return True
+    return bool(_safe_rglob(repo, "*.java"))
 
 
 def _detect_spring_boot(repo: Path) -> bool:
-    resources = repo / "src" / "main" / "resources"
-    if _safe_is_dir(resources):
-        for name in ("application.yml", "application.properties"):
-            if _safe_exists(resources / name):
+    for name in ("application.yml", "application.yaml", "application.properties"):
+        for path in _safe_rglob(repo, name):
+            if path.parent.as_posix().endswith("src/main/resources"):
                 return True
-    for name in ("pom.xml", "build.gradle", "build.gradle.kts"):
-        content = _safe_read_text(repo / name)
-        if content and "spring-boot" in content:
-            return True
+    for name in _JAVA_BUILD_FILES:
+        for path in _safe_rglob(repo, name):
+            content = _safe_read_text(path)
+            if content and "spring-boot" in content:
+                return True
     return False
 
 
@@ -199,7 +204,8 @@ def _detect_python(repo: Path) -> bool:
     for pattern in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
         if _safe_rglob(repo, pattern):
             return True
-    return False
+    # Script-only repos (no packaging manifest) still contain Python source.
+    return bool(_safe_rglob(repo, "*.py"))
 
 
 def _detect_nodejs(repo: Path) -> bool:

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-18T16:45:17.898367+00:00",
-  "nfr_review_sha": "c0712917484f3fa68a896b93d37fa09695994455",
-  "platform": "Linux",
-  "python_version": "3.12.15",
-  "ci": true
+  "generated_at": "2026-11-11T03:06:16.268512+00:00",
+  "nfr_review_sha": "162f2e04dc07f937967ebfaa5767628850790edf",
+  "platform": "Darwin",
+  "python_version": "3.11.16",
+  "ci": false
 }
