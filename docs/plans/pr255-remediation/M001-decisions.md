@@ -60,3 +60,7 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 ## 2026-11-11 — executing M001/S05
 
 - **Decision:** W1 stays `open` after Tasks 1 and 2 and is set `done` at Task 3. — **Why:** Tasks 1–3 all list W1; Task 3 adds the structural-baseline half.
+
+## 2026-11-11 — executing M001/S06
+
+- **Decision:** the evidence file is created at Task 1 and appended per task; Task 5 appends the slice-gate results and the row-to-test map instead of writing the file. — **Why:** the ledger standard (and the plan's own evidence rule) appends evidence per task as it lands; same precedent as S03.

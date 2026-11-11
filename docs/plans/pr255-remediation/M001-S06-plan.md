@@ -10,7 +10,7 @@
 
 ## Task status
 
-- [ ] Task 1 — P1: restore the Scoring Methodology / LLM Usage appendix in the Typst PDF
+- [x] Task 1 — P1: restore the Scoring Methodology / LLM Usage appendix in the Typst PDF
 - [ ] Task 2 — P2: render architecture diagrams at scale 4 on a 2400×1600 viewport
 - [ ] Task 3 — P3: disclose the model the arch LLM client resolved from config
 - [ ] Task 4 — L1: send oversized solution profiles to the market-comparison LLM call

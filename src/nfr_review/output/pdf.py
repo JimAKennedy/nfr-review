@@ -738,6 +738,19 @@ def render_pdf(
         sections.append("== Appendix A --- Dependency Tree\n\n")
         sections.append(_md_to_typst(body, image_files, counter))
 
+    if score_section_md:
+        # The score section tells readers to "See Appendix — Scoring
+        # Methodology"; emit it (with the LLM usage disclosure) whenever the
+        # score section is present, lettered after the dependency appendix.
+        from nfr_review.output.markdown import _methodology_appendix
+
+        appendix_label = "B" if deps_section_md else "A"
+        methodology_md = _methodology_appendix(llm_info=llm_info)
+        body = methodology_md.split("\n", 1)[1] if "\n" in methodology_md else ""
+        sections.append("#pagebreak()\n\n")
+        sections.append(f"== Appendix {appendix_label} --- Scoring Methodology\n\n")
+        sections.append(_md_to_typst(body, image_files, counter))
+
     typst_doc = _build_typst_document(sections, title)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

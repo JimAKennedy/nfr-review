@@ -6,6 +6,8 @@ import struct
 import zlib
 from pathlib import Path
 
+import pytest
+
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
 from nfr_review.output.pdf import _md_to_typst, _render_mermaid_for_typst, _t, render_pdf
@@ -400,4 +402,81 @@ class TestMdToTypst:
             diagrams={"Severity Chart": mermaid},
         )
         assert result == out
+        assert out.read_bytes()[:5] == b"%PDF-"
+
+
+_SCORE_MD = (
+    "## Design Maturity Score\n\nSee **Appendix — Scoring Methodology** for full details.\n"
+)
+
+
+def _capture_typst(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Replace the Typst compiler with one that records the source."""
+    captured: list[str] = []
+
+    def _fake_compile(typst_doc: str, image_files: dict[str, bytes]) -> bytes:
+        captured.append(typst_doc)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr("nfr_review.output.pdf._compile_typst", _fake_compile)
+    return captured
+
+
+class TestMethodologyAppendix:
+    def test_appendix_with_llm_disclosure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The appendix the score section points at is present, with the model."""
+        captured = _capture_typst(monkeypatch)
+        render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=tmp_path / "r.pdf",
+            score_section_md=_SCORE_MD,
+            llm_info=("anthropic", "claude-test-model-x1"),
+        )
+        doc = captured[0]
+        assert "== Appendix A --- Scoring Methodology" in doc
+        assert "=== LLM Usage in This Report" in doc
+        assert 'model #raw("claude-test-model-x1")' in doc
+
+    def test_appendix_follows_dependency_appendix(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """With a dependency appendix (A), methodology is Appendix B; no LLM."""
+        captured = _capture_typst(monkeypatch)
+        render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=tmp_path / "r.pdf",
+            score_section_md=_SCORE_MD,
+            deps_section_md="## Appendix A — Dependency Tree\n\nNo deps.\n",
+        )
+        doc = captured[0]
+        assert "== Appendix A --- Dependency Tree" in doc
+        assert "== Appendix B --- Scoring Methodology" in doc
+        assert doc.index("== Appendix A --- Dependency Tree") < doc.index(
+            "== Appendix B --- Scoring Methodology"
+        )
+        assert "*without LLM integration*" in doc
+
+    def test_no_appendix_without_score_section(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No score section means nothing refers to the appendix; omit it."""
+        captured = _capture_typst(monkeypatch)
+        render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=tmp_path / "r.pdf",
+            llm_info=("anthropic", "claude-test-model-x1"),
+        )
+        assert "Scoring Methodology" not in captured[0]
+
+    def test_appendix_compiles(self, tmp_path: Path) -> None:
+        """The real Typst compiler accepts the converted appendix."""
+        out = tmp_path / "appendix.pdf"
+        render_pdf(
+            nfr_result=_make_run_result(),
+            output_path=out,
+            score_section_md=_SCORE_MD,
+            llm_info=("anthropic", "claude-test-model-x1"),
+        )
         assert out.read_bytes()[:5] == b"%PDF-"
