@@ -82,6 +82,7 @@ class RustMutexLockUnwrap(BasePayload):
     lock_method: str
     line: int
     file: str
+    in_test: bool
 
 
 class RustHttpClientBuild(BasePayload):

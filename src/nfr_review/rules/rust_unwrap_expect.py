@@ -4,11 +4,27 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 from nfr_review.collectors.payloads.rust_ast import RustAstFilePayload
 from nfr_review.models import Evidence
 from nfr_review.rules.framework import FieldRule, Hit
+
+_RECEIVER_MAX = 60
+
+
+def _short_receiver(receiver: str) -> str:
+    """One-line receiver text for the summary, at most _RECEIVER_MAX chars.
+
+    Line breaks and the indentation around them are dropped (Rust method
+    chains break before the ``.``), other whitespace runs become one space,
+    and anything longer than the cap ends in an ellipsis.
+    """
+    one_line = re.sub(r"\s+", " ", re.sub(r"\s*\n\s*", "", receiver)).strip()
+    if len(one_line) <= _RECEIVER_MAX:
+        return one_line
+    return one_line[: _RECEIVER_MAX - 1] + "…"
 
 
 class RustUnwrapExpectRule(FieldRule[RustAstFilePayload]):
@@ -31,7 +47,8 @@ class RustUnwrapExpectRule(FieldRule[RustAstFilePayload]):
                 rag="amber",
                 severity="medium",
                 summary=(
-                    f"{call.receiver}.{call.method}() panics instead of propagating the error"
+                    f"{_short_receiver(call.receiver)}.{call.method}()"
+                    " panics instead of propagating the error"
                 ),
                 recommendation=(
                     "Propagate the error with `?`, or handle the `Err`/`None` case"

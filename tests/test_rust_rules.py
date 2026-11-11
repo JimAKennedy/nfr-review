@@ -72,18 +72,67 @@ class TestRustUnwrapExpectRule:
         result = RustUnwrapExpectRule().evaluate([_evidence(_empty_payload())], None)
         assert all(f.rag == "green" for f in result.findings)
 
+    def test_multiline_receiver_summary_is_single_line(self) -> None:
+        payload = _empty_payload(
+            unwrap_expect_calls=[
+                RustUnwrapExpectCall(
+                    method="expect",
+                    receiver="create_config()\n        .create_pool(NoTls)",
+                    line=5,
+                    file="lib.rs",
+                    in_test=False,
+                )
+            ]
+        )
+        result = RustUnwrapExpectRule().evaluate([_evidence(payload)], None)
+        amber = [f for f in result.findings if f.rag == "amber"]
+        assert amber[0].summary == (
+            "create_config().create_pool(NoTls).expect()"
+            " panics instead of propagating the error"
+        )
+
+    def test_long_receiver_summary_is_capped_at_60_chars(self) -> None:
+        receiver = (
+            "Response::builder()\n"
+            '        .header("Access-Control-Allow-Origin", "*")\n'
+            '        .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")\n'
+            "        .body(Body::empty())"
+        )
+        payload = _empty_payload(
+            unwrap_expect_calls=[
+                RustUnwrapExpectCall(
+                    method="unwrap", receiver=receiver, line=5, file="lib.rs", in_test=False
+                )
+            ]
+        )
+        result = RustUnwrapExpectRule().evaluate([_evidence(payload)], None)
+        summary = [f for f in result.findings if f.rag == "amber"][0].summary
+        shown = 'Response::builder().header("Access-Control-Allow-Origin", "…'
+        assert len(shown) == 60
+        assert "\n" not in summary
+        assert summary == f"{shown}.unwrap() panics instead of propagating the error"
+
 
 class TestRustMutexLockUnwrapRule:
     def test_flags_lock_unwrap(self) -> None:
         payload = _empty_payload(
             mutex_lock_unwraps=[
-                RustMutexLockUnwrap(lock_method="lock", line=10, file="lib.rs")
+                RustMutexLockUnwrap(lock_method="lock", line=10, file="lib.rs", in_test=False)
             ]
         )
         result = RustMutexLockUnwrapRule().evaluate([_evidence(payload)], None)
         amber = [f for f in result.findings if f.rag == "amber"]
         assert len(amber) == 1
         assert amber[0].severity == "high"
+
+    def test_skips_test_call(self) -> None:
+        payload = _empty_payload(
+            mutex_lock_unwraps=[
+                RustMutexLockUnwrap(lock_method="lock", line=10, file="lib.rs", in_test=True)
+            ]
+        )
+        result = RustMutexLockUnwrapRule().evaluate([_evidence(payload)], None)
+        assert all(f.rag == "green" for f in result.findings)
 
 
 class TestRustHttpNoTimeoutRule:

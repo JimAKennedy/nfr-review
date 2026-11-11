@@ -31,6 +31,7 @@ _UNWRAP_METHODS = frozenset({"unwrap", "expect"})
 _LOCK_METHODS = frozenset({"lock", "read", "write"})
 _LOOP_TYPES = frozenset({"for_expression", "while_expression", "loop_expression"})
 _ATTR_SIBLING_TYPES = frozenset({"attribute_item", "line_comment", "block_comment"})
+_TEST_MOD_NAMES = frozenset({"test", "tests"})
 
 
 def _is_inside_loop(node: Node) -> bool:
@@ -61,27 +62,53 @@ def _lock_method_name(call: Node, source: bytes) -> str | None:
     return text(field_node, source)
 
 
-def _preceding_attrs_text(item_node: Node, source: bytes) -> str:
-    parts: list[str] = []
+def _preceding_attributes(item_node: Node) -> list[Node]:
+    """``attribute_item`` siblings directly above *item_node* (comments skipped)."""
+    attrs: list[Node] = []
     sib = item_node.prev_sibling
     while sib is not None and sib.type in _ATTR_SIBLING_TYPES:
         if sib.type == "attribute_item":
-            parts.append(text(sib, source))
+            attrs.append(sib)
         sib = sib.prev_sibling
-    return " ".join(parts)
+    return attrs
+
+
+def _is_test_attribute(attr_item: Node, source: bytes) -> bool:
+    attr = next((c for c in attr_item.named_children if c.type == "attribute"), None)
+    if attr is None or not attr.named_children:
+        return False
+    path = text(attr.named_children[0], source)
+    if path == "cfg":
+        args = attr.child_by_field_name("arguments")
+        return args is not None and "".join(text(args, source).split()) == "(test)"
+    return path.rsplit("::", 1)[-1] == "test"
 
 
 def _is_inside_test(node: Node, source: bytes) -> bool:
+    """True when *node* sits inside test code, matched exactly (never by substring).
+
+    - An attribute is a test attribute when its path is exactly ``test``, or its
+      last ``::`` segment is exactly ``test`` (``#[tokio::test]``,
+      ``#[tokio::test(flavor = "multi_thread")]``, ``#[async_std::test]``,
+      ``#[actix_rt::test]``), or it is ``cfg`` whose argument token tree is
+      exactly ``(test)`` after removing whitespace. Not matched:
+      ``#[cfg(feature = "testing")]``, ``#[cfg(all(test, ..))]``,
+      ``#[cfg(not(test))]``, ``#[rstest]``, ``#[test_case(..)]``.
+    - A ``mod`` is test code when it carries a test attribute or is named
+      exactly ``tests`` or ``test``; ``mod attestation``, ``mod contest`` are
+      scanned.
+    - An ``fn`` is test code when it carries a test attribute; its name never
+      matters (``fn latest``, ``fn test_helper`` are scanned unless attributed).
+    """
     parent = node.parent
     while parent is not None:
-        if parent.type == "function_item" and "test" in _preceding_attrs_text(parent, source):
-            return True
-        if parent.type == "mod_item":
-            name_node = parent.child_by_field_name("name")
-            mod_name = text(name_node, source) if name_node is not None else ""
-            attrs = _preceding_attrs_text(parent, source)
-            if "test" in mod_name or "test" in attrs:
+        if parent.type in ("function_item", "mod_item"):
+            if any(_is_test_attribute(a, source) for a in _preceding_attributes(parent)):
                 return True
+            if parent.type == "mod_item":
+                name_node = parent.child_by_field_name("name")
+                if name_node is not None and text(name_node, source) in _TEST_MOD_NAMES:
+                    return True
         parent = parent.parent
     return False
 
@@ -334,6 +361,7 @@ def _extract_unwrap_expect_and_mutex(
                         lock_method=lock_method,
                         line=call.start_point[0] + 1,
                         file=rel_path,
+                        in_test=_is_inside_test(call, source),
                     )
                 )
                 continue

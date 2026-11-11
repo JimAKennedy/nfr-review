@@ -283,3 +283,93 @@ class TestAsyncContextBoundary:
         assert [(c.function_name, c.line) for c in payload.async_blocking_calls] == [
             ("fan_out", 5)
         ]
+
+
+_TEST_DETECTION_SRC = """\
+mod attestation {
+    pub fn verify(v: Option<u8>) -> u8 {
+        v.unwrap()
+    }
+}
+mod contest {
+    pub fn score(v: Option<u8>) -> u8 {
+        v.unwrap()
+    }
+}
+#[cfg(feature = "testing")]
+fn latest(v: Option<u8>) -> u8 {
+    v.unwrap()
+}
+#[cfg(test)]
+mod checks {
+    fn a(v: Option<u8>) -> u8 {
+        v.unwrap()
+    }
+}
+mod tests {
+    fn b(v: Option<u8>) -> u8 {
+        v.unwrap()
+    }
+}
+#[tokio::test(flavor = "multi_thread")]
+async fn it_works() {
+    Some(1u8).unwrap();
+}
+#[test]
+fn plain() {
+    Some(1u8).unwrap();
+}
+"""
+
+
+def _in_test_by_line(tmp_path: Path) -> dict[int, bool]:
+    payload = _payload_for_source(tmp_path, _TEST_DETECTION_SRC)
+    return {c.line: c.in_test for c in payload.unwrap_expect_calls}
+
+
+class TestTestCodeDetection:
+    def test_mod_attestation_is_scanned(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[3] is False
+
+    def test_mod_contest_is_scanned(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[8] is False
+
+    def test_fn_latest_with_cfg_feature_testing_is_scanned(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[13] is False
+
+    def test_cfg_test_mod_is_suppressed(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[18] is True
+
+    def test_mod_named_tests_is_suppressed(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[23] is True
+
+    def test_tokio_test_fn_is_suppressed(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[28] is True
+
+    def test_plain_test_fn_is_suppressed(self, tmp_path: Path) -> None:
+        assert _in_test_by_line(tmp_path)[32] is True
+
+
+class TestMutexLockUnwrapInTest:
+    def test_mutex_lock_unwrap_in_test_module_marked(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use std::sync::Mutex;
+            fn bump(m: &Mutex<u8>) {
+                *m.lock().unwrap() += 1;
+            }
+            #[cfg(test)]
+            mod tests {
+                #[test]
+                fn bumps() {
+                    let m = std::sync::Mutex::new(0u8);
+                    let _g = m.lock().unwrap();
+                }
+            }
+            """,
+        )
+        assert [(c.line, c.in_test) for c in payload.mutex_lock_unwraps] == [
+            (3, False),
+            (10, True),
+        ]

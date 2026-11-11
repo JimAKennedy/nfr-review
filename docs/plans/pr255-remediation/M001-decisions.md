@@ -40,3 +40,9 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 ## 2026-11-11 — executing M001/S13
 
 - **Decision:** the S13 refresh kept only the 3 `dep-freshness` lines and dropped 2 duplicate `structure-coupling-cluster` lines the refresh also added. — **Why:** DoD 2 allows only freshness lines; structure rules are graphify reclustering noise the snapshot test ignores, and S04 removes them all. The plan's grep keyed on `dep-freshness` in the line, which `dead-library` findings carry only as `rule_id`; matched by `rule_id` instead.
+
+## 2026-11-11 — executing M001/S02
+
+- **Decision:** Task 2 sets the `RustMutexLockUnwrapRule` class docstring to "Flag .lock()/.read()/.write().unwrap() on std::sync Mutex/RwLock outside test code." rather than the all-clear sentence the plan's wording literally applied to both. — **Why:** the docstring is what `list-rules`/`explain-rule` print as the rule's description, so it must say what the rule flags; the all-clear sentence was meant for `all_clear_summary`.
+- **Decision:** Task 2's `test_multiline_receiver_summary_is_single_line` splits its expected-summary literal across two adjacent strings. — **Why:** the plan's single literal is 97 columns and fails `ruff` E501 (limit 95); the asserted value is unchanged.
+- **Decision:** Task 2's snapshot refresh kept only the `rust-ast` lines (8 changed: 6 `rust-unwrap-expect` summaries, 2 `rust-mutex-lock-unwrap` all-clear summaries) and dropped the 24 graphify `structure-*` lines the refresh also rewrote. — **Why:** same as the S13 precedent — structure lines are reclustering noise the snapshot test ignores, and the plan's check requires every changed line to come from `rust-ast`.

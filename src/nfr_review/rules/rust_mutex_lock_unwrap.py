@@ -15,7 +15,7 @@ from nfr_review.rules.framework import FieldRule, Hit
 
 
 class RustMutexLockUnwrapRule(FieldRule[RustAstFilePayload]):
-    """Flag .lock()/.read()/.write().unwrap() on std::sync Mutex/RwLock."""
+    """Flag .lock()/.read()/.write().unwrap() on std::sync Mutex/RwLock outside test code."""
 
     id = "rust-mutex-lock-unwrap"
     collector_name = "rust-ast"
@@ -24,10 +24,14 @@ class RustMutexLockUnwrapRule(FieldRule[RustAstFilePayload]):
     pattern_tag = "rust-mutex-lock-unwrap"
     required_tech: list[str] = ["rust"]
     default_confidence = 0.85
-    all_clear_summary = "No .lock()/.read()/.write().unwrap() calls detected."
+    all_clear_summary = (
+        "No .lock()/.read()/.write().unwrap() calls detected outside test code."
+    )
 
     def check(self, payload: RustAstFilePayload, ev: Evidence) -> Iterable[Hit]:
         for call in payload.mutex_lock_unwraps:
+            if call.in_test:
+                continue
             yield Hit(
                 rag="amber",
                 severity="high",
