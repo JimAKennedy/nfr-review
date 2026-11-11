@@ -57,11 +57,29 @@ every slice below is `done` or `accepted`.
 | A6 | ~40 coverage omits and test-core `--ignore`s hid untested code | `.github/workflows/ci.yml`, `pyproject.toml` | commit `828beaf`; 91% over 27,047 statements | `done` |
 | A7 | Fork-specific edits to upstream files, CRLF fixtures, stale `rules.json` | `CLAUDE.md`, `.gitignore`, `docs/internal/`, fixtures, `rules.json` | commit `67cfc95` | `done` |
 
+### Slice M001/S13 — Regression baseline current
+
+**Plan:** M001-S13-plan.md
+**Validation:** regression, format
+**Evidence:** evidence/M001-S13.md
+**Status:** in-progress
+
+**Definition of Done**
+
+- [ ] The regression suite passes on the branch before any other slice's change lands
+- [ ] The only snapshot lines that change are time-based `dep-freshness` findings for `gin` and `httpx`
+
+| ID | Item | Lands in | Verification | Status |
+|---|---|---|---|---|
+| X1 | `gin` (+2) and `httpx` (+1) snapshots fail on time-based `dep-freshness` findings unrelated to PR #255 (found while planning, 2026-11-10) | `tests/regression/snapshots/` | `regression` → 0 failed; snapshot diff contains only `dep-freshness` lines | `open` |
+
 ### Slice M001/S02 — Rust collector correctness
 
+**Depends:** M001/S13
+**Plan:** M001-S02-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S02.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -83,9 +101,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S03 — Grammar loading and its tests
 
+**Depends:** M001/S13
+**Plan:** M001-S03-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S03.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -103,9 +123,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S04 — Graphify opt-in and out of tree
 
+**Depends:** M001/S13
+**Plan:** M001-S04-plan.md
 **Validation:** format, unit, regression, container-e2e, gate
 **Evidence:** evidence/M001-S04.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -120,9 +142,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S05 — Windows locator stability
 
+**Depends:** M001/S13
+**Plan:** M001-S05-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S05.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -137,9 +161,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S06 — Report fidelity and LLM payloads
 
+**Depends:** M001/S13
+**Plan:** M001-S06-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S06.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -157,9 +183,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S07 — Scan scope
 
+**Depends:** M001/S13
+**Plan:** M001-S07-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S07.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -173,9 +201,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S08 — Privacy SCM-username filter
 
+**Depends:** M001/S13
+**Plan:** M001-S08-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S08.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -189,9 +219,11 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S09 — Real LLM isolation in tests
 
+**Depends:** M001/S13
+**Plan:** M001-S09-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S09.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
@@ -204,16 +236,17 @@ every slice below is `done` or `accepted`.
 
 ### Slice M001/S10 — Lockfiles, base image and CI hygiene
 
-**Depends:** M001/S03, M001/S04
+**Depends:** M001/S03, M001/S04, M001/S13
+**Plan:** M001-S10-plan.md
 **Validation:** format, unit, container-e2e, gate
 **Evidence:** evidence/M001-S10.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
 - [ ] `requirements.txt` and `requirements-dev.txt` are pip-compiled from the final `pyproject.toml` and install cleanly
 - [ ] `.trivyignore` has no zlib entries and the image scan reports neither CVE
-- [ ] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is merged into the report
+- [ ] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is measured and uploaded as its own report
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
@@ -226,17 +259,18 @@ it.
 
 ### Slice M001/S11 — Docs and CHANGELOG
 
-**Depends:** M001/S04
+**Depends:** M001/S04, M001/S13
+**Plan:** M001-S11-plan.md
 **Validation:** format, discipline, gate
 **Evidence:** evidence/M001-S11.md
-**Status:** open
+**Status:** in-progress
 
 **Definition of Done**
 
 - [ ] No user-facing doc mentions weasyprint, the removed extras, or openai as a core dependency
 - [ ] Historical CHANGELOG entries (0.3.1, 0.2.0, 0.1.x) match main
 - [ ] `[Unreleased]` records the typst migration, Rust support, extras consolidation, the detection/required_tech change, graphify becoming opt-in, and the breaking LLM refactor
-- [ ] The package version agrees with what the CHANGELOG and PR title claim
+- [ ] The package version agrees with the CHANGELOG, and the PR-title correction is recorded as an owner action in the milestone report
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
@@ -263,6 +297,8 @@ it.
 S10 depends on S03 and S04 because it pip-compiles the lockfiles from
 `pyproject.toml`, which S03 changes (the `tree-sitter-dockerfile` pin) and S04
 may change (whether `graphifyy` stays a core dependency); compiling before both
-land means compiling twice. S11 depends on S04 because the docs and
+land means compiling twice. Every slice depends on S13 because each owes
+`regression` or `gate`, and both are red on the unchanged tree until the
+`gin`/`httpx` snapshot drift is refreshed. S11 depends on S04 because the docs and
 `[Unreleased]` must describe graphify as opt-in. Every other slice touches
 disjoint files and can land in any order.

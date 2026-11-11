@@ -15,7 +15,7 @@
 format: pre-commit run --all-files
 
 # The test suite, excluding network-bound regression tests (mirrors test-core).
-unit: python -m pytest -n auto tests/
+unit: python -m pytest -n auto -m "not regression" tests/
 
 # Snapshot tests against the public corpus repos (mirrors the nightly
 # regression job). Needs network on first run; repos are cached under
@@ -40,5 +40,5 @@ discipline: jk-standards ledger
 # Everything a push to the PR branch must pass locally. Minutes, not seconds.
 gate: >
   pre-commit run --all-files &&
-  python -m pytest -n auto tests/ &&
+  python -m pytest -n auto -m "not regression" tests/ &&
   python -m pytest -n auto -m regression --timeout=600 tests/regression
