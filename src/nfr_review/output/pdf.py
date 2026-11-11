@@ -130,12 +130,19 @@ def _render_mermaid_for_typst(
     mermaid_text: str,
     image_files: dict[str, bytes],
     counter: list[int],
+    *,
+    scale: int = 1,
+    width: int | None = None,
+    height: int | None = None,
 ) -> str:
     """Render a mermaid code block to a Typst image or fallback.
 
     Tier 1: mmdc → PNG → #image(...)
     Tier 2: SVG fallback (pure Python) → #image(...)
     Tier 3: Typst table/list from parsed diagram content
+
+    *scale*, *width* and *height* are passed to ``render_mermaid_to_png``
+    for the tier-1 render (``mmdc -s/-w/-H``).
     """
     from nfr_review.output.render import (
         render_flowchart_as_svg_fallback,
@@ -149,7 +156,9 @@ def _render_mermaid_for_typst(
     # --- Tier 1: mmdc PNG ---
     with tempfile.TemporaryDirectory() as tmpdir:
         out_path = Path(tmpdir) / f"mermaid_{idx}.png"
-        result = render_mermaid_to_png(mermaid_text, out_path)
+        result = render_mermaid_to_png(
+            mermaid_text, out_path, scale=scale, width=width, height=height
+        )
         if result is not None and result.exists():
             raw = result.read_bytes()
             filename = f"mermaid_{idx}.png"

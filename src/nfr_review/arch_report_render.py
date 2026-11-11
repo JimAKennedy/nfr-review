@@ -53,6 +53,29 @@ _LANDSCAPE_DIAGRAM_MAX_H_MM = _LANDSCAPE_CONTENT_H_MM - 25
 
 _WIDE_DIAGRAM_ASPECT_THRESHOLD = 1.8
 
+# Architecture diagrams are dense C4/topology graphs: render them on a wide
+# 2400x1600 viewport at 4x, as the pre-typst renderer did, so node labels
+# stay legible when the PDF is zoomed.
+_ARCH_MERMAID_SCALE = 4
+_ARCH_MERMAID_WIDTH = 2400
+_ARCH_MERMAID_HEIGHT = 1600
+
+
+def _render_arch_mermaid(
+    mermaid_text: str,
+    image_files: dict[str, bytes],
+    counter: list[int],
+) -> str:
+    """Render an architecture diagram for Typst at high resolution."""
+    return _render_mermaid_for_typst(
+        mermaid_text,
+        image_files,
+        counter,
+        scale=_ARCH_MERMAID_SCALE,
+        width=_ARCH_MERMAID_WIDTH,
+        height=_ARCH_MERMAID_HEIGHT,
+    )
+
 
 # ---------------------------------------------------------------------------
 # JSON rendering
@@ -563,7 +586,7 @@ def _arch_diagrams_typst(
         if diagram.scope:
             parts.append(f"_Scope: {_t(diagram.scope)}_\n\n")
         parts.append(f"_Level: {_t(diagram.level)}_\n\n")
-        parts.append(_render_mermaid_for_typst(diagram.mermaid, image_files, counter))
+        parts.append(_render_arch_mermaid(diagram.mermaid, image_files, counter))
         parts.append("\n")
     return "".join(parts)
 
@@ -668,7 +691,7 @@ def _arch_domain_model_typst(
 
     if dm.context_map_mermaid:
         parts.append("=== Context Map\n\n")
-        parts.append(_render_mermaid_for_typst(dm.context_map_mermaid, image_files, counter))
+        parts.append(_render_arch_mermaid(dm.context_map_mermaid, image_files, counter))
         parts.append("\n")
 
     return "".join(parts)
@@ -725,7 +748,7 @@ def _arch_repo_dependencies_typst(
         return ""
 
     parts: list[str] = ["#pagebreak()\n\n== Repository Dependencies\n\n"]
-    parts.append(_render_mermaid_for_typst(mermaid, image_files, counter))
+    parts.append(_render_arch_mermaid(mermaid, image_files, counter))
     parts.append("\n")
 
     cross_repo = [ip for ip in report.integration_points if ip.is_cross_repo]
@@ -794,7 +817,7 @@ def _arch_dynamic_analysis_typst(
         parts.append(f"=== Observed Services\n\n{svc_items}\n")
     if da.topology_mermaid:
         parts.append("=== Service Topology\n\n")
-        parts.append(_render_mermaid_for_typst(da.topology_mermaid, image_files, counter))
+        parts.append(_render_arch_mermaid(da.topology_mermaid, image_files, counter))
         parts.append("\n")
     return "".join(parts)
 

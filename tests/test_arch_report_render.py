@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from nfr_review.arch_models import (
     ArchReport,
     ArchReportMetadata,
@@ -1090,3 +1092,27 @@ class TestConsolidatedFeatures:
 
         assert data["dynamic_analysis"] is None
         assert data["cross_repo_edges"] == []
+
+
+class TestArchDiagramResolution:
+    def test_arch_diagrams_render_at_scale_4_width_2400(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every arch diagram is rendered at the pre-typst resolution."""
+        calls: list[dict[str, object]] = []
+
+        def _fake_render(
+            mermaid_text: str, output_path: Path, **kwargs: object
+        ) -> Path | None:
+            calls.append(kwargs)
+            return None  # fall through to the SVG/table fallbacks
+
+        monkeypatch.setattr("nfr_review.output.render.render_mermaid_to_png", _fake_render)
+        render_arch_pdf(_make_full_report(), tmp_path / "report.pdf")
+
+        # _make_full_report has a C4 diagram and a domain context map.
+        assert len(calls) >= 2
+        for kwargs in calls:
+            assert kwargs.get("scale") == 4
+            assert kwargs.get("width") == 2400
+            assert kwargs.get("height") == 1600

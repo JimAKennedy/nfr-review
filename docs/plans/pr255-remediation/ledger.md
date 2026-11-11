@@ -177,7 +177,7 @@ every slice below is `done` or `accepted`.
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
 | P1 | Methodology/LLM-usage appendix dropped from Typst PDF; `llm_info` unused | `output/pdf.py` | Case in `tests/test_pdf.py` asserting the appendix heading and model name in the generated Typst source | `done` |
-| P2 | Arch diagram `scale=4`, `width=2400` render lost in the typst migration | `output/pdf.py` (`_render_mermaid_for_typst`) | Case in `tests/test_arch_report_render.py` asserting the render call's scale and width | `open` |
+| P2 | Arch diagram `scale=4`, `width=2400` render lost in the typst migration | `output/pdf.py` (`_render_mermaid_for_typst`) | Case in `tests/test_arch_report_render.py` asserting the render call's scale and width | `done` |
 | P3 | Arch report discloses `NFR_LLM_MODEL` or a hard-coded default instead of the resolved config model (CLI half already correct) | `arch_orchestrator.py` | Case setting the model in config only and asserting `ArchReportMetadata.llm_model` | `open` |
 | L1 | Market comparison wraps the profile as one bundle item under an 8 KB cap, so an oversized profile becomes `[]` (also on main) | `arch_market_comparison.py` | Case in `tests/test_arch_market_comparison.py` with a >8 KB profile asserting a non-empty payload | `open` |
 
