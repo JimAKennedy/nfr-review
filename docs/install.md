@@ -245,8 +245,8 @@ nfr-review includes optional LLM-powered analysis with three backend options:
 | Backend | Extra to install | Auth | Best for |
 |---------|-----------------|------|----------|
 | **Anthropic API** (default) | `[llm]` | `ANTHROPIC_API_KEY` | CI, production use |
-| **OpenAI-compatible** | `[llm]` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
-| **Claude CLI** | None | Claude Code subscription | Local dev, no API key needed |
+| **OpenAI-compatible** | `[llm]` + `pip install openai` | Varies by provider | Ollama (local), Azure OpenAI, OpenRouter |
+| **Claude CLI** | `[llm]` | Claude Code subscription | Local dev, no API key needed |
 
 When no backend is configured, LLM features are **skipped gracefully** — the
 scan runs normally and all static-analysis findings are still produced.
@@ -320,7 +320,7 @@ nfr-review report /path/to/repo
 **Option B — OpenAI-compatible (Ollama):**
 
 ```bash
-pip install "nfr-review[llm]"
+pip install "nfr-review[llm]" openai
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -344,12 +344,14 @@ OpenRouter (set `base_url: https://openrouter.ai/api/v1`).
 **Option C — Claude CLI (Claude Max):**
 
 ```bash
+pip install "nfr-review[llm]"
 export NFR_LLM_PROVIDER=claude-cli
 nfr-review report /path/to/repo
 ```
 
-Requires the `claude` binary on your `$PATH` (installed with Claude Code).
-No API key or Python SDK needed.
+Requires the `claude` binary on your `$PATH` (installed with Claude Code) and
+the `[llm]` extra, which provides the ai-tooling provider layer. No API key
+needed.
 
 ### Opting out
 
@@ -442,17 +444,18 @@ pip install nfr-review
 
 ### Optional extras
 
-nfr-review ships with all language support, PDF generation, diagram rendering,
-and monitoring capabilities built in. The only extras are for opt-in features
-that require additional configuration:
+nfr-review ships with all language support, Typst PDF generation, diagram
+rendering, graphify structural analysis (off by default; enable with
+`graphify.enabled: true`) and the production monitor built in. The only extras
+are for opt-in features that require additional configuration:
 
 | Extra | What it adds |
 |-------|-------------|
-| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection) and [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK plus ai-tooling, the LLM provider layer, for LLM-powered analysis (executive summary, ADR drift, PII detection). The OpenAI-compatible backend (Ollama, Azure OpenAI, OpenRouter) also needs the [openai](https://pypi.org/project/openai/) package: `pip install openai`. |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. |
 | `[otel]` | [opentelemetry-api](https://pypi.org/project/opentelemetry-api/) + SDK for OTel trace generation in tests. |
 | `[full]` | All capability extras: `[llm,scancode,otel]`. |
-| `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, anthropic, and build — everything needed for development and CI. |
+| `[dev]` | pytest, pytest-cov, pytest-timeout, pytest-xdist, pytest-asyncio, pytest-aiohttp, filelock, ruff, and build — everything needed for development and CI. |
 
 Install extras individually or combine them:
 
@@ -460,7 +463,7 @@ Install extras individually or combine them:
 # LLM features
 pip install "nfr-review[llm]"
 
-# Base install — all languages, PDF, diagrams, and monitor included
+# Base install — all languages, Typst PDF, diagrams, graphify (off by default) and monitor included
 pip install nfr-review
 
 # Or install everything at once:
@@ -550,9 +553,10 @@ nfr-review version
 
 ### Docker
 
-A pre-built `linux/amd64` image is published to GHCR. It includes PDF
-generation (via WeasyPrint), LLM SDKs (Anthropic and OpenAI), and `git`.
-The container runs as non-root user `nfr` (UID 1000).
+A pre-built `linux/amd64` image is published to GHCR. It contains the core
+install (Typst PDF generation included) plus the `fonts-liberation`, `git` and
+`zlib1g` system packages, and no LLM SDK. The container runs as non-root user
+`nfr` (UID 1000).
 
 > **Note:** The container does not include Node.js, Chromium, or
 > mermaid-cli (`mmdc`). Diagrams in HTML reports use bundled client-side
@@ -573,7 +577,7 @@ docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:latest report /repo --html
 
-# Full report with PDF (WeasyPrint included in image)
+# Full report with PDF (Typst, included in core)
 docker run --rm --platform linux/amd64 \
   -v "$(pwd)":/repo \
   ghcr.io/jimakennedy/nfr-review:latest report /repo
@@ -583,39 +587,10 @@ The entrypoint is `nfr-review`, so all CLI subcommands and flags
 (`run`, `report`, `hygiene`, `deps`, `arch`, `all`, etc.) work directly as
 arguments.
 
-**Using LLM features in Docker:** Pass your API key via `-e`. The image
-ships with both Anthropic and OpenAI SDKs pre-installed. Without an API key,
-LLM-powered features (executive summary, ADR drift, PII detection) are
-skipped gracefully — all static-analysis rules still run.
-
-```bash
-# Anthropic API (default provider)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-
-# OpenAI-compatible (e.g. Ollama running on the host)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e NFR_LLM_PROVIDER=openai \
-  -e NFR_LLM_MODEL=llama3 \
-  -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
-  -e OPENAI_API_KEY=ollama \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-
-# Override provider and model via env vars
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e NFR_LLM_PROVIDER=anthropic \
-  -e NFR_LLM_MODEL=claude-sonnet-4-6 \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:latest all /repo -v
-```
-
-Note: `-e ANTHROPIC_API_KEY` (no `=`) forwards the variable from your
-host shell. You can also use `-e ANTHROPIC_API_KEY=sk-ant-...` to set
-it explicitly.
+**LLM features in Docker:** the image does not include an LLM SDK yet, so
+LLM features (executive summary, ADR drift, PII confirmation) are skipped in
+the container and every static-analysis rule still runs. For LLM features, use
+a pip install with the `[llm]` extra (see [LLM features](#7-llm-features)).
 
 **macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop
 on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64`

@@ -116,7 +116,7 @@ pip install "nfr-review[scancode]"  # license compliance scanning
 
 ### Docker
 
-A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes the `[llm]` extra and the `gh` CLI. All other features (PDF, diagrams, structural analysis) are included in core.
+A pre-built Docker image is published to GHCR (`linux/amd64`). The image contains the core install (Typst PDF, diagrams, structural analysis) plus the `fonts-liberation`, `git` and `zlib1g` system packages. It does not include an LLM SDK.
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
@@ -138,24 +138,7 @@ docker run --rm --platform linux/amd64 \
   ghcr.io/jimakennedy/nfr-review:latest all /repo -v
 ```
 
-**Using LLM features in Docker:** Pass your API key as an environment variable with `-e`. LLM features (executive summary, ADR drift analysis, PII detection) are optional — without an API key, all static-analysis rules still run normally.
-
-```bash
-# Anthropic API (default provider)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-
-# OpenAI-compatible (Ollama running on the host)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e NFR_LLM_PROVIDER=openai \
-  -e NFR_LLM_MODEL=llama3 \
-  -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
-  -e OPENAI_API_KEY=ollama \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-```
+**LLM features in Docker:** the image does not include an LLM SDK yet, so LLM features (executive summary, ADR drift, PII confirmation) are skipped in the container and every static-analysis rule still runs. For LLM features, use a pip install with the `[llm]` extra.
 
 **macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64` flag is required. For faster emulation, enable **Settings > General > "Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** in Docker Desktop.
 
@@ -179,7 +162,7 @@ Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` s
 
 ### Optional: LLM features
 
-Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs like Ollama (no extra needed — `openai` is included in core), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs such as Ollama (`[llm]` extra plus `pip install openai`), and Claude CLI (`[llm]` extra, no API key). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
@@ -193,7 +176,7 @@ pip install nfr-review
 
 | Extra | What it adds |
 |-------|-------------|
-| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK and ai-tooling (the LLM provider layer) for LLM-powered analysis (executive summary, ADR drift, PII detection). The OpenAI-compatible backend also needs `pip install openai`. |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
 | `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
 | `[full]` | `[llm]` + `[scancode]` + `[otel]`. |
@@ -229,6 +212,7 @@ nfr-review run /path/to/repo
 
 **OpenAI-compatible** (Ollama, Azure OpenAI, OpenRouter):
 ```bash
+pip install "nfr-review[llm]" openai
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -238,6 +222,7 @@ nfr-review run /path/to/repo
 
 **Claude CLI** (Claude Code subscription, no API key needed):
 ```bash
+pip install "nfr-review[llm]"
 export NFR_LLM_PROVIDER=claude-cli
 nfr-review run /path/to/repo
 ```

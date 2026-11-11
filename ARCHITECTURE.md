@@ -52,7 +52,7 @@ report command (nfr-review report <target>):
   generate_executive_summary()  -->  SummaryResult  (LLM, --no-summary skips)
         |
         v
-  render_pdf_report()  -->  PDF (weasyprint)
+  render_pdf_report()  -->  PDF (typst)
         |
   Timestamped files in reports/:
     {repo}-nfr-review-{timestamp}.md
@@ -79,7 +79,7 @@ arch command (nfr-review arch <targets...>):
         +-- JSON report    -->  {repo}-architecture.json
         +-- Markdown report  -->  {repo}-architecture.md
         +-- arch_diagrams    -->  Mermaid diagrams (C4 levels)
-        +-- PDF report       -->  {repo}-architecture.pdf  (via weasyprint)
+        +-- PDF report       -->  {repo}-architecture.pdf  (via typst)
 
 issues command (nfr-review issues <scan|sync>):
 
@@ -103,9 +103,9 @@ all command (nfr-review all <target1> <target2> ...):
 | `detect.py` | File-system probing for 18 tech keys, `_DETECTORS` dispatch dict | Config merging (CLI does that), collector logic |
 | `engine.py` | Collector execution, rule filtering (skip/include_only/tech/collectors), rule evaluation, fault tolerance | Individual collector or rule logic, output writing |
 | `models.py` | `Evidence`, `Finding`, `RuleResult`, `RunResult`, `RunMetadata`, `RAG`, `Severity`, `BasePayload` | Serialization format details (CSV column order lives in output/) |
-| `protocols.py` | `Band`, `Collector`, `Rule`, and `LlmClient` runtime-checkable protocols | Registration, instantiation |
+| `protocols.py` | `Band` type, `Collector` and `Rule` runtime-checkable protocols; re-exports `LlmClient` from ai-tooling (or the inert stub) | Registration, instantiation |
 | `registry.py` | Generic `Registry[T]` container, global singletons `rule_registry` / `collector_registry` | What gets registered (that's the plugin modules' job) |
-| `llm_client.py` | LLM abstraction (Anthropic, OpenAI-compatible, Claude CLI); availability gating, retry with backoff | Prompt design (rules own their prompts), evidence selection |
+| `llm_integration.py` | Single LLM integration point; delegates to ai-tooling when installed, inert stub otherwise; `create_llm_client`, `extract_json`, `serialize_bundle`, `run_analysis` | Prompt design (rules own their prompts), evidence selection |
 | `rule_metadata.py` | `RuleMetadata` model: severity, category, tags, compliance references; loaded alongside rules for `list-rules --format json` | Rule evaluation, evidence gathering |
 | `auditability.py` | Git probe (SHA, branch, dirty), `RunMetadata` assembly | Output writing, config |
 | `collectors/*` | Evidence gathering from target repo files | Evaluating findings, accessing config.rules |
@@ -119,7 +119,7 @@ all command (nfr-review all <target1> <target2> ...):
 | `output/classify.py` | Path-based source/test classification (`classify_region`, `partition_findings`) | Finding evaluation, rule logic |
 | `output/markdown.py` | Markdown report rendering with partitioned findings, summary tables, test results, and dependency section | Data collection, engine orchestration |
 | `output/pytest_runner.py` | Subprocess pytest execution, summary line parsing, `PytestResult` | Test framework logic, assertions |
-| `output/pdf.py` | PDF report generation via weasyprint; assembles HTML from rendered Markdown + diagrams + summary section, converts to PDF | Markdown rendering, diagram rendering, LLM calls |
+| `output/pdf.py` | PDF report generation via Typst; converts rendered Markdown, diagrams and the summary section to Typst markup (escaped) and compiles it in a temporary root | Markdown rendering, diagram rendering, LLM calls |
 | `output/render.py` | Mermaid diagram rendering to PNG/SVG via subprocess; image embedding helpers for PDF | Diagram content generation, rule logic |
 | `output/summarize.py` | LLM executive summary generation; calls LLM client with structured findings, returns `SummaryResult` | PDF assembly, finding evaluation |
 | `output/summary_models.py` | Pydantic models for executive summary: `SummaryResult`, `SummarySection`, `RiskItem` | LLM prompt design, serialization |
@@ -228,7 +228,7 @@ triggering registration. The CLI imports these packages at startup.
 | Change pre-collector path exclusion | `path_filter.py` (edit `_TEST_PATH_PATTERNS` or `should_exclude_path`) | Tests in `test_path_filter.py` |
 | Change source/test classification | `output/classify.py` (add patterns to `_TEST_PATH_PATTERNS`) | Tests in `test_classify.py` |
 | Add a typed evidence payload | `collectors/payloads/<name>.py` with `BasePayload` subclass | Collector's `collect()` method, existing rules consuming the payload |
-| Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject LLM client via `create_llm_client()` | Tests must mock `nfr_review.llm_client.anthropic` |
+| Add a Band 2 (LLM) rule | `rules/<name>.py` with `band = 2`, inject LLM client via `create_llm_client()` | Tests patch `create_llm_client` in the rule's module (or pass `llm_client=`); the autouse `offline_llm` fixture keeps other tests off real backends |
 | Add rule metadata (tags, compliance refs) | `rule_metadata.py` via `RuleMetadata(...)` | `list-rules --format json` output, `docs/continuous-compliance.md` |
 | Change finding field order | `models.py` (reorder `Finding` fields) | `tests/test_output.py` R007 column-order assertion |
 | Add a new hygiene collector | `hygiene/collectors/<name>.py` with `_register()` | `hygiene/collectors/__init__.py` (import), test fixtures |
