@@ -35,25 +35,47 @@ _LEGACY_MARKER_PREFIX = "<!-- nfr-review:issue:"
 # ---------------------------------------------------------------------------
 
 
-def _finding_key(finding: dict[str, Any]) -> str:
+def _key_for_locator(finding: dict[str, Any], locator: str) -> str:
+    """Hash *finding*'s identity using *locator* as its evidence locator."""
+    from nfr_review.models import _strip_line_from_locator
+
     content_hash = finding.get("content_hash", "")
     if content_hash:
-        from nfr_review.models import _strip_line_from_locator
-
-        file_path = _strip_line_from_locator(finding.get("evidence_locator", ""))
         parts = [
             finding.get("rule_id", ""),
-            file_path,
+            _strip_line_from_locator(locator),
             finding.get("pattern_tag", ""),
             content_hash,
         ]
     else:
         parts = [
             finding.get("rule_id", ""),
-            finding.get("evidence_locator", ""),
+            locator,
             finding.get("pattern_tag", ""),
         ]
     return hashlib.sha256(":".join(parts).encode()).hexdigest()[:12]
+
+
+def _finding_key(finding: dict[str, Any]) -> str:
+    from nfr_review.models import normalise_locator
+
+    return _key_for_locator(finding, normalise_locator(finding.get("evidence_locator", "")))
+
+
+def _windows_finding_key(finding: dict[str, Any]) -> str | None:
+    """Return the key a pre-forward-slash Windows run wrote for *finding*.
+
+    Windows runs recorded ``\\``-separated locators before locators were
+    normalised to ``/``, and an issue marker stores only the hash, so the old
+    key is recomputed rather than parsed.  Returns None when the locator has
+    no separator, because then both keys are identical.
+    """
+    from nfr_review.models import normalise_locator
+
+    locator = normalise_locator(finding.get("evidence_locator", ""))
+    if "/" not in locator:
+        return None
+    return _key_for_locator(finding, locator.replace("/", "\\"))
 
 
 # Legacy alias kept for backward compat (used by action_issues.py / tests).
@@ -82,6 +104,25 @@ def _dedup_marker(finding: dict[str, Any]) -> str:
     """Legacy single-marker format (kept for backward compat)."""
     fp = _finding_key(finding)
     return f"{_LEGACY_MARKER_PREFIX}{fp}{_MARKER_SUFFIX}"
+
+
+def _adopt_windows_keys(
+    finding_by_key: dict[str, dict[str, Any]],
+    *issue_maps: dict[str, dict[str, Any]],
+) -> None:
+    """Re-key issues whose marker was written by a pre-forward-slash Windows run.
+
+    Each issue found under a finding's Windows key is moved to its current key,
+    so the sync updates it (rewriting the marker) instead of filing a duplicate
+    and closing the original.
+    """
+    for key, finding in finding_by_key.items():
+        legacy = _windows_finding_key(finding)
+        if legacy is None:
+            continue
+        for by_key in issue_maps:
+            if key not in by_key and legacy in by_key:
+                by_key[key] = by_key.pop(legacy)
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +580,7 @@ def sync_issues(
         _ensure_labels(repo, all_labels)
 
     open_by_key, closed_by_key, all_issues = _partition_issues(repo)
+    _adopt_windows_keys(finding_by_key, open_by_key, closed_by_key)
 
     is_first_run = len(all_issues) == 0
     results: list[dict[str, Any]] = []
@@ -639,7 +681,7 @@ def file_issues(
         fp = _finding_key(finding)
         title = generate_issue_title(finding)
 
-        if fp in existing_fps:
+        if fp in existing_fps or _windows_finding_key(finding) in existing_fps:
             results.append(
                 {
                     "rule_id": finding.get("rule_id", ""),
