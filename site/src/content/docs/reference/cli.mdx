@@ -48,7 +48,7 @@ nfr-review run ./my-project --csv findings.csv --score
 | `--design-baseline-dir PATH` | Path | — | Directory for structural baseline snapshots (save on first run, diff on rerun) |
 | `--force-standard-config` | Flag | off | Ignore project design-change thresholds; use built-in defaults |
 | `--origin NAME` | Choice | — | Filter findings by origin: `first_party` or `dependency` |
-| `--strict-collectors` | Flag | off | Exit 1 after writing outputs if any collector failed (crashed); for CI gates |
+| `--strict-collectors` | Flag | off | Exit 1 after writing outputs if any collector failed (crashed); for CI gates. Missing-grammar warnings do not count |
 
 ---
 

@@ -45,16 +45,19 @@ knowledge graph from the codebase. It computes:
 - **Dormant code** — nodes with no incoming edges (potential dead code)
 - **Dependency structure** — inter-module dependency edges
 
-The output feeds into rules that detect structural anti-patterns. Graphify is
-optional — if the tool is not installed, the collector is skipped gracefully.
+The output feeds into rules that detect structural anti-patterns. Graphify
+ships with the base install and is off by default; enable it with
+`graphify.enabled: true`:
 
-```bash
-# Install graphify separately
-pip install graphify
-
-# nfr-review detects it automatically
-nfr-review report ./my-repo
+```yaml
+# nfr-review.yaml
+graphify:
+  enabled: true
 ```
+
+nfr-review then runs Graphify itself, with its output in a temporary
+directory, or reads `graphify.graph_path` if you set it. See the
+[configuration reference](/reference/config) for the `graphify` keys.
 
 ## Production monitoring
 

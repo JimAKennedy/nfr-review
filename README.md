@@ -156,9 +156,9 @@ These are **not** Python packages — they are standalone binaries that some col
 | Tool | Used by | Install |
 |------|---------|---------|
 | [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
-| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install nfr-review` (included in core; provides both the `graphify` CLI and `networkx`) |
+| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | Included in `pip install nfr-review`; enable with `graphify.enabled: true` |
 
-Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
+Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Structural analysis (god nodes, weak boundaries, coupling clusters) is off by default; set `graphify.enabled: true` in `nfr-review.yaml` to run it. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
 
 ### Optional: LLM features
 
@@ -264,6 +264,7 @@ This will:
 | `--baseline PATH` | — | Path to a prior JSONL file; suppress known findings, exit on regressions |
 | `--score` | off | Compute and display design maturity score |
 | `--workers N` | `1` | Number of parallel collector threads (`1` = sequential) |
+| `--strict-collectors` | off | Exit 1 after writing outputs if any collector failed (crashed). Missing-grammar warnings do not count. |
 | `-v` / `--verbose` | off | Increase verbosity (`-v` for INFO, `-vv` for DEBUG) |
 | `-q` / `--quiet` | off | Suppress warnings (ERROR level only) |
 | `--log-file PATH` | stderr | Write diagnostics to FILE instead of stderr |
@@ -273,7 +274,7 @@ This will:
 | Code | Meaning |
 |------|---------|
 | 0 | Success — scan completed |
-| 1 | Error — bad target path, config error, or engine failure |
+| 1 | Error — bad target path, config error, engine failure, or a collector failure under `--strict-collectors` |
 | 2 | Threshold breach — at least one finding meets or exceeds `severity_threshold` |
 
 ### List available rules
