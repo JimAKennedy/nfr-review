@@ -14,16 +14,16 @@
 - [x] Task 2 — P2: render architecture diagrams at scale 4 on a 2400×1600 viewport
 - [x] Task 3 — P3: disclose the model the arch LLM client resolved from config
 - [x] Task 4 — L1: send oversized solution profiles to the market-comparison LLM call
-- [ ] Task 5 — Slice gate and evidence
+- [x] Task 5 — Slice gate and evidence
 
 ## Definition of Done
 
 Copied verbatim from the ledger slice:
 
-- [ ] The Typst PDF contains the Scoring Methodology appendix, including the LLM usage disclosure, that its body text refers to
-- [ ] Architecture diagrams in the PDF render at scale 4 / width 2400
-- [ ] The arch report's disclosed model equals the model the LLM client resolved from config
-- [ ] An architecture profile over 8 KB still reaches the market-comparison LLM call
+- [x] The Typst PDF contains the Scoring Methodology appendix, including the LLM usage disclosure, that its body text refers to
+- [x] Architecture diagrams in the PDF render at scale 4 / width 2400
+- [x] The arch report's disclosed model equals the model the LLM client resolved from config
+- [x] An architecture profile over 8 KB still reaches the market-comparison LLM call
 
 ## Validation
 

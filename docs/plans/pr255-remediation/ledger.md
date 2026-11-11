@@ -165,14 +165,14 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S06-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S06.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] The Typst PDF contains the Scoring Methodology appendix, including the LLM usage disclosure, that its body text refers to
-- [ ] Architecture diagrams in the PDF render at scale 4 / width 2400
-- [ ] The arch report's disclosed model equals the model the LLM client resolved from config
-- [ ] An architecture profile over 8 KB still reaches the market-comparison LLM call
+- [x] The Typst PDF contains the Scoring Methodology appendix, including the LLM usage disclosure, that its body text refers to
+- [x] Architecture diagrams in the PDF render at scale 4 / width 2400
+- [x] The arch report's disclosed model equals the model the LLM client resolved from config
+- [x] An architecture profile over 8 KB still reaches the market-comparison LLM call
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
