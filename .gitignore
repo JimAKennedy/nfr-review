@@ -48,7 +48,6 @@ package-lock.json
 !site/package-lock.json
 reports/
 docs/research/
-docs/internal/
 
 # ── Graphify output (generated, 20+ MB) ──
 graphify-out/
