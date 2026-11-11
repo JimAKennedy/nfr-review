@@ -79,25 +79,25 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S02-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S02.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] An io `.write(..)`/`.read(..)` with arguments is not reported as a lock call
-- [ ] A blocking call inside a closure (e.g. `spawn_blocking(move || …)`) in an async fn is not reported, and one inside an `async {}` block in a sync fn is
-- [ ] Test-code suppression matches `#[test]`, `#[cfg(test)]` and a `mod tests` name exactly, so `mod attestation` is still scanned
-- [ ] Imported paths (`use reqwest::Client; Client::new()`, imported `spawn`, `tokio::task::spawn`) are recognised
-- [ ] Unwrap summaries are single-line and bounded in length
-- [ ] `rust-mutex-lock-unwrap` does not report calls in test code
-- [ ] Workspace-inherited, target-cfg and renamed Cargo dependencies resolve to the right crate, and nothing under `target/` is parsed
-- [ ] The three truncated Rust rule descriptions read as complete sentences
-- [ ] Each outcome above is locked by a named test case
+- [x] An io `.write(..)`/`.read(..)` with arguments is not reported as a lock call
+- [x] A blocking call inside a closure (e.g. `spawn_blocking(move || …)`) in an async fn is not reported, and one inside an `async {}` block in a sync fn is
+- [x] Test-code suppression matches `#[test]`, `#[cfg(test)]` and a `mod tests` name exactly, so `mod attestation` is still scanned
+- [x] Imported paths (`use reqwest::Client; Client::new()`, imported `spawn`, `tokio::task::spawn`) are recognised
+- [x] Unwrap summaries are single-line and bounded in length
+- [x] `rust-mutex-lock-unwrap` does not report calls in test code
+- [x] Workspace-inherited, target-cfg and renamed Cargo dependencies resolve to the right crate, and nothing under `target/` is parsed
+- [x] The three truncated Rust rule descriptions read as complete sentences
+- [x] Each outcome above is locked by a named test case
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
 | R1 | Rust AST false positives/negatives: lock-method arity, closure/async-block boundary, substring test matching, imported paths, async-block sleep, unbounded unwrap summary, mutex rule ignores `in_test` | `collectors/rust_ast.py`, `rules/rust_unwrap_expect.py`, mutex-lock rule | One case per sub-item in `tests/test_rust_ast_collector.py` / `tests/test_rust_rules.py`, each feeding the snippet from the input | `done` |
 | R2 | Cargo.toml parsing misses workspace inheritance, target-cfg tables, renamed deps; rglob enters `target/`; `read_text` has no encoding | `collectors/rust_deps.py` | Cases in `tests/test_rust_deps_collector.py` with a workspace fixture, a `[target.'cfg(..)'.dependencies]` table, a `package =` rename, and a `target/` decoy | `done` |
-| R3 | Rust rule descriptions truncated mid-sentence | `rule_metadata.py` | Case in `tests/test_rule_metadata.py` asserting no description ends in a dangling word before the full stop; `rules.json` regenerated | `open` |
+| R3 | Rust rule descriptions truncated mid-sentence | `rule_metadata.py` | Case in `tests/test_rule_metadata.py` asserting no description ends in a dangling word before the full stop; `rules.json` regenerated | `done` |
 
 ### Slice M001/S03 — Grammar loading and its tests
 

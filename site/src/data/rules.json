@@ -2307,7 +2307,7 @@
       "async",
       "concurrency"
     ],
-    "description": "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside.",
+    "description": "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside async code, where they block the executor thread.",
     "compliance_refs": [
       "ISO 25010:Reliability"
     ]
@@ -2370,7 +2370,7 @@
       "async",
       "concurrency"
     ],
-    "description": "Flags tokio::spawn calls inside a loop with nothing joining or bounding the.",
+    "description": "Flags tokio::spawn calls inside a loop with nothing joining or bounding the spawned tasks.",
     "compliance_refs": [
       "ISO 25010:Reliability"
     ]
@@ -2390,7 +2390,7 @@
       "rust",
       "error-handling"
     ],
-    "description": "Flags .unwrap()/.expect() calls outside test code that panic instead of.",
+    "description": "Flags .unwrap()/.expect() calls outside test code that panic instead of propagating the error.",
     "compliance_refs": [
       "ISO 25010:Reliability"
     ]

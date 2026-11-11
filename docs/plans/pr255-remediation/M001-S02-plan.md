@@ -8,19 +8,19 @@
 - [x] Task 2 — Exact test-code detection, mutex `in_test`, bounded unwrap summary
 - [x] Task 3 — `use`-declaration alias resolution for HTTP-client and spawn extractors
 - [x] Task 4 — Cargo.toml workspace inheritance, target-cfg tables, renames, `target/` pruning
-- [ ] Task 5 — Complete Rust rule descriptions and regenerated `rules.json`
+- [x] Task 5 — Complete Rust rule descriptions and regenerated `rules.json`
 
 ## Definition of Done
 
-- [ ] An io `.write(..)`/`.read(..)` with arguments is not reported as a lock call
-- [ ] A blocking call inside a closure (e.g. `spawn_blocking(move || …)`) in an async fn is not reported, and one inside an `async {}` block in a sync fn is
-- [ ] Test-code suppression matches `#[test]`, `#[cfg(test)]` and a `mod tests` name exactly, so `mod attestation` is still scanned
-- [ ] Imported paths (`use reqwest::Client; Client::new()`, imported `spawn`, `tokio::task::spawn`) are recognised
-- [ ] Unwrap summaries are single-line and bounded in length
-- [ ] `rust-mutex-lock-unwrap` does not report calls in test code
-- [ ] Workspace-inherited, target-cfg and renamed Cargo dependencies resolve to the right crate, and nothing under `target/` is parsed
-- [ ] The three truncated Rust rule descriptions read as complete sentences
-- [ ] Each outcome above is locked by a named test case
+- [x] An io `.write(..)`/`.read(..)` with arguments is not reported as a lock call
+- [x] A blocking call inside a closure (e.g. `spawn_blocking(move || …)`) in an async fn is not reported, and one inside an `async {}` block in a sync fn is
+- [x] Test-code suppression matches `#[test]`, `#[cfg(test)]` and a `mod tests` name exactly, so `mod attestation` is still scanned
+- [x] Imported paths (`use reqwest::Client; Client::new()`, imported `spawn`, `tokio::task::spawn`) are recognised
+- [x] Unwrap summaries are single-line and bounded in length
+- [x] `rust-mutex-lock-unwrap` does not report calls in test code
+- [x] Workspace-inherited, target-cfg and renamed Cargo dependencies resolve to the right crate, and nothing under `target/` is parsed
+- [x] The three truncated Rust rule descriptions read as complete sentences
+- [x] Each outcome above is locked by a named test case
 
 ## Validation
 

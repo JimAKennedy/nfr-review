@@ -67,3 +67,44 @@ def test_metadata_count_matches_registry() -> None:
 
     orphan_metadata = metadata_ids - registered_ids
     assert orphan_metadata == set(), f"Metadata for non-existent rules: {orphan_metadata}"
+
+
+_DANGLING_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "as",
+        "at",
+        "by",
+        "for",
+        "from",
+        "in",
+        "inside",
+        "instead",
+        "into",
+        "of",
+        "on",
+        "or",
+        "than",
+        "that",
+        "the",
+        "to",
+        "via",
+        "which",
+        "with",
+        "without",
+    }
+)
+
+
+def test_rust_rule_descriptions_are_complete_sentences() -> None:
+    """Rust rule descriptions must not be cut off mid-sentence."""
+    rust = {k: m for k, m in RULE_METADATA.items() if k.startswith("rust-")}
+    assert len(rust) == 5
+    for rule_id, meta in rust.items():
+        assert meta.description.endswith("."), rule_id
+        last_word = meta.description.rstrip(".").split()[-1].lower()
+        assert last_word not in _DANGLING_WORDS, (
+            f"{rule_id}: description ends in dangling word {last_word!r}"
+        )

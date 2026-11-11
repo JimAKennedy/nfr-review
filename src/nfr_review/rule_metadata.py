@@ -870,7 +870,8 @@ RULE_METADATA: dict[str, RuleMetadata] = {
     "rust-unwrap-expect": _m(
         "medium",
         "reliability",
-        "Flags .unwrap()/.expect() calls outside test code that panic instead of.",
+        "Flags .unwrap()/.expect() calls outside test code that panic instead of"
+        " propagating the error.",
         ["rust", "error-handling"],
         ["ISO 25010:Reliability"],
     ),
@@ -891,14 +892,16 @@ RULE_METADATA: dict[str, RuleMetadata] = {
     "rust-blocking-in-async": _m(
         "medium",
         "reliability",
-        "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside.",
+        "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside"
+        " async code, where they block the executor thread.",
         ["rust", "async", "concurrency"],
         ["ISO 25010:Reliability"],
     ),
     "rust-unbounded-spawn-in-loop": _m(
         "medium",
         "reliability",
-        "Flags tokio::spawn calls inside a loop with nothing joining or bounding the.",
+        "Flags tokio::spawn calls inside a loop with nothing joining or bounding the"
+        " spawned tasks.",
         ["rust", "async", "concurrency"],
         ["ISO 25010:Reliability"],
     ),
