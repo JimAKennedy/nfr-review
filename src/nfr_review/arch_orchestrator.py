@@ -304,6 +304,8 @@ def _discover_arch_artifacts(
     repo_names: list[str],
     multi: bool,
     cb: ProgressCallback,
+    *,
+    exclude_test_paths: bool = True,
 ):
     """Discover components and integrations, materialising infra components."""
     from nfr_review.arch_discovery import (
@@ -325,9 +327,16 @@ def _discover_arch_artifacts(
 
     cb("Mapping integrations...")
     if multi:
-        integrations = discover_integrations_multi_repo(targets, components, repo_names)
+        integrations = discover_integrations_multi_repo(
+            targets, components, repo_names, exclude_test_paths=exclude_test_paths
+        )
     else:
-        integrations = discover_integrations(targets[0], components, repo_name=repo_names[0])
+        integrations = discover_integrations(
+            targets[0],
+            components,
+            repo_name=repo_names[0],
+            exclude_test_paths=exclude_test_paths,
+        )
     cb(f"Found {len(integrations)} integration points")
 
     prev_count = len(components)
@@ -388,6 +397,7 @@ def run_arch_review(
     evidence: list[Evidence] | None = None,
     progress: ProgressCallback | None = None,
     llm_config: LlmConfig | None = None,
+    exclude_test_paths: bool = True,
 ) -> ArchReport:
     """Run the full architecture review pipeline and return an ArchReport.
 
@@ -407,6 +417,9 @@ def run_arch_review(
     llm_config:
         LLM configuration (normally ``Config.llm``). ``NFR_LLM_*``
         overrides apply on top; defaults to ``LlmConfig()``.
+    exclude_test_paths:
+        Skip config files under test paths during integration discovery
+        (the ``--exclude-tests`` default).
     """
     from nfr_review.arch_diagrams import generate_all_diagrams
     from nfr_review.arch_recommendations import generate_recommendations
@@ -424,7 +437,9 @@ def run_arch_review(
 
     repos_info = _build_repos_info(targets, repo_names)
     llm, llm_model = _init_llm_client(skip_llm, cb, llm_config)
-    components, integrations = _discover_arch_artifacts(targets, repo_names, multi, cb)
+    components, integrations = _discover_arch_artifacts(
+        targets, repo_names, multi, cb, exclude_test_paths=exclude_test_paths
+    )
 
     # --- test coverage ---
     cb("Assessing test coverage...")

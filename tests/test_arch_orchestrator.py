@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
@@ -381,3 +382,59 @@ class TestArchLlmModelDisclosure:
         llm_config = seen["llm_config"]
         assert isinstance(llm_config, LlmConfig)
         assert llm_config.model == "cfg-file-model"
+
+
+class TestArchTestPathExclusion:
+    """``exclude_test_paths`` reaches config-integration discovery."""
+
+    @staticmethod
+    def _repo_with_test_config(root: Path) -> Path:
+        cfg_dir = root / "src" / "test" / "resources"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "application.yml").write_text(
+            "spring:\n  redis:\n    url: redis://test-cache:6379\n"
+        )
+        (root / "pyproject.toml").write_text('[project]\nname = "s"\nversion = "0.1.0"\n')
+        return root
+
+    def test_default_excludes_test_path_config(self, tmp_path: Path) -> None:
+        repo = self._repo_with_test_config(tmp_path)
+        report = run_arch_review([repo], skip_llm=True)
+        assert [i for i in report.integration_points if i.protocol == "redis"] == []
+
+    def test_exclusion_off_discovers_test_path_config(self, tmp_path: Path) -> None:
+        repo = self._repo_with_test_config(tmp_path)
+        report = run_arch_review([repo], skip_llm=True, exclude_test_paths=False)
+        assert len([i for i in report.integration_points if i.protocol == "redis"]) == 1
+
+    def test_all_command_include_tests_reaches_arch_review(self, tmp_path: Path) -> None:
+        from nfr_review.cli import _execute_all_pipelines
+
+        with (
+            patch("nfr_review.arch_orchestrator.run_arch_review") as arch,
+            patch("nfr_review.arch_report_render.render_arch_report", return_value={}),
+            patch("nfr_review.cli.run_report_pipeline", return_value=MagicMock()),
+        ):
+            _execute_all_pipelines(
+                target_list=[tmp_path],
+                repo_names=["repo"],
+                timestamp="20260101-000000",
+                output_dir=tmp_path / "out",
+                config_path=None,
+                no_arch=False,
+                no_tests=True,
+                no_deps=True,
+                no_diagrams=True,
+                no_pdf=True,
+                no_summary=True,
+                test_timeout=1,
+                no_score=True,
+                max_resolve_rounds=None,
+                no_llm=True,
+                diagram_mode="hierarchical",
+                exclude_tests=False,
+                workers=1,
+                quiet=True,
+            )
+
+        assert arch.call_args.kwargs["exclude_test_paths"] is False

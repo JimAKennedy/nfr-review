@@ -64,3 +64,7 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 ## 2026-11-11 — executing M001/S06
 
 - **Decision:** the evidence file is created at Task 1 and appended per task; Task 5 appends the slice-gate results and the row-to-test map instead of writing the file. — **Why:** the ledger standard (and the plan's own evidence rule) appends evidence per task as it lands; same precedent as S03.
+
+## 2026-11-11 — executing M001/S07
+
+- **Decision:** Task 1 adds `exclude_test_paths` to `run_arch_review` after S06's `llm_config` (and its docstring entry after `llm_config:`), not directly after `progress:` as the plan says. — **Why:** the plan predates S06; both are keyword-only, so the order only keeps S06's parameter and docstring pair intact.

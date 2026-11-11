@@ -2741,6 +2741,7 @@ def _execute_all_pipelines(  # noqa: PLR0913
             diagram_mode=diagram_mode,
             llm_config=llm_config,
             progress=lambda msg: _ts_echo(msg, quiet=quiet),
+            exclude_test_paths=exclude_tests,
         )
         _phase_done("Architecture review", t0, quiet=quiet)
 

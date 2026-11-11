@@ -9,6 +9,7 @@ public API consumed by ``arch_orchestrator``.
 
 from __future__ import annotations
 
+import functools
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -98,6 +99,8 @@ def discover_integrations(
     repo_path: Path,
     components: list[Component],
     repo_name: str | None = None,
+    *,
+    exclude_test_paths: bool = True,
 ) -> list[IntegrationPoint]:
     """Discover integration points in a single repository.
 
@@ -112,6 +115,9 @@ def discover_integrations(
         Pre-discovered components to match against.
     repo_name:
         Optional human-friendly name for the repository.
+    exclude_test_paths:
+        Skip config files under test paths when scanning for connection
+        strings (``--exclude-tests``, the default).
 
     Returns
     -------
@@ -124,8 +130,13 @@ def discover_integrations(
     all_integrations: list[IntegrationPoint] = []
 
     for strategy_name, strategy_fn in _STRATEGIES:
+        fn: StrategyFn = strategy_fn
+        if strategy_fn is discover_config_integrations:
+            fn = functools.partial(
+                discover_config_integrations, exclude_test_paths=exclude_test_paths
+            )
         try:
-            all_integrations.extend(strategy_fn(repo_path, components, effective_name))
+            all_integrations.extend(fn(repo_path, components, effective_name))
         except Exception:  # noqa: BLE001
             logger.warning(
                 "Strategy %s failed for %s", strategy_name, repo_path, exc_info=True
@@ -140,6 +151,8 @@ def discover_integrations_multi_repo(
     repo_paths: list[Path],
     all_components: list[Component],
     repo_names: list[str] | None = None,
+    *,
+    exclude_test_paths: bool = True,
 ) -> list[IntegrationPoint]:
     """Discover integrations across multiple repositories.
 
@@ -154,6 +167,8 @@ def discover_integrations_multi_repo(
         Components from all repos (with ``repo`` attribute set).
     repo_names:
         Optional human-friendly names for each repository.
+    exclude_test_paths:
+        Passed through to :func:`discover_integrations` for each repository.
 
     Returns
     -------
@@ -171,7 +186,9 @@ def discover_integrations_multi_repo(
 
     for i, repo_path in enumerate(repo_paths):
         name = repo_names[i] if repo_names else None
-        intgs = discover_integrations(repo_path, all_components, repo_name=name)
+        intgs = discover_integrations(
+            repo_path, all_components, repo_name=name, exclude_test_paths=exclude_test_paths
+        )
         all_integrations.extend(intgs)
 
     result: list[IntegrationPoint] = []

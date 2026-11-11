@@ -196,7 +196,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| C1 | `discover_config_integrations` gained `exclude_test_paths`, but its only caller never passes it | `arch_integrations.py` | Case in `tests/test_arch_integrations.py` with exclusion off, asserting a test-path integration is discovered | `open` |
+| C1 | `discover_config_integrations` gained `exclude_test_paths`, but its only caller never passes it | `arch_integrations.py` | Case in `tests/test_arch_integrations.py` with exclusion off, asserting a test-path integration is discovered | `done` |
 | C2 | Detection `rglob`s traverse `node_modules`/`target` before exclusion | `detect.py` (`_safe_rglob`) | Case in `tests/test_detect.py` asserting excluded directories are never listed | `open` |
 
 ### Slice M001/S08 — Privacy SCM-username filter
