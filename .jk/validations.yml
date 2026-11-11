@@ -1,0 +1,44 @@
+# Validation tokens for the jk-standards delivery workflow.
+#
+# A slice in docs/plans/<slug>/ledger.md names TOKENS, never commands — the
+# ledger says which class of assurance the slice owes, and this file says how
+# that assurance is obtained in this repo. The `ledger` check asserts that
+# every token a ledger cites appears here, so a typo fails rather than
+# silently skipping a gate.
+#
+# The set mirrors .github/workflows/ci.yml and the nightly regression job,
+# ordered cheapest-first: a slice owes `format` plus whichever subject-matter
+# tokens its change touches, and `gate` before it is pushed.
+
+# Formatting, lint (ruff), type-checking (mypy) and the rest of the hook
+# suite. Seconds.
+format: pre-commit run --all-files
+
+# The test suite, excluding network-bound regression tests (mirrors test-core).
+unit: python -m pytest -n auto tests/
+
+# Snapshot tests against the public corpus repos (mirrors the nightly
+# regression job). Needs network on first run; repos are cached under
+# .regression-repos. Owed by any slice that can change rule or collector
+# output. Refresh with --update-snapshots and commit the snapshots alongside
+# the code change, never in a follow-up.
+regression: python -m pytest -n auto -m regression --timeout=600 tests/regression
+
+# The Container E2E job, locally: build the image (amd64 only — the
+# tree-sitter-dockerfile grammar has no aarch64 wheel) and scan the C++
+# fixture on a read-only mount, exactly as CI does. Owed by any slice touching
+# the Dockerfile, dependencies, or anything that writes into the scanned repo.
+container-e2e: >
+  podman build --platform linux/amd64 -t nfr-review:e2e-test . &&
+  podman run --rm --platform linux/amd64 --entrypoint sh
+  -v "$PWD/tests/fixtures/cpp-integration-repo:/repo:ro" -w /repo nfr-review:e2e-test
+  -c 'nfr-review run --score --csv /tmp/out.csv --jsonl /tmp/out.jsonl .'
+
+# Ledger conformance for docs/plans/*/ledger.md.
+discipline: jk-standards ledger
+
+# Everything a push to the PR branch must pass locally. Minutes, not seconds.
+gate: >
+  pre-commit run --all-files &&
+  python -m pytest -n auto tests/ &&
+  python -m pytest -n auto -m regression --timeout=600 tests/regression
