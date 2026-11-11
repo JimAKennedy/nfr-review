@@ -10,7 +10,7 @@
 
 ## Task status
 
-- [ ] Task 1 — PV1: suppress SCM local parts only in SSH remotes, and lock both directions
+- [x] Task 1 — PV1: suppress SCM local parts only in SSH remotes, and lock both directions
 - [ ] Task 2 — Slice gate and evidence
 
 ## Definition of Done

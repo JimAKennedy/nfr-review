@@ -215,7 +215,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| PV1 | SCM-username suppression is domain-agnostic and untested | `hygiene/collectors/privacy.py` | Cases in `tests/test_hygiene_privacy.py` for both directions | `open` |
+| PV1 | SCM-username suppression is domain-agnostic and untested | `hygiene/collectors/privacy.py` | Cases in `tests/test_hygiene_privacy.py` for both directions | `done` |
 
 ### Slice M001/S09 — Real LLM isolation in tests
 
