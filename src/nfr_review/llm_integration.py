@@ -21,13 +21,38 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from nfr_review.config import LlmConfig
 
 logger = logging.getLogger(__name__)
+
+_ENV_LOADED = False
+
+
+def _load_dotenv_once() -> None:
+    """Load the source checkout's ``.env`` into ``os.environ`` (no-clobber, once)."""
+    global _ENV_LOADED  # noqa: PLW0603
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
+
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value
+
 
 try:
     from ai_tooling.config import ProviderConfig
@@ -44,16 +69,21 @@ try:
 
         Maps nfr-review's ``LlmConfig`` fields onto ``ai_tooling.ProviderConfig``
         and delegates session creation to ``ai_tooling.create_session()``.
-        When *config* is ``None``, uses ``ai_tooling`` defaults.
-        """
-        if config is None:
-            return create_session()
 
+        nfr-review's own defaults and documented ``NFR_LLM_*`` env-var
+        overrides (via :meth:`LlmConfig.resolve`) always apply, also when
+        *config* is ``None`` -- ai-tooling's defaults are never used directly.
+        """
+        from nfr_review.config import LlmConfig as _LlmConfig
+
+        _load_dotenv_once()
+
+        resolved = (config if config is not None else _LlmConfig()).resolve()
         provider_cfg = ProviderConfig(
-            provider=config.provider,
-            model=config.model,
-            base_url=config.base_url,
-            api_key_env_var=config.api_key_env_var,
+            provider=resolved.provider,
+            model=resolved.model,
+            base_url=resolved.base_url,
+            api_key_env_var=resolved.api_key_env_var,
         )
         return create_session(provider_cfg)
 
