@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-11T13:23:11.998428+00:00",
-  "nfr_review_sha": "47893bacb4366d437ea8e7e887437bbc2a6e76f3",
+  "generated_at": "2026-11-11T14:55:01.927375+00:00",
+  "nfr_review_sha": "ef9804e3f63ea982f7670c86368b4d40cfde6400",
   "platform": "Darwin",
   "python_version": "3.11.16",
   "ci": false

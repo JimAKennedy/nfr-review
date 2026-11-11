@@ -127,18 +127,18 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S04-plan.md
 **Validation:** format, unit, regression, container-e2e, gate
 **Evidence:** evidence/M001-S04.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] A scan with default config never invokes the `graphify` executable
-- [ ] With graphify enabled, its output is written to a temp dir and nothing is written into the scanned repo
-- [ ] A stale `graph.json` in the scanned repo is not reused
-- [ ] The Container E2E job fails when any collector crashes, and passes on the `:ro` fixture mount
+- [x] A scan with default config never invokes the `graphify` executable
+- [x] With graphify enabled, its output is written to a temp dir and nothing is written into the scanned repo
+- [x] A stale `graph.json` in the scanned repo is not reused
+- [x] The Container E2E job fails when any collector crashes, and passes on the `:ro` fixture mount
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| GR1 | Graphify runs on every scan (up to 2×300 s), writes `graphify-out/` into the scanned repo, reuses stale output, and crashes silently on a `:ro` mount | `collectors/graphify.py`, `config.py` (`GraphifyConfig`), `.github/workflows/ci.yml` | Cases in `tests/test_graphify_collector.py` asserting no subprocess call by default and temp-dir output when enabled; `container-e2e` exits non-zero on an injected collector crash | `open` |
+| GR1 | Graphify runs on every scan (up to 2×300 s), writes `graphify-out/` into the scanned repo, reuses stale output, and crashes silently on a `:ro` mount | `collectors/graphify.py`, `config.py` (`GraphifyConfig`), `.github/workflows/ci.yml` | Cases in `tests/test_graphify_collector.py` asserting no subprocess call by default and temp-dir output when enabled; `container-e2e` exits non-zero on an injected collector crash | `done` |
 
 ### Slice M001/S05 — Windows locator stability
 

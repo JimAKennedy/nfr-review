@@ -10,14 +10,14 @@
 - [x] Task 1 — `graphify.enabled` opt-in; graphify output in a temp dir; `graph_path` read
 - [x] Task 2 — `RunResult.failed_collectors` and `nfr-review run --strict-collectors`
 - [x] Task 3 — Container E2E runs with `--strict-collectors` (CI, `ci-complete`, `.jk/validations.yml`)
-- [ ] Task 4 — Regression snapshots refreshed without graphify findings; full gate
+- [x] Task 4 — Regression snapshots refreshed without graphify findings; full gate
 
 ## Definition of Done
 
-- [ ] A scan with default config never invokes the `graphify` executable
-- [ ] With graphify enabled, its output is written to a temp dir and nothing is written into the scanned repo
-- [ ] A stale `graph.json` in the scanned repo is not reused
-- [ ] The Container E2E job fails when any collector crashes, and passes on the `:ro` fixture mount
+- [x] A scan with default config never invokes the `graphify` executable
+- [x] With graphify enabled, its output is written to a temp dir and nothing is written into the scanned repo
+- [x] A stale `graph.json` in the scanned repo is not reused
+- [x] The Container E2E job fails when any collector crashes, and passes on the `:ro` fixture mount
 
 ## Validation
 
