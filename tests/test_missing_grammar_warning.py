@@ -4,14 +4,21 @@ must surface as a visible run warning, not silently produce zero findings.
 Deliberately does not depend on any real grammar being installed — every test
 here mocks the grammar loader, so this exercises the same code path
 regardless of which platform CI (or this environment) runs on.
+
+The one exception is the Go grammar, a core dependency installed
+everywhere, which the parser-constructor case needs to reach
+``tree_sitter.Parser``.
 """
 
 from __future__ import annotations
 
+import types
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import tree_sitter
+import tree_sitter_go
 
 from nfr_review.collectors.dockerfile import DockerfileCollector
 from nfr_review.collectors.go_ast import GoAstCollector
@@ -23,6 +30,51 @@ _GO_WARNING = "tree-sitter grammar for go not installed on this platform — col
 _DOCKERFILE_WARNING = (
     "tree-sitter grammar for dockerfile not installed on this platform — collector disabled"
 )
+
+
+def _placeholder_grammar_module() -> types.ModuleType:
+    """A grammar package with no language function, like the 0.0.0a1 placeholder."""
+    return types.ModuleType("tree_sitter_placeholder")
+
+
+def _raise_attribute_error() -> object:
+    raise AttributeError("bug inside the grammar's language()")
+
+
+def _buggy_grammar_module() -> types.ModuleType:
+    """A grammar package whose language function itself raises AttributeError."""
+    mod = types.ModuleType("tree_sitter_buggy")
+    mod.language = _raise_attribute_error  # type: ignore[attr-defined]
+    return mod
+
+
+def _go_backed_grammar_module() -> types.ModuleType:
+    """A grammar package that loads fine (backed by the installed Go grammar)."""
+    mod = types.ModuleType("tree_sitter_stand_in")
+    mod.language = tree_sitter_go.language  # type: ignore[attr-defined]
+    return mod
+
+
+class TestMakeParser:
+    def test_missing_language_function_raises_grammar_not_installed(self) -> None:
+        from nfr_review.collectors.ast_common import GrammarNotInstalledError, make_parser
+
+        with patch("importlib.import_module", return_value=_placeholder_grammar_module()):
+            with pytest.raises(GrammarNotInstalledError, match="does not provide language"):
+                make_parser("dockerfile")
+
+    def test_grammar_not_installed_is_an_import_error(self) -> None:
+        from nfr_review.collectors.ast_common import GrammarNotInstalledError
+
+        assert issubclass(GrammarNotInstalledError, ImportError)
+
+    def test_attribute_error_inside_language_function_propagates(self) -> None:
+        from nfr_review.collectors.ast_common import GrammarNotInstalledError, make_parser
+
+        with patch("importlib.import_module", return_value=_buggy_grammar_module()):
+            with pytest.raises(AttributeError, match="bug inside") as excinfo:
+                make_parser("dockerfile")
+        assert not isinstance(excinfo.value, GrammarNotInstalledError)
 
 
 class TestBaseASTCollectorRecordsWarning:
@@ -39,6 +91,29 @@ class TestBaseASTCollectorRecordsWarning:
             result = collector.collect(tmp_path, config=None)
         assert result == []
         assert collector.grammar_warnings == [_GO_WARNING]
+
+    def test_missing_language_function_records_warning(self, tmp_path: Path) -> None:
+        collector = GoAstCollector()
+        with patch("importlib.import_module", return_value=_placeholder_grammar_module()):
+            result = collector.collect(tmp_path, config=None)
+        assert result == []
+        assert collector.grammar_warnings == [_GO_WARNING]
+
+    def test_attribute_error_inside_language_function_propagates(self, tmp_path: Path) -> None:
+        collector = GoAstCollector()
+        with patch("importlib.import_module", return_value=_buggy_grammar_module()):
+            with pytest.raises(AttributeError, match="bug inside"):
+                collector.collect(tmp_path, config=None)
+        assert collector.grammar_warnings == []
+
+    def test_attribute_error_from_parser_constructor_propagates(self, tmp_path: Path) -> None:
+        collector = GoAstCollector()
+        with patch.object(
+            tree_sitter, "Parser", side_effect=AttributeError("parser ctor bug")
+        ):
+            with pytest.raises(AttributeError, match="parser ctor bug"):
+                collector.collect(tmp_path, config=None)
+        assert collector.grammar_warnings == []
 
     def test_repeated_collect_records_the_warning_once(self, tmp_path: Path) -> None:
         collector = GoAstCollector()
@@ -75,6 +150,30 @@ class TestDockerfileCollectorRecordsWarning:
             result = collector.collect(tmp_path, config=None)
         assert result == []
         assert collector.grammar_warnings == [_DOCKERFILE_WARNING]
+
+    def test_missing_language_function_records_warning(self, tmp_path: Path) -> None:
+        collector = DockerfileCollector()
+        with patch("importlib.import_module", return_value=_placeholder_grammar_module()):
+            result = collector.collect(tmp_path, config=None)
+        assert result == []
+        assert collector.grammar_warnings == [_DOCKERFILE_WARNING]
+
+    def test_attribute_error_inside_language_function_propagates(self, tmp_path: Path) -> None:
+        collector = DockerfileCollector()
+        with patch("importlib.import_module", return_value=_buggy_grammar_module()):
+            with pytest.raises(AttributeError, match="bug inside"):
+                collector.collect(tmp_path, config=None)
+        assert collector.grammar_warnings == []
+
+    def test_attribute_error_from_parser_constructor_propagates(self, tmp_path: Path) -> None:
+        collector = DockerfileCollector()
+        with (
+            patch("importlib.import_module", return_value=_go_backed_grammar_module()),
+            patch.object(tree_sitter, "Parser", side_effect=AttributeError("parser ctor bug")),
+        ):
+            with pytest.raises(AttributeError, match="parser ctor bug"):
+                collector.collect(tmp_path, config=None)
+        assert collector.grammar_warnings == []
 
     def test_repeated_collect_records_the_warning_once(self, tmp_path: Path) -> None:
         collector = DockerfileCollector()

@@ -42,16 +42,35 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
 }
 
 
+class GrammarNotInstalledError(ImportError):
+    """The grammar package is installed but does not expose its language function.
+
+    This is what the ``tree-sitter-dockerfile`` 0.0.0a1 placeholder looks like.
+    It subclasses ``ImportError`` so one ``except ImportError`` covers both a
+    missing package and an empty one, while an ``AttributeError`` raised by a
+    real bug in the grammar or in parser construction still propagates.
+    """
+
+
 def make_parser(language: str) -> tree_sitter.Parser:
-    """Create a tree-sitter Parser for *language* using individual grammar packages."""
+    """Create a tree-sitter Parser for *language* using individual grammar packages.
+
+    Raises ``ImportError`` (``ModuleNotFoundError``) when the grammar package is
+    absent and ``GrammarNotInstalledError`` when it lacks its language function.
+    """
     if language not in _GRAMMAR_LOADERS:
         raise ValueError(f"Unsupported tree-sitter language: {language!r}")
     module_name, func_name = _GRAMMAR_LOADERS[language]
     import importlib
 
     mod = importlib.import_module(module_name)
-    lang_ptr = getattr(mod, func_name)()
-    lang = tree_sitter.Language(lang_ptr)
+    try:
+        language_func = getattr(mod, func_name)
+    except AttributeError as exc:
+        raise GrammarNotInstalledError(
+            f"{module_name} does not provide {func_name}()", name=module_name
+        ) from exc
+    lang = tree_sitter.Language(language_func())
     return tree_sitter.Parser(lang)
 
 
@@ -103,7 +122,7 @@ class BaseASTCollector(ABC):
         if self._parser is None:
             try:
                 self._parser = make_parser(self.language)  # type: ignore[assignment]
-            except (ImportError, ModuleNotFoundError, AttributeError):
+            except ImportError:  # includes ModuleNotFoundError, GrammarNotInstalledError
                 msg = (
                     f"tree-sitter grammar for {self.language} not installed"
                     " on this platform — collector disabled"
@@ -179,4 +198,4 @@ class BaseASTCollector(ABC):
         return evidence
 
 
-__all__ = ["BaseASTCollector", "find_nodes", "make_parser", "text"]
+__all__ = ["BaseASTCollector", "GrammarNotInstalledError", "find_nodes", "make_parser", "text"]

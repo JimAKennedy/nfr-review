@@ -6,7 +6,7 @@
 
 - [x] Task 1 — G1: `tree-sitter-dockerfile>=0.2` behind a marker for the two published wheels
 - [x] Task 2 — G3 + T1: reset grammar warnings per run, record each once; rewrite the "Raises…" tests to assert the warning
-- [ ] Task 3 — G2 + T1: only a missing grammar module or a failing `getattr(mod, func_name)` counts as "not installed"
+- [x] Task 3 — G2 + T1: only a missing grammar module or a failing `getattr(mod, func_name)` counts as "not installed"
 - [ ] Task 4 — Slice gate and evidence
 
 **Definition of Done**
