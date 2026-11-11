@@ -10,14 +10,14 @@
 - [x] Task 3 — H2: correct the site pages and `scripts/setup-all.sh`
 - [x] Task 4 — H2: document graphify opt-in and `--strict-collectors`
 - [x] Task 5 — H3: write `[Unreleased]` and record the version decision
-- [ ] Task 6 — Slice gate and evidence
+- [x] Task 6 — Slice gate and evidence
 
 **Definition of Done**
 
-- [ ] No user-facing doc mentions weasyprint, the removed extras, or openai as a core dependency
-- [ ] Historical CHANGELOG entries (0.3.1, 0.2.0, 0.1.x) match main
-- [ ] `[Unreleased]` records the typst migration, Rust support, extras consolidation, the detection/required_tech change, graphify becoming opt-in, and the breaking LLM refactor
-- [ ] The package version agrees with the CHANGELOG, and the PR-title correction is recorded as an owner action in the milestone report
+- [x] No user-facing doc mentions weasyprint, the removed extras, or openai as a core dependency
+- [x] Historical CHANGELOG entries (0.3.1, 0.2.0, 0.1.x) match main
+- [x] `[Unreleased]` records the typst migration, Rust support, extras consolidation, the detection/required_tech change, graphify becoming opt-in, and the breaking LLM refactor
+- [x] The package version agrees with the CHANGELOG, and the PR-title correction is recorded as an owner action in the milestone report
 
 **Validation** (tokens from `.jk/validations.yml`, run from the worktree root
 with `.venv/bin` first on `PATH`: `export PATH="$PWD/.venv/bin:$PATH"`)
