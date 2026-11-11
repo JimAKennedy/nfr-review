@@ -5,7 +5,7 @@
 
 **Task status**
 
-- [ ] Task 1 — H3: restore the historical CHANGELOG entries to main's text
+- [x] Task 1 — H3: restore the historical CHANGELOG entries to main's text
 - [ ] Task 2 — H2: correct the core docs (dependencies, install, README, ARCHITECTURE)
 - [ ] Task 3 — H2: correct the site pages and `scripts/setup-all.sh`
 - [ ] Task 4 — H2: document graphify opt-in and `--strict-collectors`

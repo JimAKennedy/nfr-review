@@ -79,3 +79,8 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 
 - **Decision:** the lockfiles were compiled with pip-tools 7.5.3 under Python 3.11 from a throwaway venv in the session scratchpad (with `pip<26.2` and `click<8.3`), not with `/opt/homebrew/bin/pip-compile`. — **Why:** the Homebrew binary crashes on import (`cannot import name 'stdlib_pkgs' from 'pip._internal.utils.compat'`, pip 26.2.1), and with `click` 8.5 pip-tools 7.5.3 writes a spurious `--no-index` into the header; the pinned venv runs the same pip-tools version and Python as the plan and the lockfile headers, and the headers come out byte-identical to the originals.
 - **Decision:** the evidence file is created at Task 1 and appended per task; Task 4 appends the slice-gate results instead of creating the file, so its `test -f` failing check is moot. — **Why:** the ledger standard (and the plan's own evidence rule) appends evidence per task as it lands; same precedent as S03 and S06.
+
+## 2026-11-11 — executing M001/S11
+
+- **Decision:** the evidence file is created at Task 1 and appended per task; Task 6 appends the slice-gate results instead of creating the file, so its `test -f` failing check is moot. — **Why:** the ledger standard (and the plan's own evidence rule) appends evidence per task as it lands; same precedent as S03, S06 and S10.
+- **Decision:** `gate` (format + unit + regression) is run at every task, not only Task 6. — **Why:** the executor brief requires every declared validation token per task; it also covers the repo constraint of regression + pre-commit before each commit.
