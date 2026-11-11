@@ -104,11 +104,6 @@ jobs:
       - name: Run core tests
         run: |
           pytest -n auto -m "not regression" \
-            --ignore=tests/test_llm_client.py \
-            --ignore=tests/test_s04_integration.py \
-            --ignore=tests/test_pii_logging_rule.py \
-            --ignore=tests/test_adr_drift_rule.py \
-            --ignore=tests/test_adr_gap_rule.py \
             --cov --cov-report=term-missing --cov-report=xml \
             --junitxml=test-results.xml
 
@@ -169,6 +164,7 @@ jobs:
         run: |
           pytest -n auto -m "not regression" \
             tests/test_llm_client.py \
+            tests/test_llm_config.py \
             tests/test_s04_integration.py \
             tests/test_pii_logging_rule.py \
             tests/test_adr_drift_rule.py \
