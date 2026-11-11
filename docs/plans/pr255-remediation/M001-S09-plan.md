@@ -5,7 +5,7 @@
 **Task status**
 
 - [x] Task 1 — T2: an autouse `offline_llm` fixture patches `create_llm_client` at every lookup site and the LLM rules' import-time clients
-- [ ] Task 2 — T2: remove the `_AI_TOOLING_AVAILABLE` patches; make the unavailable-client tests deterministic
+- [x] Task 2 — T2: remove the `_AI_TOOLING_AVAILABLE` patches; make the unavailable-client tests deterministic
 - [ ] Task 3 — Slice gate and evidence
 
 **Definition of Done**

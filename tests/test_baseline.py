@@ -403,16 +403,13 @@ class TestClassifyFindings:
 
 
 class TestCLIBaseline:
-    def test_baseline_filters_known_findings_exit_0(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When all findings match the baseline, exit 0 (no regressions)."""
-        # Suppress LLM-powered rules (adr-gap etc.) which are non-deterministic
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setenv("NFR_LLM_BACKEND", "api")
-        import nfr_review.llm_integration as _lc
+    @pytest.mark.usefixtures("offline_llm")
+    def test_baseline_filters_known_findings_exit_0(self, tmp_path: Path) -> None:
+        """When all findings match the baseline, exit 0 (no regressions).
 
-        monkeypatch.setattr(_lc, "_AI_TOOLING_AVAILABLE", True)
+        LLM-powered rules and collectors are non-deterministic; ``offline_llm``
+        (tests/conftest.py) patches ``create_llm_client`` so they skip.
+        """
 
         target = tmp_path / "repo"
         target.mkdir()

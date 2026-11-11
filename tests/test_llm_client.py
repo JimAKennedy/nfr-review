@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import sys
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
 
 from nfr_review.llm_integration import (
-    ProviderUnavailableError,
-    create_llm_client,
     extract_json,
     run_analysis,
     serialize_bundle,
@@ -20,33 +21,44 @@ from nfr_review.llm_integration import (
 # ---------------------------------------------------------------------------
 
 
+def _load_llm_integration_without_ai_tooling(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    """Execute a private copy of ``nfr_review.llm_integration`` with ai-tooling unimportable.
+
+    The copy is never registered in ``sys.modules``, so the real module, and the
+    classes other tests hold, are untouched. The result does not depend on
+    whether ai-tooling is installed or on ``ANTHROPIC_API_KEY``.
+    """
+    import nfr_review.llm_integration as real
+
+    loaded = [n for n in sys.modules if n == "ai_tooling" or n.startswith("ai_tooling.")]
+    for name in {"ai_tooling", *loaded}:
+        monkeypatch.setitem(sys.modules, name, None)
+    spec = importlib.util.spec_from_file_location(
+        "_llm_integration_without_ai_tooling", real.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class TestCreateLlmClientStub:
-    """When ai-tooling is not installed the stub must be importable and inert."""
+    """When ai-tooling is not installed the stub must be importable and inert,
+    even with an API key in the environment."""
 
     def test_returns_unavailable_client_when_no_ai_tooling(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import nfr_review.llm_integration as _mod
-
-        monkeypatch.setattr(_mod, "_AI_TOOLING_AVAILABLE", False)
-        # Re-import stub path by calling the module-level stub directly
-        client = (
-            _mod._UnavailableClient()
-            if hasattr(_mod, "_UnavailableClient")
-            else create_llm_client()
-        )
-        assert client.available is False
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+        stub = _load_llm_integration_without_ai_tooling(monkeypatch)
+        assert stub.create_llm_client().available is False
 
     def test_stub_call_raises_provider_unavailable(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import nfr_review.llm_integration as _mod
-
-        if not hasattr(_mod, "_UnavailableClient"):
-            pytest.skip("ai-tooling is installed; stub path not active")
-        client = _mod._UnavailableClient()
-        with pytest.raises(ProviderUnavailableError):
-            client.call("hello")
+        stub = _load_llm_integration_without_ai_tooling(monkeypatch)
+        with pytest.raises(stub.ProviderUnavailableError, match="ai-tooling is not installed"):
+            stub.create_llm_client().call("hello")
 
 
 # ---------------------------------------------------------------------------

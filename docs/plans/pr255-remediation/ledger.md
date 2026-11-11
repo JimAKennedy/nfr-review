@@ -232,7 +232,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| T2 | No-op `_AI_TOOLING_AVAILABLE` patches; the unavailable-client test fails when `ANTHROPIC_API_KEY` is set | `tests/test_baseline.py`, `tests/test_pilot_validation.py`, `tests/test_llm_client.py` | `grep _AI_TOOLING_AVAILABLE tests/` is empty; `unit` run with a dummy `ANTHROPIC_API_KEY` recorded in evidence | `open` |
+| T2 | No-op `_AI_TOOLING_AVAILABLE` patches; the unavailable-client test fails when `ANTHROPIC_API_KEY` is set | `tests/test_baseline.py`, `tests/test_pilot_validation.py`, `tests/test_llm_client.py` | `grep _AI_TOOLING_AVAILABLE tests/` is empty; `unit` run with a dummy `ANTHROPIC_API_KEY` recorded in evidence | `done` |
 
 ### Slice M001/S10 — Lockfiles, base image and CI hygiene
 
