@@ -205,13 +205,13 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S08-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S08.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] `github@acme-corp.com` and `deploy@acme.com` in prose are reported
-- [ ] `git@github.com:org/repo` in an SSH remote is not reported
-- [ ] Both are locked by tests
+- [x] `github@acme-corp.com` and `deploy@acme.com` in prose are reported
+- [x] `git@github.com:org/repo` in an SSH remote is not reported
+- [x] Both are locked by tests
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|

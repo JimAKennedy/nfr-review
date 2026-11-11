@@ -11,15 +11,15 @@
 ## Task status
 
 - [x] Task 1 — PV1: suppress SCM local parts only in SSH remotes, and lock both directions
-- [ ] Task 2 — Slice gate and evidence
+- [x] Task 2 — Slice gate and evidence
 
 ## Definition of Done
 
 Copied verbatim from the ledger slice:
 
-- [ ] `github@acme-corp.com` and `deploy@acme.com` in prose are reported
-- [ ] `git@github.com:org/repo` in an SSH remote is not reported
-- [ ] Both are locked by tests
+- [x] `github@acme-corp.com` and `deploy@acme.com` in prose are reported
+- [x] `git@github.com:org/repo` in an SSH remote is not reported
+- [x] Both are locked by tests
 
 ## Validation
 
