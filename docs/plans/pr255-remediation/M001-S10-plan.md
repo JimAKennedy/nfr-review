@@ -8,13 +8,13 @@
 - [x] Task 1 — H1: recompile `requirements.txt` and `requirements-dev.txt`
 - [x] Task 2 — H4: zlib1g upgrade, `.trivyignore` cleanup, base-image digest pin, Dependabot `docker`
 - [x] Task 3 — H5: restore "Test summary" and the `scanners: vuln` comment; test-llm coverage artifact
-- [ ] Task 4 — Slice gate and evidence
+- [x] Task 4 — Slice gate and evidence
 
 **Definition of Done**
 
-- [ ] `requirements.txt` and `requirements-dev.txt` are pip-compiled from the final `pyproject.toml` and install cleanly
-- [ ] `.trivyignore` has no zlib entries and the image scan reports neither CVE
-- [ ] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is measured and uploaded as its own report
+- [x] `requirements.txt` and `requirements-dev.txt` are pip-compiled from the final `pyproject.toml` and install cleanly
+- [x] `.trivyignore` has no zlib entries and the image scan reports neither CVE
+- [x] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is measured and uploaded as its own report
 
 **Validation** (tokens from `.jk/validations.yml`, run from the worktree root
 with `.venv/bin` first on `PATH`: `export PATH="$PWD/.venv/bin:$PATH"`)

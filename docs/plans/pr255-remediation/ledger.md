@@ -240,13 +240,13 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S10-plan.md
 **Validation:** format, unit, container-e2e, gate
 **Evidence:** evidence/M001-S10.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] `requirements.txt` and `requirements-dev.txt` are pip-compiled from the final `pyproject.toml` and install cleanly
-- [ ] `.trivyignore` has no zlib entries and the image scan reports neither CVE
-- [ ] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is measured and uploaded as its own report
+- [x] `requirements.txt` and `requirements-dev.txt` are pip-compiled from the final `pyproject.toml` and install cleanly
+- [x] `.trivyignore` has no zlib entries and the image scan reports neither CVE
+- [x] CI again has the "Test summary" step and the `scanners: vuln` explanation, and test-llm coverage is measured and uploaded as its own report
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
