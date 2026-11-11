@@ -11,7 +11,7 @@
 ## Task status
 
 - [x] Task 1 — C1: thread `exclude_test_paths` into config-integration discovery
-- [ ] Task 2 — C2: prune excluded directories during detection
+- [x] Task 2 — C2: prune excluded directories during detection
 - [ ] Task 3 — Slice gate and evidence
 
 ## Definition of Done

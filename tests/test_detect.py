@@ -471,3 +471,46 @@ class TestErrorHandling:
         assert result["go"] is True
         assert result["java"] is False
         assert _has_all_keys(result)
+
+
+class TestDetectionPruning:
+    """Detection never lists excluded directories, it does not just filter them."""
+
+    def test_excluded_directories_are_never_listed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("x = 1\n")
+        excluded = ("node_modules", "target", ".git", ".venv", "tests")
+        for top in excluded:
+            nested = tmp_path / top / "pkg" / "deep"
+            nested.mkdir(parents=True)
+            (nested / "Cargo.toml").write_text("[package]\nname = 'decoy'\n")
+
+        listed: list[str] = []
+        real_scandir = os.scandir
+
+        def recording_scandir(path: str | os.PathLike[str] = ".") -> object:
+            listed.append(Path(os.path.relpath(path, tmp_path)).as_posix())
+            return real_scandir(path)
+
+        monkeypatch.setattr(os, "scandir", recording_scandir)
+        result = detect_technologies(tmp_path)
+        monkeypatch.undo()
+
+        entered = {p for p in listed if p.split("/")[0] in excluded}
+        assert entered == set()
+        assert "src" in listed
+        assert result["python"] is True
+        assert result["rust"] is False
+
+    def test_glob_patterns_still_match_names(self, tmp_path: Path) -> None:
+        (tmp_path / "svc" / "docker").mkdir(parents=True)
+        (tmp_path / "svc" / "docker" / "api.Dockerfile").write_text("FROM scratch\n")
+        (tmp_path / "crates" / "core").mkdir(parents=True)
+        (tmp_path / "crates" / "core" / "Cargo.toml").write_text("[package]\n")
+
+        result = detect_technologies(tmp_path)
+
+        assert result["dockerfile"] is True
+        assert result["rust"] is True

@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+import fnmatch
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 from nfr_review.arch_utils import safe_read_text as _safe_read_text
-from nfr_review.path_filter import should_exclude_path
+from nfr_review.path_filter import ALWAYS_SKIP_DIRS, should_exclude_path
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +78,43 @@ def _safe_glob(base: Path, pattern: str) -> list[Path]:
         return []
 
 
+# Directories detection never descends into: the always-skipped set (VCS
+# metadata, virtualenvs, caches, node_modules) plus build output.  Any
+# directory whose name starts with "." is pruned as well, matching the AST
+# collectors' hidden-directory rule.
+_PRUNED_DIR_NAMES: frozenset[str] = ALWAYS_SKIP_DIRS | {"target"}
+
+
+def _is_pruned_dir(name: str, rel_dir: str) -> bool:
+    """Return True if the directory *name* at *rel_dir* must not be walked."""
+    return (
+        name.startswith(".") or name in _PRUNED_DIR_NAMES or should_exclude_path(f"{rel_dir}/")
+    )
+
+
 def _safe_rglob(base: Path, pattern: str) -> list[Path]:
+    """Return paths under *base* whose name matches the glob *pattern*.
+
+    Matches what ``base.rglob(pattern)`` returns for a single-component
+    pattern, minus excluded paths, but prunes hidden, always-skipped,
+    ``target`` and test directories during the walk so they are never listed.
+    Unreadable directories are skipped; any other ``OSError`` yields ``[]``.
+    """
+    matches: list[Path] = []
     try:
-        results = list(base.rglob(pattern))
+        for dirpath, dirnames, filenames in os.walk(base):
+            current = Path(dirpath)
+            rel = current.relative_to(base).as_posix()
+            prefix = "" if rel == "." else f"{rel}/"
+            dirnames[:] = sorted(d for d in dirnames if not _is_pruned_dir(d, f"{prefix}{d}"))
+            for name in (*dirnames, *sorted(filenames)):
+                if fnmatch.fnmatch(name, pattern) and not should_exclude_path(
+                    f"{prefix}{name}"
+                ):
+                    matches.append(current / name)
     except OSError:
         return []
-    return [p for p in results if not should_exclude_path(p.relative_to(base).as_posix())]
+    return matches
 
 
 _JAVA_BUILD_FILES = ("pom.xml", "build.gradle", "build.gradle.kts")
