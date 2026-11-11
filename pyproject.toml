@@ -164,4 +164,5 @@ markers = [
     "regression: clones public repos and diffs output against snapshot baselines (requires network)",
     "slow: full analysis pass on the repo (may hit network for dep resolution)",
     "loadtest: sustained-traffic load tests for the monitor (longer running)",
+    "real_llm_factory: run with the real create_llm_client instead of the offline stub from tests/conftest.py",
 ]

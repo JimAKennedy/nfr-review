@@ -68,3 +68,9 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 ## 2026-11-11 — executing M001/S07
 
 - **Decision:** Task 1 adds `exclude_test_paths` to `run_arch_review` after S06's `llm_config` (and its docstring entry after `llm_config:`), not directly after `progress:` as the plan says. — **Why:** the plan predates S06; both are keyword-only, so the order only keeps S06's parameter and docstring pair intact.
+
+## 2026-11-11 — executing M001/S09
+
+- **Decision:** the `CREATE_LLM_CLIENT_SITES` list is the plan's, unchanged. — **Why:** re-derived from the tree after S06/S07: module-level importers are still `collectors.adr_derive`, `output.summarize`, `rules.adr_drift`, `rules.pii_logging`; S06 added no new site (`arch_orchestrator._init_llm_client` imports `create_llm_client` at call time from `nfr_review.llm_integration`, already covered); `test_sites_cover_every_module_level_import` passes.
+- **Decision:** S06's `TestArchLlmModelDisclosure` (`tests/test_arch_orchestrator.py`) is left unchanged, with no opt-out marker. — **Why:** its `created_with` fixture monkeypatches `nfr_review.llm_integration.create_llm_client` after the autouse `offline_llm` fixture has run (autouse fixtures are set up first), so its recording fake wins and its assertions keep their intent; `tests/test_arch_orchestrator.py` passes with `ANTHROPIC_API_KEY=dummy`.
+- **Decision:** the throwaway tripwire plugin and its logs live in the session scratchpad rather than `/tmp/llm_tripwire/`. — **Why:** the executor environment requires temporary files in its scratchpad; the plugin's content is the plan's verbatim and nothing is committed.

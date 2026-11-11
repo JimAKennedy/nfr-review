@@ -18,6 +18,10 @@ import pytest
 import nfr_review.llm_integration as _llm_mod
 from nfr_review.config import LlmConfig
 
+# These tests exercise the real factory's config mapping; none of them calls
+# the client it returns.
+pytestmark = pytest.mark.real_llm_factory
+
 _NFR_ENV = (
     "NFR_LLM_PROVIDER",
     "NFR_LLM_BACKEND",
