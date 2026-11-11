@@ -105,14 +105,14 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S03-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S03.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] On a platform without a 0.2 wheel, `tree-sitter-dockerfile` is not installed at all rather than as a placeholder, and aarch64 stays excluded
-- [ ] Only a failing `getattr(mod, func_name)` is treated as "grammar not installed"; an `AttributeError` raised elsewhere propagates
-- [ ] Repeated runs on the same collector instance report each grammar warning once
-- [ ] The tests named "Raises…" assert the recorded warning, and the `BaseASTCollector` warning path is asserted
+- [x] On a platform without a 0.2 wheel, `tree-sitter-dockerfile` is not installed at all rather than as a placeholder, and aarch64 stays excluded
+- [x] Only a failing `getattr(mod, func_name)` is treated as "grammar not installed"; an `AttributeError` raised elsewhere propagates
+- [x] Repeated runs on the same collector instance report each grammar warning once
+- [x] The tests named "Raises…" assert the recorded warning, and the `BaseASTCollector` warning path is asserted
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|

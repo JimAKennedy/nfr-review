@@ -7,14 +7,14 @@
 - [x] Task 1 — G1: `tree-sitter-dockerfile>=0.2` behind a marker for the two published wheels
 - [x] Task 2 — G3 + T1: reset grammar warnings per run, record each once; rewrite the "Raises…" tests to assert the warning
 - [x] Task 3 — G2 + T1: only a missing grammar module or a failing `getattr(mod, func_name)` counts as "not installed"
-- [ ] Task 4 — Slice gate and evidence
+- [x] Task 4 — Slice gate and evidence
 
 **Definition of Done**
 
-- [ ] On a platform without a 0.2 wheel, `tree-sitter-dockerfile` is not installed at all rather than as a placeholder, and aarch64 stays excluded
-- [ ] Only a failing `getattr(mod, func_name)` is treated as "grammar not installed"; an `AttributeError` raised elsewhere propagates
-- [ ] Repeated runs on the same collector instance report each grammar warning once
-- [ ] The tests named "Raises…" assert the recorded warning, and the `BaseASTCollector` warning path is asserted
+- [x] On a platform without a 0.2 wheel, `tree-sitter-dockerfile` is not installed at all rather than as a placeholder, and aarch64 stays excluded
+- [x] Only a failing `getattr(mod, func_name)` is treated as "grammar not installed"; an `AttributeError` raised elsewhere propagates
+- [x] Repeated runs on the same collector instance report each grammar warning once
+- [x] The tests named "Raises…" assert the recorded warning, and the `BaseASTCollector` warning path is asserted
 
 **Validation**
 
