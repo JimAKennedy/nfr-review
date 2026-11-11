@@ -187,12 +187,12 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S07-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S07.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] Config-integration discovery honours the configured test-path exclusion
-- [ ] Detection does not descend into `node_modules`, `target` or other excluded directories
+- [x] Config-integration discovery honours the configured test-path exclusion
+- [x] Detection does not descend into `node_modules`, `target` or other excluded directories
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|

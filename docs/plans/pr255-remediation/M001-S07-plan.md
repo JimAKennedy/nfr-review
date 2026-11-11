@@ -12,14 +12,14 @@
 
 - [x] Task 1 — C1: thread `exclude_test_paths` into config-integration discovery
 - [x] Task 2 — C2: prune excluded directories during detection
-- [ ] Task 3 — Slice gate and evidence
+- [x] Task 3 — Slice gate and evidence
 
 ## Definition of Done
 
 Copied verbatim from the ledger slice:
 
-- [ ] Config-integration discovery honours the configured test-path exclusion
-- [ ] Detection does not descend into `node_modules`, `target` or other excluded directories
+- [x] Config-integration discovery honours the configured test-path exclusion
+- [x] Detection does not descend into `node_modules`, `target` or other excluded directories
 
 ## Validation
 
