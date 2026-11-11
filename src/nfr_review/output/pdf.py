@@ -9,6 +9,7 @@ and optional diagram stubs, then compiles to PDF.
 from __future__ import annotations
 
 import logging
+import string
 import struct
 import tempfile
 from collections import Counter, defaultdict
@@ -61,17 +62,53 @@ def _png_dimensions(raw: bytes) -> tuple[int, int] | None:
     return w, h
 
 
-def _t(text: str) -> str:
-    """Escape text for Typst markup."""
-    text = str(text)
-    text = text.replace("\\", "\\\\")
-    text = text.replace("#", "\\#")
-    text = text.replace("@", "\\@")
-    text = text.replace("*", "\\*")
-    text = text.replace("_", "\\_")
-    text = text.replace("<", "\\<")
-    text = text.replace(">", "\\>")
-    return text
+# Every ASCII punctuation character has (or may gain) markup meaning in
+# Typst: ``$`` opens math, ``[``/``]`` delimit content, ``//`` starts a
+# comment, ``~``/``--`` are shorthands, ``=``/``-``/``+`` start headings and
+# lists at line start, and so on. A backslash before any of them yields the
+# literal character, so escaping all of them is the only robust option for
+# untrusted text (finding summaries, paths and names from scanned repos).
+_TYPST_MARKUP_ESCAPES = str.maketrans({c: "\\" + c for c in string.punctuation})
+
+
+def _t(text: object) -> str:
+    """Escape arbitrary text for safe inclusion in Typst *markup*."""
+    return str(text).translate(_TYPST_MARKUP_ESCAPES)
+
+
+def _typst_str(text: object) -> str:
+    """Return *text* as a quoted Typst string literal (for code mode)."""
+    escaped = (
+        str(text)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    return f'"{escaped}"'
+
+
+def _raw_inline(text: object) -> str:
+    """Render *text* verbatim as inline monospace, safe for untrusted input."""
+    return f"#raw({_typst_str(text)})"
+
+
+def _compile_typst(typst_doc: str, image_files: dict[str, bytes]) -> bytes:
+    """Compile a Typst document with a sandboxed root.
+
+    The project root is always a fresh temporary directory holding only the
+    rendered images, so a document can never read files from the current
+    working directory (e.g. via ``#read``) even if markup is injected.
+    """
+    import typst
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for filename, raw in image_files.items():
+            (Path(tmpdir) / filename).write_bytes(raw)
+        main = Path(tmpdir) / "__main__.typ"
+        main.write_text(typst_doc, encoding="utf-8")
+        return typst.compile(str(main), root=tmpdir)  # type: ignore[no-any-return]
 
 
 def _image_typst(filename: str, raw_bytes: bytes) -> str:
@@ -197,8 +234,7 @@ def _render_mermaid_for_typst(
             )
 
     # Last resort: show as raw code
-    escaped = mermaid_text.replace('"', '\\"')
-    return f'#raw(lang: "none", block: true, "{escaped}")\n'
+    return f'#raw(lang: "none", block: true, {_typst_str(mermaid_text)})\n'
 
 
 def _md_to_typst(
@@ -232,9 +268,7 @@ def _md_to_typst(
             if lang == "mermaid":
                 out.append(_render_mermaid_for_typst(body, image_files, counter))
             else:
-                # Escape for Typst raw string: backslash then quote
-                escaped = body.replace("\\", "\\\\").replace('"', '\\"')
-                out.append(f'#raw(lang: "none", block: true, "{escaped}")\n')
+                out.append(f'#raw(lang: "none", block: true, {_typst_str(body)})\n')
             continue
 
         # --- Pipe table ---
@@ -326,9 +360,7 @@ def _inline_md_to_typst(text: str) -> str:
             end = text.find("`", pos + 1)
             if end != -1:
                 inner = text[pos + 1 : end]
-                # Escape for Typst raw inline
-                inner_escaped = inner.replace("\\", "\\\\").replace('"', '\\"')
-                result += f'#raw("{inner_escaped}")'
+                result += _raw_inline(inner)
                 pos = end + 1
                 continue
         # Bold: **text**
@@ -352,14 +384,14 @@ def _provenance_section(nfr_result: RunResult) -> str:
         return ""
     repo_label = Path(meta.target_repo).name
     rows = [
-        f"  [*Repository*], [`{_t(repo_label)}`],",
-        f"  [*Target path*], [`{_t(meta.target_repo)}`],",
+        f"  [*Repository*], [{_raw_inline(repo_label)}],",
+        f"  [*Target path*], [{_raw_inline(meta.target_repo)}],",
         f"  [*Report generated*], [{_t(meta.timestamp)}],",
     ]
     if meta.git_sha:
         dirty = " (dirty)" if meta.git_dirty else ""
         sha_short = meta.git_sha[:10]
-        rows.append(f"  [*Commit*], [`{_t(sha_short)}{_t(dirty)}`],")
+        rows.append(f"  [*Commit*], [{_raw_inline(sha_short + dirty)}],")
     if meta.git_branch:
         rows.append(f"  [*Branch / tag*], [{_t(meta.git_branch)}],")
     rows.append(f"  [*Tool version*], [{_t(meta.tool_version)}],")
@@ -491,7 +523,7 @@ def _findings_section(findings: list[Finding], title: str) -> str:
             )
             # Occurrences table
             occ_rows = "".join(
-                f"  [`{_t(occ.evidence_locator)}`], "
+                f"  [{_raw_inline(occ.evidence_locator)}], "
                 f"[{_t(occ.severity)}], [{occ.confidence:.0%}],\n"
                 for occ in occurrences
             )
@@ -708,17 +740,8 @@ def render_pdf(
 
     typst_doc = _build_typst_document(sections, title)
 
-    import typst
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if image_files:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for filename, raw in image_files.items():
-                (Path(tmpdir) / filename).write_bytes(raw)
-            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)  # type: ignore[type-var]
-    else:
-        pdf_bytes = typst.compile(typst_doc.encode())
+    pdf_bytes = _compile_typst(typst_doc, image_files)
 
     output_path.write_bytes(pdf_bytes)
     logger.info("PDF written to %s (%d bytes)", output_path, output_path.stat().st_size)

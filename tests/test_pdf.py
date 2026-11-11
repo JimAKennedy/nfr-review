@@ -8,7 +8,7 @@ from pathlib import Path
 
 from nfr_review.engine import RunResult
 from nfr_review.models import Finding, RunMetadata
-from nfr_review.output.pdf import _md_to_typst, _render_mermaid_for_typst, render_pdf
+from nfr_review.output.pdf import _md_to_typst, _render_mermaid_for_typst, _t, render_pdf
 from nfr_review.output.summary_models import ExecSummary, RemediationItem
 
 
@@ -286,7 +286,7 @@ class TestMdToTypst:
         assert "#table(" in result
         assert "Package" in result
         assert "click" in result
-        assert "8.1.0" in result
+        assert _t("8.1.0") in result
 
     def test_bold_inline(self) -> None:
         """**bold** converts to *bold* (Typst bold)."""

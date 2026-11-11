@@ -40,6 +40,7 @@ from nfr_review.arch_report_render import (
     render_arch_pdf,
     render_arch_report,
 )
+from nfr_review.output.pdf import _t
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -658,8 +659,8 @@ class TestPdfTestCoverageHtml:
         )
         typst = _arch_test_coverage_typst(report)
 
-        assert "comp-svc" in typst
-        assert "comp-db" in typst
+        assert _t("comp-svc") in typst
+        assert _t("comp-db") in typst
         assert "adequate" in typst
         assert "minimal" in typst
         assert "No security tests" in typst
@@ -967,8 +968,8 @@ class TestRepoDependencies:
         typst = _arch_repo_dependencies_typst(report, {}, [0])
 
         assert "== Repository Dependencies" in typst
-        assert "comp-order-svc" in typst
-        assert "comp-payment-client" in typst
+        assert _t("comp-order-svc") in typst
+        assert _t("comp-payment-client") in typst
         # _t() escapes underscores, so api_call → api\_call in the typst output
         assert "api\\_call" in typst
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 import re
-import tempfile
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -39,6 +38,7 @@ _SEVERITY_EMOJI: dict[str, str] = {
 
 from nfr_review.output.pdf import (  # noqa: E402
     _build_typst_document,
+    _compile_typst,
     _render_mermaid_for_typst,
     _t,
 )
@@ -834,7 +834,6 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
 
     Returns the output path on success.
     """
-    import typst
 
     image_files: dict[str, bytes] = {}
     counter: list[int] = [0]
@@ -860,13 +859,7 @@ def render_arch_pdf(report: ArchReport, output_path: Path) -> Path | None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if image_files:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            for filename, raw in image_files.items():
-                (Path(tmpdir) / filename).write_bytes(raw)
-            pdf_bytes = typst.compile(typst_doc.encode(), root=tmpdir)  # type: ignore[type-var]
-    else:
-        pdf_bytes = typst.compile(typst_doc.encode())
+    pdf_bytes = _compile_typst(typst_doc, image_files)
 
     output_path.write_bytes(pdf_bytes)
     logger.info(
