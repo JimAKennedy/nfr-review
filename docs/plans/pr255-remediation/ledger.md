@@ -250,7 +250,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| H1 | Lockfiles lack typst, graphviz, graphifyy, networkx, aiohttp; `tree-sitter==0.26.0` conflicts with the graphifyy cap; `anthropic` still in dev | `requirements.txt`, `requirements-dev.txt` | `pip-compile` rerun produces no diff; `pip install -r` into a fresh venv succeeds | `open` |
+| H1 | Lockfiles lack typst, graphviz, graphifyy, networkx, aiohttp; `tree-sitter==0.26.0` conflicts with the graphifyy cap; `anthropic` still in dev | `requirements.txt`, `requirements-dev.txt` | `pip-compile` rerun produces no diff; `pip install -r` into a fresh venv succeeds | `done` |
 | H4 | zlib1g CVE-2026-76844 and CVE-2026-85091 ignored globally with no expiry | `Dockerfile` runtime stage, `.trivyignore` | Trivy image scan with the entries removed reports neither CVE | `open` |
 | H5 | "Test summary" step and `scanners: vuln` comment removed; test-llm runs without coverage | `.github/workflows/ci.yml` | Workflow diff against main for the restored step and comment; test-llm job uses `--cov --cov-append` | `open` |
 
