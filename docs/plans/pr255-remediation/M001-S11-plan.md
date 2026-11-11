@@ -9,7 +9,7 @@
 - [x] Task 2 — H2: correct the core docs (dependencies, install, README, ARCHITECTURE)
 - [x] Task 3 — H2: correct the site pages and `scripts/setup-all.sh`
 - [x] Task 4 — H2: document graphify opt-in and `--strict-collectors`
-- [ ] Task 5 — H3: write `[Unreleased]` and record the version decision
+- [x] Task 5 — H3: write `[Unreleased]` and record the version decision
 - [ ] Task 6 — Slice gate and evidence
 
 **Definition of Done**

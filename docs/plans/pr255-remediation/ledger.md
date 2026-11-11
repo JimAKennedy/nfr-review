@@ -275,7 +275,7 @@ it.
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
 | H2 | Docs describe weasyprint or removed extras; README, CHANGELOG and dependencies doc claim openai is core | `ARCHITECTURE.md`, `docs/dependencies.md`, `docs/install.md`, `scripts/setup-all.sh`, `README.md`, site pages (output formats, arch, first scan, faq, advanced) | `grep -ri weasyprint` and `grep -i "openai.*core"` over those paths return nothing | `done` |
-| H3 | Historical CHANGELOG entries rewritten; `[Unreleased]` empty; version 0.3.1 vs "v0.5" in the PR title | `CHANGELOG.md`, `pyproject.toml` | `git diff main -- CHANGELOG.md` touches only `[Unreleased]`; version decision recorded in the plan | `open` |
+| H3 | Historical CHANGELOG entries rewritten; `[Unreleased]` empty; version 0.3.1 vs "v0.5" in the PR title | `CHANGELOG.md`, `pyproject.toml` | `git diff main -- CHANGELOG.md` touches only `[Unreleased]`; version decision recorded in the plan | `done` |
 
 ### Slice M001/S12 — ai-tooling packaging (deferred)
 
