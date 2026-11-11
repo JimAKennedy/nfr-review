@@ -8,6 +8,7 @@ Validates that Graphify produces meaningful structural analysis for a real
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -31,14 +32,25 @@ def selfscan_evidence(
     if not graphify_available:
         pytest.skip("graphify not installed")
 
-    from nfr_review.collectors.graphify import GraphifyCollector
+    from nfr_review.collectors.graphify import GraphifyCollector, _run_graphify
+    from nfr_review.config import Config, GraphifyConfig
 
-    # Each xdist worker runs this module-scoped fixture independently, and the
-    # collector reuses REPO_ROOT/graphify-out/graph.json whenever it exists — so
-    # without a lock one worker can read the file while another is still writing it.
-    lock_path = tmp_path_factory.getbasetemp().parent / "graphify-selfscan.lock"
-    with FileLock(lock_path, timeout=900):
-        return GraphifyCollector().collect(REPO_ROOT, None)
+    # Build the graph once per session, outside the repo, and share it across
+    # xdist workers (basetemp's parent is per-session only under xdist). The
+    # collector then reads it through graphify.graph_path.
+    shared_root = tmp_path_factory.getbasetemp()
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        shared_root = shared_root.parent
+    out_dir = shared_root / "graphify-selfscan" / "graphify-out"
+    graph_json = out_dir / "graph.json"
+    with FileLock(shared_root / "graphify-selfscan.lock", timeout=900):
+        if not graph_json.is_file():
+            assert _run_graphify(REPO_ROOT, out_dir) is not None, (
+                "graphify failed to build the self-scan graph"
+            )
+
+    config = Config(graphify=GraphifyConfig(enabled=True, graph_path=str(graph_json)))
+    return GraphifyCollector().collect(REPO_ROOT, config)
 
 
 class TestGraphifySelfScan:

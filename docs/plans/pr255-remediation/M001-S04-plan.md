@@ -7,7 +7,7 @@
 
 ## Task status
 
-- [ ] Task 1 — `graphify.enabled` opt-in; graphify output in a temp dir; `graph_path` read
+- [x] Task 1 — `graphify.enabled` opt-in; graphify output in a temp dir; `graph_path` read
 - [ ] Task 2 — `RunResult.failed_collectors` and `nfr-review run --strict-collectors`
 - [ ] Task 3 — Container E2E runs with `--strict-collectors` (CI, `ci-complete`, `.jk/validations.yml`)
 - [ ] Task 4 — Regression snapshots refreshed without graphify findings; full gate

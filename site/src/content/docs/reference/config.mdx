@@ -112,8 +112,9 @@ design_change:
     deployment_service_count: 1.0
     schema_migration_count: 1.0
 
-# Graphify structural analysis integration
+# Graphify structural analysis integration (off by default)
 graphify:
+  enabled: false
   query_enabled: true
   mcp_enabled: false
   graph_path: null
@@ -204,6 +205,7 @@ change by more than this percentage between baselines to trigger a signal.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
+| `enabled` | bool | `false` | Run structural analysis. When `false` the `graphify` collector does nothing and the `structure-*` rules are skipped |
 | `query_enabled` | bool | `true` | Enable structural graph queries |
 | `mcp_enabled` | bool | `false` | Enable MCP server integration for graph queries |
-| `graph_path` | string \| null | `null` | Custom path to the Graphify database |
+| `graph_path` | string \| null | `null` | Pre-built `graph.json` to read instead of running Graphify (relative paths resolve against the scanned repository). When unset, Graphify runs with its output in a temporary directory; nothing is written into the scanned repository |

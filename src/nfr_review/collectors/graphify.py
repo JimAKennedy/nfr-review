@@ -1,16 +1,22 @@
 # Copyright 2026 nfr-review contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Graphify collector — runs graphify CLI to extract a knowledge graph and
+"""Graphify collector — builds or reads a Graphify knowledge graph and
 computes structural metrics (god nodes, community boundary stats).
+
+Opt-in through ``graphify.enabled``. Graphify output always goes to a
+temporary directory (``GRAPHIFY_OUT``); a ``graphify-out/`` inside the
+scanned repository is never read or written.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import statistics
 import subprocess  # nosec B404 — args are hardcoded, not user input
+import tempfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -22,30 +28,46 @@ from nfr_review.collectors.payloads.graphify import (
     GraphifyPayload,
     GraphNode,
 )
+from nfr_review.config import GraphifyConfig
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
 logger = logging.getLogger(__name__)
 
 _GOD_NODE_MULTIPLIER = 2
+_GRAPHIFY_TIMEOUT_S = 300
 
 
-def _run_graphify(repo_path: Path) -> Path | None:
-    """Run graphify update + cluster-only; return graph.json path or None."""
-    graphify_out = repo_path / "graphify-out"
-    graph_json = graphify_out / "graph.json"
+def _graphify_config(config: Any) -> GraphifyConfig:
+    """Return the ``graphify`` section of *config*, or defaults when absent."""
+    section = getattr(config, "graphify", None)
+    return section if isinstance(section, GraphifyConfig) else GraphifyConfig()
 
-    if graph_json.is_file():
-        logger.info("Reusing existing graph.json at %s", graph_json)
-        return graph_json
+
+def _run_graphify(repo_path: Path, out_dir: Path) -> Path | None:
+    """Run ``graphify update`` + ``cluster-only`` writing only under *out_dir*.
+
+    *out_dir* (named ``graphify-out``) is passed to graphify as an absolute
+    ``GRAPHIFY_OUT`` and the subprocesses run with their CWD beside it, so
+    nothing is written into *repo_path* and any ``graphify-out/`` already
+    there is never read. Returns ``out_dir / "graph.json"`` or ``None``.
+    """
+    repo = repo_path.resolve()
+    out_dir = out_dir.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    graph_json = out_dir / "graph.json"
+    env = {**os.environ, "GRAPHIFY_OUT": str(out_dir)}
+    cwd = str(out_dir.parent)
 
     try:
         subprocess.run(  # nosec B603 B607
-            ["graphify", "update", str(repo_path), "--no-cluster"],
+            ["graphify", "update", str(repo), "--no-cluster"],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=_GRAPHIFY_TIMEOUT_S,
             check=True,
+            env=env,
+            cwd=cwd,
         )
     except subprocess.CalledProcessError as exc:
         logger.warning(
@@ -58,11 +80,21 @@ def _run_graphify(repo_path: Path) -> Path | None:
 
     try:
         subprocess.run(  # nosec B603 B607
-            ["graphify", "cluster-only", str(repo_path), "--no-viz", "--no-label"],
+            [
+                "graphify",
+                "cluster-only",
+                str(repo),
+                "--no-viz",
+                "--no-label",
+                "--graph",
+                str(graph_json),
+            ],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=_GRAPHIFY_TIMEOUT_S,
             check=True,
+            env=env,
+            cwd=cwd,
         )
     except subprocess.CalledProcessError as exc:
         logger.warning(
@@ -171,20 +203,34 @@ def _compute_metrics(
 
 
 class GraphifyCollector:
-    """Runs graphify CLI and emits structural evidence."""
+    """Builds or reads a Graphify graph and emits structural evidence."""
 
     name = "graphify"
     version = "0.1.0"
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        settings = _graphify_config(config)
+        if not settings.enabled:
+            logger.info("graphify.enabled is false — skipping structural analysis")
+            return []
+
+        if settings.graph_path:
+            graph_json = Path(settings.graph_path)
+            if not graph_json.is_absolute():
+                graph_json = repo_path / graph_json
+            return self._evidence_from_graph(graph_json)
+
         if not shutil.which("graphify"):
             logger.info("graphify not installed — skipping structural analysis")
             return []
 
-        graph_json_path = _run_graphify(repo_path)
-        if graph_json_path is None:
-            return []
+        with tempfile.TemporaryDirectory(prefix="nfr-review-graphify-") as tmp:
+            graph_json_path = _run_graphify(repo_path, Path(tmp) / "graphify-out")
+            if graph_json_path is None:
+                return []
+            return self._evidence_from_graph(graph_json_path)
 
+    def _evidence_from_graph(self, graph_json_path: Path) -> list[Evidence]:
         try:
             raw = json.loads(graph_json_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:

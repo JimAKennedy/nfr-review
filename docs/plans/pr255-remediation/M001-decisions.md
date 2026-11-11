@@ -51,3 +51,8 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 
 - **Decision:** the G1 dry-run resolution is recorded in the evidence file at Task 1, not copied in at Task 4. — **Why:** the ledger standard appends evidence per task as it lands; Task 4 then appends only the gate results and the row-to-test map.
 - **Decision:** T1 stays `open` after Task 2 and is set `done` at Task 3. — **Why:** both tasks list T1; Task 3 adds the remaining `*records_warning` cases.
+
+## 2026-11-11 — executing M001/S04
+
+- **Decision:** targeted test runs use `-n0` instead of the plan's `-p no:xdist`. — **Why:** `pyproject.toml` `addopts` passes `-n`/`--dist`, so disabling the xdist plugin makes pytest reject those options; `-n0` runs serially with the same effect.
+- **Decision:** Task 1 also rewords `docs/graphify-guide.md` §3 item 2 ("reads that `graph.json`") and replaces the nightly-regression lead sentence with the plan's new one, keeping the GitHub Actions "Add Graphify to your nfr-review workflow:" line after the new sentence. — **Why:** the plan's goal for the guide is that it no longer describes reuse of `graphify-out/graph.json`; §3 item 2 still did, and the old nightly sentence would have duplicated the new one.
