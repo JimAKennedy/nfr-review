@@ -38,9 +38,10 @@ pip install nfr-review
 For optional features:
 
 ```bash
-pip install "nfr-review[pdf]"      # PDF report generation
-pip install "nfr-review[monitor]"  # production monitoring
-pip install "nfr-review[all]"      # everything
+pip install "nfr-review[llm]"       # LLM features (executive summary, ADR drift, PII)
+pip install "nfr-review[scancode]"  # license compliance scanning
+pip install "nfr-review[otel]"      # OpenTelemetry instrumentation
+pip install "nfr-review[full]"      # everything optional (llm + scancode + otel)
 ```
 
 ### What Python version is required?
@@ -148,9 +149,9 @@ tech:
 ### "Required collector not available"
 
 The collector may need an optional dependency. Check:
-- `graphify` requires `pip install graphify`
+- `graphify` is part of the base install and runs only when `graphify.enabled: true`
 - License scanning requires `pip install scancode-toolkit`
-- Monitor mode requires `pip install nfr-review[monitor]`
+- Monitor mode is part of the base install (aiohttp is a core dependency)
 
 ### Findings differ between local and CI runs
 

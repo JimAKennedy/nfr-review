@@ -314,10 +314,10 @@ else
   MISSING_PKGS+=("graphviz (Python)")
 fi
 
-if python -c "import weasyprint" 2>/dev/null; then
-  success "weasyprint: OK"
+if python -c "import typst" 2>/dev/null; then
+  success "typst: OK"
 else
-  MISSING_PKGS+=("weasyprint")
+  MISSING_PKGS+=("typst")
 fi
 
 if python -c "import graphifyy" 2>/dev/null; then
@@ -335,7 +335,7 @@ fi
 if command -v graphify &>/dev/null; then
   info "graphify CLI already installed: $(graphify --version 2>&1 | head -1 || echo 'unknown')"
 else
-  warn "graphify CLI not found — structural analysis will use pre-generated graph.json only"
+  warn "graphify CLI not found — graphify.enabled scans need graphify.graph_path"
   warn "  Install: pip install graphifyy (provides the graphify CLI)"
   MISSING_BINS+=("graphify (pip install graphifyy)")
 fi
@@ -457,7 +457,7 @@ case "$LLM_BACKEND" in
   *)         echo "  LLM:     disabled (LLM rules will be skipped)" ;;
 esac
 echo ""
-echo "  Extras installed: dev, scancode, diagrams, pdf, graphify"
+echo "  Extras installed: dev, full (llm, scancode, otel)"
 echo ""
 
 if [[ ${#MISSING_PKGS[@]} -gt 0 ]]; then

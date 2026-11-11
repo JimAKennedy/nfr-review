@@ -16,10 +16,10 @@ The action supports two execution modes:
 | Mode | Setting | How it works |
 |------|---------|-------------|
 | **pip** (default) | `execution: "pip"` | Installs nfr-review via pip in the runner |
-| **container** | `execution: "container"` | Runs inside a pre-built Docker image with all extras |
+| **container** | `execution: "container"` | Runs inside the pre-built Docker image (core install) |
 
 Container mode is faster for repeated runs (image layers are cached) and
-includes PDF generation, diagram rendering, and the `gh` CLI out of the box.
+includes PDF generation and diagram rendering out of the box.
 
 ## PR workflow
 
