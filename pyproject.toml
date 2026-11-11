@@ -29,7 +29,7 @@ dependencies = [
     "tree-sitter>=0.23",
     "tree-sitter-python>=0.23",
     "tree-sitter-hcl>=1.1",
-    "tree-sitter-dockerfile>=0.0.0a1; platform_machine != 'aarch64'",
+    "tree-sitter-dockerfile>=0.2; (sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64')",
     "tree-sitter-java>=0.23",
     "tree-sitter-go>=0.23",
     "tree-sitter-rust>=0.23",
