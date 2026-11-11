@@ -95,7 +95,7 @@ every slice below is `done` or `accepted`.
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| R1 | Rust AST false positives/negatives: lock-method arity, closure/async-block boundary, substring test matching, imported paths, async-block sleep, unbounded unwrap summary, mutex rule ignores `in_test` | `collectors/rust_ast.py`, `rules/rust_unwrap_expect.py`, mutex-lock rule | One case per sub-item in `tests/test_rust_ast_collector.py` / `tests/test_rust_rules.py`, each feeding the snippet from the input | `open` |
+| R1 | Rust AST false positives/negatives: lock-method arity, closure/async-block boundary, substring test matching, imported paths, async-block sleep, unbounded unwrap summary, mutex rule ignores `in_test` | `collectors/rust_ast.py`, `rules/rust_unwrap_expect.py`, mutex-lock rule | One case per sub-item in `tests/test_rust_ast_collector.py` / `tests/test_rust_rules.py`, each feeding the snippet from the input | `done` |
 | R2 | Cargo.toml parsing misses workspace inheritance, target-cfg tables, renamed deps; rglob enters `target/`; `read_text` has no encoding | `collectors/rust_deps.py` | Cases in `tests/test_rust_deps_collector.py` with a workspace fixture, a `[target.'cfg(..)'.dependencies]` table, a `package =` rename, and a `target/` decoy | `open` |
 | R3 | Rust rule descriptions truncated mid-sentence | `rule_metadata.py` | Case in `tests/test_rule_metadata.py` asserting no description ends in a dangling word before the full stop; `rules.json` regenerated | `open` |
 

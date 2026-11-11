@@ -32,6 +32,7 @@ _LOCK_METHODS = frozenset({"lock", "read", "write"})
 _LOOP_TYPES = frozenset({"for_expression", "while_expression", "loop_expression"})
 _ATTR_SIBLING_TYPES = frozenset({"attribute_item", "line_comment", "block_comment"})
 _TEST_MOD_NAMES = frozenset({"test", "tests"})
+_SPAWN_PATHS = frozenset({"tokio::spawn", "tokio::task::spawn"})
 
 
 def _is_inside_loop(node: Node) -> bool:
@@ -158,6 +159,78 @@ def _enclosing_async_function(node: Node, source: bytes) -> str | None:
             name_node = parent.child_by_field_name("name")
             return text(name_node, source) if name_node is not None else "<anonymous>"
         parent = parent.parent
+    return None
+
+
+def _collect_use_aliases(
+    node: Node, prefix: str, source: bytes, aliases: dict[str, str]
+) -> None:
+    """Record local-name -> full-path entries for one ``use`` tree node."""
+    kind = node.type
+    if kind == "identifier":
+        name = text(node, source)
+        aliases[name] = prefix + name
+    elif kind == "scoped_identifier":
+        full = prefix + text(node, source)
+        aliases[full.rsplit("::", 1)[-1]] = full
+    elif kind == "use_as_clause":
+        path = node.child_by_field_name("path")
+        alias = node.child_by_field_name("alias")
+        if path is not None and alias is not None:
+            aliases[text(alias, source)] = prefix + text(path, source)
+    elif kind == "scoped_use_list":
+        path = node.child_by_field_name("path")
+        inner = prefix + (text(path, source) + "::" if path is not None else "")
+        use_list = node.child_by_field_name("list")
+        if use_list is not None:
+            _collect_use_aliases(use_list, inner, source, aliases)
+    elif kind == "use_list":
+        for child in node.named_children:
+            _collect_use_aliases(child, prefix, source, aliases)
+    elif kind == "self" and prefix:
+        full = prefix.removesuffix("::")
+        aliases[full.rsplit("::", 1)[-1]] = full
+    # use_wildcard (`use a::*`) binds no single name and is ignored.
+
+
+def _build_use_aliases(root: Node, source: bytes) -> dict[str, str]:
+    """File-wide map of names bound by ``use`` declarations to full paths.
+
+    Covers ``use a::B``, ``use a::{b, c::D}``, ``use a::b as c``,
+    ``use a::{self}``. Scope is the whole file (a ``use`` inside a fn or
+    mod applies file-wide) — an accepted approximation for a lint.
+    """
+    aliases: dict[str, str] = {}
+    for decl in find_nodes(root, "use_declaration"):
+        argument = decl.child_by_field_name("argument")
+        if argument is not None:
+            _collect_use_aliases(argument, "", source, aliases)
+    return aliases
+
+
+def _resolve_path(path: str, aliases: dict[str, str]) -> str:
+    """Expand the first ``::`` segment of *path* through *aliases*."""
+    path = path.removeprefix("::")
+    head, sep, rest = path.partition("::")
+    if head in aliases:
+        path = aliases[head] + sep + rest
+    return path.removeprefix("::")
+
+
+def _chain_root_callee(node: Node | None) -> Node | None:
+    """For a method chain ``X::f().a().b()``, return the ``X::f`` node."""
+    while node is not None:
+        if node.type == "call_expression":
+            func = node.child_by_field_name("function")
+            if func is None:
+                return None
+            if func.type != "field_expression":
+                return func
+            node = func.child_by_field_name("value")
+        elif node.type == "field_expression":
+            node = node.child_by_field_name("value")
+        else:
+            return None
     return None
 
 
@@ -380,14 +453,17 @@ def _extract_unwrap_expect_and_mutex(
 
 
 def _extract_http_client_builds(
-    root: Node, source: bytes, rel_path: str
+    root: Node, source: bytes, rel_path: str, *, aliases: dict[str, str]
 ) -> list[RustHttpClientBuild]:
     results = []
     for call in find_nodes(root, "call_expression"):
         func = call.child_by_field_name("function")
         if func is None:
             continue
-        if func.type == "scoped_identifier" and text(func, source) == "reqwest::Client::new":
+        if (
+            func.type in ("scoped_identifier", "identifier")
+            and _resolve_path(text(func, source), aliases) == "reqwest::Client::new"
+        ):
             results.append(
                 RustHttpClientBuild(
                     call="reqwest::Client::new",
@@ -401,12 +477,16 @@ def _extract_http_client_builds(
             field_node = func.child_by_field_name("field")
             if field_node is None or text(field_node, source) != "build":
                 continue
-            full_text = text(call, source)
-            if "reqwest::Client::builder" in full_text:
+            root_fn = _chain_root_callee(call)
+            if (
+                root_fn is not None
+                and root_fn.type in ("scoped_identifier", "identifier")
+                and _resolve_path(text(root_fn, source), aliases) == "reqwest::Client::builder"
+            ):
                 results.append(
                     RustHttpClientBuild(
                         call="reqwest::Client::builder()...build()",
-                        has_timeout=".timeout(" in full_text,
+                        has_timeout=".timeout(" in text(call, source),
                         line=call.start_point[0] + 1,
                         file=rel_path,
                     )
@@ -462,13 +542,15 @@ def _extract_async_blocking_calls(
     return results
 
 
-def _extract_spawn_calls(root: Node, source: bytes, rel_path: str) -> list[RustSpawnCall]:
+def _extract_spawn_calls(
+    root: Node, source: bytes, rel_path: str, *, aliases: dict[str, str]
+) -> list[RustSpawnCall]:
     results = []
     for call in find_nodes(root, "call_expression"):
         func = call.child_by_field_name("function")
-        if func is None or func.type != "scoped_identifier":
+        if func is None or func.type not in ("scoped_identifier", "identifier"):
             continue
-        if text(func, source) != "tokio::spawn":
+        if _resolve_path(text(func, source), aliases) not in _SPAWN_PATHS:
             continue
         results.append(
             RustSpawnCall(
@@ -491,6 +573,7 @@ class RustAstCollector(BaseASTCollector):
         assert self._parser is not None
         tree = self._parser.parse(source)
         root = tree.root_node
+        aliases = _build_use_aliases(root, source)
         unwrap_calls, mutex_calls = _extract_unwrap_expect_and_mutex(root, source, rel_path)
         return RustAstFilePayload(
             file_path=rel_path,
@@ -498,9 +581,11 @@ class RustAstCollector(BaseASTCollector):
             functions=_extract_functions(root, source),
             unwrap_expect_calls=unwrap_calls,
             mutex_lock_unwraps=mutex_calls,
-            http_client_builds=_extract_http_client_builds(root, source, rel_path),
+            http_client_builds=_extract_http_client_builds(
+                root, source, rel_path, aliases=aliases
+            ),
             async_blocking_calls=_extract_async_blocking_calls(root, source, rel_path),
-            spawn_calls=_extract_spawn_calls(root, source, rel_path),
+            spawn_calls=_extract_spawn_calls(root, source, rel_path, aliases=aliases),
         )
 
 

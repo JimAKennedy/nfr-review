@@ -373,3 +373,103 @@ class TestMutexLockUnwrapInTest:
             (3, False),
             (10, True),
         ]
+
+
+class TestImportedPaths:
+    def test_imported_client_new(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use reqwest::Client;
+            fn build() {
+                let _c = Client::new();
+            }
+            """,
+        )
+        assert [(b.call, b.has_timeout, b.line) for b in payload.http_client_builds] == [
+            ("reqwest::Client::new", False, 3)
+        ]
+
+    def test_imported_client_builder_without_timeout(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use reqwest::Client;
+            fn build() {
+                let _c = Client::builder().build();
+            }
+            """,
+        )
+        assert [(b.call, b.has_timeout) for b in payload.http_client_builds] == [
+            ("reqwest::Client::builder()...build()", False)
+        ]
+
+    def test_renamed_crate_alias(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use reqwest as rq;
+            fn build() {
+                let _c = rq::Client::new();
+            }
+            """,
+        )
+        assert [b.call for b in payload.http_client_builds] == ["reqwest::Client::new"]
+
+    def test_imported_spawn_in_loop(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use tokio::spawn;
+            async fn run(n: u32) {
+                for i in 0..n {
+                    spawn(async move { i });
+                }
+            }
+            """,
+        )
+        assert [(c.line, c.in_loop) for c in payload.spawn_calls] == [(4, True)]
+
+    def test_fully_qualified_tokio_task_spawn(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            async fn run(n: u32) {
+                for i in 0..n {
+                    tokio::task::spawn(async move { i });
+                }
+            }
+            """,
+        )
+        assert [(c.line, c.in_loop) for c in payload.spawn_calls] == [(3, True)]
+
+    def test_grouped_use_with_rename_and_module_import(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use tokio::{task, task::spawn as go};
+            async fn run(n: u32) {
+                for i in 0..n {
+                    go(async move { i });
+                    task::spawn(async move { i });
+                }
+            }
+            """,
+        )
+        assert [(c.line, c.in_loop) for c in payload.spawn_calls] == [(4, True), (5, True)]
+
+    def test_unimported_local_spawn_not_reported(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            fn spawn<F: FnOnce()>(f: F) {
+                f()
+            }
+            fn run() {
+                for _ in 0..3 {
+                    spawn(|| ());
+                }
+            }
+            """,
+        )
+        assert payload.spawn_calls == []
