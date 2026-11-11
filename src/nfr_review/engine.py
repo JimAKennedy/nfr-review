@@ -45,6 +45,9 @@ class RunResult:
     run_metadata: RunMetadata | None = None
     warnings: list[str] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
+    # Names of collectors whose collect() raised — the
+    # "collector <name> failed: …" path. Grammar warnings are not failures.
+    failed_collectors: list[str] = field(default_factory=list)
 
 
 def _select_collectors(registry: Registry[Collector], skip: list[str]) -> list[Collector]:
@@ -365,6 +368,7 @@ class Engine:
         evidence, warnings, succeeded = self._run_collection_phase(
             active_collectors, target, config, exclude_pats
         )
+        failed_collectors = [c.name for c in active_collectors if c.name not in succeeded]
         findings, rule_results, rules_run, rules_skipped = self._run_rules_phase(
             evidence, config, succeeded
         )
@@ -378,6 +382,7 @@ class Engine:
             run_metadata=run_metadata,
             warnings=warnings,
             evidence=evidence,
+            failed_collectors=failed_collectors,
         )
 
     # endregion:engine-run

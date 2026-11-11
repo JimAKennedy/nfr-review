@@ -830,3 +830,33 @@ def test_parallel_collector_failure_does_not_abort(tmp_path: Path) -> None:
     assert any("raises" in w or "bad" in w for w in result.warnings)
     assert len(result.findings) == 1
     assert result.findings[0].rule_id == "needs-good"
+
+
+class _GrammarWarningCollector:
+    name = "grammar-warns"
+    version = "0.0.1"
+    grammar_warnings = ["tree-sitter grammar for x not installed"]
+
+    def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        return []
+
+
+@pytest.mark.parametrize("workers", [1, 4])
+def test_failed_collectors_names_only_collectors_that_raised(
+    tmp_path: Path, workers: int
+) -> None:
+    cregistry: Registry = Registry("collector")
+    cregistry.register("raises", _RaisingCollector())
+    cregistry.register("good", _StaticCollector("good", []))
+    cregistry.register("grammar-warns", _GrammarWarningCollector())
+    engine = Engine(collectors=cregistry, rules=Registry("rule"), workers=workers)
+
+    result = engine.run(tmp_path, Config())
+
+    assert result.failed_collectors == ["raises"]
+
+
+def test_failed_collectors_empty_when_all_collectors_succeed(tmp_path: Path) -> None:
+    engine, cregistry, _ = _make_engine()
+    cregistry.register("good", _StaticCollector("good", []))
+    assert engine.run(tmp_path, Config()).failed_collectors == []

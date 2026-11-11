@@ -11,7 +11,7 @@ Exit-code matrix:
 
 * ``0`` — success
 * ``1`` — recoverable failure (bad target, ConfigError, EngineError, OutputError,
-  unknown rule for ``explain``)
+  unknown rule for ``explain``, a collector failure under ``run --strict-collectors``)
 * ``2`` — at least one emitted finding has ``severity`` >= ``config.severity_threshold``
 
 The ``run`` summary is printed to *stderr* so machine-readable artifacts (CSV,
@@ -82,13 +82,7 @@ def _apply_framework_filter(
 
 def _with_findings(result: RunResult, findings: list[Finding]) -> RunResult:
     """Return a copy of *result* with replaced findings list."""
-    return RunResult(
-        findings=findings,
-        rule_results=result.rule_results,
-        run_metadata=result.run_metadata,
-        warnings=result.warnings,
-        evidence=result.evidence,
-    )
+    return dataclasses.replace(result, findings=findings)
 
 
 def _severity_rank(sev: Severity) -> int:
@@ -754,6 +748,12 @@ def cli() -> None:
     default=None,
     help="Filter findings by origin: first_party (direct repo issues) or dependency.",
 )
+@click.option(
+    "--strict-collectors",
+    is_flag=True,
+    default=False,
+    help="Exit 1 after writing outputs if any collector failed (crashed).",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -773,6 +773,7 @@ def run_cmd(
     design_baseline_dir: Path | None = None,
     force_standard_config: bool = False,
     origin: str | None = None,
+    strict_collectors: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -840,6 +841,14 @@ def run_cmd(
         tech_detected=tech_detected,
         quiet=quiet,
     )
+
+    if strict_collectors and result.failed_collectors:
+        click.echo(
+            "error: --strict-collectors: collector(s) failed: "
+            + ", ".join(result.failed_collectors),
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
 
     if baseline_path is not None and len(result.findings) > 0:
         raise click.exceptions.Exit(1)
