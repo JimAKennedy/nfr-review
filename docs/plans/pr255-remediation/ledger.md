@@ -223,12 +223,12 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S09-plan.md
 **Validation:** format, unit, gate
 **Evidence:** evidence/M001-S09.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] No test patches `_AI_TOOLING_AVAILABLE`; tests needing a fake or absent LLM patch `create_llm_client`
-- [ ] The suite passes with `ANTHROPIC_API_KEY` set in the environment
+- [x] No test patches `_AI_TOOLING_AVAILABLE`; tests needing a fake or absent LLM patch `create_llm_client`
+- [x] The suite passes with `ANTHROPIC_API_KEY` set in the environment
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
