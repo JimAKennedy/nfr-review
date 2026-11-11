@@ -7,7 +7,7 @@
 
 - [x] Task 1 — H1: recompile `requirements.txt` and `requirements-dev.txt`
 - [x] Task 2 — H4: zlib1g upgrade, `.trivyignore` cleanup, base-image digest pin, Dependabot `docker`
-- [ ] Task 3 — H5: restore "Test summary" and the `scanners: vuln` comment; test-llm coverage artifact
+- [x] Task 3 — H5: restore "Test summary" and the `scanners: vuln` comment; test-llm coverage artifact
 - [ ] Task 4 — Slice gate and evidence
 
 **Definition of Done**

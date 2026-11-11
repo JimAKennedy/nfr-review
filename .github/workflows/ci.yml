@@ -144,6 +144,16 @@ jobs:
           maxColorRange: 90
           namedLogo: pytest
 
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## Test Results (Python ${{ matrix.python-version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f coverage.xml ]; then
+            COV_PCT="${{ steps.cov.outputs.pct }}"
+            echo "Coverage: ${COV_PCT:-unknown}%" >> $GITHUB_STEP_SUMMARY
+          fi
+
   test-llm:
     name: Test LLM integration
     runs-on: ubuntu-latest
@@ -163,12 +173,21 @@ jobs:
       - name: Run LLM integration tests
         run: |
           pytest -n auto -m "not regression" \
+            --cov --cov-append --cov-fail-under=0 \
+            --cov-report=term-missing --cov-report=xml:coverage-llm.xml \
             tests/test_llm_client.py \
             tests/test_llm_config.py \
             tests/test_s04_integration.py \
             tests/test_pii_logging_rule.py \
             tests/test_adr_drift_rule.py \
             tests/test_adr_gap_rule.py
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report-llm
+          path: coverage-llm.xml
+          retention-days: 14
 
   license-check:
     name: License Compliance
@@ -283,6 +302,9 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
+          # Vulnerabilities only: secret scanning of the image flags example
+          # credentials in third-party site-packages (e.g. the anthropic SDK).
+          # Our own source is covered by the Secrets Scanning job.
           scanners: vuln
 
       - name: Scan skipped
