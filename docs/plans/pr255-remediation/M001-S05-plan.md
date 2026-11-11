@@ -14,15 +14,15 @@
 - [x] Task 2 — W1: issue keys survive the separator change
 - [x] Task 3 — W1: structural design baseline file items
 - [x] Task 4 — W2: assert raw locators and add the Windows-path case
-- [ ] Task 5 — Slice gate and evidence
+- [x] Task 5 — Slice gate and evidence
 
 ## Definition of Done
 
 Copied verbatim from the ledger slice:
 
-- [ ] A baseline and legacy issue markers recorded with `\` locators match the same findings after the forward-slash change
-- [ ] No test normalises the locator it is asserting on
-- [ ] A test feeds a Windows-style relative path and asserts the raw `/` locator
+- [x] A baseline and legacy issue markers recorded with `\` locators match the same findings after the forward-slash change
+- [x] No test normalises the locator it is asserting on
+- [x] A test feeds a Windows-style relative path and asserts the raw `/` locator
 
 ## Validation
 

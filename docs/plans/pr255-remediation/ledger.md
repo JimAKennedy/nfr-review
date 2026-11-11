@@ -146,13 +146,13 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S05-plan.md
 **Validation:** format, unit, regression, gate
 **Evidence:** evidence/M001-S05.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] A baseline and legacy issue markers recorded with `\` locators match the same findings after the forward-slash change
-- [ ] No test normalises the locator it is asserting on
-- [ ] A test feeds a Windows-style relative path and asserts the raw `/` locator
+- [x] A baseline and legacy issue markers recorded with `\` locators match the same findings after the forward-slash change
+- [x] No test normalises the locator it is asserting on
+- [x] A test feeds a Windows-style relative path and asserts the raw `/` locator
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
