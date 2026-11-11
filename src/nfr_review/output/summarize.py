@@ -257,8 +257,6 @@ def generate_executive_summary(
 
     Returns ``None`` when no LLM backend is configured or available.
     """
-    from nfr_review.llm_integration import run_analysis
-
     client = create_llm_client()
     if not client.available:
         logger.info(
@@ -269,12 +267,13 @@ def generate_executive_summary(
     prompt_data_str = _build_prompt_data(
         nfr_result, hygiene_result, pytest_result, deps_summary
     )
-    # _build_prompt_data returns a JSON string; parse it so run_analysis can
-    # re-serialize it into the evidence bundle alongside the prompt.
-    evidence_items = [json.loads(prompt_data_str)]
-
+    # Send the payload whole. It is already bounded by _build_prompt_data
+    # (top-N findings), and must not go through run_analysis: its byte-capped
+    # bundle drops whole items, so this single-object payload would be
+    # replaced by "[]" once it exceeds the cap, and the LLM would summarise
+    # nothing.
     try:
-        raw = run_analysis(client, _SYSTEM_PROMPT, evidence_items, max_tokens=2048)
+        raw = client.call(_SYSTEM_PROMPT + "\n\n" + prompt_data_str, max_tokens=2048)
     except ProviderUnavailableError as exc:
         logger.warning("LLM unavailable for executive summary: %s", exc)
         return None

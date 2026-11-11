@@ -14,6 +14,7 @@ from nfr_review.collectors.payloads.graphify import (
 from nfr_review.engine import RunResult
 from nfr_review.models import Evidence, Finding, RunMetadata
 from nfr_review.output.summarize import (
+    _SYSTEM_PROMPT,
     _build_prompt_data,
     _build_structural_context,
     _extract_graphify_payload,
@@ -185,13 +186,35 @@ class TestGenerateExecSummary:
             result = generate_executive_summary(_make_run_result(findings))
 
         assert result is not None
-        # run_analysis appends "\n\n" + bundle at the end of the prompt
-        full_arg = mock_client.call.call_args[0][0]
-        # Split on the last "\n\n" to isolate the serialized bundle
-        bundle_str = full_arg.rsplit("\n\n", 1)[1]
-        prompt_data = json.loads(bundle_str)[0]
+        prompt_data = _sent_prompt_data(mock_client)
         assert prompt_data["findings_summary"]["total_findings"] == 3
         assert "critical" in prompt_data["findings_summary"]["severity_distribution"]
+
+    def test_large_payload_is_sent_in_full(self) -> None:
+        """Regression: payloads >8 KB were replaced by "[]" by the bundle cap."""
+        findings = [
+            _make_finding(f"SEC-{i:03d}", "high", "red").model_copy(
+                update={"summary": "x" * 400}
+            )
+            for i in range(40)
+        ]
+        run = _make_run_result(findings)
+        expected = json.loads(_build_prompt_data(run))
+        assert len(json.dumps(expected)) > 8192, "fixture must exceed the old bundle cap"
+
+        mock_client = MagicMock()
+        mock_client.available = True
+        mock_client.call.return_value = _VALID_LLM_RESPONSE
+        with patch("nfr_review.output.summarize.create_llm_client", return_value=mock_client):
+            generate_executive_summary(run)
+
+        assert _sent_prompt_data(mock_client) == expected
+
+
+def _sent_prompt_data(mock_client: MagicMock) -> dict:
+    full_arg = mock_client.call.call_args[0][0]
+    assert full_arg.startswith(_SYSTEM_PROMPT + "\n\n")
+    return json.loads(full_arg[len(_SYSTEM_PROMPT) + 2 :])
 
 
 def _make_graphify_payload() -> GraphifyPayload:
