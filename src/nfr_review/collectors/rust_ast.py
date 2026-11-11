@@ -42,6 +42,25 @@ def _is_inside_loop(node: Node) -> bool:
     return False
 
 
+def _lock_method_name(call: Node, source: bytes) -> str | None:
+    """Return "lock"/"read"/"write" when *call* is a zero-argument
+    ``.lock()``/``.read()``/``.write()`` method call, else None.
+
+    io calls such as ``out.write(buf)`` or ``f.read(&mut b)`` take an
+    argument; std ``Mutex``/``RwLock`` lock calls never do.
+    """
+    func = call.child_by_field_name("function")
+    if func is None or func.type != "field_expression":
+        return None
+    field_node = func.child_by_field_name("field")
+    if field_node is None or text(field_node, source) not in _LOCK_METHODS:
+        return None
+    args = call.child_by_field_name("arguments")
+    if args is not None and args.named_child_count > 0:
+        return None
+    return text(field_node, source)
+
+
 def _preceding_attrs_text(item_node: Node, source: bytes) -> str:
     parts: list[str] = []
     sib = item_node.prev_sibling
@@ -78,9 +97,34 @@ def _is_async_function_item(node: Node) -> bool:
     return False
 
 
-def _enclosing_async_function(node: Node, source: bytes) -> str | None:
+def _enclosing_function_name(node: Node, source: bytes) -> str:
+    """Name of the nearest enclosing fn item, or "<async block>" at item level."""
     parent = node.parent
     while parent is not None:
+        if parent.type == "function_item":
+            name_node = parent.child_by_field_name("name")
+            return text(name_node, source) if name_node is not None else "<anonymous>"
+        parent = parent.parent
+    return "<async block>"
+
+
+def _enclosing_async_function(node: Node, source: bytes) -> str | None:
+    """Return the function name when *node* runs on an async executor.
+
+    Walks outwards and stops at the first boundary:
+    - ``async_block``: async context; returns the enclosing fn's name
+      (sync or async), so ``async { thread::sleep(..) }`` in a sync fn
+      is reported.
+    - ``closure_expression``: returns None — the closure body may run
+      elsewhere (``spawn_blocking(move || ..)``, a thread, an iterator).
+    - ``function_item``: its name if it is ``async fn``, else None.
+    """
+    parent = node.parent
+    while parent is not None:
+        if parent.type == "async_block":
+            return _enclosing_function_name(parent, source)
+        if parent.type == "closure_expression":
+            return None
         if parent.type == "function_item":
             if not _is_async_function_item(parent):
                 return None
@@ -283,18 +327,16 @@ def _extract_unwrap_expect_and_mutex(
         receiver = func.child_by_field_name("value")
 
         if receiver is not None and receiver.type == "call_expression":
-            rfunc = receiver.child_by_field_name("function")
-            if rfunc is not None and rfunc.type == "field_expression":
-                rfield = rfunc.child_by_field_name("field")
-                if rfield is not None and text(rfield, source) in _LOCK_METHODS:
-                    mutex_calls.append(
-                        RustMutexLockUnwrap(
-                            lock_method=text(rfield, source),
-                            line=call.start_point[0] + 1,
-                            file=rel_path,
-                        )
+            lock_method = _lock_method_name(receiver, source)
+            if lock_method is not None:
+                mutex_calls.append(
+                    RustMutexLockUnwrap(
+                        lock_method=lock_method,
+                        line=call.start_point[0] + 1,
+                        file=rel_path,
                     )
-                    continue
+                )
+                continue
 
         unwrap_calls.append(
             RustUnwrapExpectCall(
@@ -377,20 +419,18 @@ def _extract_async_blocking_calls(
                         file=rel_path,
                     )
                 )
-        elif func.type == "field_expression":
-            field_node = func.child_by_field_name("field")
-            if field_node is not None and text(field_node, source) in _LOCK_METHODS:
-                awaited = call.parent is not None and call.parent.type == "await_expression"
-                if not awaited:
-                    results.append(
-                        RustAsyncBlockingCall(
-                            function_name=fn_name,
-                            call=text(func, source),
-                            kind="sync-lock-no-await",
-                            line=call.start_point[0] + 1,
-                            file=rel_path,
-                        )
+        elif _lock_method_name(call, source) is not None:
+            awaited = call.parent is not None and call.parent.type == "await_expression"
+            if not awaited:
+                results.append(
+                    RustAsyncBlockingCall(
+                        function_name=fn_name,
+                        call=text(func, source),
+                        kind="sync-lock-no-await",
+                        line=call.start_point[0] + 1,
+                        file=rel_path,
                     )
+                )
     return results
 
 

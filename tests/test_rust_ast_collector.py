@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 from nfr_review.collectors.rust_ast import RustAstCollector
@@ -17,6 +18,13 @@ def _payload_for(filename: str):
         if ev.payload.file_path == filename:
             return ev.payload
     raise AssertionError(f"no evidence for {filename}")
+
+
+def _payload_for_source(tmp_path: Path, source: str):
+    (tmp_path / "lib.rs").write_text(textwrap.dedent(source), encoding="utf-8")
+    evidences = RustAstCollector().collect(tmp_path, config=None)
+    assert len(evidences) == 1
+    return evidences[0].payload
 
 
 class TestRegistration:
@@ -181,3 +189,97 @@ class TestEdgeCases:
         assert by_name["Shape"].is_interface is True
         assert by_name["Circle"].is_interface is False
         assert "Shape" in [b.name for b in by_name["Circle"].base_classes]
+
+
+class TestLockCallArity:
+    def test_io_write_with_args_is_not_a_lock_unwrap(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            use std::io::Write;
+            fn emit(out: &mut Vec<u8>) {
+                out.write(b"x").unwrap();
+            }
+            """,
+        )
+        assert payload.mutex_lock_unwraps == []
+        assert [(c.method, c.receiver) for c in payload.unwrap_expect_calls] == [
+            ("unwrap", 'out.write(b"x")')
+        ]
+
+    def test_zero_arg_lock_unwrap_still_reported(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            fn bump(m: &std::sync::Mutex<u8>) {
+                *m.lock().unwrap() += 1;
+            }
+            """,
+        )
+        assert [c.lock_method for c in payload.mutex_lock_unwraps] == ["lock"]
+
+    def test_io_read_write_with_args_not_sync_lock_in_async(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            async fn save(f: &mut std::fs::File, buf: &[u8]) {
+                f.write(buf).unwrap();
+                let _ = f.read(&mut [0u8; 4]);
+            }
+            async fn guard(m: &std::sync::Mutex<u8>) {
+                let _g = m.lock();
+            }
+            """,
+        )
+        assert [(c.function_name, c.call, c.line) for c in payload.async_blocking_calls] == [
+            ("guard", "m.lock", 6)
+        ]
+
+
+class TestAsyncContextBoundary:
+    def test_blocking_call_in_closure_in_async_fn_not_reported(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            async fn handler() {
+                tokio::task::spawn_blocking(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                });
+            }
+            """,
+        )
+        assert payload.async_blocking_calls == []
+
+    def test_sleep_in_async_block_in_sync_fn_reported(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            fn start() {
+                let fut = async {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                };
+                drop(fut);
+            }
+            """,
+        )
+        assert [
+            (c.function_name, c.call, c.kind, c.line) for c in payload.async_blocking_calls
+        ] == [("start", "std::thread::sleep", "thread::sleep", 3)]
+
+    def test_async_block_inside_closure_is_async_context(self, tmp_path: Path) -> None:
+        payload = _payload_for_source(
+            tmp_path,
+            """\
+            async fn fan_out(items: Vec<u8>) {
+                let _futs: Vec<_> = items
+                    .into_iter()
+                    .map(|_| async move {
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    })
+                    .collect();
+            }
+            """,
+        )
+        assert [(c.function_name, c.line) for c in payload.async_blocking_calls] == [
+            ("fan_out", 5)
+        ]

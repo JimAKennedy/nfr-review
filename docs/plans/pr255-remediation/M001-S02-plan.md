@@ -4,7 +4,7 @@
 
 ## Task status
 
-- [ ] Task 1 — Lock-call arity and async-context boundary
+- [x] Task 1 — Lock-call arity and async-context boundary
 - [ ] Task 2 — Exact test-code detection, mutex `in_test`, bounded unwrap summary
 - [ ] Task 3 — `use`-declaration alias resolution for HTTP-client and spawn extractors
 - [ ] Task 4 — Cargo.toml workspace inheritance, target-cfg tables, renames, `target/` pruning
