@@ -4,7 +4,7 @@
 
 **Task status**
 
-- [ ] Task 1 — Refresh the drifted `gin` and `httpx` snapshots
+- [x] Task 1 — Refresh the drifted `gin` and `httpx` snapshots
 
 **Definition of Done**
 

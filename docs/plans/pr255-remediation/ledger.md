@@ -62,16 +62,16 @@ every slice below is `done` or `accepted`.
 **Plan:** M001-S13-plan.md
 **Validation:** regression, format
 **Evidence:** evidence/M001-S13.md
-**Status:** in-progress
+**Status:** done
 
 **Definition of Done**
 
-- [ ] The regression suite passes on the branch before any other slice's change lands
-- [ ] The only snapshot lines that change are time-based `dep-freshness` findings for `gin` and `httpx`
+- [x] The regression suite passes on the branch before any other slice's change lands
+- [x] The only snapshot lines that change are time-based `dep-freshness` findings for `gin` and `httpx`
 
 | ID | Item | Lands in | Verification | Status |
 |---|---|---|---|---|
-| X1 | `gin` (+2) and `httpx` (+1) snapshots fail on time-based `dep-freshness` findings unrelated to PR #255 (found while planning, 2026-11-10) | `tests/regression/snapshots/` | `regression` → 0 failed; snapshot diff contains only `dep-freshness` lines | `open` |
+| X1 | `gin` (+2) and `httpx` (+1) snapshots fail on time-based `dep-freshness` findings unrelated to PR #255 (found while planning, 2026-11-10) | `tests/regression/snapshots/` | `regression` → 0 failed; snapshot diff contains only `dep-freshness` lines | `done` |
 
 ### Slice M001/S02 — Rust collector correctness
 

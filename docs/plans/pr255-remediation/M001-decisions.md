@@ -36,3 +36,7 @@ user's behalf while running M001 of the PR #255 remediation ledger.
 - **Decision:** S09 adds an autouse offline-LLM fixture and blocks `.env` loading in tests. — **Why:** with a dummy key, 65 tests made 91 real LLM calls; the main checkout's `.env` could supply a real key.
 - **Q:** Regression is red before any slice (gin +2, httpx +1 dep-freshness drift). How to handle it? — **A:** New slice S13; refresh first.
 - **Decision:** S13 is placed before S02 and every other open slice depends on it. — **Why:** each owes `regression` or `gate`, both red until the drift is refreshed.
+
+## 2026-11-11 — executing M001/S13
+
+- **Decision:** the S13 refresh kept only the 3 `dep-freshness` lines and dropped 2 duplicate `structure-coupling-cluster` lines the refresh also added. — **Why:** DoD 2 allows only freshness lines; structure rules are graphify reclustering noise the snapshot test ignores, and S04 removes them all. The plan's grep keyed on `dep-freshness` in the line, which `dead-library` findings carry only as `rule_id`; matched by `rule_id` instead.
