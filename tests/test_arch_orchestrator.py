@@ -6,12 +6,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
 from nfr_review.arch_models import ArchReport
 from nfr_review.arch_orchestrator import run_arch_review
-from nfr_review.cli import cli
+from nfr_review.cli import _execute_all_pipelines, cli
+from nfr_review.config import LlmConfig
+from nfr_review.llm_integration import ProviderUnavailableError
 
 
 @pytest.fixture()
@@ -281,3 +284,100 @@ class TestArchCliCommand:
             ],
         )
         assert result.exit_code == 0
+
+
+class _OfflineClient:
+    """An available LLM client whose calls fail, so analysis falls back."""
+
+    available = True
+
+    def call(self, prompt: str, *, max_tokens: int = 1024) -> str:
+        raise ProviderUnavailableError("offline test client")
+
+
+class TestArchLlmModelDisclosure:
+    @pytest.fixture()
+    def created_with(self, monkeypatch: pytest.MonkeyPatch) -> list[LlmConfig | None]:
+        """Clear NFR_LLM_* and record the config each client is created with."""
+        for var in (
+            "NFR_LLM_MODEL",
+            "NFR_LLM_PROVIDER",
+            "NFR_LLM_BACKEND",
+            "NFR_LLM_BASE_URL",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        seen: list[LlmConfig | None] = []
+
+        def _fake_create(config: LlmConfig | None = None) -> _OfflineClient:
+            seen.append(config)
+            return _OfflineClient()
+
+        monkeypatch.setattr("nfr_review.llm_integration.create_llm_client", _fake_create)
+        return seen
+
+    def test_model_from_config_only(
+        self, sample_repo: Path, created_with: list[LlmConfig | None]
+    ) -> None:
+        report = run_arch_review(
+            [sample_repo], llm_config=LlmConfig(model="config-only-model")
+        )
+        assert report.metadata.llm_available is True
+        assert report.metadata.llm_model == "config-only-model"
+        assert created_with[0] is not None
+        assert created_with[0].model == "config-only-model"
+
+    def test_env_override_is_disclosed(
+        self,
+        sample_repo: Path,
+        created_with: list[LlmConfig | None],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("NFR_LLM_MODEL", "env-model")
+        report = run_arch_review([sample_repo], llm_config=LlmConfig(model="config-model"))
+        assert report.metadata.llm_model == "env-model"
+
+    def test_default_model_without_config(
+        self, sample_repo: Path, created_with: list[LlmConfig | None]
+    ) -> None:
+        report = run_arch_review([sample_repo])
+        assert report.metadata.llm_model == LlmConfig().model
+
+    def test_all_pipeline_passes_config_llm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = tmp_path / "nfr-review.yaml"
+        cfg.write_text("llm:\n  model: cfg-file-model\n", encoding="utf-8")
+        seen: dict[str, object] = {}
+
+        def _fake_run_arch_review(targets: list[Path], **kwargs: object) -> ArchReport:
+            seen.update(kwargs)
+            raise RuntimeError("stop after capturing the arguments")
+
+        monkeypatch.setattr(
+            "nfr_review.arch_orchestrator.run_arch_review", _fake_run_arch_review
+        )
+        with pytest.raises(click.exceptions.Exit):
+            _execute_all_pipelines(
+                target_list=[tmp_path],
+                repo_names=["repo"],
+                timestamp="20260101T000000",
+                output_dir=tmp_path / "out",
+                config_path=cfg,
+                no_arch=False,
+                no_tests=True,
+                no_deps=True,
+                no_diagrams=True,
+                no_pdf=True,
+                no_summary=True,
+                test_timeout=1,
+                no_score=True,
+                max_resolve_rounds=None,
+                no_llm=False,
+                diagram_mode="hierarchical",
+                exclude_tests=False,
+                workers=1,
+                quiet=True,
+            )
+        llm_config = seen["llm_config"]
+        assert isinstance(llm_config, LlmConfig)
+        assert llm_config.model == "cfg-file-model"

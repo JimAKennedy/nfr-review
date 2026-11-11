@@ -2729,12 +2729,17 @@ def _execute_all_pipelines(  # noqa: PLR0913
         from nfr_review.arch_orchestrator import run_arch_review
         from nfr_review.arch_report_render import render_arch_report
 
+        # Same config the NFR half loads, so the arch LLM client and its
+        # disclosed model follow the configured llm block.
+        llm_config = _load_effective_config(config_path, quiet=True).llm
+
         t0 = _phase("Running architecture review (all targets)", quiet=quiet)
         report = run_arch_review(
             target_list,
             repo_names=repo_names,
             skip_llm=no_llm,
             diagram_mode=diagram_mode,
+            llm_config=llm_config,
             progress=lambda msg: _ts_echo(msg, quiet=quiet),
         )
         _phase_done("Architecture review", t0, quiet=quiet)
