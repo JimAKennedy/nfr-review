@@ -13,8 +13,3 @@
 # gh (Go stdlib) — bundled for CI convenience, not used at runtime.
 # Fixed in gh 1.26.4; will clear on next base-image rebuild.
 CVE-2026-42504
-
-# zlib1g — OS-layer CVEs in python:3.14-slim base image.
-# Fixed in 1:1.3.dfsg+really1.3.1-1+deb13u1; will clear on next base-image rebuild.
-CVE-2026-76844
-CVE-2026-85091
