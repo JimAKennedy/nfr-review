@@ -46,6 +46,22 @@ python scripts/install_skills.py --update-lock  # update lock hashes after upstr
 > be tracked. See `skills-lock.json` for the canonical list of vendored skills
 > and their sources.
 
+### Delivery workflow commands
+
+The `/jk:*` Claude Code commands (`assess`, `plan`, `next`, `auto`, `ship`,
+`close`, `status`, `sdlc-retro`) come from
+[jk-standards](https://github.com/JimAKennedy/jk-standards) and are pinned
+under `commands` in `skills-lock.json`. They are vendored into
+`.claude/commands/jk/`, which is gitignored. Install them with:
+
+```bash
+pip install jk-standards
+jk-standards install-commands
+```
+
+Delivery ledgers live under `docs/plans/<slug>/ledger.md`; check them with
+`jk-standards ledger`. Validation tokens are declared in `.jk/validations.yml`.
+
 ## Git Identity
 
 Before committing, configure your Git email to a public address (not a local
