@@ -26,7 +26,7 @@ site pages (output formats, arch) still name weasyprint.
 review is fixed and locked by a test or deliberately deferred with a recorded
 reason, and the regression suite, coverage and container E2E gate the result.
 **Branch:** pr255-fixes
-**Status:** in-progress
+**Status:** done
 **Demo:** `gate` and `container-e2e` pass on the head of `pr255-fixes`, and
 every slice below is `done` or `accepted`.
 
