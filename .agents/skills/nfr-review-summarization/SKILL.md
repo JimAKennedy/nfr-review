@@ -19,7 +19,7 @@ RunResult + HygieneResult + PytestResult + DepsSection
   -> _build_prompt_data() creates structured JSON for LLM
   -> ClaudeClient.analyze() sends prompt + data
   -> JSON response parsed into ExecSummary Pydantic model
-  -> render_pdf() embeds summary into HTML -> PDF via weasyprint
+  -> render_pdf() assembles Typst source sections -> typst.compile() -> PDF bytes written to disk
 ```
 
 ### Key files
@@ -28,7 +28,7 @@ RunResult + HygieneResult + PytestResult + DepsSection
 |------|---------|
 | `src/nfr_review/output/summary_models.py` | ExecSummary and RemediationItem Pydantic models |
 | `src/nfr_review/output/summarize.py` | Prompt engineering and LLM call orchestration |
-| `src/nfr_review/output/pdf.py` | HTML/CSS template with verdict box rendering |
+| `src/nfr_review/output/pdf.py` | Typst document assembler; converts findings, summary, and markdown sections to Typst markup and compiles to PDF via `typst.compile()` |
 | `src/nfr_review/llm_client.py` | ClaudeClient wrapper around Anthropic SDK |
 | `tests/test_summarize.py` | Unit tests with mocked LLM responses |
 
@@ -72,5 +72,5 @@ When tuning:
 - No ANTHROPIC_API_KEY: returns None, PDF renders without summary section
 - LLM returns invalid JSON: returns None with warning log
 - LLM response fails schema validation: returns None with warning log
-- weasyprint not installed: CLI exits with install instructions
+- typst package not installed: `render_pdf()` raises `ModuleNotFoundError`; CLI catches it, prints `error: PDF generation failed: ...` to stderr, and continues without a PDF
 - mmdc not installed: Mermaid diagrams skipped, DOT diagrams attempted via graphviz

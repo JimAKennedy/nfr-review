@@ -40,6 +40,7 @@ nfr-review uses a three-stage pipeline:
 | | C++ | `cpp_ast`, `cmake` | tree-sitter | Raw memory, include guards, exception safety, CMake config, sanitizer CI, dormant classes |
 | | C# | `csharp_ast`, `csharp_deps` | tree-sitter | Async void, blocking async, ConfigureAwait, disposable without using |
 | | Node.js / TypeScript | `nodejs_ast`, `nodejs_deps` | tree-sitter | Floating promises, unhandled rejections, sync FS APIs, callback errors ignored |
+| | Rust | `rust_ast`, `rust_deps` | tree-sitter | Panic-prone unwrap/expect, mutex-poisoning unwraps, HTTP client no timeout, blocking calls in async, unbounded task spawn in loops |
 | **Frameworks** | Spring Boot | `spring_config` | -- | Actuator exposure, logging config, profile misconfiguration |
 | | APIM (Azure) | `apim_policy` | -- | Auth policy missing, hardcoded backend URLs, rate limiting |
 | **Infrastructure** | Docker | `dockerfile` | tree-sitter | Base image pinning, multistage builds, USER directive, secret leakage, K8s image drift |
@@ -52,7 +53,7 @@ nfr-review uses a three-stage pipeline:
 | **Architecture** | ADRs | `adr`, `adr_derive` | -- | Lifecycle gaps, coverage gaps, architectural drift (LLM-assisted) |
 | | gRPC / Protobuf | `proto` | -- | Field numbering, method comments, service versioning |
 | **Observability** | OpenTelemetry | `otel`, `otel_trace`, `telemetry_config` | -- | Exporter config, pipeline completeness, sampling, W3C propagation, resource attributes |
-| **Dependencies** | PyPI, Maven, Go modules, npm, NuGet | `*_deps` collectors | -- | Freshness, upgrade paths, transitive resolution |
+| **Dependencies** | PyPI, Maven, Go modules, npm, NuGet, crates.io | `*_deps` collectors | -- | Freshness, upgrade paths, transitive resolution |
 | **Dynamic analysis** | OTel traces | `otel_trace` | -- | Latency P95, N+1 queries, correlation propagation, method coverage, call sequences |
 | **Security** | PII detection | -- | -- | PII in log statements (LLM-assisted) |
 | **Patching** | Deployment readiness | multiple | -- | 22 rules: update strategy, PDB coverage, graceful shutdown, rollback CI, and more |
@@ -61,7 +62,7 @@ nfr-review uses a three-stage pipeline:
 | | JDepend | `jdepend` | -- | Package cycles, instability, distance from main sequence |
 | **Structural analysis** | Graphify | `graphify` | -- | God nodes (coupling hotspots), weak module boundaries, coupling clusters |
 
-Technologies are auto-detected (18 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
+Technologies are auto-detected (19 tech keys); override with `nfr-review.yaml` or `nfr-review init`.
 
 ## Quick start
 
@@ -109,17 +110,13 @@ nfr-review run /path/to/your/repo
 Optional extras:
 
 ```bash
-pip install "nfr-review[llm-anthropic]"  # LLM via Anthropic API
-pip install "nfr-review[llm-openai]"     # LLM via OpenAI-compatible APIs (Ollama, Azure, OpenRouter)
-pip install "nfr-review[pdf]"            # PDF report generation
-pip install "nfr-review[scancode]"       # license compliance scanning
-pip install "nfr-review[diagrams]"       # Graphviz diagram rendering
-pip install "nfr-review[graphify]"       # structural analysis (god nodes, weak boundaries)
+pip install "nfr-review[llm]"       # LLM via Anthropic API
+pip install "nfr-review[scancode]"  # license compliance scanning
 ```
 
 ### Docker
 
-A pre-built Docker image is published to GHCR (`linux/amd64`). The image includes all extras (PDF, Mermaid diagram rendering, Graphviz, LLM SDKs) and the `gh` CLI.
+A pre-built Docker image is published to GHCR (`linux/amd64`). The image contains the core install (Typst PDF, diagrams, structural analysis) plus the `fonts-liberation`, `git` and `zlib1g` system packages. It does not include an LLM SDK.
 
 ```bash
 # Pull the image (--platform required on Apple Silicon Macs)
@@ -141,24 +138,7 @@ docker run --rm --platform linux/amd64 \
   ghcr.io/jimakennedy/nfr-review:latest all /repo -v
 ```
 
-**Using LLM features in Docker:** Pass your API key as an environment variable with `-e`. LLM features (executive summary, ADR drift analysis, PII detection) are optional — without an API key, all static-analysis rules still run normally.
-
-```bash
-# Anthropic API (default provider)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-
-# OpenAI-compatible (Ollama running on the host)
-docker run --rm --platform linux/amd64 \
-  -v "$(pwd)":/repo \
-  -e NFR_LLM_PROVIDER=openai \
-  -e NFR_LLM_MODEL=llama3 \
-  -e NFR_LLM_BASE_URL=http://host.docker.internal:11434/v1 \
-  -e OPENAI_API_KEY=ollama \
-  ghcr.io/jimakennedy/nfr-review:latest report /repo
-```
+**LLM features in Docker:** the image does not include an LLM SDK yet, so LLM features (executive summary, ADR drift, PII confirmation) are skipped in the container and every static-analysis rule still runs. For LLM features, use a pip install with the `[llm]` extra.
 
 **macOS (Apple Silicon):** The image is `linux/amd64` only. Docker Desktop on M-series Macs runs it via Rosetta emulation — the `--platform linux/amd64` flag is required. For faster emulation, enable **Settings > General > "Use Rosetta for x86_64/amd64 emulation on Apple Silicon"** in Docker Desktop.
 
@@ -176,13 +156,13 @@ These are **not** Python packages — they are standalone binaries that some col
 | Tool | Used by | Install |
 |------|---------|---------|
 | [Helm](https://helm.sh/) | `helm` collector — renders Go-templated Helm charts via `helm template` before analysis | `brew install helm` (macOS) or [helm.sh/docs/intro/install](https://helm.sh/docs/intro/install/) |
-| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | `pip install "nfr-review[graphify]"` (provides both the `graphify` CLI and `networkx`) |
+| [Graphify](https://pypi.org/project/graphifyy/) | `graphify` collector — extracts a knowledge graph (AST-based) for structural analysis | Included in `pip install nfr-review`; enable with `graphify.enabled: true` |
 
-Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Without Graphify, structural analysis rules (god nodes, weak boundaries, coupling clusters) are skipped gracefully. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
+Without Helm, the Helm collector still analyses `Chart.yaml` and `values.yaml` statically, but rendered manifest analysis (template expansion, secret leakage in rendered output) is skipped. Structural analysis (god nodes, weak boundaries, coupling clusters) is off by default; set `graphify.enabled: true` in `nfr-review.yaml` to run it. See the [Graphify usage guide](docs/graphify-guide.md) for a full walkthrough.
 
 ### Optional: LLM features
 
-Three LLM backends are supported: Anthropic API (`[llm-anthropic]` extra), OpenAI-compatible APIs like Ollama (`[llm-openai]` extra), and Claude CLI (no extra needed). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
+Three LLM backends are supported: Anthropic API (`[llm]` extra), OpenAI-compatible APIs such as Ollama (`[llm]` extra plus `pip install openai`), and Claude CLI (`[llm]` extra, no API key). Configure via `nfr-review.yaml` or env vars. Without a backend, LLM features are skipped gracefully. See [docs/install.md — LLM features](docs/install.md#7-llm-features) for setup details.
 
 ## Installation
 
@@ -196,21 +176,16 @@ pip install nfr-review
 
 | Extra | What it adds |
 |-------|-------------|
-| `[llm-anthropic]` | [anthropic](https://pypi.org/project/anthropic/) SDK for LLM-powered analysis (executive summary, ADR drift, PII detection). |
-| `[llm-openai]` | [openai](https://pypi.org/project/openai/) SDK for OpenAI-compatible backends (Ollama, Azure OpenAI, OpenRouter). |
+| `[llm]` | [anthropic](https://pypi.org/project/anthropic/) SDK and ai-tooling (the LLM provider layer) for LLM-powered analysis (executive summary, ADR drift, PII detection). The OpenAI-compatible backend also needs `pip install openai`. |
 | `[scancode]` | [scancode-toolkit](https://github.com/aboutcode-org/scancode-toolkit) for license compliance scanning. Without it, license hygiene rules skip gracefully with an informative warning. |
-| `[diagrams]` | [graphviz](https://pypi.org/project/graphviz/) Python bindings for `--render-diagrams` output. |
-| `[pdf]` | [weasyprint](https://weasyprint.org/) for PDF report generation with rendered diagrams and executive summary. |
 | `[otel]` | [OpenTelemetry](https://opentelemetry.io/) SDK for instrumenting your own application to emit traces. **Not required** for analysing pre-collected traces — pass `--otel-traces` to `report` without this extra. Only needed if you want `nfr-review` to instrument your app directly. See [docs/dynamic-analysis.md](docs/dynamic-analysis.md). |
-| `[monitor]` | [aiohttp](https://docs.aiohttp.org/) for the `nfr-review monitor` production interaction server. |
-| `[graphify]` | [graphifyy](https://pypi.org/project/graphifyy/) knowledge-graph extraction + [networkx](https://pypi.org/project/networkx/) for structural analysis rules (god nodes, weak boundaries, coupling clusters). See the [usage guide](docs/graphify-guide.md). |
-| `[full]` | All of the above (excluding `[dev]`). |
+| `[full]` | `[llm]` + `[scancode]` + `[otel]`. |
 | `[dev]` | pytest, ruff, and pytest-cov for development and CI. |
 
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf]"
+pip install "nfr-review[llm,scancode]"
 ```
 
 ### Development install (from source)
@@ -230,14 +205,14 @@ LLM-assisted rules (PII detection, ADR drift analysis) require an LLM backend. T
 
 **Anthropic API** (default):
 ```bash
-pip install "nfr-review[llm-anthropic]"
+pip install "nfr-review[llm]"
 export ANTHROPIC_API_KEY="sk-ant-..."
 nfr-review run /path/to/repo
 ```
 
 **OpenAI-compatible** (Ollama, Azure OpenAI, OpenRouter):
 ```bash
-pip install "nfr-review[llm-openai]"
+pip install "nfr-review[llm]" openai
 export NFR_LLM_PROVIDER=openai
 export NFR_LLM_MODEL=llama3
 export NFR_LLM_BASE_URL=http://localhost:11434/v1
@@ -247,6 +222,7 @@ nfr-review run /path/to/repo
 
 **Claude CLI** (Claude Code subscription, no API key needed):
 ```bash
+pip install "nfr-review[llm]"
 export NFR_LLM_PROVIDER=claude-cli
 nfr-review run /path/to/repo
 ```
@@ -288,6 +264,7 @@ This will:
 | `--baseline PATH` | — | Path to a prior JSONL file; suppress known findings, exit on regressions |
 | `--score` | off | Compute and display design maturity score |
 | `--workers N` | `1` | Number of parallel collector threads (`1` = sequential) |
+| `--strict-collectors` | off | Exit 1 after writing outputs if any collector failed (crashed). Missing-grammar warnings do not count. |
 | `-v` / `--verbose` | off | Increase verbosity (`-v` for INFO, `-vv` for DEBUG) |
 | `-q` / `--quiet` | off | Suppress warnings (ERROR level only) |
 | `--log-file PATH` | stderr | Write diagnostics to FILE instead of stderr |
@@ -297,7 +274,7 @@ This will:
 | Code | Meaning |
 |------|---------|
 | 0 | Success — scan completed |
-| 1 | Error — bad target path, config error, or engine failure |
+| 1 | Error — bad target path, config error, engine failure, or a collector failure under `--strict-collectors` |
 | 2 | Threshold breach — at least one finding meets or exceeds `severity_threshold` |
 
 ### List available rules
@@ -408,7 +385,7 @@ nfr-review deps --dot deps.dot --render-diagrams /path/to/target/repo
 | `--no-tree` | off | Skip transitive resolution and dependency tree (faster) |
 | `--output PATH` | — | Write Markdown dependency report to FILE |
 | `--dot PATH` | — | Write Graphviz DOT dependency graph to FILE |
-| `--render-diagrams` | off | Render DOT graph to SVG (requires `[diagrams]` extra) |
+| `--render-diagrams` | off | Render DOT graph to SVG (requires the system-level `graphviz` binary) |
 | `--max-resolve-rounds N` | `2000` | Maximum resolver iterations for dependency analysis |
 | `-v` / `-q` / `--log-file` | — | Same as `run` command |
 
@@ -516,12 +493,12 @@ version: 1
 
 # Declare which technology stacks the target repo uses.
 # Rules requiring a tech that isn't declared true will be skipped.
-# 18 tech keys are auto-detected; these override detection results.
+# 19 tech keys are auto-detected; these override detection results.
 tech:
   spring_boot: true
   apim: false
   terraform: false
-  cmake: true   # enables C++ rules
+  cpp: true   # enables both C++ and CMake rules (there is no separate "cmake" tech key)
 
 # Control which rules run.
 rules:
@@ -576,6 +553,8 @@ nfr-review ships with 153 rules (125 NFR + 28 hygiene) across several domains. A
 | `csharp-blocking-async` | C# | Detect `.Result` / `.Wait()` on async calls |
 | `nodejs-floating-promise` | Node.js | Flag un-awaited promises |
 | `nodejs-sync-fs-api` | Node.js | Flag synchronous filesystem API usage |
+| `rust-unwrap-expect` | Rust | Flag `.unwrap()`/`.expect()` calls outside test code |
+| `rust-mutex-lock-unwrap` | Rust | Flag `.lock()/.read()/.write().unwrap()` on std Mutex/RwLock |
 | `dockerfile-base-pinning` | Docker | Flag unpinned base images |
 | `dockerfile-secret-leakage` | Docker | Detect secrets copied into image layers |
 | `helm-secret-leakage` | Helm | Detect secrets in Helm values and templates |

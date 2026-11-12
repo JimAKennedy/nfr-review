@@ -37,16 +37,17 @@ nfr-review --version
 
 ### Optional extras
 
-Install additional capabilities as needed:
+PDF output, diagrams, all languages and the production monitor are in the
+base install. Install additional capabilities as needed:
 
 ```bash
-# PDF report generation
-pip install "nfr-review[pdf]"
-
 # LLM-powered executive summaries (Anthropic)
-pip install "nfr-review[llm-anthropic]"
+pip install "nfr-review[llm]"
 
-# Everything
+# License compliance scanning
+pip install "nfr-review[scancode]"
+
+# Everything optional (llm + scancode + otel)
 pip install "nfr-review[full]"
 ```
 

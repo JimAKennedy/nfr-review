@@ -68,6 +68,16 @@ _BINARY_EXTENSIONS = frozenset(
 )
 
 _EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}")
+_SCM_USERNAMES = frozenset(
+    {"git", "hg", "svn", "deploy", "ci", "bitbucket", "github", "gitlab", "ssh"}
+)
+# An SCM service account (git@, deploy@, ...) is noise only as the user of an
+# SSH remote: URL-style ``ssh://git@host/...`` or scp-style
+# ``git@host:org/repo``. _EMAIL_RE stops after the first domain label, so the
+# scp test skips any remaining host characters before requiring ``:`` and a
+# non-space path character. Anywhere else (``deploy@acme.com`` in prose)
+# the address is real and is reported.
+_SCP_REMOTE_TAIL_RE = re.compile(r"[a-zA-Z0-9.-]*:\S")
 _PHONE_RE = re.compile(
     r"(?<!\d)"
     r"(?:\+?1[-.\s]?)?"
@@ -143,6 +153,16 @@ def _read_safe(path: Path) -> str | None:
         return None
 
 
+def _is_scm_ssh_remote(line: str, match: re.Match[str]) -> bool:
+    """Return True when *match* is the SCM user@host of an SSH remote."""
+    local_part = match.group().split("@", 1)[0].lower()
+    if local_part not in _SCM_USERNAMES:
+        return False
+    if line[: match.start()].lower().endswith("ssh://"):
+        return True
+    return _SCP_REMOTE_TAIL_RE.match(line, match.end()) is not None
+
+
 def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[PrivacyMatch]:
     matches: list[PrivacyMatch] = []
 
@@ -169,6 +189,8 @@ def _scan_pii(rel_path: str, text: str, *, is_config: bool) -> list[PrivacyMatch
                 )
         if not is_config:
             for _m in _EMAIL_RE.finditer(line):
+                if _is_scm_ssh_remote(line, _m):
+                    continue
                 matches.append(
                     PrivacyMatch(
                         file=rel_path,
@@ -251,7 +273,7 @@ class PrivacyCollector:
             if _is_binary(path):
                 continue
 
-            rel = str(path.relative_to(repo_path))
+            rel = path.relative_to(repo_path).as_posix()
             text = _read_safe(path)
             if text is None:
                 continue

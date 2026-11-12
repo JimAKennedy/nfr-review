@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess  # nosec B404 — git commands with hardcoded args
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -20,6 +19,7 @@ from nfr_review.arch_models import (
     DynamicAnalysisSection,
     RepoInfo,
 )
+from nfr_review.config import LlmConfig
 from nfr_review.models import Evidence
 
 if TYPE_CHECKING:
@@ -206,7 +206,7 @@ def _build_dynamic_analysis(
 
 
 def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict] | None:
-    """Collect enriched class data from C++, Java, Python, and Go files."""
+    """Collect enriched class data from C++, Java, Python, Go, and Rust files."""
     import importlib
 
     _COLLECTORS: list[tuple[str, str, str, str]] = [
@@ -214,6 +214,7 @@ def _collect_class_data(targets: list[Path], cb: ProgressCallback) -> list[dict]
         ("nfr_review.collectors.java_ast", "JavaAstCollector", "classes", "Java"),
         ("nfr_review.collectors.python_ast", "PythonAstCollector", "classes", "Python"),
         ("nfr_review.collectors.go_ast", "GoAstCollector", "structs", "Go"),
+        ("nfr_review.collectors.rust_ast", "RustAstCollector", "structs", "Rust"),
     ]
 
     all_classes: list[dict] = []
@@ -274,18 +275,28 @@ def _build_repos_info(targets: list[Path], repo_names: list[str]) -> list[RepoIn
     return repos_info
 
 
-def _init_llm_client(skip_llm: bool, cb: ProgressCallback):  # type: ignore[return]
-    """Initialise and return an LLM client, or None if unavailable/skipped."""
-    if skip_llm:
-        return None
-    from nfr_review.llm_client import create_llm_client
+def _init_llm_client(  # type: ignore[return]
+    skip_llm: bool,
+    cb: ProgressCallback,
+    llm_config: LlmConfig | None = None,
+):
+    """Initialise an LLM client from *llm_config*.
 
-    client = create_llm_client()
+    Returns ``(client, model)``, where *model* is the model the client was
+    created with (config plus ``NFR_LLM_*`` overrides), or ``(None, None)``
+    when LLM use is skipped or no backend is available.
+    """
+    if skip_llm:
+        return None, None
+    from nfr_review.llm_integration import create_llm_client
+
+    resolved = (llm_config if llm_config is not None else LlmConfig()).resolve()
+    client = create_llm_client(resolved)
     if client.available:
         cb("LLM available — domain model and market analysis enabled")
-        return client
+        return client, resolved.model
     cb("LLM not available — skipping LLM-dependent analysis")
-    return None
+    return None, None
 
 
 def _discover_arch_artifacts(
@@ -293,6 +304,8 @@ def _discover_arch_artifacts(
     repo_names: list[str],
     multi: bool,
     cb: ProgressCallback,
+    *,
+    exclude_test_paths: bool = True,
 ):
     """Discover components and integrations, materialising infra components."""
     from nfr_review.arch_discovery import (
@@ -314,9 +327,16 @@ def _discover_arch_artifacts(
 
     cb("Mapping integrations...")
     if multi:
-        integrations = discover_integrations_multi_repo(targets, components, repo_names)
+        integrations = discover_integrations_multi_repo(
+            targets, components, repo_names, exclude_test_paths=exclude_test_paths
+        )
     else:
-        integrations = discover_integrations(targets[0], components, repo_name=repo_names[0])
+        integrations = discover_integrations(
+            targets[0],
+            components,
+            repo_name=repo_names[0],
+            exclude_test_paths=exclude_test_paths,
+        )
     cb(f"Found {len(integrations)} integration points")
 
     prev_count = len(components)
@@ -332,6 +352,7 @@ def _assemble_report(
     *,
     repos_info: list[RepoInfo],
     llm,
+    llm_model: str | None,
     components,
     integrations,
     test_coverage,
@@ -349,9 +370,7 @@ def _assemble_report(
         timestamp=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         repos_analyzed=repos_info,
         llm_available=llm is not None,
-        llm_model=os.environ.get("NFR_LLM_MODEL", "claude-sonnet-4-6")
-        if llm is not None
-        else None,
+        llm_model=llm_model,
     )
     return ArchReport(
         metadata=metadata,
@@ -377,6 +396,8 @@ def run_arch_review(
     diagram_mode: str = "hierarchical",
     evidence: list[Evidence] | None = None,
     progress: ProgressCallback | None = None,
+    llm_config: LlmConfig | None = None,
+    exclude_test_paths: bool = True,
 ) -> ArchReport:
     """Run the full architecture review pipeline and return an ArchReport.
 
@@ -393,6 +414,12 @@ def run_arch_review(
         Optional pre-collected evidence list (e.g. OTel traces).
     progress:
         Optional callback invoked with status messages.
+    llm_config:
+        LLM configuration (normally ``Config.llm``). ``NFR_LLM_*``
+        overrides apply on top; defaults to ``LlmConfig()``.
+    exclude_test_paths:
+        Skip config files under test paths during integration discovery
+        (the ``--exclude-tests`` default).
     """
     from nfr_review.arch_diagrams import generate_all_diagrams
     from nfr_review.arch_recommendations import generate_recommendations
@@ -409,8 +436,10 @@ def run_arch_review(
         repo_names = [t.resolve().name for t in targets]
 
     repos_info = _build_repos_info(targets, repo_names)
-    llm = _init_llm_client(skip_llm, cb)
-    components, integrations = _discover_arch_artifacts(targets, repo_names, multi, cb)
+    llm, llm_model = _init_llm_client(skip_llm, cb, llm_config)
+    components, integrations = _discover_arch_artifacts(
+        targets, repo_names, multi, cb, exclude_test_paths=exclude_test_paths
+    )
 
     # --- test coverage ---
     cb("Assessing test coverage...")
@@ -487,6 +516,7 @@ def run_arch_review(
     report = _assemble_report(
         repos_info=repos_info,
         llm=llm,
+        llm_model=llm_model,
         components=components,
         integrations=integrations,
         test_coverage=test_coverage,

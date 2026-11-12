@@ -122,7 +122,7 @@ def _scan_cmake_test_signals(repo_path: Path) -> list[CmakeTestSignalFile]:
             signals = [m.split("(")[0].strip().lower() for m in matches]
             results.append(
                 CmakeTestSignalFile(
-                    file_path=str(rel),
+                    file_path=rel.as_posix(),
                     signals=sorted(set(signals)),
                 )
             )
@@ -283,7 +283,7 @@ class CiArtifactCollector:
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="ci-pipeline",
                     payload=payload,
                 )
@@ -355,7 +355,7 @@ class CiArtifactCollector:
 
         if ci_system == "jenkins":
             return CiPipelinePayload(
-                file_path=str(rel),
+                file_path=rel.as_posix(),
                 ci_system=ci_system,
                 has_test_step=False,
                 has_security_scan=False,
@@ -379,7 +379,7 @@ class CiArtifactCollector:
             return None
 
         return CiPipelinePayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             ci_system=ci_system,
             **parsed,
         )

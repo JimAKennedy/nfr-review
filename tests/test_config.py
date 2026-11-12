@@ -520,3 +520,20 @@ class TestDesignChangeConfig:
         assert custom.thresholds != DEFAULT_DESIGN_CHANGE_THRESHOLDS
         standard = DesignChangeConfig()
         assert standard.thresholds == DEFAULT_DESIGN_CHANGE_THRESHOLDS
+
+
+def test_graphify_is_disabled_by_default() -> None:
+    cfg = Config()
+    assert cfg.graphify.enabled is False
+    assert cfg.graphify.graph_path is None
+
+
+def test_graphify_enabled_and_graph_path_load_from_yaml(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "nfr-review.yaml"
+    cfg_file.write_text(
+        "graphify:\n  enabled: true\n  graph_path: build/graph.json\n",
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_file)
+    assert cfg.graphify.enabled is True
+    assert cfg.graphify.graph_path == "build/graph.json"

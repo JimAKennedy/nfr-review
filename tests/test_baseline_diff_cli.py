@@ -167,7 +167,7 @@ class TestBaselineDiffCLI:
             ["baseline", "diff", "--baseline", str(bl), "--otel-traces", str(empty)],
         )
         assert result.exit_code != 0
-        assert "no spans" in result.output.lower()
+        assert "no spans" in (result.output + result.stderr).lower()
 
     def test_diff_cross_fixture(self, tmp_path: Path) -> None:
         """Diff topology traces against multi-service baseline."""

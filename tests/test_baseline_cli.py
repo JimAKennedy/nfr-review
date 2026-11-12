@@ -97,4 +97,4 @@ class TestBaselineCreateCLI:
             cli, ["baseline", "create", "--otel-traces", str(empty), "-o", str(out)]
         )
         assert result.exit_code != 0
-        assert "no spans" in result.output.lower()
+        assert "no spans" in (result.output + result.stderr).lower()

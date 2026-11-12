@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+import fnmatch
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 from nfr_review.arch_utils import safe_read_text as _safe_read_text
-from nfr_review.path_filter import should_exclude_path
+from nfr_review.path_filter import ALWAYS_SKIP_DIRS, should_exclude_path
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ ALL_TECH_KEYS: list[str] = [
     "dockerfile",
     "grpc",
     "go",
+    "rust",
     "python",
     "nodejs",
     "csharp",
@@ -75,33 +78,69 @@ def _safe_glob(base: Path, pattern: str) -> list[Path]:
         return []
 
 
+# Directories detection never descends into: the always-skipped set (VCS
+# metadata, virtualenvs, caches, node_modules) plus build output.  Any
+# directory whose name starts with "." is pruned as well, matching the AST
+# collectors' hidden-directory rule.
+_PRUNED_DIR_NAMES: frozenset[str] = ALWAYS_SKIP_DIRS | {"target"}
+
+
+def _is_pruned_dir(name: str, rel_dir: str) -> bool:
+    """Return True if the directory *name* at *rel_dir* must not be walked."""
+    return (
+        name.startswith(".") or name in _PRUNED_DIR_NAMES or should_exclude_path(f"{rel_dir}/")
+    )
+
+
 def _safe_rglob(base: Path, pattern: str) -> list[Path]:
+    """Return paths under *base* whose name matches the glob *pattern*.
+
+    Matches what ``base.rglob(pattern)`` returns for a single-component
+    pattern, minus excluded paths, but prunes hidden, always-skipped,
+    ``target`` and test directories during the walk so they are never listed.
+    Unreadable directories are skipped; any other ``OSError`` yields ``[]``.
+    """
+    matches: list[Path] = []
     try:
-        results = list(base.rglob(pattern))
+        for dirpath, dirnames, filenames in os.walk(base):
+            current = Path(dirpath)
+            rel = current.relative_to(base).as_posix()
+            prefix = "" if rel == "." else f"{rel}/"
+            dirnames[:] = sorted(d for d in dirnames if not _is_pruned_dir(d, f"{prefix}{d}"))
+            for name in (*dirnames, *sorted(filenames)):
+                if fnmatch.fnmatch(name, pattern) and not should_exclude_path(
+                    f"{prefix}{name}"
+                ):
+                    matches.append(current / name)
     except OSError:
         return []
-    return [p for p in results if not should_exclude_path(str(p.relative_to(base)))]
+    return matches
+
+
+_JAVA_BUILD_FILES = ("pom.xml", "build.gradle", "build.gradle.kts")
 
 
 def _detect_java(repo: Path) -> bool:
-    for name in ("pom.xml", "build.gradle", "build.gradle.kts"):
+    for name in _JAVA_BUILD_FILES:
         if _safe_exists(repo / name):
             return True
-    if _safe_glob(repo / "src", "**/*.java"):
-        return True
-    return False
+    # Monorepos commonly nest Java modules in subdirectories.
+    for name in _JAVA_BUILD_FILES:
+        if _safe_rglob(repo, name):
+            return True
+    return bool(_safe_rglob(repo, "*.java"))
 
 
 def _detect_spring_boot(repo: Path) -> bool:
-    resources = repo / "src" / "main" / "resources"
-    if _safe_is_dir(resources):
-        for name in ("application.yml", "application.properties"):
-            if _safe_exists(resources / name):
+    for name in ("application.yml", "application.yaml", "application.properties"):
+        for path in _safe_rglob(repo, name):
+            if path.parent.as_posix().endswith("src/main/resources"):
                 return True
-    for name in ("pom.xml", "build.gradle", "build.gradle.kts"):
-        content = _safe_read_text(repo / name)
-        if content and "spring-boot" in content:
-            return True
+    for name in _JAVA_BUILD_FILES:
+        for path in _safe_rglob(repo, name):
+            content = _safe_read_text(path)
+            if content and "spring-boot" in content:
+                return True
     return False
 
 
@@ -180,18 +219,32 @@ def _detect_grpc(repo: Path) -> bool:
 
 
 def _detect_go(repo: Path) -> bool:
-    return _safe_exists(repo / "go.mod")
+    if _safe_exists(repo / "go.mod"):
+        return True
+    return bool(_safe_rglob(repo, "go.mod"))
+
+
+def _detect_rust(repo: Path) -> bool:
+    if _safe_exists(repo / "Cargo.toml"):
+        return True
+    return bool(_safe_rglob(repo, "Cargo.toml"))
 
 
 def _detect_python(repo: Path) -> bool:
     for name in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
         if _safe_exists(repo / name):
             return True
-    return False
+    for pattern in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"):
+        if _safe_rglob(repo, pattern):
+            return True
+    # Script-only repos (no packaging manifest) still contain Python source.
+    return bool(_safe_rglob(repo, "*.py"))
 
 
 def _detect_nodejs(repo: Path) -> bool:
-    return _safe_exists(repo / "package.json")
+    if _safe_exists(repo / "package.json"):
+        return True
+    return bool(_safe_rglob(repo, "package.json"))
 
 
 def _detect_csharp(repo: Path) -> bool:
@@ -260,6 +313,7 @@ _DETECTORS: dict[str, Callable[..., bool]] = {
     "dockerfile": _detect_dockerfile,
     "grpc": _detect_grpc,
     "go": _detect_go,
+    "rust": _detect_rust,
     "python": _detect_python,
     "nodejs": _detect_nodejs,
     "csharp": _detect_csharp,

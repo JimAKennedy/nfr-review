@@ -3662,3 +3662,34 @@ class TestCLIDesignChangeDetection:
         assert "design" in combined_output.lower(), (
             "Expected design-related output in combined stdout+stderr"
         )
+
+
+class TestStructuralBaselineWindowsPaths:
+    """Structural baselines saved by Windows runs before paths used ``/``."""
+
+    def test_backslash_file_items_are_normalised_on_load(self, tmp_path: Path) -> None:
+        cat = _make_category(
+            "schema_migration",
+            sets={
+                "schema_migrations": [
+                    "file:db\\migrations\\V1__init.sql",
+                    "tool:flyway",
+                ]
+            },
+        )
+        path = tmp_path / "baseline.json"
+        save_baseline(_make_baseline(metrics={"schema_migration": cat}), path)
+
+        loaded = load_baseline(path)
+
+        items = loaded.metrics["schema_migration"].set_metrics["schema_migrations"].items
+        assert items == ["file:db/migrations/V1__init.sql", "tool:flyway"]
+
+    def test_items_without_file_prefix_are_left_alone(self, tmp_path: Path) -> None:
+        cat = _make_category("api", sets={"api_endpoints": ["GET /a\\b"]})
+        path = tmp_path / "baseline.json"
+        save_baseline(_make_baseline(metrics={"api": cat}), path)
+
+        loaded = load_baseline(path)
+
+        assert loaded.metrics["api"].set_metrics["api_endpoints"].items == ["GET /a\\b"]

@@ -19,6 +19,7 @@ class NodejsSyncFsApiRule(FieldRule[NodejsAstFilePayload]):
     evidence_kind = "nodejs-ast-file"
     payload_type = NodejsAstFilePayload
     pattern_tag = "nodejs-sync-fs-api"
+    required_tech = ["nodejs"]
     all_clear_summary = "No synchronous blocking calls detected."
 
     def check(self, payload: NodejsAstFilePayload, ev: Evidence) -> Iterable[Hit]:

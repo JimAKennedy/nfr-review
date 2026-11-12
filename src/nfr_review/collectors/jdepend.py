@@ -247,7 +247,7 @@ def _analyze_bytecode_dir(
     collector_name: str,
     collector_version: str,
 ) -> list[Evidence] | None:
-    rel_dir = str(bytecode_dir.relative_to(repo_path))
+    rel_dir = bytecode_dir.relative_to(repo_path).as_posix()
 
     run_result = _run_jdepend(bytecode_dir, collector_name, collector_version, rel_dir)
     if isinstance(run_result, list):

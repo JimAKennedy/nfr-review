@@ -36,13 +36,13 @@ using interactive graph queries for deeper analysis.
 |-------------|---------|-------|
 | Python | 3.11+ | Required by nfr-review |
 | nfr-review | latest | `pip install nfr-review` |
-| graphifyy | >=0.8 | Included in `[graphify]` extra |
-| networkx | >=3.0 | Included in `[graphify]` extra |
+| graphifyy | >=0.8 | Included in core `nfr-review` |
+| networkx | >=3.0 | Included in core `nfr-review` |
 
-Install nfr-review with Graphify support:
+Install nfr-review:
 
 ```bash
-pip install "nfr-review[graphify]"
+pip install nfr-review
 ```
 
 This installs both the `graphify` CLI and the `networkx` library used for
@@ -59,15 +59,18 @@ nfr-review --version
 
 ## 2. Quick start
 
-Run a structural analysis on any repository in three commands:
+Run a structural analysis on any repository:
 
 ```bash
-# 1. Extract the knowledge graph (AST-only, no LLM needed)
-cd /path/to/target-repo
-graphify update . --no-cluster
+# 1. Turn structural analysis on (it is off by default) in the
+#    nfr-review.yaml you run nfr-review with
+cat >> nfr-review.yaml <<'EOF'
+graphify:
+  enabled: true
+EOF
 
-# 2. Run nfr-review — it auto-detects graphify-out/graph.json
-nfr-review run .
+# 2. Run nfr-review — it runs Graphify with its output in a temp dir
+nfr-review run /path/to/target-repo
 
 # 3. View the findings (CSV + JSONL output by default)
 ls *-nfr-review.csv *-nfr-review.jsonl
@@ -84,7 +87,7 @@ alongside the standard nfr-review categories.
 target repo
     │
     ▼
-graphify update ──► graphify-out/graph.json
+graphify update ──► <temp dir>/graphify-out/graph.json  (or graphify.graph_path)
                         │
                         ▼
 nfr-review run  ──► GraphifyCollector
@@ -107,7 +110,7 @@ nfr-review run  ──► GraphifyCollector
    directed graph of code entities (functions, classes, modules) and their
    relationships (calls, imports, defines, implements).
 
-2. **GraphifyCollector** reads `graphify-out/graph.json`, computes degree
+2. **GraphifyCollector** reads that `graph.json`, computes degree
    metrics (in-degree, out-degree, total degree per node) and community
    boundary statistics (internal vs cross-boundary edges per community).
 
@@ -144,14 +147,13 @@ which groups related nodes into communities. This is recommended for
 structural analysis — the weak-boundary and coupling-cluster rules depend
 on community assignments.
 
-### Pre-existing graph.json
+### Using a pre-built graph.json
 
-If `graphify-out/graph.json` already exists when nfr-review runs, the
-collector reuses it without re-running extraction. This is useful when:
-
-- You want to control the Graphify version or flags separately
-- The extraction was run in a previous CI step
-- You are pointing nfr-review at a custom graph path via configuration
+nfr-review never reads a `graphify-out/` it finds in the scanned repository.
+To use a graph you built yourself (for example with full clustering in an
+earlier CI step), set `graphify.graph_path` to it — a relative path resolves
+against the scanned repository. nfr-review then reads that file and does not
+run Graphify; keeping it current is up to you.
 
 ### Adding graphify-out/ to .gitignore
 
@@ -173,18 +175,22 @@ nfr-review run /path/to/repo
 
 The collector:
 
-1. Checks if `graphify` is on `PATH` — if not, skips with a warning
-2. Checks if `graphify-out/graph.json` exists — reuses if present
-3. Runs `graphify update <repo> --no-cluster` if no graph exists
-4. Parses `graph.json` and computes structural metrics
-5. Produces evidence under the `graphify` / `graphify-analysis` key
+1. If `graphify.enabled` is `false` (the default), does nothing.
+2. If `graphify.graph_path` is set, reads that `graph.json` and does not run Graphify.
+3. Otherwise checks that `graphify` is on `PATH` — if not, skips.
+4. Runs `graphify update <repo> --no-cluster` and `graphify cluster-only`
+   with `GRAPHIFY_OUT` pointing at a new temporary directory, so nothing
+   is written into the scanned repository; the directory is deleted once
+   the graph is read.
+5. Parses `graph.json` and computes structural metrics.
+6. Produces evidence under the `graphify` / `graphify-analysis` key.
 
 Structural rules then evaluate this evidence and produce findings under the
 `structure` category.
 
 ### Graceful degradation
 
-If Graphify is not installed, all structural rules are skipped — they
+If structural analysis is disabled or Graphify is not installed, all structural rules are skipped — they
 report `skipped: no graphify-analysis evidence available`. The rest of the
 nfr-review scan proceeds normally.
 
@@ -359,9 +365,11 @@ Add a `graphify` section to your `nfr-review.yaml`:
 
 ```yaml
 graphify:
+  enabled: false             # run structural analysis (default: false)
   query_enabled: true        # enable in-process graph queries (default: true)
-  mcp_enabled: false          # use MCP server instead of in-process (default: false)
-  graph_path: null            # custom path to graph.json (default: auto-detect)
+  mcp_enabled: false         # use MCP server instead of in-process (default: false)
+  graph_path: null           # pre-built graph.json, relative to the scanned repo
+                             # (default: run Graphify into a temp dir)
 ```
 
 ### Category weight
@@ -380,6 +388,9 @@ category_weights:
 ## 9. CI integration
 
 ### GitHub Actions
+
+Set `graphify.enabled: true` in the repository's `nfr-review.yaml`;
+nfr-review runs Graphify itself.
 
 Add Graphify to your nfr-review workflow:
 
@@ -400,10 +411,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install nfr-review with Graphify
-        run: pip install "nfr-review[graphify]"
-
-      - name: Extract knowledge graph
-        run: graphify update . --no-cluster
+        run: pip install nfr-review
 
       - name: Run nfr-review
         run: nfr-review run . --sarif findings.sarif
@@ -411,7 +419,8 @@ jobs:
 
 ### Nightly regression
 
-For nightly CI, run with full clustering for richer community analysis:
+Build the graph with full clustering yourself and point nfr-review at it
+with `graphify.enabled: true` and `graphify.graph_path: graphify-out/graph.json`:
 
 ```yaml
 - name: Extract knowledge graph (full)
@@ -475,13 +484,13 @@ git clone https://github.com/example/my-cli-tool.git
 cd my-cli-tool
 
 # Install nfr-review with Graphify
-pip install "nfr-review[graphify]"
+pip install nfr-review
 
-# Extract the knowledge graph
-graphify update . --no-cluster
+# Turn structural analysis on
+printf 'graphify:\n  enabled: true\n' > "$HOME/nfr-graphify.yaml"
 
 # Run the structural review
-nfr-review run .
+nfr-review run . --config "$HOME/nfr-graphify.yaml"
 ```
 
 ### Expected report output
@@ -539,7 +548,7 @@ if path:
 Graphify is not installed or not on PATH. Install with:
 
 ```bash
-pip install "nfr-review[graphify]"
+pip install nfr-review
 ```
 
 Verify: `which graphify` should return a path.
@@ -548,8 +557,9 @@ Verify: `which graphify` should return a path.
 
 The Graphify collector was skipped. Check:
 
-1. Is `graphify` installed? (`graphify --version`)
-2. Does `graphify-out/graph.json` exist in the target repo?
+1. Is `graphify.enabled: true` set?
+2. Is `graphify` installed (`graphify --version`), or is `graphify.graph_path`
+   set to an existing file?
 3. Did `graphify update` succeed? Run it manually and check stderr.
 
 ### Large graph.json causes slow scans

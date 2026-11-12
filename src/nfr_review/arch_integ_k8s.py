@@ -64,7 +64,7 @@ def discover_k8s_integrations(
             continue
 
         for yaml_file in yaml_files:
-            rel_path = str(yaml_file.relative_to(repo_path))
+            rel_path = yaml_file.relative_to(repo_path).as_posix()
             if should_exclude_path(rel_path):
                 continue
 
@@ -202,7 +202,7 @@ def discover_k8s_env_integrations(
             continue
 
         for yaml_file in yaml_files:
-            rel_path = str(yaml_file.relative_to(repo_path))
+            rel_path = yaml_file.relative_to(repo_path).as_posix()
             if should_exclude_path(rel_path):
                 continue
 

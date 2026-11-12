@@ -85,7 +85,7 @@ class TestEngineIntegration:
     def full_result(self) -> RunResult:
         cregistry, rregistry = _nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        return engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        return engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
 
     def test_engine_produces_findings_for_bad_code(self, full_result: RunResult) -> None:
         fired_rule_ids = {f.rule_id for f in full_result.findings}
@@ -99,7 +99,7 @@ class TestEngineIntegration:
         engine = Engine(collectors=cregistry, rules=rregistry)
         good_only = NODEJS_REPO / "good_code.js"
         assert good_only.exists()
-        result = engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        result = engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
         good_findings = [
             f
             for f in result.findings
@@ -112,7 +112,7 @@ class TestEngineIntegration:
     def test_nodejs_rules_skip_without_nodejs_files(self) -> None:
         cregistry, rregistry = _nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=PYTHON_REPO, config=Config(tech={}))
+        result = engine.run(target=PYTHON_REPO, config=Config(tech={"nodejs": True}))
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
         for rule_id, _ in NODEJS_SPECIFIC_RULES:
             assert rule_id in skipped_ids, (
@@ -134,7 +134,7 @@ class TestEngineIntegration:
         cregistry, _ = _nodejs_registries()
         engine_evidence: list = []
         collector = cregistry.get("nodejs-ast")
-        produced = collector.collect(NODEJS_REPO, Config(tech={}))
+        produced = collector.collect(NODEJS_REPO, Config(tech={"nodejs": True}))
         engine_evidence.extend(produced)
         assert len(engine_evidence) > 0
         for ev in engine_evidence:
@@ -172,7 +172,7 @@ class TestCrossLanguageWithNodejs:
     def full_result(self) -> RunResult:
         cregistry, rregistry = _nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        return engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        return engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
 
     def test_bare_except_detects_bare_catch(self, full_result: RunResult) -> None:
         findings = _findings_by_rule(full_result, "bare-except-catch-all")
@@ -193,7 +193,7 @@ class TestCrossLanguageWithNodejs:
         rregistry.register("bare-except-catch-all", BareExceptCatchAllRule())
         rregistry.register("logging-to-stdout", LoggingToStdoutRule())
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=PYTHON_REPO, config=Config(tech={}))
+        result = engine.run(target=PYTHON_REPO, config=Config(tech={"nodejs": True}))
         findings = result.findings
         assert len(findings) > 0, "Cross-language rules should produce Python findings"
 
@@ -209,7 +209,7 @@ class TestCrossLanguageWithNodejs:
         rregistry.register("bare-except-catch-all", BareExceptCatchAllRule())
         rregistry.register("logging-to-stdout", LoggingToStdoutRule())
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=go_repo, config=Config(tech={}))
+        result = engine.run(target=go_repo, config=Config(tech={"nodejs": True}))
         findings = result.findings
         assert len(findings) > 0, "Cross-language rules should produce Go findings"
 
@@ -223,7 +223,7 @@ class TestTechGating:
     def test_rules_skip_when_no_js_files(self) -> None:
         cregistry, rregistry = _nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=PYTHON_REPO, config=Config(tech={}))
+        result = engine.run(target=PYTHON_REPO, config=Config(tech={"nodejs": True}))
         skipped_ids = {e["rule_id"] for e in result.run_metadata.rules_skipped}
         for rule_id, _ in NODEJS_SPECIFIC_RULES:
             assert rule_id in skipped_ids, (
@@ -233,7 +233,7 @@ class TestTechGating:
     def test_rules_fire_when_js_files_present(self) -> None:
         cregistry, rregistry = _nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        result = engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
         ran = set(result.run_metadata.rules_run)
         for rule_id, _ in NODEJS_SPECIFIC_RULES:
             assert rule_id in ran, f"{rule_id} should have run for Node.js repo"
@@ -241,7 +241,7 @@ class TestTechGating:
     def test_skip_reason_mentions_nodejs_ast(self) -> None:
         cregistry, rregistry = _no_nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        result = engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
         for entry in result.run_metadata.rules_skipped:
             if entry["rule_id"] in {r[0] for r in NODEJS_SPECIFIC_RULES}:
                 assert "nodejs-ast" in entry["reason"]
@@ -249,7 +249,7 @@ class TestTechGating:
     def test_no_findings_without_collector(self) -> None:
         cregistry, rregistry = _no_nodejs_registries()
         engine = Engine(collectors=cregistry, rules=rregistry)
-        result = engine.run(target=NODEJS_REPO, config=Config(tech={}))
+        result = engine.run(target=NODEJS_REPO, config=Config(tech={"nodejs": True}))
         nodejs_findings = [
             f for f in result.findings if f.rule_id in {r[0] for r in NODEJS_SPECIFIC_RULES}
         ]

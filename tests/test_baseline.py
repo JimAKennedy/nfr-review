@@ -403,16 +403,13 @@ class TestClassifyFindings:
 
 
 class TestCLIBaseline:
-    def test_baseline_filters_known_findings_exit_0(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When all findings match the baseline, exit 0 (no regressions)."""
-        # Suppress LLM-powered rules (adr-gap etc.) which are non-deterministic
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setenv("NFR_LLM_BACKEND", "api")
-        import nfr_review.llm_client as _lc
+    @pytest.mark.usefixtures("offline_llm")
+    def test_baseline_filters_known_findings_exit_0(self, tmp_path: Path) -> None:
+        """When all findings match the baseline, exit 0 (no regressions).
 
-        monkeypatch.setattr(_lc, "_ENV_LOADED", True)
+        LLM-powered rules and collectors are non-deterministic; ``offline_llm``
+        (tests/conftest.py) patches ``create_llm_client`` so they skip.
+        """
 
         target = tmp_path / "repo"
         target.mkdir()
@@ -611,3 +608,72 @@ class TestBaselineNoise:
         result = classify_findings([pair], load_baseline(path))
 
         assert result.new == [pair]
+
+
+# ---- Windows baselines: locators recorded with backslashes ------------------
+
+
+class TestWindowsBaselineLocators:
+    """Baselines written on Windows before locators used ``/`` still match."""
+
+    def test_backslash_locators_are_normalised_on_load(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(
+            path,
+            [
+                _make_finding(evidence_locator="src\\pkg\\a.py:3"),
+                _make_finding(
+                    rule_id="R002",
+                    evidence_locator="src\\pkg\\b.py:7",
+                    content_hash="abc123def456",
+                ),
+            ],
+        )
+
+        baseline = load_baseline(path)
+
+        assert baseline.legacy_keys == {
+            ("R001", "src/pkg/a.py:3", "missing-readme"),
+            ("R002", "src/pkg/b.py:7", "missing-readme"),
+        }
+        assert baseline.stable_keys == {
+            ("R002", "src/pkg/b.py", "missing-readme", "abc123def456")
+        }
+        assert set(baseline.hashless_summaries) == {
+            ("R001", "src/pkg/a.py:3", "missing-readme")
+        }
+
+    def test_backslash_legacy_key_matches_same_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [_make_finding(evidence_locator="src\\foo.py:12")])
+        current = _make_finding(evidence_locator="src/foo.py:12")
+
+        result = classify_findings([current], load_baseline(path))
+
+        assert result.new == []
+        assert result.shifted == []
+        assert result.resolved == []
+
+    def test_backslash_stable_key_matches_shifted_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(
+            path,
+            [_make_finding(evidence_locator="src\\foo.py:12", content_hash="abc123def456")],
+        )
+        current = _make_finding(evidence_locator="src/foo.py:15", content_hash="abc123def456")
+
+        result = classify_findings([current], load_baseline(path))
+
+        assert result.new == []
+        assert [s.baseline_locator for s in result.shifted] == ["src/foo.py:12"]
+
+    def test_backslash_hashless_entry_matches_moved_finding(self, tmp_path: Path) -> None:
+        path = tmp_path / "baseline.jsonl"
+        _write_jsonl(path, [_make_finding(evidence_locator="src\\foo.py:12")])
+        moved = _make_finding(evidence_locator="src/foo.py:20")
+
+        result = classify_findings([moved], load_baseline(path))
+
+        assert result.new == []
+        assert [s.baseline_locator for s in result.shifted] == ["src/foo.py:12"]
+        assert result.resolved == []

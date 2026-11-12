@@ -7,6 +7,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- **LLM integration moved to ai-tooling** — `nfr_review.llm_client` is
+  removed; LLM access goes through `nfr_review.llm_integration`, which
+  delegates to the `ai-tooling` library from the `[llm]` extra and falls
+  back to an inert client without it. `LlmClient.analyze(prompt,
+  evidence_bundle, max_tokens)` is replaced by `LlmClient.call(prompt, *,
+  max_tokens)`; `serialize_evidence_bundle` is replaced by
+  `serialize_bundle`; `LlmUnavailableError` is replaced by
+  `ProviderUnavailableError`; the `AnthropicClient`,
+  `OpenAICompatibleClient` and `ClaudeCliClient` classes are removed, and
+  `nfr_review.protocols.LlmClient` now re-exports ai-tooling's protocol.
+  Every backend, Claude CLI included, needs the `[llm]` extra. Custom rules
+  that call the LLM must switch to `call()`.
+- **`Capabilities.weasyprint` removed** — `detect_capabilities()` reports
+  only `git`, `mmdc` and `dot`.
+
+### Added
+
+- **Rust language support** — Cargo.toml detection, a tree-sitter AST
+  collector, a Cargo.toml dependency collector (deps.dev `cargo`
+  ecosystem) and five rules: `rust-unwrap-expect`,
+  `rust-mutex-lock-unwrap`, `rust-http-no-timeout`,
+  `rust-blocking-in-async` and `rust-unbounded-spawn-in-loop`.
+- **`graphify.enabled`** — new config key (default `false`) that turns
+  the graphify collector on.
+- **`run --strict-collectors`** — exits 1 after writing its outputs if any
+  collector failed; missing-grammar warnings do not count. The Container
+  E2E job uses it.
+- **Missing grammar warnings** — when a tree-sitter grammar cannot be
+  loaded, the run reports a warning naming it instead of silently
+  producing no evidence for that language.
+
+### Changed
+
+- **PDF rendering uses Typst** — weasyprint and its Cairo/Pango system
+  libraries are replaced by the self-contained `typst` wheel, so `report`
+  and `arch` PDFs build on every platform, including Windows. Typst
+  markup in report content is escaped and compilation is confined to a
+  temporary root. The Docker image no longer installs Cairo/Pango.
+- **Optional extras consolidated** — all language grammars, graphviz,
+  graphifyy, networkx, aiohttp and typst are core dependencies. The
+  `[pdf]`, `[diagrams]`, `[monitor]`, `[graphify]`, `[llm-anthropic]` and
+  `[llm-openai]` extras are removed; use `[llm]` for LLM features.
+  nfr-review no longer installs `openai`: the OpenAI-compatible backend
+  needs `pip install openai` alongside `[llm]`. `anthropic` is no longer
+  in `[dev]`. `[full]` is now `[llm,scancode,otel]`. Remaining extras:
+  `[llm]`, `[scancode]`, `[otel]`, `[full]`, `[dev]`.
+- **Technology detection and `required_tech`** — every Go, Python, Java,
+  Node.js and C# rule now declares `required_tech`, so language rules run
+  only when their technology is detected. Detection now finds Go, Rust,
+  Node.js, Python, Java and Spring Boot modules in subdirectories
+  (monorepos), and detects Python from scripts alone, without a packaging
+  manifest.
+- **Graphify is opt-in** — the graphify collector no longer runs on every
+  scan. With `graphify.enabled: true` it reads `graphify.graph_path` if
+  set, otherwise runs graphify with its output in a temporary directory.
+  A `graphify-out/` directory in the scanned repository is never read or
+  written.
+- **Evidence locators use forward slashes on every platform**, so JSONL,
+  CSV and SARIF output on Windows matches other platforms.
+- **LLM configuration** — the LLM client honours `LlmConfig` defaults,
+  `NFR_LLM_*` environment overrides and a `.env` file in the source
+  checkout.
+- **`click>=8.2`** is now the minimum supported version.
+- **CI** — coverage is measured over all shipped code, and the LLM
+  integration tests publish their own coverage report.
+
+### Fixed
+
+- Windows: baselines, structural (design-change) baselines and issue
+  markers recorded with `\` locators still match after the forward-slash
+  change.
+- Windows: collector subprocesses are stopped with `terminate()` instead
+  of `SIGTERM`, and `nfr-review monitor` no longer depends on POSIX-only
+  signal and `resource` APIs.
+- `nfr-review all` passes `--exclude-tests`/`--include-tests` to
+  architecture configuration-integration discovery, which previously
+  always excluded test paths.
+- Rust: io `.read(..)`/`.write(..)` calls with arguments are not reported
+  as lock calls; blocking calls inside closures in async functions are not
+  reported, and those inside `async {}` blocks in sync functions are;
+  test-code suppression matches `#[test]`, `#[cfg(test)]` and a
+  `mod tests` exactly; imported paths are resolved;
+  `rust-mutex-lock-unwrap` skips test code; unwrap summaries are
+  single-line and bounded; rule descriptions are complete sentences.
+- Rust dependencies: workspace-inherited, target-specific and renamed
+  Cargo dependencies resolve to the right crate, and `target/` is not
+  parsed.
+- `tree-sitter-dockerfile` is installed only where a 0.2 wheel exists
+  instead of as an empty placeholder; an `AttributeError` raised outside
+  grammar loading is no longer reported as a missing grammar; each
+  grammar warning is reported once per run.
+- PDF: the Scoring Methodology appendix, including the LLM usage
+  disclosure, is back in the Typst PDF; architecture diagrams render at
+  scale 4 on a 2400x1600 viewport again.
+- Architecture report: the LLM client is created from the config's `llm`
+  block (`nfr-review all` passes it too) and the disclosed model is the
+  one it resolved; an architecture profile over 8 KB still reaches the
+  market-comparison call.
+- Detection walks prune dot-directories, `node_modules` and the other
+  always-skipped directories, `target/` and test directories instead of
+  filtering after a full walk, so a `Cargo.toml` or `pom.xml` under
+  `target/` no longer counts towards detection.
+- Privacy rule: SCM-username suppression applies only to SSH remotes such
+  as `git@github.com:org/repo`; addresses like `github@acme-corp.com` in
+  prose are reported.
+- The executive summary sends its full payload to the LLM instead of an
+  empty list when it exceeds 8 KB.
+
+### Security
+
+- Docker image: zlib1g is upgraded to the Debian fix for CVE-2026-76844
+  and CVE-2026-85091, and the base image is pinned by digest.
+
+### Dependencies
+
+- `requirements.txt` and `requirements-dev.txt` recompiled from
+  `pyproject.toml`; `tree-sitter` is held below 0.26 for
+  `graphifyy==0.9.97`.
+- `tree-sitter-dockerfile>=0.2`, installed only on macOS arm64 and Linux
+  x86_64.
+- Dependabot now updates the Docker base image digest.
+
 ## [0.3.1] - 2026-06-23
 
 ### Added

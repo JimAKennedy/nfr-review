@@ -6,9 +6,8 @@ import json
 from unittest.mock import MagicMock
 
 from nfr_review.collectors.payloads.adr import AdrDocumentPayload
-from nfr_review.llm_client import LlmUnavailableError
+from nfr_review.llm_integration import ProviderUnavailableError, serialize_bundle
 from nfr_review.models import Evidence
-from nfr_review.protocols import LlmClient
 from nfr_review.rules.adr_drift import ArchitecturalDriftFromAdrRule
 
 
@@ -62,17 +61,17 @@ def _make_java_evidence(
     )
 
 
-def _unavailable_client() -> LlmClient:
-    client = MagicMock(spec=LlmClient)
+def _unavailable_client() -> MagicMock:
+    client = MagicMock()
     client.available = False
-    client.analyze.side_effect = LlmUnavailableError("no key")
+    client.call.side_effect = ProviderUnavailableError("no key")
     return client
 
 
-def _mock_client(response: str) -> LlmClient:
-    client = MagicMock(spec=LlmClient)
+def _mock_client(response: str) -> MagicMock:
+    client = MagicMock()
     client.available = True
-    client.analyze.return_value = response
+    client.call.return_value = response
     return client
 
 
@@ -228,17 +227,18 @@ class TestEvidenceBundleSize:
             for i in range(50)
         ]
         rule = ArchitecturalDriftFromAdrRule(llm_client=_unavailable_client())
-        bundle = rule._build_evidence_bundle(adr_items, java_items)
-        assert len(bundle.encode()) <= 8192
+        evidence_items = rule._build_evidence_items(adr_items, java_items)
+        serialized = serialize_bundle(evidence_items, max_bytes=8192)
+        assert len(serialized.encode()) <= 8192
 
 
 class TestLlmErrors:
     def test_api_error_returns_skipped(self) -> None:
         adr_ev = _make_adr_evidence()
         java_ev = _make_java_evidence()
-        llm = MagicMock(spec=LlmClient)
+        llm = MagicMock()
         llm.available = True
-        llm.analyze.side_effect = RuntimeError("API timeout")
+        llm.call.side_effect = RuntimeError("API timeout")
         rule = ArchitecturalDriftFromAdrRule(llm_client=llm)
         result = rule.evaluate([adr_ev, java_ev], context=None)
         assert result.skipped is True
@@ -286,8 +286,7 @@ class TestAdrsWithoutTitles:
         )
         java_ev = _make_java_evidence()
         rule = ArchitecturalDriftFromAdrRule(llm_client=_unavailable_client())
-        bundle = rule._build_evidence_bundle([adr_with_title, adr_no_title], [java_ev])
-        parsed = json.loads(bundle)
-        adr_section = [s for s in parsed if s["section"] == "adrs"][0]
+        evidence_items = rule._build_evidence_items([adr_with_title, adr_no_title], [java_ev])
+        adr_section = [s for s in evidence_items if s["section"] == "adrs"][0]
         assert len(adr_section["items"]) == 1
         assert adr_section["items"][0]["title"] == "ADR-001: Real Decision"

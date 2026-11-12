@@ -154,7 +154,7 @@ class JaCoCoReportCollector:
                     )
 
                 payload = JacocoReportPayload(
-                    report_path=str(rel),
+                    report_path=rel.as_posix(),
                     report_name=report_name,
                     overall=overall,
                     packages=packages,
@@ -164,7 +164,7 @@ class JaCoCoReportCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="jacoco-report",
                         payload=payload,
                     )

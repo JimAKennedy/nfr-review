@@ -33,6 +33,7 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
     "java": ("tree_sitter_java", "language"),
     "python": ("tree_sitter_python", "language"),
     "go": ("tree_sitter_go", "language"),
+    "rust": ("tree_sitter_rust", "language"),
     "hcl": ("tree_sitter_hcl", "language"),
     "dockerfile": ("tree_sitter_dockerfile", "language"),
     "typescript": ("tree_sitter_typescript", "language_typescript"),
@@ -41,16 +42,35 @@ _GRAMMAR_LOADERS: dict[str, tuple[str, str]] = {
 }
 
 
+class GrammarNotInstalledError(ImportError):
+    """The grammar package is installed but does not expose its language function.
+
+    This is what the ``tree-sitter-dockerfile`` 0.0.0a1 placeholder looks like.
+    It subclasses ``ImportError`` so one ``except ImportError`` covers both a
+    missing package and an empty one, while an ``AttributeError`` raised by a
+    real bug in the grammar or in parser construction still propagates.
+    """
+
+
 def make_parser(language: str) -> tree_sitter.Parser:
-    """Create a tree-sitter Parser for *language* using individual grammar packages."""
+    """Create a tree-sitter Parser for *language* using individual grammar packages.
+
+    Raises ``ImportError`` (``ModuleNotFoundError``) when the grammar package is
+    absent and ``GrammarNotInstalledError`` when it lacks its language function.
+    """
     if language not in _GRAMMAR_LOADERS:
         raise ValueError(f"Unsupported tree-sitter language: {language!r}")
     module_name, func_name = _GRAMMAR_LOADERS[language]
     import importlib
 
     mod = importlib.import_module(module_name)
-    lang_ptr = getattr(mod, func_name)()
-    lang = tree_sitter.Language(lang_ptr)
+    try:
+        language_func = getattr(mod, func_name)
+    except AttributeError as exc:
+        raise GrammarNotInstalledError(
+            f"{module_name} does not provide {func_name}()", name=module_name
+        ) from exc
+    lang = tree_sitter.Language(language_func())
     return tree_sitter.Parser(lang)
 
 
@@ -90,21 +110,30 @@ class BaseASTCollector(ABC):
 
     def __init__(self) -> None:
         self._parser: Parser | None = None  # type: ignore[assignment]
+        self.grammar_warnings: list[str] = []
 
     def _get_parser(self) -> Parser | None:
         """Return the tree-sitter parser, creating it on first use.
 
         Returns ``None`` if the grammar package is not installed.
+        Records a warning string in ``grammar_warnings`` so the engine can
+        surface it in ``RunResult.warnings``.
         """
         if self._parser is None:
             try:
                 self._parser = make_parser(self.language)  # type: ignore[assignment]
-            except (ImportError, ModuleNotFoundError):
+            except ImportError:  # includes ModuleNotFoundError, GrammarNotInstalledError
+                msg = (
+                    f"tree-sitter grammar for {self.language} not installed"
+                    " on this platform — collector disabled"
+                )
                 logger.warning(
                     "tree-sitter grammar for %s not installed — %s collector disabled",
                     self.language,
                     self.name,
                 )
+                if msg not in self.grammar_warnings:
+                    self.grammar_warnings.append(msg)
                 return None
         return self._parser
 
@@ -120,7 +149,15 @@ class BaseASTCollector(ABC):
         ...
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        # Registered collectors are process-wide singletons: start each run
+        # with no warnings so the engine reports only this run's.
+        self.grammar_warnings = []
         if self._get_parser() is None:
+            logger.info(
+                "tree-sitter grammar for %s not installed — %s collector skipped",
+                self.language,
+                self.name,
+            )
             return []
         exclude_pats = compile_exclude_patterns(getattr(config, "exclude_paths", []))
         exclude_test = getattr(config, "exclude_test_paths", True)
@@ -141,18 +178,19 @@ class BaseASTCollector(ABC):
                 except OSError as exc:
                     logger.debug("Cannot read %s: %s", rel, exc)
                     continue
+                rel_posix = rel.as_posix()
                 try:
-                    payload = self._parse_file(source, str(rel))
+                    payload = self._parse_file(source, rel_posix)
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Parse error in %s: %s", rel, exc)
                     continue
                 if not isinstance(payload, BasePayload):
-                    payload["file_path"] = str(rel)
+                    payload["file_path"] = rel_posix
                 evidence.append(
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel_posix,
                         kind=self.evidence_kind,
                         payload=payload,
                     )
@@ -160,4 +198,4 @@ class BaseASTCollector(ABC):
         return evidence
 
 
-__all__ = ["BaseASTCollector", "find_nodes", "make_parser", "text"]
+__all__ = ["BaseASTCollector", "GrammarNotInstalledError", "find_nodes", "make_parser", "text"]

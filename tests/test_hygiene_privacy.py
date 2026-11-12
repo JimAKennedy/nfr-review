@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from nfr_review.hygiene import hygiene_collector_registry, hygiene_rule_registry
 from nfr_review.hygiene.collectors.privacy import PrivacyCollector
 from nfr_review.hygiene.rules.prv_internal_refs import InternalRefsRule
@@ -284,6 +286,45 @@ class TestPrivacyCollector:
         evs = PrivacyCollector().collect(tmp_path, None)
         assert evs[0].payload["files_scanned"] == 1
         assert evs[0].payload["pii_matches"] == []
+
+
+def _emails(tmp_path: Path, content: str) -> list[dict[str, Any]]:
+    """Collect privacy evidence for one Markdown file; return its email matches."""
+    _write_file(tmp_path, "docs/notes.md", content)
+    pii = PrivacyCollector().collect(tmp_path, None)[0].payload["pii_matches"]
+    return [m for m in pii if m["pattern_type"] == "email"]
+
+
+class TestScmUsernameFilter:
+    """SCM service accounts are noise only inside SSH remotes."""
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "Contact github@acme-corp.com for access.",
+            "Pager alerts go to deploy@acme.com.",
+            "Escalate to ci@acme.com: the on-call owner.",
+            "Write to gitlab@corp-mail.org today",
+        ],
+    )
+    def test_scm_local_part_in_prose_is_reported(self, tmp_path: Path, line: str) -> None:
+        assert len(_emails(tmp_path, line + "\n")) == 1
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "git clone git@github.com:org/repo.git",
+            "url = ssh://git@github.com/org/repo",
+            "pip install git+ssh://git@gitlab.com/org/repo.git",
+            "remote: git@gitlab.example.com:org/repo.git",
+            "hg clone ssh://hg@bitbucket.org/org/repo",
+        ],
+    )
+    def test_scm_user_in_ssh_remote_is_not_reported(self, tmp_path: Path, line: str) -> None:
+        assert _emails(tmp_path, line + "\n") == []
+
+    def test_non_scm_user_in_ssh_remote_is_reported(self, tmp_path: Path) -> None:
+        assert len(_emails(tmp_path, "git clone alice@example.com:org/repo.git\n")) == 1
 
 
 # ---------------------------------------------------------------------------

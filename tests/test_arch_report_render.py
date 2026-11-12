@@ -33,15 +33,16 @@ from nfr_review.arch_models import (
     TechStackEntry,
 )
 from nfr_review.arch_report_render import (
+    _arch_market_analysis_typst,
+    _arch_repo_dependencies_typst,
+    _arch_test_coverage_typst,
     _md_repo_dependencies,
-    _pdf_market_analysis_html,
-    _pdf_repo_dependencies_html,
-    _pdf_test_coverage_html,
     render_arch_json,
     render_arch_markdown,
     render_arch_pdf,
     render_arch_report,
 )
+from nfr_review.output.pdf import _t
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -609,31 +610,6 @@ class TestRenderArchMarkdown:
 
 
 class TestRenderArchPdf:
-    def test_returns_none_without_weasyprint(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When weasyprint is not importable, render_arch_pdf returns None."""
-        import builtins
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if name == "weasyprint":
-                raise ImportError("no weasyprint")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", fake_import)
-        report = _make_full_report()
-        out = tmp_path / "report.pdf"
-        result = render_arch_pdf(report, out)
-        assert result is None
-        assert not out.exists()
-
-    @pytest.fixture()
-    def _requires_weasyprint(self) -> None:
-        pytest.importorskip("weasyprint")
-
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_created(self, tmp_path: Path) -> None:
         report = _make_full_report()
         out = tmp_path / "report.pdf"
@@ -644,7 +620,6 @@ class TestRenderArchPdf:
         # PDF magic bytes
         assert out.read_bytes()[:5] == b"%PDF-"
 
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_empty_report(self, tmp_path: Path) -> None:
         report = _make_empty_report()
         out = tmp_path / "report.pdf"
@@ -652,7 +627,6 @@ class TestRenderArchPdf:
         assert result == out
         assert out.read_bytes()[:5] == b"%PDF-"
 
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_pdf_without_llm_sections(self, tmp_path: Path) -> None:
         report = _make_report_without_llm_sections()
         out = tmp_path / "report.pdf"
@@ -685,21 +659,21 @@ class TestPdfTestCoverageHtml:
                 ),
             ],
         )
-        html = _pdf_test_coverage_html(report)
+        typst = _arch_test_coverage_typst(report)
 
-        assert "<h4>comp-svc</h4>" in html
-        assert "<h4>comp-db</h4>" in html
-        assert "Functional:</strong> adequate" in html
-        assert "NFR:</strong> minimal" in html
-        assert "<td>No security tests</td>" in html
-        assert "<td>No load tests</td>" in html
-        assert "No gaps identified." in html
+        assert _t("comp-svc") in typst
+        assert _t("comp-db") in typst
+        assert "adequate" in typst
+        assert "minimal" in typst
+        assert "No security tests" in typst
+        assert "No load tests" in typst
+        assert "No gaps identified." in typst
 
     def test_empty_coverage_returns_empty(self) -> None:
         report = ArchReport(metadata=_make_metadata(), test_coverage=[])
-        assert _pdf_test_coverage_html(report) == ""
+        assert _arch_test_coverage_typst(report) == ""
 
-    def test_gaps_table_class(self) -> None:
+    def test_gaps_table_present(self) -> None:
         report = ArchReport(
             metadata=_make_metadata(),
             test_coverage=[
@@ -709,12 +683,13 @@ class TestPdfTestCoverageHtml:
                 ),
             ],
         )
-        html = _pdf_test_coverage_html(report)
-        assert 'class="gaps-table"' in html
+        typst = _arch_test_coverage_typst(report)
+        assert "#table(" in typst
+        assert "Missing integration tests" in typst
 
 
 class TestPdfComparisonTableHtml:
-    def test_comparison_table_uses_fixed_layout_class(self) -> None:
+    def test_comparison_table_present(self) -> None:
         report = ArchReport(
             metadata=_make_metadata(),
             market_analysis=MarketAnalysisSection(
@@ -731,12 +706,11 @@ class TestPdfComparisonTableHtml:
                 overall_maturity="developing",
             ),
         )
-        html = _pdf_market_analysis_html(report)
+        typst = _arch_market_analysis_typst(report)
 
-        assert 'class="comparison-table"' in html
-        assert "wide-table" not in html
-        assert "Tool A" in html
-        assert "More mature platform" in html
+        assert "#table(" in typst
+        assert "Tool A" in typst
+        assert "More mature platform" in typst
 
     def test_no_comparisons_skips_table(self) -> None:
         report = ArchReport(
@@ -746,10 +720,10 @@ class TestPdfComparisonTableHtml:
                 overall_maturity="developing",
             ),
         )
-        html = _pdf_market_analysis_html(report)
+        typst = _arch_market_analysis_typst(report)
 
-        assert "comparison-table" not in html
-        assert "developing" in html
+        assert "#table(" not in typst
+        assert "developing" in typst
 
 
 # ---------------------------------------------------------------------------
@@ -797,11 +771,6 @@ class TestRenderArchReport:
         assert results["json"] is not None
         assert results["md"] is not None
 
-    @pytest.fixture()
-    def _requires_weasyprint(self) -> None:
-        pytest.importorskip("weasyprint")
-
-    @pytest.mark.usefixtures("_requires_weasyprint")
     def test_all_three_formats(self, tmp_path: Path) -> None:
         report = _make_full_report()
         results = render_arch_report(report, tmp_path, formats=["json", "md", "pdf"])
@@ -994,16 +963,17 @@ class TestRepoDependencies:
 
     def test_pdf_repo_deps_returns_empty_for_single_repo(self) -> None:
         report = _make_full_report()
-        assert _pdf_repo_dependencies_html(report) == ""
+        assert _arch_repo_dependencies_typst(report, {}, [0]) == ""
 
     def test_pdf_repo_deps_includes_section_for_multi_repo(self) -> None:
         report = _make_multi_repo_report()
-        html = _pdf_repo_dependencies_html(report)
+        typst = _arch_repo_dependencies_typst(report, {}, [0])
 
-        assert "<h2>Repository Dependencies</h2>" in html
-        assert "comp-order-svc" in html
-        assert "comp-payment-client" in html
-        assert "api_call" in html
+        assert "== Repository Dependencies" in typst
+        assert _t("comp-order-svc") in typst
+        assert _t("comp-payment-client") in typst
+        # _t() escapes underscores, so api_call → api\_call in the typst output
+        assert "api\\_call" in typst
 
     def test_edge_annotation_shows_component_names(self, tmp_path: Path) -> None:
         report = _make_multi_repo_report()
@@ -1122,3 +1092,27 @@ class TestConsolidatedFeatures:
 
         assert data["dynamic_analysis"] is None
         assert data["cross_repo_edges"] == []
+
+
+class TestArchDiagramResolution:
+    def test_arch_diagrams_render_at_scale_4_width_2400(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every arch diagram is rendered at the pre-typst resolution."""
+        calls: list[dict[str, object]] = []
+
+        def _fake_render(
+            mermaid_text: str, output_path: Path, **kwargs: object
+        ) -> Path | None:
+            calls.append(kwargs)
+            return None  # fall through to the SVG/table fallbacks
+
+        monkeypatch.setattr("nfr_review.output.render.render_mermaid_to_png", _fake_render)
+        render_arch_pdf(_make_full_report(), tmp_path / "report.pdf")
+
+        # _make_full_report has a C4 diagram and a domain context map.
+        assert len(calls) >= 2
+        for kwargs in calls:
+            assert kwargs.get("scale") == 4
+            assert kwargs.get("width") == 2400
+            assert kwargs.get("height") == 1600

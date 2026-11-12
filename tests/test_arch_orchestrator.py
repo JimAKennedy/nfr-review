@@ -5,13 +5,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
+import click
 import pytest
 from click.testing import CliRunner
 
 from nfr_review.arch_models import ArchReport
 from nfr_review.arch_orchestrator import run_arch_review
-from nfr_review.cli import cli
+from nfr_review.cli import _execute_all_pipelines, cli
+from nfr_review.config import LlmConfig
+from nfr_review.llm_integration import ProviderUnavailableError
 
 
 @pytest.fixture()
@@ -281,3 +285,156 @@ class TestArchCliCommand:
             ],
         )
         assert result.exit_code == 0
+
+
+class _OfflineClient:
+    """An available LLM client whose calls fail, so analysis falls back."""
+
+    available = True
+
+    def call(self, prompt: str, *, max_tokens: int = 1024) -> str:
+        raise ProviderUnavailableError("offline test client")
+
+
+class TestArchLlmModelDisclosure:
+    @pytest.fixture()
+    def created_with(self, monkeypatch: pytest.MonkeyPatch) -> list[LlmConfig | None]:
+        """Clear NFR_LLM_* and record the config each client is created with."""
+        for var in (
+            "NFR_LLM_MODEL",
+            "NFR_LLM_PROVIDER",
+            "NFR_LLM_BACKEND",
+            "NFR_LLM_BASE_URL",
+        ):
+            monkeypatch.delenv(var, raising=False)
+        seen: list[LlmConfig | None] = []
+
+        def _fake_create(config: LlmConfig | None = None) -> _OfflineClient:
+            seen.append(config)
+            return _OfflineClient()
+
+        monkeypatch.setattr("nfr_review.llm_integration.create_llm_client", _fake_create)
+        return seen
+
+    def test_model_from_config_only(
+        self, sample_repo: Path, created_with: list[LlmConfig | None]
+    ) -> None:
+        report = run_arch_review(
+            [sample_repo], llm_config=LlmConfig(model="config-only-model")
+        )
+        assert report.metadata.llm_available is True
+        assert report.metadata.llm_model == "config-only-model"
+        assert created_with[0] is not None
+        assert created_with[0].model == "config-only-model"
+
+    def test_env_override_is_disclosed(
+        self,
+        sample_repo: Path,
+        created_with: list[LlmConfig | None],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("NFR_LLM_MODEL", "env-model")
+        report = run_arch_review([sample_repo], llm_config=LlmConfig(model="config-model"))
+        assert report.metadata.llm_model == "env-model"
+
+    def test_default_model_without_config(
+        self, sample_repo: Path, created_with: list[LlmConfig | None]
+    ) -> None:
+        report = run_arch_review([sample_repo])
+        assert report.metadata.llm_model == LlmConfig().model
+
+    def test_all_pipeline_passes_config_llm(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg = tmp_path / "nfr-review.yaml"
+        cfg.write_text("llm:\n  model: cfg-file-model\n", encoding="utf-8")
+        seen: dict[str, object] = {}
+
+        def _fake_run_arch_review(targets: list[Path], **kwargs: object) -> ArchReport:
+            seen.update(kwargs)
+            raise RuntimeError("stop after capturing the arguments")
+
+        monkeypatch.setattr(
+            "nfr_review.arch_orchestrator.run_arch_review", _fake_run_arch_review
+        )
+        with pytest.raises(click.exceptions.Exit):
+            _execute_all_pipelines(
+                target_list=[tmp_path],
+                repo_names=["repo"],
+                timestamp="20260101T000000",
+                output_dir=tmp_path / "out",
+                config_path=cfg,
+                no_arch=False,
+                no_tests=True,
+                no_deps=True,
+                no_diagrams=True,
+                no_pdf=True,
+                no_summary=True,
+                test_timeout=1,
+                no_score=True,
+                max_resolve_rounds=None,
+                no_llm=False,
+                diagram_mode="hierarchical",
+                exclude_tests=False,
+                workers=1,
+                quiet=True,
+            )
+        llm_config = seen["llm_config"]
+        assert isinstance(llm_config, LlmConfig)
+        assert llm_config.model == "cfg-file-model"
+
+
+class TestArchTestPathExclusion:
+    """``exclude_test_paths`` reaches config-integration discovery."""
+
+    @staticmethod
+    def _repo_with_test_config(root: Path) -> Path:
+        cfg_dir = root / "src" / "test" / "resources"
+        cfg_dir.mkdir(parents=True)
+        (cfg_dir / "application.yml").write_text(
+            "spring:\n  redis:\n    url: redis://test-cache:6379\n"
+        )
+        (root / "pyproject.toml").write_text('[project]\nname = "s"\nversion = "0.1.0"\n')
+        return root
+
+    def test_default_excludes_test_path_config(self, tmp_path: Path) -> None:
+        repo = self._repo_with_test_config(tmp_path)
+        report = run_arch_review([repo], skip_llm=True)
+        assert [i for i in report.integration_points if i.protocol == "redis"] == []
+
+    def test_exclusion_off_discovers_test_path_config(self, tmp_path: Path) -> None:
+        repo = self._repo_with_test_config(tmp_path)
+        report = run_arch_review([repo], skip_llm=True, exclude_test_paths=False)
+        assert len([i for i in report.integration_points if i.protocol == "redis"]) == 1
+
+    def test_all_command_include_tests_reaches_arch_review(self, tmp_path: Path) -> None:
+        from nfr_review.cli import _execute_all_pipelines
+
+        with (
+            patch("nfr_review.arch_orchestrator.run_arch_review") as arch,
+            patch("nfr_review.arch_report_render.render_arch_report", return_value={}),
+            patch("nfr_review.cli.run_report_pipeline", return_value=MagicMock()),
+        ):
+            _execute_all_pipelines(
+                target_list=[tmp_path],
+                repo_names=["repo"],
+                timestamp="20260101-000000",
+                output_dir=tmp_path / "out",
+                config_path=None,
+                no_arch=False,
+                no_tests=True,
+                no_deps=True,
+                no_diagrams=True,
+                no_pdf=True,
+                no_summary=True,
+                test_timeout=1,
+                no_score=True,
+                max_resolve_rounds=None,
+                no_llm=True,
+                diagram_mode="hierarchical",
+                exclude_tests=False,
+                workers=1,
+                quiet=True,
+            )
+
+        assert arch.call_args.kwargs["exclude_test_paths"] is False

@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 from nfr_review.cli import cli
 
-CMAKE_FIXTURE = Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+CMAKE_FIXTURE = Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
 
 
 def test_run_prints_skipped_rule_warnings(tmp_path: Path) -> None:

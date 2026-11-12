@@ -149,10 +149,10 @@ class CmakeCollector:
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="cmake-config",
                     payload=CmakeConfigPayload(
-                        file_path=str(rel),
+                        file_path=rel.as_posix(),
                         cmake_minimum_required=cmake_min,
                         project_name=project_name,
                         project_version=project_version,

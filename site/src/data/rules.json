@@ -424,7 +424,9 @@
     "required_collectors": [
       "csharp-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "csharp"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -442,7 +444,9 @@
     "required_collectors": [
       "csharp-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "csharp"
+    ],
     "severity": "high",
     "category": "performance",
     "tags": [
@@ -461,7 +465,9 @@
     "required_collectors": [
       "csharp-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "csharp"
+    ],
     "severity": "low",
     "category": "performance",
     "tags": [
@@ -479,7 +485,9 @@
     "required_collectors": [
       "csharp-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "csharp"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -877,7 +885,9 @@
     "required_collectors": [
       "go-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "go"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -895,7 +905,9 @@
     "required_collectors": [
       "go-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "go"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -913,7 +925,9 @@
     "required_collectors": [
       "go-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "go"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -931,7 +945,9 @@
     "required_collectors": [
       "go-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "go"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -950,7 +966,9 @@
     "required_collectors": [
       "go-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "go"
+    ],
     "severity": "medium",
     "category": "maintainability",
     "tags": [
@@ -1156,7 +1174,9 @@
     "required_collectors": [
       "java-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "java"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1174,7 +1194,9 @@
     "required_collectors": [
       "java-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "java"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1193,7 +1215,9 @@
     "required_collectors": [
       "java-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "java"
+    ],
     "severity": "medium",
     "category": "maintainability",
     "tags": [
@@ -1213,7 +1237,9 @@
     "required_collectors": [
       "java-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "java"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1231,7 +1257,9 @@
     "required_collectors": [
       "java-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "java"
+    ],
     "severity": "high",
     "category": "performance",
     "tags": [
@@ -1390,7 +1418,9 @@
     "required_collectors": [
       "nodejs-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "nodejs"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1408,7 +1438,9 @@
     "required_collectors": [
       "nodejs-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "nodejs"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1427,7 +1459,9 @@
     "required_collectors": [
       "nodejs-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "nodejs"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -1446,7 +1480,9 @@
     "required_collectors": [
       "nodejs-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "nodejs"
+    ],
     "severity": "medium",
     "category": "performance",
     "tags": [
@@ -2158,7 +2194,9 @@
     "required_collectors": [
       "python-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "python"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -2177,7 +2215,9 @@
     "required_collectors": [
       "python-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "python"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -2195,7 +2235,9 @@
     "required_collectors": [
       "python-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "python"
+    ],
     "severity": "high",
     "category": "reliability",
     "tags": [
@@ -2213,7 +2255,9 @@
     "required_collectors": [
       "python-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "python"
+    ],
     "severity": "medium",
     "category": "maintainability",
     "tags": [
@@ -2233,7 +2277,9 @@
     "required_collectors": [
       "python-ast"
     ],
-    "required_tech": [],
+    "required_tech": [
+      "python"
+    ],
     "severity": "medium",
     "category": "maintainability",
     "tags": [
@@ -2243,6 +2289,110 @@
     "description": "Flags wildcard imports (from x import *) that obscure dependencies and pollute.",
     "compliance_refs": [
       "ISO 25010:Maintainability"
+    ]
+  },
+  {
+    "id": "rust-blocking-in-async",
+    "band": 1,
+    "required_collectors": [
+      "rust-ast"
+    ],
+    "required_tech": [
+      "rust"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "rust",
+      "async",
+      "concurrency"
+    ],
+    "description": "Flags blocking calls (thread::sleep, std::fs, a sync lock with no .await) inside async code, where they block the executor thread.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "rust-http-no-timeout",
+    "band": 1,
+    "required_collectors": [
+      "rust-ast"
+    ],
+    "required_tech": [
+      "rust"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "rust",
+      "http",
+      "timeout"
+    ],
+    "description": "Flags reqwest clients built without an explicit timeout.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "rust-mutex-lock-unwrap",
+    "band": 1,
+    "required_collectors": [
+      "rust-ast"
+    ],
+    "required_tech": [
+      "rust"
+    ],
+    "severity": "high",
+    "category": "reliability",
+    "tags": [
+      "rust",
+      "concurrency",
+      "error-handling"
+    ],
+    "description": "Flags .lock()/.read()/.write().unwrap() on std Mutex/RwLock, which panics.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "rust-unbounded-spawn-in-loop",
+    "band": 1,
+    "required_collectors": [
+      "rust-ast"
+    ],
+    "required_tech": [
+      "rust"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "rust",
+      "async",
+      "concurrency"
+    ],
+    "description": "Flags tokio::spawn calls inside a loop with nothing joining or bounding the spawned tasks.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
+    ]
+  },
+  {
+    "id": "rust-unwrap-expect",
+    "band": 1,
+    "required_collectors": [
+      "rust-ast"
+    ],
+    "required_tech": [
+      "rust"
+    ],
+    "severity": "medium",
+    "category": "reliability",
+    "tags": [
+      "rust",
+      "error-handling"
+    ],
+    "description": "Flags .unwrap()/.expect() calls outside test code that panic instead of propagating the error.",
+    "compliance_refs": [
+      "ISO 25010:Reliability"
     ]
   },
   {

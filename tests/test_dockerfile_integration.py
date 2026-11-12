@@ -18,6 +18,21 @@ from nfr_review.rules.dockerfile_secret_leakage import DockerfileSecretLeakageRu
 from nfr_review.rules.dockerfile_user_directive import DockerfileUserDirectiveRule
 from nfr_review.rules.sample import ReadmeExistsRule
 
+
+def _dockerfile_grammar_available() -> bool:
+    try:
+        import tree_sitter_dockerfile
+
+        return hasattr(tree_sitter_dockerfile, "language")
+    except ImportError:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _dockerfile_grammar_available(),
+    reason="tree-sitter-dockerfile grammar not available (stub package — see M.0 backlog)",
+)
+
 FIXTURES = Path(__file__).parent / "fixtures"
 DOCKERFILE_REPO = FIXTURES / "dockerfile-sample-repo"
 

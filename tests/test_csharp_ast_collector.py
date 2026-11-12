@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
@@ -265,3 +265,27 @@ class TestGoodCode:
         payload = _evidence_for(collector, "good_code.cs")
         assert len(payload["catch_blocks"]) == 1
         assert payload["catch_blocks"][0]["rethrows"] is True
+
+
+class TestWindowsRelativePath:
+    """A Windows-style relative path still yields a ``/``-separated locator."""
+
+    def test_windows_relative_path_gives_forward_slash_locator(
+        self, collector: CSharpAstCollector, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = tmp_path / "src" / "app"
+        src.mkdir(parents=True)
+        (src / "main.cs").write_text("class Y {}\n")
+        real_relative_to = Path.relative_to
+
+        def windows_relative_to(self: Path, *other: Path) -> PureWindowsPath:
+            return PureWindowsPath(*real_relative_to(self, *other).parts)
+
+        monkeypatch.setattr(Path, "relative_to", windows_relative_to)
+        assert str((tmp_path / "src" / "app" / "main.cs").relative_to(tmp_path)) == (
+            "src\\app\\main.cs"
+        )
+        results = collector.collect(tmp_path, config=None)
+        monkeypatch.undo()
+
+        assert [e.locator for e in results] == ["src/app/main.cs"]

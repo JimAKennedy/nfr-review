@@ -362,7 +362,7 @@ def _scan_sdk_file(path: Path, content: str, repo_path: Path) -> dict[str, Any] 
 
     rel = path.relative_to(repo_path)
     return {
-        "file_path": str(rel),
+        "file_path": rel.as_posix(),
         "language": spec["language"],
         "sdk_packages": sorted(set(import_matches)),
         "instrumentation_type": instr_type,
@@ -395,10 +395,10 @@ def _build_pipeline_evidence(
     ev = Evidence(
         collector_name=collector_name,
         collector_version=collector_version,
-        locator=str(rel),
+        locator=rel.as_posix(),
         kind="telemetry-pipeline",
         payload=TelemetryPipelinePayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             receivers=_sorted_keys(receivers_raw),
             processors=_sorted_keys(processors_raw),
             exporters=_sorted_keys(exporters_raw),
@@ -508,9 +508,11 @@ class TelemetryConfigCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="telemetry-synthetic-config",
-                        payload=TelemetrySyntheticConfigPayload(file_path=str(rel), **synth),
+                        payload=TelemetrySyntheticConfigPayload(
+                            file_path=rel.as_posix(), **synth
+                        ),
                     )
                 )
 
@@ -553,7 +555,7 @@ class TelemetryConfigCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="telemetry-sdk-init",
                         payload=TelemetrySdkInitPayload(**sdk_info),
                     )

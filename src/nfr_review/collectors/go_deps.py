@@ -35,7 +35,7 @@ class GoDepsCollector:
         raw_deps: list[tuple[str, str, str, bool]] = []  # (source, name, version, indirect)
 
         for mod_path in sorted(repo_path.rglob("go.mod")):
-            rel = str(mod_path.relative_to(repo_path))
+            rel = mod_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

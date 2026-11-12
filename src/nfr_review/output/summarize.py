@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 
 import pydantic
 
-from nfr_review.llm_client import LlmUnavailableError, create_llm_client, extract_json
+from nfr_review.llm_integration import (
+    ProviderUnavailableError,
+    create_llm_client,
+    extract_json,
+)
 from nfr_review.output.summary_models import ExecSummary
 
 if TYPE_CHECKING:
@@ -260,15 +264,17 @@ def generate_executive_summary(
         )
         return None
 
-    prompt_data = _build_prompt_data(nfr_result, hygiene_result, pytest_result, deps_summary)
-
+    prompt_data_str = _build_prompt_data(
+        nfr_result, hygiene_result, pytest_result, deps_summary
+    )
+    # Send the payload whole. It is already bounded by _build_prompt_data
+    # (top-N findings), and must not go through run_analysis: its byte-capped
+    # bundle drops whole items, so this single-object payload would be
+    # replaced by "[]" once it exceeds the cap, and the LLM would summarise
+    # nothing.
     try:
-        raw = client.analyze(
-            prompt=_SYSTEM_PROMPT,
-            evidence_bundle=prompt_data,
-            max_tokens=2048,
-        )
-    except LlmUnavailableError as exc:
+        raw = client.call(_SYSTEM_PROMPT + "\n\n" + prompt_data_str, max_tokens=2048)
+    except ProviderUnavailableError as exc:
         logger.warning("LLM unavailable for executive summary: %s", exc)
         return None
     except Exception:  # noqa: BLE001

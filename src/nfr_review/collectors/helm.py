@@ -80,7 +80,9 @@ def _list_templates(chart_dir: Path) -> list[str]:
         return []
     try:
         return sorted(
-            str(f.relative_to(chart_dir)) for f in templates_dir.rglob("*") if f.is_file()
+            f.relative_to(chart_dir).as_posix()
+            for f in templates_dir.rglob("*")
+            if f.is_file()
         )
     except OSError:
         return []
@@ -101,7 +103,7 @@ class HelmCollector:
 
         evidence: list[Evidence] = []
         for chart_dir in chart_dirs:
-            rel_chart = str(chart_dir.relative_to(repo_path))
+            rel_chart = chart_dir.relative_to(repo_path).as_posix()
 
             chart_meta = _parse_yaml_file(chart_dir / "Chart.yaml")
             if chart_meta is None:

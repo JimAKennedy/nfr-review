@@ -39,7 +39,7 @@ class CsharpDepsCollector:
         for csproj_path in sorted(repo_path.rglob("*.csproj")):
             if _should_skip(csproj_path):
                 continue
-            rel = str(csproj_path.relative_to(repo_path))
+            rel = csproj_path.relative_to(repo_path).as_posix()
             if should_exclude_path(
                 rel, exclude_test_paths=exclude_test, exclude_patterns=exclude_pats
             ):

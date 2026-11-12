@@ -52,7 +52,7 @@ class TestCppBuildSystemDetection:
         assert ev.payload["build_system"]["has_build_system"] is False
 
     def test_fixture_cmake_sample_repo(self) -> None:
-        fixture = Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+        fixture = Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
         c = BuildReadinessCollector()
         results = c.collect(fixture, config=None)
         ev = results[0]
@@ -177,7 +177,7 @@ class TestCmakeVersionDetection:
         assert "CMakeLists.txt" in result.findings[0].summary
 
     def test_fixture_cmake_sample_repo_version(self) -> None:
-        fixture = Path(__file__).parent / "fixtures" / "cmake-sample-repo"
+        fixture = Path(__file__).parent / "fixtures" / "cpp-cmake-sample-repo"
         c = BuildReadinessCollector()
         ev = c.collect(fixture, config=None)[0]
         ver = ev.payload["version"]

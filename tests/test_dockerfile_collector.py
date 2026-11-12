@@ -10,6 +10,21 @@ import pytest
 from nfr_review.collectors.dockerfile import DockerfileCollector
 from nfr_review.models import Evidence
 
+
+def _dockerfile_grammar_available() -> bool:
+    try:
+        import tree_sitter_dockerfile
+
+        return hasattr(tree_sitter_dockerfile, "language")
+    except ImportError:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _dockerfile_grammar_available(),
+    reason="tree-sitter-dockerfile grammar not available (stub package — see M.0 backlog)",
+)
+
 FIXTURES = Path(__file__).parent / "fixtures" / "dockerfile-sample-repo"
 
 

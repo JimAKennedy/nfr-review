@@ -6,10 +6,14 @@ from __future__ import annotations
 
 import asyncio
 import io
-import resource
 import sys
 import time
 from pathlib import Path
+
+try:
+    import resource  # Unix only
+except ImportError:
+    resource = None  # type: ignore[assignment]
 
 import aiohttp
 import pytest
@@ -80,6 +84,7 @@ def baseline_file(tmp_path: Path) -> Path:
     return p
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="resource module unavailable on Windows")
 async def test_sustained_load(baseline_file: Path) -> None:
     """Send ~1000 spans/sec for 5s, verify stable performance."""
     alert_buf = io.StringIO()

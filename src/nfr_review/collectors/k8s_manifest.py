@@ -175,10 +175,10 @@ class K8sManifestCollector:
                         Evidence(
                             collector_name=self.name,
                             collector_version=self.version,
-                            locator=f"{rel}:{resource_name}",
+                            locator=f"{rel.as_posix()}:{resource_name}",
                             kind="k8s-pdb",
                             payload=K8sPdbPayload(
-                                file_path=str(rel),
+                                file_path=rel.as_posix(),
                                 name=resource_name,
                                 namespace=namespace,
                                 min_available=pdb_spec.get("minAvailable"),
@@ -220,10 +220,10 @@ class K8sManifestCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=f"{rel}:{resource_name}",
+                        locator=f"{rel.as_posix()}:{resource_name}",
                         kind="k8s-resource",
                         payload=K8sResourcePayload(
-                            file_path=str(rel),
+                            file_path=rel.as_posix(),
                             kind=kind,
                             name=resource_name,
                             namespace=namespace,

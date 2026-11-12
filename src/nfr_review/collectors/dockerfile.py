@@ -216,21 +216,35 @@ class DockerfileCollector:
 
     def __init__(self) -> None:
         self._parser: Parser | None = None
+        self.grammar_warnings: list[str] = []
 
     def _get_parser(self) -> Parser | None:
         if self._parser is None:
             try:
                 self._parser = make_parser("dockerfile")
-            except (ImportError, ModuleNotFoundError):
+            except ImportError:  # includes ModuleNotFoundError, GrammarNotInstalledError
+                msg = (
+                    "tree-sitter grammar for dockerfile not installed"
+                    " on this platform — collector disabled"
+                )
                 logger.warning(
                     "tree-sitter grammar for dockerfile not installed"
                     " — dockerfile collector disabled"
                 )
+                if msg not in self.grammar_warnings:
+                    self.grammar_warnings.append(msg)
                 return None
         return self._parser
 
     def collect(self, repo_path: Path, config: Any) -> list[Evidence]:
+        # Registered at import as a process-wide singleton: start each run
+        # with no warnings so the engine reports only this run's.
+        self.grammar_warnings = []
         if self._get_parser() is None:
+            logger.info(
+                "tree-sitter grammar for dockerfile not installed"
+                " — dockerfile collector skipped"
+            )
             return []
         evidence: list[Evidence] = []
         for dockerfile in _iter_dockerfiles(repo_path):
@@ -245,12 +259,12 @@ class DockerfileCollector:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Parse error in %s: %s", rel, exc)
                 continue
-            payload["file_path"] = str(rel)
+            payload["file_path"] = rel.as_posix()
             evidence.append(
                 Evidence(
                     collector_name=self.name,
                     collector_version=self.version,
-                    locator=str(rel),
+                    locator=rel.as_posix(),
                     kind="dockerfile-analysis",
                     payload=DockerfileAnalysisPayload(**payload),
                 )

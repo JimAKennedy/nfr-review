@@ -216,10 +216,18 @@ class DesignChangeConfig(BaseModel):
 
 
 class GraphifyConfig(BaseModel):
-    """Configuration for Graphify structural analysis integration."""
+    """Configuration for Graphify structural analysis integration.
+
+    ``enabled`` is off by default: the ``graphify`` collector does nothing
+    unless it is turned on. With ``graph_path`` set, that ``graph.json`` is
+    read (relative paths resolve against the scanned repository) and
+    Graphify is not run; otherwise Graphify runs with its output in a
+    temporary directory outside the scanned repository.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    enabled: bool = False
     query_enabled: bool = True
     mcp_enabled: bool = False
     graph_path: str | None = None
@@ -348,3 +356,10 @@ __all__ = [
     "ScoringConfig",
     "load_config",
 ]
+
+try:
+    from ai_tooling.config import ProviderConfig as _ProviderConfig  # noqa: F401
+
+    __all__ = list(__all__)
+except ImportError:
+    pass

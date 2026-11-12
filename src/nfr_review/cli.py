@@ -11,7 +11,7 @@ Exit-code matrix:
 
 * ``0`` — success
 * ``1`` — recoverable failure (bad target, ConfigError, EngineError, OutputError,
-  unknown rule for ``explain``)
+  unknown rule for ``explain``, a collector failure under ``run --strict-collectors``)
 * ``2`` — at least one emitted finding has ``severity`` >= ``config.severity_threshold``
 
 The ``run`` summary is printed to *stderr* so machine-readable artifacts (CSV,
@@ -82,13 +82,7 @@ def _apply_framework_filter(
 
 def _with_findings(result: RunResult, findings: list[Finding]) -> RunResult:
     """Return a copy of *result* with replaced findings list."""
-    return RunResult(
-        findings=findings,
-        rule_results=result.rule_results,
-        run_metadata=result.run_metadata,
-        warnings=result.warnings,
-        evidence=result.evidence,
-    )
+    return dataclasses.replace(result, findings=findings)
 
 
 def _severity_rank(sev: Severity) -> int:
@@ -754,6 +748,12 @@ def cli() -> None:
     default=None,
     help="Filter findings by origin: first_party (direct repo issues) or dependency.",
 )
+@click.option(
+    "--strict-collectors",
+    is_flag=True,
+    default=False,
+    help="Exit 1 after writing outputs if any collector failed (crashed).",
+)
 def run_cmd(
     target: Path,
     verbose: int,
@@ -773,6 +773,7 @@ def run_cmd(
     design_baseline_dir: Path | None = None,
     force_standard_config: bool = False,
     origin: str | None = None,
+    strict_collectors: bool = False,
 ) -> None:
     """Run command — load config, run engine, emit CSV+JSONL, print summary."""
     include_tests = not exclude_tests
@@ -840,6 +841,14 @@ def run_cmd(
         tech_detected=tech_detected,
         quiet=quiet,
     )
+
+    if strict_collectors and result.failed_collectors:
+        click.echo(
+            "error: --strict-collectors: collector(s) failed: "
+            + ", ".join(result.failed_collectors),
+            err=True,
+        )
+        raise click.exceptions.Exit(1)
 
     if baseline_path is not None and len(result.findings) > 0:
         raise click.exceptions.Exit(1)
@@ -1311,7 +1320,7 @@ def _compute_score(
 
 def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
     """Detect available LLM for methodology appendix disclosure."""
-    from nfr_review.llm_client import ClaudeCliClient, create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     resolved_llm = config.llm.resolve()
     _llm_client = create_llm_client(resolved_llm)
@@ -1319,8 +1328,7 @@ def _resolve_llm_info(config: Config) -> tuple[str, str] | None:
         return (resolved_llm.provider, resolved_llm.model)
     _default_client = create_llm_client()
     if _default_client.available:
-        _prov = "claude-cli" if isinstance(_default_client, ClaudeCliClient) else "openai"
-        return (_prov, resolved_llm.model)
+        return (resolved_llm.provider, resolved_llm.model)
     return None
 
 
@@ -1350,15 +1358,7 @@ def _render_pdf(
     quiet: bool,
 ) -> Path | None:
     """Generate PDF report with optional LLM executive summary."""
-    try:
-        from nfr_review.output.pdf import render_pdf
-    except ImportError as exc:
-        click.echo(
-            "error: weasyprint is required for PDF output — "
-            "install with 'pip install nfr-review[pdf]'",
-            err=True,
-        )
-        raise click.exceptions.Exit(1) from exc
+    from nfr_review.output.pdf import render_pdf
 
     exec_summary = None
     if not no_summary:
@@ -1960,9 +1960,7 @@ def _write_dot_output(
             click.echo(f"SVG rendered to {rendered}", err=True)
         else:
             click.echo(
-                "info: graphviz not available — install with "
-                "'pip install nfr-review[diagrams]' and ensure the "
-                "'dot' binary is on PATH",
+                "info: graphviz rendering failed — ensure the 'dot' binary is on PATH",
                 err=True,
             )
 
@@ -2463,7 +2461,8 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         click.echo(f"error: target is not a directory: {target}", err=True)
         raise click.exceptions.Exit(1)
 
-    click.echo("Detecting technologies...", err=True)
+    if not dry_run:
+        click.echo("Detecting technologies...", err=True)
     try:
         detected = detect_technologies(target)
     except Exception as e:  # noqa: BLE001
@@ -2493,14 +2492,15 @@ def init_cmd(target: Path, dry_run: bool) -> None:
         out_path.write_text(yaml_text, encoding="utf-8")
         click.echo(f"Wrote {out_path}", err=True)
 
-    # Summary of detected technologies
-    if active_tech:
-        click.echo(
-            f"Detected: {', '.join(sorted(active_tech.keys()))}",
-            err=True,
-        )
-    else:
-        click.echo("No technologies detected.", err=True)
+    # Summary of detected technologies — only in interactive (non-dry-run) mode
+    if not dry_run:
+        if active_tech:
+            click.echo(
+                f"Detected: {', '.join(sorted(active_tech.keys()))}",
+                err=True,
+            )
+        else:
+            click.echo("No technologies detected.", err=True)
 
 
 def _banner_arch(
@@ -2688,7 +2688,7 @@ def _warn_llm_cost(no_arch: bool, no_llm: bool, quiet: bool) -> None:
     """Warn about LLM cost if architecture analysis will use LLM calls."""
     if no_arch or no_llm or quiet:
         return
-    from nfr_review.llm_client import create_llm_client
+    from nfr_review.llm_integration import create_llm_client
 
     if create_llm_client().available:
         click.echo(
@@ -2729,13 +2729,19 @@ def _execute_all_pipelines(  # noqa: PLR0913
         from nfr_review.arch_orchestrator import run_arch_review
         from nfr_review.arch_report_render import render_arch_report
 
+        # Same config the NFR half loads, so the arch LLM client and its
+        # disclosed model follow the configured llm block.
+        llm_config = _load_effective_config(config_path, quiet=True).llm
+
         t0 = _phase("Running architecture review (all targets)", quiet=quiet)
         report = run_arch_review(
             target_list,
             repo_names=repo_names,
             skip_llm=no_llm,
             diagram_mode=diagram_mode,
+            llm_config=llm_config,
             progress=lambda msg: _ts_echo(msg, quiet=quiet),
+            exclude_test_paths=exclude_tests,
         )
         _phase_done("Architecture review", t0, quiet=quiet)
 
@@ -3208,14 +3214,9 @@ def monitor_cmd(
     traces against a UAT baseline and emits JSON alerts for novel
     interactions to stdout.
     """
-    try:
-        from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
-    except ImportError as err:
-        raise click.ClickException(
-            "monitor requires the [monitor] extra: pip install nfr-review[monitor]"
-        ) from err
-
     import asyncio
+
+    from nfr_review.monitor.engine import MonitorConfig, MonitorEngine
 
     config = MonitorConfig(
         baseline_path=baseline_path,

@@ -289,10 +289,10 @@ class OTelCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="otel-analysis",
                         payload=OtelAnalysisPayload(
-                            file_path=str(rel),
+                            file_path=rel.as_posix(),
                             receivers=receivers,
                             processors=processors,
                             exporters=exporters,
@@ -301,7 +301,7 @@ class OTelCollector:
                     )
                 )
 
-            rel_str = str(rel)
+            rel_str = rel.as_posix()
             name_lower = yaml_file.name.lower()
 
             sdk_payload: OtelSdkConfigPayload | None = None
@@ -326,7 +326,7 @@ class OTelCollector:
             rel = pom_file.relative_to(repo_path)
             if _is_hidden(rel):
                 continue
-            rel_str = str(rel)
+            rel_str = rel.as_posix()
             if rel_str in sdk_configs_seen:
                 continue
             sdk_payload = _scan_pom_xml(pom_file, rel_str)
@@ -348,7 +348,7 @@ class OTelCollector:
                 continue
             if not dockerfile.is_file():
                 continue
-            rel_str = str(rel)
+            rel_str = rel.as_posix()
             if rel_str in sdk_configs_seen:
                 continue
             sdk_payload = _scan_dockerfile(dockerfile, rel_str)

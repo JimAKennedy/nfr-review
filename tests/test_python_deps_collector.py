@@ -256,4 +256,4 @@ class TestEdgeCases:
         assert len(evidences) == 1
         deps = evidences[0].payload["dependencies"]
         assert deps[0]["name"] == "numpy"
-        assert "requirements/requirements.txt" in deps[0]["source_file"]
+        assert deps[0]["source_file"] == "requirements/requirements.txt"

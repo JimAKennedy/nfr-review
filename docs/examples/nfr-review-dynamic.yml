@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install nfr-review
-        run: pip install "nfr-review[pdf]"
+        run: pip install nfr-review
 
       - name: Run NFR Review with dynamic analysis
         run: |

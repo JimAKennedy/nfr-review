@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -82,6 +83,31 @@ class TestDetectJava:
         (tmp_path / "src" / "main" / "java" / "Foo.java").write_text("class Foo {}")
         assert detect_technologies(tmp_path)["java"] is True
 
+    def test_nested_pom_xml_in_monorepo(self, tmp_path: Path) -> None:
+        # Regression: awesome-compose-style layout, no root build file.
+        module = tmp_path / "spring-postgres" / "backend"
+        module.mkdir(parents=True)
+        (module / "pom.xml").write_text("<project/>")
+        assert detect_technologies(tmp_path)["java"] is True
+
+    def test_nested_build_gradle_kts(self, tmp_path: Path) -> None:
+        module = tmp_path / "services" / "api"
+        module.mkdir(parents=True)
+        (module / "build.gradle.kts").write_text("plugins { java }")
+        assert detect_technologies(tmp_path)["java"] is True
+
+    def test_java_source_outside_src(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "app" / "com" / "example"
+        pkg.mkdir(parents=True)
+        (pkg / "Main.java").write_text("class Main {}")
+        assert detect_technologies(tmp_path)["java"] is True
+
+    def test_java_only_in_excluded_path_not_detected(self, tmp_path: Path) -> None:
+        vendored = tmp_path / "node_modules" / "pkg"
+        vendored.mkdir(parents=True)
+        (vendored / "pom.xml").write_text("<project/>")
+        assert detect_technologies(tmp_path)["java"] is False
+
     def test_negative(self, tmp_path: Path) -> None:
         assert detect_technologies(tmp_path)["java"] is False
 
@@ -108,6 +134,23 @@ class TestDetectSpringBoot:
             "implementation 'org.springframework.boot:spring-boot-starter'"
         )
         assert detect_technologies(tmp_path)["spring_boot"] is True
+
+    def test_nested_application_yml(self, tmp_path: Path) -> None:
+        resources = tmp_path / "backend" / "src" / "main" / "resources"
+        resources.mkdir(parents=True)
+        (resources / "application.yml").write_text("server:\n  port: 8080")
+        assert detect_technologies(tmp_path)["spring_boot"] is True
+
+    def test_nested_pom_with_spring_boot(self, tmp_path: Path) -> None:
+        module = tmp_path / "spring-postgres" / "backend"
+        module.mkdir(parents=True)
+        (module / "pom.xml").write_text("<artifactId>spring-boot-starter</artifactId>")
+        assert detect_technologies(tmp_path)["spring_boot"] is True
+
+    def test_application_yml_outside_resources_ignored(self, tmp_path: Path) -> None:
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "application.yml").write_text("a: 1")
+        assert detect_technologies(tmp_path)["spring_boot"] is False
 
     def test_negative(self, tmp_path: Path) -> None:
         assert detect_technologies(tmp_path)["spring_boot"] is False
@@ -260,6 +303,18 @@ class TestDetectPython:
         (tmp_path / "requirements.txt").write_text("flask==3.0")
         assert detect_technologies(tmp_path)["python"] is True
 
+    def test_nested_pyproject(self, tmp_path: Path) -> None:
+        (tmp_path / "svc").mkdir()
+        (tmp_path / "svc" / "pyproject.toml").write_text("[project]\nname = 'svc'")
+        assert detect_technologies(tmp_path)["python"] is True
+
+    def test_script_only_repo_without_manifest(self, tmp_path: Path) -> None:
+        # Regression: python rules were skipped ("tech not declared") for
+        # repos with .py sources but no packaging manifest.
+        (tmp_path / "scripts").mkdir()
+        (tmp_path / "scripts" / "tool.py").write_text("def f(x=[]):\n    return x\n")
+        assert detect_technologies(tmp_path)["python"] is True
+
     def test_negative(self, tmp_path: Path) -> None:
         assert detect_technologies(tmp_path)["python"] is False
 
@@ -370,7 +425,9 @@ class TestDetectSkaffold:
 
 
 class TestErrorHandling:
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can read any file")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.getuid() == 0, reason="Unix only; root can read any file"
+    )
     def test_unreadable_file_skipped_gracefully(self, tmp_path: Path) -> None:
         marker = tmp_path / "pom.xml"
         marker.write_text("<project/>")
@@ -382,7 +439,9 @@ class TestErrorHandling:
         finally:
             marker.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
-    @pytest.mark.skipif(os.getuid() == 0, reason="root can read any file")
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.getuid() == 0, reason="Unix only; root can read any file"
+    )
     def test_unreadable_spring_boot_marker_returns_false(self, tmp_path: Path) -> None:
         pom = tmp_path / "pom.xml"
         pom.write_text("<project>spring-boot</project>")
@@ -412,3 +471,46 @@ class TestErrorHandling:
         assert result["go"] is True
         assert result["java"] is False
         assert _has_all_keys(result)
+
+
+class TestDetectionPruning:
+    """Detection never lists excluded directories, it does not just filter them."""
+
+    def test_excluded_directories_are_never_listed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "main.py").write_text("x = 1\n")
+        excluded = ("node_modules", "target", ".git", ".venv", "tests")
+        for top in excluded:
+            nested = tmp_path / top / "pkg" / "deep"
+            nested.mkdir(parents=True)
+            (nested / "Cargo.toml").write_text("[package]\nname = 'decoy'\n")
+
+        listed: list[str] = []
+        real_scandir = os.scandir
+
+        def recording_scandir(path: str | os.PathLike[str] = ".") -> object:
+            listed.append(Path(os.path.relpath(path, tmp_path)).as_posix())
+            return real_scandir(path)
+
+        monkeypatch.setattr(os, "scandir", recording_scandir)
+        result = detect_technologies(tmp_path)
+        monkeypatch.undo()
+
+        entered = {p for p in listed if p.split("/")[0] in excluded}
+        assert entered == set()
+        assert "src" in listed
+        assert result["python"] is True
+        assert result["rust"] is False
+
+    def test_glob_patterns_still_match_names(self, tmp_path: Path) -> None:
+        (tmp_path / "svc" / "docker").mkdir(parents=True)
+        (tmp_path / "svc" / "docker" / "api.Dockerfile").write_text("FROM scratch\n")
+        (tmp_path / "crates" / "core").mkdir(parents=True)
+        (tmp_path / "crates" / "core" / "Cargo.toml").write_text("[package]\n")
+
+        result = detect_technologies(tmp_path)
+
+        assert result["dockerfile"] is True
+        assert result["rust"] is True

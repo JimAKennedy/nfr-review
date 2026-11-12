@@ -91,7 +91,9 @@ class CodeDebtCollector:
                 total += file_total
                 per_marker += counts
                 file_counts.append(
-                    CodeDebtFileEntry(path=str(rel), count=file_total, markers=dict(counts))
+                    CodeDebtFileEntry(
+                        path=rel.as_posix(), count=file_total, markers=dict(counts)
+                    )
                 )
 
         file_counts.sort(key=lambda f: f.count, reverse=True)

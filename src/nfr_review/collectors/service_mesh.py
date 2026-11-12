@@ -237,10 +237,10 @@ def _build_virtual_service_evidence(
     return Evidence(
         collector_name=collector_name,
         collector_version=collector_version,
-        locator=f"{rel}:{name}",
+        locator=f"{rel.as_posix()}:{name}",
         kind="service-mesh-virtual-service",
         payload=ServiceMeshVirtualServicePayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             name=name,
             namespace=namespace,
             hosts=spec.get("hosts", []) or [],
@@ -264,10 +264,10 @@ def _build_destination_rule_evidence(
     return Evidence(
         collector_name=collector_name,
         collector_version=collector_version,
-        locator=f"{rel}:{name}",
+        locator=f"{rel.as_posix()}:{name}",
         kind="service-mesh-destination-rule",
         payload=ServiceMeshDestinationRulePayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             name=name,
             namespace=namespace,
             host=spec.get("host", ""),
@@ -317,10 +317,10 @@ def _build_rollout_evidence(
     return Evidence(
         collector_name=collector_name,
         collector_version=collector_version,
-        locator=f"{rel}:{name}",
+        locator=f"{rel.as_posix()}:{name}",
         kind="service-mesh-rollout",
         payload=ServiceMeshRolloutPayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             name=name,
             namespace=namespace,
             replicas=spec.get("replicas"),
@@ -350,10 +350,10 @@ def _build_analysis_template_evidence(
     return Evidence(
         collector_name=collector_name,
         collector_version=collector_version,
-        locator=f"{rel}:{name}",
+        locator=f"{rel.as_posix()}:{name}",
         kind="service-mesh-analysis-template",
         payload=ServiceMeshAnalysisTemplatePayload(
-            file_path=str(rel),
+            file_path=rel.as_posix(),
             name=name,
             namespace=namespace,
             metrics=metrics,

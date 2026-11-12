@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +16,7 @@ from nfr_review.issues import (
     _RULE_MARKER_PREFIX,
     _extract_key,
     _finding_key,
+    file_issues,
     filter_findings,
     generate_issue_body,
     generate_issue_title,
@@ -584,3 +586,90 @@ class TestSyncRagFilter:
 
         assert len(results) == 1
         assert results[0]["rule_id"] == "R001"
+
+
+# ---------------------------------------------------------------------------
+# Windows locators recorded before the forward-slash change
+# ---------------------------------------------------------------------------
+
+_WINDOWS_LOCATOR = "src\\main\\java\\App.java:42"
+
+
+def _windows_key(finding: dict[str, Any]) -> str:
+    """The marker key a pre-forward-slash Windows run wrote for *finding*."""
+    win = dict(finding, evidence_locator=_WINDOWS_LOCATOR)
+    if win.get("content_hash"):
+        file_path = "src\\main\\java\\App.java"
+        parts = [win["rule_id"], file_path, win["pattern_tag"], win["content_hash"]]
+    else:
+        parts = [win["rule_id"], _WINDOWS_LOCATOR, win["pattern_tag"]]
+    return hashlib.sha256(":".join(parts).encode()).hexdigest()[:12]
+
+
+class TestWindowsLocatorKeys:
+    def test_finding_key_ignores_separator_style(self) -> None:
+        windows = dict(_RED_CRITICAL, evidence_locator=_WINDOWS_LOCATOR)
+        assert _finding_key(windows) == _finding_key(_RED_CRITICAL)
+
+    def test_finding_key_ignores_separator_style_with_content_hash(self) -> None:
+        posix = dict(_RED_CRITICAL, content_hash="abc123def456")
+        windows = dict(posix, evidence_locator=_WINDOWS_LOCATOR)
+        assert _finding_key(windows) == _finding_key(posix)
+
+    def test_open_issue_with_windows_marker_is_updated_not_duplicated(self) -> None:
+        issues = [_issue_json(42, _make_body_with_key(_windows_key(_RED_CRITICAL)))]
+
+        with (
+            patch("nfr_review.issues._fetch_nfr_issues", return_value=issues),
+            patch("nfr_review.issues._gh_run") as gh,
+        ):
+            gh.return_value = _gh_result()
+            results = sync_issues([_RED_CRITICAL], "owner/repo", rag_min="red")
+
+        assert [r["action"] for r in results] == ["update"]
+        edit_args = gh.call_args[0][0]
+        assert edit_args[:3] == ["issue", "edit", "--repo"]
+        new_body = edit_args[edit_args.index("--body") + 1]
+        assert f"{_KEY_MARKER_PREFIX}{_finding_key(_RED_CRITICAL)}{_MARKER_SUFFIX}" in new_body
+
+    def test_hashed_finding_with_windows_marker_is_updated(self) -> None:
+        finding = dict(_RED_CRITICAL, content_hash="abc123def456")
+        issues = [_issue_json(42, _make_body_with_key(_windows_key(finding)))]
+
+        with (
+            patch("nfr_review.issues._fetch_nfr_issues", return_value=issues),
+            patch("nfr_review.issues._gh_run") as gh,
+        ):
+            gh.return_value = _gh_result()
+            results = sync_issues([finding], "owner/repo", rag_min="red")
+
+        assert [r["action"] for r in results] == ["update"]
+
+    def test_manually_closed_issue_with_windows_marker_is_not_refiled(self) -> None:
+        issues = [
+            _issue_json(42, _make_body_with_key(_windows_key(_RED_CRITICAL)), state="CLOSED")
+        ]
+
+        with (
+            patch("nfr_review.issues._fetch_nfr_issues", return_value=issues),
+            patch("nfr_review.issues._issue_has_tool_close_comment", return_value=False),
+            patch("nfr_review.issues._gh_run") as gh,
+        ):
+            gh.return_value = _gh_result()
+            results = sync_issues([_RED_CRITICAL], "owner/repo", rag_min="red")
+
+        assert [(r["action"], r["reason"]) for r in results] == [("skip", "manually closed")]
+
+    def test_file_issues_skips_finding_with_windows_marker(self) -> None:
+        with (
+            patch("nfr_review.issues._ensure_labels"),
+            patch(
+                "nfr_review.issues.find_existing_issues",
+                return_value={_windows_key(_RED_CRITICAL)},
+            ),
+            patch("nfr_review.issues._gh_run") as gh,
+        ):
+            results = file_issues([_RED_CRITICAL], "owner/repo")
+
+        assert [r["status"] for r in results] == ["skipped"]
+        gh.assert_not_called()

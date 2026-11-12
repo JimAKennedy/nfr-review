@@ -98,7 +98,7 @@ class LicenseScanCollector:
         }
 
         for fpath in all_files:
-            rel = str(fpath.relative_to(repo_path))
+            rel = fpath.relative_to(repo_path).as_posix()
             logger.debug("Scanning %s", rel)
 
             try:

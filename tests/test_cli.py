@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import CliRunner
@@ -317,3 +318,72 @@ def test_report_help_shows_exclude_tests() -> None:
 def test_hygiene_help_shows_exclude_tests() -> None:
     result = _runner().invoke(cli, ["hygiene", "--help"])
     assert "--exclude-tests" in result.output
+
+
+class _CrashingCollector:
+    name = "crashing"
+    version = "0.0.1"
+
+    def collect(self, repo_path: Path, config: Any) -> list:
+        raise RuntimeError("injected collector crash")
+
+
+def _install_collectors(monkeypatch: pytest.MonkeyPatch, *collectors: Any) -> None:
+    from nfr_review.registry import Registry
+
+    registry: Registry = Registry("collector")
+    for c in collectors:
+        registry.register(c.name, c)
+    monkeypatch.setattr("nfr_review.engine._default_collector_registry", registry)
+    monkeypatch.setattr("nfr_review.engine._default_rule_registry", Registry("rule"))
+
+
+def _run_args(tmp_path: Path, *extra: str) -> list[str]:
+    target = tmp_path / "repo"
+    target.mkdir()
+    (target / "README.md").write_text("# sample\n")
+    return [
+        "run",
+        str(target),
+        "--csv",
+        str(tmp_path / "out.csv"),
+        "--jsonl",
+        str(tmp_path / "out.jsonl"),
+        *extra,
+    ]
+
+
+def test_run_strict_collectors_exits_1_when_a_collector_crashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_collectors(monkeypatch, _CrashingCollector())
+    result = _runner().invoke(cli, _run_args(tmp_path, "--strict-collectors"))
+    assert result.exit_code == 1, result.output
+    assert "collector(s) failed: crashing" in result.stderr
+    assert (tmp_path / "out.jsonl").exists(), "outputs are written before exiting"
+
+
+def test_run_without_strict_collectors_exits_0_when_a_collector_crashes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_collectors(monkeypatch, _CrashingCollector())
+    result = _runner().invoke(cli, _run_args(tmp_path))
+    assert result.exit_code == 0, result.output
+
+
+def test_run_strict_collectors_exits_0_when_no_collector_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_collectors(monkeypatch)
+    result = _runner().invoke(cli, _run_args(tmp_path, "--strict-collectors"))
+    assert result.exit_code == 0, result.output
+
+
+def test_with_findings_preserves_failed_collectors() -> None:
+    from nfr_review.cli import _with_findings
+    from nfr_review.engine import RunResult
+
+    original = RunResult(warnings=["collector boom failed: x"], failed_collectors=["boom"])
+    copied = _with_findings(original, [])
+    assert copied.failed_collectors == ["boom"]
+    assert copied.warnings == ["collector boom failed: x"]

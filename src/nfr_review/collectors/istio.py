@@ -97,10 +97,10 @@ class IstioCollector:
                     Evidence(
                         collector_name=self.name,
                         collector_version=self.version,
-                        locator=str(rel),
+                        locator=rel.as_posix(),
                         kind="istio-analysis",
                         payload=IstioAnalysisPayload(
-                            file_path=str(rel),
+                            file_path=rel.as_posix(),
                             resources=resources,
                         ),
                     )

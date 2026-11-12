@@ -186,7 +186,7 @@ def _find_owning_component(
             bp = boundary.path
             if bp == ".":
                 continue
-            if str(rel).startswith(bp.rstrip("/") + "/") or str(rel.parent) == bp:
+            if rel.as_posix().startswith(bp.rstrip("/") + "/") or rel.parent.as_posix() == bp:
                 return comp
 
     # Fallback: pick the root-level repo component regardless of file depth.
@@ -438,6 +438,8 @@ def discover_config_integrations(
     repo_path: Path,
     components: list[Component],
     repo_name: str | None = None,
+    *,
+    exclude_test_paths: bool = True,
 ) -> list[IntegrationPoint]:
     """Scan config files for connection strings and endpoint URLs."""
     integrations: list[IntegrationPoint] = []
@@ -452,8 +454,8 @@ def discover_config_integrations(
             continue
 
     for config_file in config_files:
-        rel_path = str(config_file.relative_to(repo_path))
-        if should_exclude_path(rel_path, exclude_test_paths=True):
+        rel_path = config_file.relative_to(repo_path).as_posix()
+        if should_exclude_path(rel_path, exclude_test_paths=exclude_test_paths):
             continue
 
         content = safe_read_text(config_file)

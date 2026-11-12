@@ -34,7 +34,7 @@ from nfr_review.collectors.payloads.adr_derive import (
     AdrDeriveSkipPayload,
     AdrDeriveSummaryPayload,
 )
-from nfr_review.llm_client import create_llm_client, extract_json, serialize_evidence_bundle
+from nfr_review.llm_integration import create_llm_client, extract_json, run_analysis
 from nfr_review.models import Evidence
 from nfr_review.registry import collector_registry
 
@@ -167,14 +167,9 @@ class AdrDeriveCollector:
             ]
 
         context = _gather_context(repo_path)
-        bundle = serialize_evidence_bundle(context)
 
         try:
-            raw_response = client.analyze(
-                prompt=_PROMPT,
-                evidence_bundle=bundle,
-                max_tokens=2048,
-            )
+            raw_response = run_analysis(client, _PROMPT, context, max_tokens=2048)
         except Exception as exc:  # noqa: BLE001
             logger.warning("LLM analysis failed: %s", exc)
             return [

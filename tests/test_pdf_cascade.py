@@ -4,10 +4,7 @@
 
 from __future__ import annotations
 
-import logging
 from unittest.mock import patch
-
-import pytest
 
 from nfr_review.output.render import (
     render_diagram_as_html_table,
@@ -97,56 +94,46 @@ class TestHtmlTableFallback:
 
 
 class TestRenderDiagramCascade:
-    def test_tier2_svg_when_mmdc_unavailable(self, caplog: pytest.LogCaptureFixture) -> None:
-        from nfr_review.output.pdf import _render_diagram_cascade
+    def test_tier2_svg_when_mmdc_unavailable(self) -> None:
+        from nfr_review.output.pdf import _render_mermaid_for_typst
 
-        with (
-            patch("shutil.which", return_value=None),
-            caplog.at_level(logging.INFO, logger="nfr_review.output.pdf"),
-        ):
-            result = _render_diagram_cascade("Severity Distribution", PIE_MERMAID)
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        with patch("shutil.which", return_value=None):
+            result = _render_mermaid_for_typst(PIE_MERMAID, image_files, counter)
 
-        assert "tier 2" in caplog.text
-        assert "data:image/svg+xml" in result
+        assert any(k.endswith(".svg") for k in image_files)
+        assert "#image(" in result
 
-    def test_tier2_flowchart_when_mmdc_unavailable(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        from nfr_review.output.pdf import _render_diagram_cascade
+    def test_tier2_flowchart_when_mmdc_unavailable(self) -> None:
+        from nfr_review.output.pdf import _render_mermaid_for_typst
 
-        with (
-            patch("shutil.which", return_value=None),
-            caplog.at_level(logging.INFO, logger="nfr_review.output.pdf"),
-        ):
-            result = _render_diagram_cascade("Tech Overview", FLOWCHART_MERMAID)
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        with patch("shutil.which", return_value=None):
+            result = _render_mermaid_for_typst(FLOWCHART_MERMAID, image_files, counter)
 
-        assert "tier 2" in caplog.text
-        assert "data:image/svg+xml" in result
+        assert any(k.endswith(".svg") for k in image_files)
+        assert "#image(" in result
 
-    def test_tier3_html_for_unknown_diagram_type(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        from nfr_review.output.pdf import _render_diagram_cascade
+    def test_tier3_for_unknown_diagram_type(self) -> None:
+        from nfr_review.output.pdf import _render_mermaid_for_typst
 
         seq_diagram = "sequenceDiagram\n    A->>B: hello"
-        with (
-            patch("shutil.which", return_value=None),
-            caplog.at_level(logging.INFO, logger="nfr_review.output.pdf"),
-        ):
-            result = _render_diagram_cascade("Sequence", seq_diagram)
+        image_files: dict[str, bytes] = {}
+        counter: list[int] = [0]
+        with patch("shutil.which", return_value=None):
+            result = _render_mermaid_for_typst(seq_diagram, image_files, counter)
 
-        assert "tier 3" in caplog.text
-        assert "<pre" in result or "<table" in result
+        assert "#table(" in result or "#raw(" in result
 
     def test_all_three_diagram_types_produce_output(self) -> None:
-        from nfr_review.output.pdf import _render_diagram_cascade
+        from nfr_review.output.pdf import _render_mermaid_for_typst
 
         with patch("shutil.which", return_value=None):
-            for title, mermaid in [
-                ("Severity", PIE_MERMAID),
-                ("Tech", FLOWCHART_MERMAID),
-                ("Deps", DEP_GRAPH_MERMAID),
-            ]:
-                result = _render_diagram_cascade(title, mermaid)
-                assert result, f"No output for {title}"
+            for mermaid in [PIE_MERMAID, FLOWCHART_MERMAID, DEP_GRAPH_MERMAID]:
+                image_files: dict[str, bytes] = {}
+                counter: list[int] = [0]
+                result = _render_mermaid_for_typst(mermaid, image_files, counter)
+                assert result, f"No output for diagram starting: {mermaid[:30]!r}"
                 assert len(result) > 10

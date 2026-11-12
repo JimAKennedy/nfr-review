@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from nfr_review.llm_client import LlmUnavailableError
+from nfr_review.llm_integration import ProviderUnavailableError
 from nfr_review.models import Evidence
-from nfr_review.protocols import LlmClient
 from nfr_review.rules.pii_logging import PiiInLogStatementsRule
 
 
@@ -32,17 +31,17 @@ def _make_evidence(
     )
 
 
-def _unavailable_client() -> LlmClient:
-    client = MagicMock(spec=LlmClient)
+def _unavailable_client() -> MagicMock:
+    client = MagicMock()
     client.available = False
-    client.analyze.side_effect = LlmUnavailableError("no key")
+    client.call.side_effect = ProviderUnavailableError("no key")
     return client
 
 
-def _confirming_client(verdicts: list[dict]) -> LlmClient:
-    client = MagicMock(spec=LlmClient)
+def _confirming_client(verdicts: list[dict]) -> MagicMock:
+    client = MagicMock()
     client.available = True
-    client.analyze.return_value = json.dumps(verdicts)
+    client.call.return_value = json.dumps(verdicts)
     return client
 
 
@@ -255,9 +254,9 @@ class TestLlmErrorFallback:
                 }
             ]
         )
-        llm = MagicMock(spec=LlmClient)
+        llm = MagicMock()
         llm.available = True
-        llm.analyze.side_effect = RuntimeError("API timeout")
+        llm.call.side_effect = RuntimeError("API timeout")
         rule = PiiInLogStatementsRule(llm_client=llm)
         result = rule.evaluate([ev], context=None)
         assert len(result.findings) == 1
@@ -273,9 +272,9 @@ class TestLlmErrorFallback:
                 }
             ]
         )
-        llm = MagicMock(spec=LlmClient)
+        llm = MagicMock()
         llm.available = True
-        llm.analyze.return_value = "Sorry, I cannot help with that."
+        llm.call.return_value = "Sorry, I cannot help with that."
         rule = PiiInLogStatementsRule(llm_client=llm)
         result = rule.evaluate([ev], context=None)
         assert len(result.findings) == 1

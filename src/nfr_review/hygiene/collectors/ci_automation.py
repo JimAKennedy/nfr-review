@@ -86,7 +86,7 @@ class CiAutomationCollector:
                 if provider not in ci_systems:
                     ci_systems.append(provider)
 
-                rel_path = str(match_path.relative_to(repo_path))
+                rel_path = match_path.relative_to(repo_path).as_posix()
                 try:
                     raw = match_path.read_text(encoding="utf-8", errors="replace")
                 except OSError:

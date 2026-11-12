@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from nfr_review.models import Finding, _strip_line_from_locator
+from nfr_review.models import Finding, _strip_line_from_locator, normalise_locator
 
 # Graphify reassigns community IDs on every clustering run, so locators built
 # from them (``community:91``, ``community-pair:2-3``) carry no identity across
@@ -50,7 +50,8 @@ class BaselineData:
     """Parsed baseline: the set of identity keys from a prior run.
 
     Stores two key sets for backward-compatible matching:
-    - ``legacy_keys``: 3-tuple ``(rule_id, evidence_locator, pattern_tag)``
+    - ``legacy_keys``: 3-tuple ``(rule_id, evidence_locator, pattern_tag)``,
+      locator normalised to ``/``.
     - ``stable_keys``: 4-tuple ``(rule_id, file_path, pattern_tag, content_hash)``
 
     ``hashless_summaries`` maps the legacy key of each finding that has no
@@ -99,6 +100,8 @@ def load_baseline(path: Path) -> BaselineData:
                     continue
                 rule_id = record.get("rule_id")
                 locator = record.get("evidence_locator")
+                if locator is not None:
+                    locator = normalise_locator(locator)
                 tag = record.get("pattern_tag")
                 content_hash = record.get("content_hash", "")
                 if rule_id and locator is not None and tag is not None:

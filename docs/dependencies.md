@@ -37,7 +37,7 @@ required for the tool to start.
 
 | Package | Constraint | Purpose | Adaptation notes |
 |---------|-----------|---------|------------------|
-| click | `>=8.1` | CLI framework — powers the `nfr-review` command | Standard CLI library |
+| click | `>=8.2` | CLI framework — powers the `nfr-review` command | Standard CLI library |
 | pydantic | `>=2` | Data validation and serialization for findings, evidence, config | Must be v2 (not v1) |
 | ruamel.yaml | `>=0.18` | YAML parsing for config files, Helm values, K8s manifests | Uses ruamel.yaml (not PyYAML) for round-trip fidelity |
 | tree-sitter | `>=0.23` | Core parsing engine for static analysis of source files | None |
@@ -45,10 +45,16 @@ required for the tool to start.
 | tree-sitter-python | `>=0.23` | Python language grammar | Remove if Python analysis unneeded |
 | tree-sitter-go | `>=0.23` | Go language grammar | Remove if Go analysis unneeded |
 | tree-sitter-hcl | `>=1.1` | HCL/Terraform grammar for IaC analysis | Remove if Terraform analysis unneeded |
-| tree-sitter-dockerfile | `>=0.2` | Dockerfile grammar for container rules | Excluded on `aarch64` (no wheel). Build amd64-only for full coverage |
+| tree-sitter-dockerfile | `>=0.2` | Dockerfile grammar for container rules | Installed only on macOS arm64 and Linux x86_64, the platforms with published 0.2 wheels (marker: `(sys_platform == 'darwin' and platform_machine == 'arm64') or (sys_platform == 'linux' and platform_machine == 'x86_64')`). Elsewhere the run reports the grammar as missing. Build the image amd64-only for full coverage |
 | tree-sitter-c-sharp | `>=0.23` | C# grammar for .NET project analysis | Remove if C# analysis unneeded |
 | tree-sitter-typescript | `>=0.23` | TypeScript/JavaScript grammar | Remove if TS/JS analysis unneeded |
 | tree-sitter-cpp | `>=0.23` | C++ grammar for native code analysis | Remove if C++ analysis unneeded |
+| tree-sitter-rust | `>=0.23` | Rust grammar for native code analysis | Remove if Rust analysis unneeded |
+| graphviz | `>=0.20` | Python bindings for Graphviz DOT rendering (`--render-diagrams`) | Requires the system-level `graphviz` binary. Without it, diagram output is skipped gracefully |
+| graphifyy | `==0.9.97` | Tree-sitter-based codebase knowledge graph extraction and querying | Runs only when `graphify.enabled: true` (default `false`); see the [Graphify usage guide](graphify-guide.md) |
+| networkx | `>=3.0` | In-process graph analysis (shortest path, degree metrics, community queries) | None |
+| aiohttp | `>=3.9` | Async HTTP server for the `nfr-review monitor` production interaction receiver | None |
+| typst | `>=0.15` | Typst compiler (Python wheel) for `report` and `arch` PDF output | Self-contained wheel; no system libraries. Use `--no-pdf` to skip PDF output |
 | packaging | `>=24.0` | PEP 440 version parsing for dependency version rules | Standard Python packaging library |
 | resolvelib | `>=1.0` | Dependency resolution algorithm for transitive dep analysis | None |
 
@@ -59,46 +65,23 @@ required for the tool to start.
 Install extras individually or combine them:
 
 ```bash
-pip install "nfr-review[llm-anthropic,pdf,scancode]"
-pip install "nfr-review[full]"        # everything except scancode and otel
+pip install "nfr-review[llm,scancode]"
+pip install "nfr-review[full]"        # llm + scancode + otel
 ```
 
-### `[llm-anthropic]` — Anthropic Claude API
+### `[llm]` — LLM provider layer
 
 | Package | Constraint | Purpose |
 |---------|-----------|---------|
 | anthropic | `>=0.40` | Anthropic Python SDK for Band 2 LLM-augmented rules |
+| ai-tooling | — | LLM provider layer (Anthropic, OpenAI-compatible, Claude CLI); not yet published on PyPI |
 
-Requires `ANTHROPIC_API_KEY`. Without the key, LLM rules are skipped
-gracefully. Default model: `claude-sonnet-4-6`.
+Every LLM backend goes through ai-tooling, so all of them need this extra.
+The Anthropic backend requires `ANTHROPIC_API_KEY`; without the key, LLM rules
+are skipped gracefully. Default model: `claude-sonnet-4-6`.
 
-### `[llm-openai]` — OpenAI-compatible API
-
-| Package | Constraint | Purpose |
-|---------|-----------|---------|
-| openai | `>=1.0` | OpenAI SDK for Ollama, Azure OpenAI, OpenRouter |
-
-Set `NFR_LLM_PROVIDER=openai` and optionally `NFR_LLM_BASE_URL` for custom
-endpoints.
-
-### `[pdf]` — PDF report generation
-
-| Package | Constraint | Purpose |
-|---------|-----------|---------|
-| weasyprint | `>=60` | HTML-to-PDF rendering engine |
-
-Requires system libraries: libpango, libcairo, libharfbuzz, libgdk-pixbuf,
-fonts-liberation. The Docker image includes these. Without them, use `--no-pdf`
-or `--html`.
-
-### `[diagrams]` — Architecture diagrams
-
-| Package | Constraint | Purpose |
-|---------|-----------|---------|
-| graphviz | `>=0.20` | Python bindings for Graphviz DOT rendering |
-
-Requires the system-level `graphviz` binary. Without it, diagram output is
-skipped gracefully.
+The OpenAI-compatible backend additionally needs the `openai` package, which
+nfr-review does not install: `pip install openai`.
 
 ### `[otel]` — OpenTelemetry instrumentation
 
@@ -122,30 +105,9 @@ analysis is available.
 Heavy dependency (~500 MB). The built-in `pip-licenses` check in CI is a
 lighter alternative. Requires native libraries.
 
-### `[monitor]` — Production interaction monitor
-
-| Package | Constraint | Purpose |
-|---------|-----------|---------|
-| aiohttp | `>=3.9` | Async HTTP server for live analysis dashboards |
-
-Only needed for the experimental production monitor feature.
-
-### `[graphify]` — Structural knowledge-graph analysis
-
-| Package | Constraint | Purpose |
-|---------|-----------|---------|
-| graphifyy | `>=0.8` | Tree-sitter-based codebase knowledge graph extraction and querying |
-| networkx | `>=3.0` | In-process graph analysis (shortest path, degree metrics, community queries) |
-
-Requires the `graphify` CLI binary (installed automatically with `graphifyy`).
-When the binary is not available, the GraphifyCollector skips gracefully and
-structural rules produce no findings. See the
-[Graphify usage guide](graphify-guide.md) for a complete walkthrough.
-
 ### `[full]` — Convenience aggregate
 
-Installs: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` +
-`monitor` + `graphify`. Does **not** include `scancode` (too heavy) or `dev`
+Installs: `llm` + `scancode` + `otel`. Does **not** include `dev`
 (test dependencies).
 
 ### `[dev]` — Development and testing
@@ -160,7 +122,6 @@ Installs: `pdf` + `diagrams` + `llm-anthropic` + `llm-openai` + `otel` +
 | pytest-aiohttp | `>=1.0` | aiohttp test client fixtures |
 | filelock | `>=3.12` | File locking for parallel test isolation |
 | ruff | `>=0.6` | Linter and formatter (CI pins exact version) |
-| anthropic | `>=0.40` | Anthropic SDK for LLM-augmented rule tests |
 | build | `>=1.0` | PEP 517 build frontend for sdist/wheel |
 
 ---
@@ -173,8 +134,8 @@ are skipped gracefully and all static-analysis findings are still produced.
 | Provider | SDK / binary | Auth | Default model | What it powers |
 |----------|-------------|------|---------------|----------------|
 | **Anthropic API** (default) | `anthropic>=0.40` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Executive summary, ADR drift, PII detection, domain inference |
-| **OpenAI-compatible** | `openai>=1.0` | `OPENAI_API_KEY` | Varies | Same features via Ollama, Azure OpenAI, or OpenRouter |
-| **Claude CLI** | `claude` binary on PATH | Claude Code subscription | N/A | Same features via Claude Code CLI — no API key needed |
+| **OpenAI-compatible** | `openai>=1.0` (install separately) via the `[llm]` extra | `OPENAI_API_KEY` | Varies | Same features via Ollama, Azure OpenAI, or OpenRouter |
+| **Claude CLI** | `claude` binary on PATH, via the `[llm]` extra | Claude Code subscription | N/A | Same features via Claude Code CLI — no API key needed |
 
 **Adopter adaptation:** Provide your own API key or switch providers via
 `NFR_LLM_PROVIDER` and `NFR_LLM_BASE_URL`. For air-gapped environments, use
@@ -209,19 +170,19 @@ corresponding tag at time of pinning.
 
 | Action | Version | Used in | Purpose | Adaptation notes |
 |--------|---------|---------|---------|------------------|
-| `actions/checkout` | v6.0.3 | All workflows | Repository checkout | Standard |
-| `actions/setup-python` | v6.2.0 | ci, release, nightly, pages, action | Python runtime setup | Versions tested: 3.11, 3.12 |
-| `actions/cache` | v5.0.5 | ci, nightly | Cache pip packages and regression repos | Keys use pyproject.toml hash |
-| `actions/upload-artifact` | v7.0.1 | ci, pr, nightly | Upload findings, coverage, SARIF | Standard |
+| `actions/checkout` | v7.0.1 | All workflows | Repository checkout | Standard |
+| `actions/setup-python` | v7.1.0 | ci, release, nightly, pages, action | Python runtime setup | Versions tested: 3.11, 3.12 |
+| `actions/cache` | v6.1.0 | ci, nightly | Cache pip packages and regression repos | Keys use pyproject.toml hash |
+| `actions/upload-artifact` | v7.0.2 | ci, pr, nightly | Upload findings, coverage, SARIF | Standard |
 
 ### CI-specific actions
 
 | Action | Version | Used in | Purpose | Adaptation notes |
 |--------|---------|---------|---------|------------------|
-| `azure/setup-helm` | v5.0.0 | ci, nightly | Install Helm binary for chart analysis | Required for Helm collector tests |
+| `azure/setup-helm` | v5.0.1 | ci, nightly | Install Helm binary for chart analysis | Required for Helm collector tests |
 | `dorny/paths-filter` | v4.0.1 | ci | Skip Docker jobs when no Docker files changed | Optimization only — safe to remove |
 | `gitleaks/gitleaks-action` | v3.0.0 | ci | Secret scanning in git history | Requires `GITLEAKS_LICENSE` for commercial use. Advisory only |
-| `schneegans/dynamic-badges-action` | v1.8.0 | ci | Coverage badge via GitHub Gist | Requires `GIST_TOKEN`. Cosmetic only |
+| `schneegans/dynamic-badges-action` | v1.9.0 | ci | Coverage badge via GitHub Gist | Requires `GIST_TOKEN`. Cosmetic only |
 | `aquasecurity/trivy-action` | v0.36.0 | ci, release | Container CVE scanning (CRITICAL/HIGH gate) | Downloads Trivy DB at runtime. May need proxy behind firewalls |
 
 ### Docker and release actions
@@ -281,7 +242,7 @@ required — features degrade gracefully when missing.
 | **docker** | Container execution mode and CI Docker jobs | Container mode fails; pip mode works | Pre-installed on GitHub-hosted runners |
 | **otelcol-contrib** | Managed OTel Collector for dynamic analysis | Must use `--otel-traces` with pre-collected traces instead | `scripts/setup-all.sh` or manual download |
 | **graphviz** (dot) | DOT diagram rendering for architecture reports | Diagram output skipped | System package (`apt install graphviz`) |
-| **graphify** | Codebase knowledge-graph extraction for structural analysis rules | GraphifyCollector skips; structural rules produce no findings | `pip install "nfr-review[graphify]"` (installed with the Python package) |
+| **graphify** | Codebase knowledge-graph extraction for structural analysis rules (only when `graphify.enabled: true`) | GraphifyCollector skips; structural rules produce no findings | Installed automatically with `pip install nfr-review` (bundled via `graphifyy`) |
 
 ---
 
@@ -310,14 +271,14 @@ The pre-built Docker image is published to GHCR on each tagged release.
 | Property | Value |
 |----------|-------|
 | **Registry** | `ghcr.io/jimakennedy/nfr-review` |
-| **Base image** | `python:3.14-slim` |
+| **Base image** | `python:3.14-slim`, pinned by digest |
 | **Architecture** | `linux/amd64` only |
 | **User** | Non-root `nfr` (UID 1000) |
-| **Python extras** | `pdf`, `diagrams`, `llm-anthropic`, `llm-openai` (excludes `graphify` — add manually if needed) |
+| **Python extras** | none — the image installs the core package only; LLM features are skipped in the container |
 
-**System packages in the image:** libpango, libpangocairo, libpangoft2,
-libharfbuzz, libcairo2, libgdk-pixbuf, libffi, shared-mime-info,
-fonts-liberation, git.
+**System packages in the image:** fonts-liberation, git, zlib1g (on top of
+the `python:3.14-slim` base). PDF output uses the Typst wheel, which needs no
+system libraries.
 
 **Not included:** Node.js, Chromium, mermaid-cli. Diagrams use bundled
 client-side Mermaid.js in HTML reports and pure-Python SVG fallbacks in PDF.
