@@ -55,5 +55,63 @@
       "skillPath": "skills/xlsx/SKILL.md",
       "computedHash": "dd316db7785a6be12966c2a2d848931fbf5f518b3cdb0a66fa62ee835ead1cfc"
     }
+  },
+  "commands": {
+    "assess": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/assess.md",
+      "computedHash": "763f5e1678e185ef7a2ccf181d152484108b9cefb0a66fa2070188fd7c308e00"
+    },
+    "auto": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/auto.md",
+      "computedHash": "9a47d8ca6c4555edd53de15af358f96d260c21716be1ae0c5596e860fc0551ba"
+    },
+    "close": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/close.md",
+      "computedHash": "b3ff6bac245f56a913528edba037bdf4585afacae2fff7922659b38aa2a3b5ba"
+    },
+    "next": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/next.md",
+      "computedHash": "f1f32e57c7bfd51b029ba4031987d7516101eba4f8bf486643e6626fa1eec457"
+    },
+    "plan": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/plan.md",
+      "computedHash": "519e9828b88215fb87c012bdbe8a12843b24917dc6e1f4fbd89fd68322f3c427"
+    },
+    "sdlc-retro": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/sdlc-retro.md",
+      "computedHash": "f27f818b81fce23eda5ccce55c7bee6a870a6c0468a9b6101fbb99c290ed3106"
+    },
+    "ship": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/ship.md",
+      "computedHash": "1d1c496569e61deddc711850842896edf07a355d72fb98b4b0fa62660fd55566"
+    },
+    "status": {
+      "source": "JimAKennedy/jk-standards",
+      "sourceType": "github",
+      "ref": "v0.19.0",
+      "commandPath": "commands/status.md",
+      "computedHash": "a5b8a5cbf57398d2fafd2be9c8af1ebe314d66662718d6bec1d68323dacefc81"
+    }
   }
 }
