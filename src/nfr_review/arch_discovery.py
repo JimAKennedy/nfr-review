@@ -276,7 +276,7 @@ def _discover_k8s_components(repo_path: Path, repo_name: str | None = None) -> l
 
     for search_dir in search_dirs:
         try:
-            yaml_files = list(search_dir.rglob("*.yaml")) + list(search_dir.rglob("*.yml"))
+            yaml_files = sorted([*search_dir.rglob("*.yaml"), *search_dir.rglob("*.yml")])
         except OSError:
             continue
 
@@ -301,12 +301,12 @@ def _discover_k8s_components(repo_path: Path, repo_name: str | None = None) -> l
                 if not isinstance(metadata, dict):
                     continue
                 name = metadata.get("name", "")
-                if not name or name in seen_names:
+                # Services are not components; recording their names here would
+                # hide a same-named workload listed later (e.g. a Service-only
+                # manifest that sorts before the Deployment).
+                if kind == "Service" or not name or name in seen_names:
                     continue
                 seen_names.add(name)
-
-                if kind == "Service":
-                    continue
 
                 comp_id = _make_id("k8s", f"{effective_name}/{name}")
                 comp_type: ComponentType = "worker" if kind == "DaemonSet" else "service"

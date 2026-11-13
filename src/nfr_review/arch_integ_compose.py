@@ -69,7 +69,7 @@ def find_compose_files(repo_path: Path) -> list[Path]:
             seen.add(candidate.name)
     for pattern in _COMPOSE_GLOB_PATTERNS:
         try:
-            for candidate in repo_path.glob(pattern):
+            for candidate in sorted(repo_path.glob(pattern)):
                 if candidate.is_file() and candidate.name not in seen:
                     found.append(candidate)
                     seen.add(candidate.name)

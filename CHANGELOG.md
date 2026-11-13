@@ -77,6 +77,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Architecture output no longer depends on the filesystem's directory
+  listing order: config, compose, Kubernetes, gRPC and `.csproj` files are
+  read in sorted order, so the same repository gives the same diagram on
+  macOS and Linux.
+- Kubernetes discovery no longer drops a Deployment, StatefulSet or
+  DaemonSet when a Service of the same name appears first, either earlier
+  in the file or in another manifest.
 - Windows: baselines, structural (design-change) baselines and issue
   markers recorded with `\` locators still match after the forward-slash
   change.
