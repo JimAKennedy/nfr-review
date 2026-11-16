@@ -59,7 +59,7 @@ def discover_k8s_integrations(
 
     for search_dir in search_dirs:
         try:
-            yaml_files = list(search_dir.rglob("*.yaml")) + list(search_dir.rglob("*.yml"))
+            yaml_files = sorted([*search_dir.rglob("*.yaml"), *search_dir.rglob("*.yml")])
         except OSError:
             continue
 
@@ -197,7 +197,7 @@ def discover_k8s_env_integrations(
 
     for search_dir in search_dirs:
         try:
-            yaml_files = list(search_dir.rglob("*.yaml")) + list(search_dir.rglob("*.yml"))
+            yaml_files = sorted([*search_dir.rglob("*.yaml"), *search_dir.rglob("*.yml")])
         except OSError:
             continue
 

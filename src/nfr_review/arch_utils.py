@@ -881,7 +881,7 @@ def scan_component_build_deps(
 
         # .NET
         try:
-            csproj_files = list(comp_dir.glob("*.csproj"))
+            csproj_files = sorted(comp_dir.glob("*.csproj"))
         except OSError:
             csproj_files = []
         for csproj in csproj_files:

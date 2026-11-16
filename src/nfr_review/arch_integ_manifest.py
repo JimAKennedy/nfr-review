@@ -291,7 +291,7 @@ def _scan_manifest_deps(comp_dir: Path) -> list[tuple[str, str, str]]:
             except Exception:  # noqa: BLE001
                 logger.warning("Failed to parse %s", fpath, exc_info=True)
 
-    for csproj in comp_dir.glob("*.csproj"):
+    for csproj in sorted(comp_dir.glob("*.csproj")):
         content = safe_read_text(csproj)
         if not content:
             continue

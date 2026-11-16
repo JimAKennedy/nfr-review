@@ -35,7 +35,7 @@ def discover_grpc_integrations(
     effective_name = repo_name or repo_path.name
 
     try:
-        proto_files = list(repo_path.rglob("*.proto"))
+        proto_files = sorted(repo_path.rglob("*.proto"))
     except OSError:
         return []
 
@@ -177,12 +177,12 @@ def _scan_for_grpc_clients(
     source_extensions = (".go", ".py", ".java", ".cs", ".js", ".ts", ".rb")
 
     try:
-        source_files = [
+        source_files = sorted(
             f
             for ext in source_extensions
             for f in comp_dir.rglob(f"*{ext}")
             if not _PROTO_GENERATED_PATTERNS.search(f.name)
-        ]
+        )
     except OSError:
         return called
 

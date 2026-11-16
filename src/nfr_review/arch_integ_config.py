@@ -449,7 +449,7 @@ def discover_config_integrations(
     config_files: list[Path] = []
     for pattern in _CONFIG_FILENAMES:
         try:
-            config_files.extend(repo_path.rglob(pattern))
+            config_files.extend(sorted(repo_path.rglob(pattern)))
         except OSError:
             continue
 
