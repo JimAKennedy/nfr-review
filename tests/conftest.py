@@ -5,6 +5,10 @@ import pytest
 
 import nfr_review.llm_integration as _llm_integration
 from nfr_review.llm_integration import ProviderUnavailableError
+from tests._require_tools import (  # noqa: F401 — re-exported pytest hooks
+    pytest_make_collect_report,
+    pytest_runtest_makereport,
+)
 
 # Never read the checkout's .env: it may hold a real API key, and the first
 # create_llm_client() call (made at import time by the LLM rules) would copy
