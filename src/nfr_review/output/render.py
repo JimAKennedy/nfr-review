@@ -10,9 +10,11 @@ allowing callers to degrade gracefully.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
+import re
 import shutil
 import struct
 import subprocess  # nosec B404 — args are hardcoded tool names, not user input
@@ -34,6 +36,46 @@ def _puppeteer_config_path() -> str | None:
     return None
 
 
+@functools.lru_cache(maxsize=4)
+def _mmdc_major_version(mmdc: str) -> int | None:
+    """Return the major version of *mmdc*, or ``None`` if it cannot be read."""
+    try:
+        proc = subprocess.run(  # nosec B603
+            [mmdc, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    stdout = proc.stdout if isinstance(proc.stdout, str) else ""
+    match = re.match(r"\s*v?(\d+)\.", stdout)
+    return int(match.group(1)) if match else None
+
+
+def _mmdc_size_args(mmdc: str, width: int | None, height: int | None) -> list[str]:
+    """Size flags for this mmdc: ``-w``/``-H`` before 12, ``--size`` from 12.
+
+    mermaid-cli 12 removed ``-w``/``-H`` (viewport) and added ``--size``
+    (maximum PNG width or height), so the larger requested dimension is used.
+    """
+    if width is None and height is None:
+        return []
+    major = _mmdc_major_version(mmdc)
+    if major is None:
+        logger.warning("could not read mmdc version — rendering at default size")
+        return []
+    if major >= 12:
+        return ["--size", str(max(d for d in (width, height) if d is not None))]
+    args: list[str] = []
+    if width is not None:
+        args.extend(["-w", str(width)])
+    if height is not None:
+        args.extend(["-H", str(height)])
+    return args
+
+
 def render_mermaid_to_png(
     mermaid_text: str,
     output_path: Path,
@@ -48,8 +90,9 @@ def render_mermaid_to_png(
     *scale* sets the output scale factor (``-s``).  Use 3 for high-DPI
     PDFs that need to look sharp when zoomed.
 
-    *width* / *height* set the viewport dimensions in pixels (``-w``/``-H``).
-    Larger values give complex diagrams more room for node layout.
+    *width* / *height* request a larger render for complex diagrams. With
+    mermaid-cli < 12 they set the viewport (``-w``/``-H``); from 12 the larger
+    of the two becomes ``--size``, the maximum PNG dimension.
 
     Returns *output_path* on success, ``None`` if mmdc is not available.
     """
@@ -89,10 +132,7 @@ def render_mermaid_to_png(
             cmd.extend(["-p", pup_cfg])
         if scale > 1:
             cmd.extend(["-s", str(scale)])
-        if width is not None:
-            cmd.extend(["-w", str(width)])
-        if height is not None:
-            cmd.extend(["-H", str(height)])
+        cmd.extend(_mmdc_size_args(mmdc, width, height))
 
         subprocess.run(  # nosec B603
             cmd,
