@@ -55,19 +55,23 @@ def _mmdc_major_version(mmdc: str) -> int | None:
 
 
 def _mmdc_size_args(mmdc: str, width: int | None, height: int | None) -> list[str]:
-    """Size flags for this mmdc: ``-w``/``-H`` before 12, ``--size`` from 12.
+    """Viewport flags for this mmdc: ``-w``/``-H`` before 12, none from 12.
 
-    mermaid-cli 12 removed ``-w``/``-H`` (viewport) and added ``--size``
-    (maximum PNG width or height), so the larger requested dimension is used.
+    mermaid-cli 12 removed ``-w``/``-H`` (a viewport: room for layout, small
+    diagrams stay small). Its replacement, ``--size``, is not equivalent: it
+    scales *every* diagram up to that size, which on a 110-diagram arch report
+    made the PDF 7x larger and rendering 2x slower. From 12 the diagram is
+    rendered at its natural size instead; large diagrams are less sharp than
+    with mmdc 11 (about 3100 px wide at scale 4 rather than 9500 px).
     """
     if width is None and height is None:
         return []
     major = _mmdc_major_version(mmdc)
     if major is None:
-        logger.warning("could not read mmdc version — rendering at default size")
+        logger.warning("could not read mmdc version — rendering at natural size")
         return []
     if major >= 12:
-        return ["--size", str(max(d for d in (width, height) if d is not None))]
+        return []
     args: list[str] = []
     if width is not None:
         args.extend(["-w", str(width)])

@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """render_mermaid_to_png passes size flags the installed mmdc understands.
 
-mermaid-cli 12 removed ``-w``/``-H`` (viewport width/height) in favour of
-``--size`` (maximum PNG dimension). Passing ``-w`` to mmdc 12 fails with
-``error: unknown option '-w'`` and the architecture diagram is dropped.
+mermaid-cli 12 removed ``-w``/``-H`` (viewport width/height). Passing ``-w``
+to mmdc 12 fails with ``error: unknown option '-w'`` and the architecture
+diagram is dropped. Its ``--size`` is not a substitute (it enlarges every
+diagram; see ``_mmdc_size_args``), so mmdc 12+ gets no size flag at all.
 """
 
 from __future__ import annotations
@@ -44,18 +45,16 @@ def _render_cmd(tmp_path: Path, version_stdout: str, **kwargs: int) -> list[str]
     return render_calls[0]
 
 
-def test_mmdc_12_gets_size_not_width_height(tmp_path: Path) -> None:
+def test_mmdc_12_gets_no_size_flags(tmp_path: Path) -> None:
     cmd = _render_cmd(tmp_path, "12.2.0\n", width=2400, height=1600)
 
-    assert "-w" not in cmd
-    assert "-H" not in cmd
-    assert cmd[cmd.index("--size") + 1] == "2400"
+    assert not {"-w", "-H", "--size"} & set(cmd)
 
 
-def test_mmdc_12_size_uses_larger_dimension(tmp_path: Path) -> None:
-    cmd = _render_cmd(tmp_path, "12.0.0\n", width=800, height=3000)
+def test_mmdc_13_gets_no_size_flags(tmp_path: Path) -> None:
+    cmd = _render_cmd(tmp_path, "13.0.1\n", width=2400, height=1600)
 
-    assert cmd[cmd.index("--size") + 1] == "3000"
+    assert not {"-w", "-H", "--size"} & set(cmd)
 
 
 def test_mmdc_11_keeps_width_and_height(tmp_path: Path) -> None:
