@@ -77,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Architecture diagrams render again with mermaid-cli 12+, which removed
+  the `-w`/`-H` flags (`error: unknown option '-w'`, diagram dropped). With
+  mmdc 12+ diagrams render at their natural size, so large ones are less
+  sharp than with mmdc 11 (which still gets `-w`/`-H`). mmdc 12's `--size`
+  is not used: it enlarges every diagram, and made a 110-diagram report's
+  PDF 7× larger.
 - Architecture output no longer depends on the filesystem's directory
   listing order: config, compose, Kubernetes, gRPC and `.csproj` files are
   read in sorted order, so the same repository gives the same diagram on
