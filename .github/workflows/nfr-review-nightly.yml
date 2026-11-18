@@ -102,6 +102,10 @@ jobs:
   regression:
     name: Regression (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # A test that skips because its tool is missing ("mmdc not installed")
+    # fails here instead: a skip is green, and would hide lost coverage.
+    env:
+      NFR_REQUIRE_TOOLS: "1"
 
     strategy:
       matrix:
@@ -135,8 +139,24 @@ jobs:
         with:
           version: 'latest'
 
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      # mmdc renders the Mermaid diagrams test_diagram_rendering.py checks.
+      # Headless Chromium's sandbox is commonly unavailable on hosted Ubuntu
+      # runners, so point render.py (PUPPETEER_CONFIG) at a puppeteer config
+      # that disables it.
+      - name: Install Mermaid CLI
+        run: |
+          npm install -g @mermaid-js/mermaid-cli@12.2.0
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json"
+          echo "PUPPETEER_CONFIG=$RUNNER_TEMP/puppeteer.json" >> "$GITHUB_ENV"
+          mmdc --version
+
+      # [otel] for tests/monitor; without it those tests skip.
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,otel]"
 
       - name: Run regression tests
         if: ${{ github.event.inputs.refresh_snapshots != 'true' }}

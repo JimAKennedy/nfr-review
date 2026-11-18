@@ -132,6 +132,10 @@ jobs:
           github.event_name == 'push' &&
           github.ref == 'refs/heads/main' &&
           env.COVERAGE_GIST_ID != ''
+        # The badge is cosmetic: an expired GIST_TOKEN kept main red from
+        # 2026-10-18 to 2026-11-17 while every test passed, masking real
+        # failures. It still shows as a failed step, without failing the job.
+        continue-on-error: true
         uses: schneegans/dynamic-badges-action@28b0fa8bdeb46170ac397105ece0c1fe58f68910 # v1.9.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
