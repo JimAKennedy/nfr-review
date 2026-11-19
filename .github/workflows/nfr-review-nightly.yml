@@ -279,7 +279,7 @@ jobs:
         run: pip install -e ".[dev,otel,scancode]"
 
       - name: Run unit tests
-        run: pytest -n auto -m "not regression" -rs --junitxml=unit-all-tools-results.xml
+        run: pytest -n auto -m "not regression" -rfEs --junitxml=unit-all-tools-results.xml
 
       - name: Upload test results
         if: always()

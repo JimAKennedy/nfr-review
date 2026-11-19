@@ -41,6 +41,7 @@ from nfr_review.arch_models import (
     IntegrationPoint,
     TechStackEntry,
 )
+from tests._mmdc import puppeteer_args
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -3009,7 +3010,18 @@ def _assert_mmdc_parses(mermaid: str, label: str = "") -> None:
         inp.write_text(mermaid)
         cfg.write_text(json.dumps({"maxTextSize": 200_000}))
         result = subprocess.run(
-            [_MMDC, "-i", str(inp), "-o", str(out), "-b", "transparent", "-c", str(cfg)],
+            [
+                _MMDC,
+                "-i",
+                str(inp),
+                "-o",
+                str(out),
+                "-b",
+                "transparent",
+                "-c",
+                str(cfg),
+                *puppeteer_args(),
+            ],
             capture_output=True,
             timeout=30,
         )
