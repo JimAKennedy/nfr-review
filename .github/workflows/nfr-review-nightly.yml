@@ -21,6 +21,10 @@ concurrency:
   group: nfr-review-nightly
   cancel-in-progress: false
 
+# One pin for every job that installs the Mermaid CLI.
+env:
+  MMDC_VERSION: "12.2.0"
+
 permissions:
   contents: write
   pull-requests: write
@@ -149,12 +153,14 @@ jobs:
       # that disables it.
       - name: Install Mermaid CLI
         run: |
-          npm install -g @mermaid-js/mermaid-cli@12.2.0
+          npm install -g "@mermaid-js/mermaid-cli@${MMDC_VERSION}"
           echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json"
           echo "PUPPETEER_CONFIG=$RUNNER_TEMP/puppeteer.json" >> "$GITHUB_ENV"
           mmdc --version
 
-      # [otel] for tests/monitor; without it those tests skip.
+      # tests/monitor is not regression-marked, so it does not run here (PR CI
+      # runs it), but without [otel] its modules report a "not installed"
+      # collection skip, which NFR_REQUIRE_TOOLS turns into a failure.
       - name: Install dependencies
         run: pip install -e ".[dev,otel]"
 
@@ -224,6 +230,64 @@ jobs:
           else
             echo "No results file generated." >> $GITHUB_STEP_SUMMARY
           fi
+
+  # ── Unit tests with every external tool: PR CI skips these ───────────────
+  # PR CI runs the non-regression suite without mmdc, graphviz or scancode,
+  # so the tests that need them skip there. Run them here, with the skip
+  # guard on, so they run somewhere. Skips that are not about a missing tool
+  # (pilot target, ai-tooling) stay skips.
+  unit-all-tools:
+    name: Unit tests (all tools)
+    runs-on: ubuntu-latest
+    env:
+      NFR_REQUIRE_TOOLS: "1"
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-3.12-all-tools-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-3.12-all-tools-
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "lts/*"
+
+      # Same no-sandbox puppeteer config as the regression job.
+      - name: Install Mermaid CLI
+        run: |
+          npm install -g "@mermaid-js/mermaid-cli@${MMDC_VERSION}"
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json"
+          echo "PUPPETEER_CONFIG=$RUNNER_TEMP/puppeteer.json" >> "$GITHUB_ENV"
+          mmdc --version
+
+      - name: Install Graphviz
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q graphviz
+          dot -V
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,otel,scancode]"
+
+      - name: Run unit tests
+        run: pytest -n auto -m "not regression" -rs --junitxml=unit-all-tools-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unit-all-tools-results
+          path: unit-all-tools-results.xml
+          retention-days: 30
 
   # ── Dynamic analysis: validate OTel trace pipeline against fixtures ─────
   dynamic-analysis:
@@ -296,7 +360,7 @@ jobs:
   # ── Alert: open/update an issue when a scheduled run fails, close on recovery ──
   alert:
     name: Failure alert
-    needs: [nfr-review, regression, dynamic-analysis]
+    needs: [nfr-review, regression, unit-all-tools, dynamic-analysis]
     if: always() && github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
