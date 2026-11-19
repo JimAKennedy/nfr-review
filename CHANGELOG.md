@@ -77,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A fresh `nfr-review[scancode]` (or `[full]`) install no longer crashes
+  most commands on start-up. pluggy 1.7 breaks scancode-toolkit's
+  `plugincode` dependency, which raised `ValueError` at import; the
+  `[scancode]` extra now pins `pluggy<1.7`, and a scancode install that
+  fails to import for any reason disables license scanning with a warning
+  instead of taking the CLI down.
 - Architecture diagrams render again with mermaid-cli 12+, which removed
   the `-w`/`-H` flags (`error: unknown option '-w'`, diagram dropped). With
   mmdc 12+ diagrams render at their natural size, so large ones are less
