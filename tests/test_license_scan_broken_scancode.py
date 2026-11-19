@@ -20,6 +20,7 @@ def test_broken_scancode_import_disables_collector_instead_of_crashing() -> None
         import importlib.abc
         import logging
         import sys
+        import types
 
         class _Broken(importlib.abc.MetaPathFinder):
             def find_spec(self, name, path=None, target=None):
@@ -27,6 +28,11 @@ def test_broken_scancode_import_disables_collector_instead_of_crashing() -> None
                     raise ValueError("did not find any 'plugincode.location_provider' hooks")
                 return None
 
+        # Stand-in parent package, so the import reaches scancode.api (and
+        # the finder below) whether or not scancode is really installed.
+        stub = types.ModuleType("scancode")
+        stub.__path__ = []
+        sys.modules["scancode"] = stub
         sys.meta_path.insert(0, _Broken())
         logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
 
