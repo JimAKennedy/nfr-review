@@ -71,6 +71,9 @@ scancode = [
     "scancode-toolkit>=32.0,<34",
     "typecode-libmagic>=5.39",
     "extractcode-libarchive>=3.5",
+    # plugincode 32.0.0 (via scancode-toolkit) finds no hooks under pluggy 1.7
+    # and raises ValueError at import.
+    "pluggy<1.7",
 ]
 otel = [
     "opentelemetry-api>=1.20",

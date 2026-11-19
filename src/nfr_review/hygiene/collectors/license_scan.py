@@ -29,7 +29,17 @@ try:
     from scancode.api import get_licenses as get_licenses  # type: ignore[import-untyped]
 
     _SCANCODE_AVAILABLE = True
-except ImportError:
+except Exception as _exc:  # noqa: BLE001
+    # A present-but-broken install fails with other errors too (plugincode
+    # raises ValueError under pluggy 1.7). Either way the scan is unavailable;
+    # it must not take down every command that loads the collectors.
+    if not isinstance(_exc, ImportError):
+        logger.warning(
+            "scancode-toolkit is installed but failed to import (%s: %s); "
+            "license scanning disabled",
+            type(_exc).__name__,
+            _exc,
+        )
 
     def get_licenses(location: str, **kwargs: Any) -> dict[str, Any]:  # type: ignore[misc]
         raise RuntimeError("scancode not installed")
