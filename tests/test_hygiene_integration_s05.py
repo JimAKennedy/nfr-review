@@ -166,6 +166,18 @@ class TestCleanRepoE2E:
 
 
 class TestDogfood:
+    @pytest.fixture(autouse=True)
+    def _without_scancode(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # scancode scans this repo's ~650 source files one at a time: about
+        # 2 minutes per hygiene run on a laptop, and past the 300s timeout on
+        # a loaded CI runner. The scan runs even under --category filters
+        # that exclude licensing. Without it each run takes seconds. Real
+        # scancode runs are covered on small fixture repos in
+        # test_license_scan_collector.py.
+        from nfr_review.hygiene.collectors import license_scan
+
+        monkeypatch.setattr(license_scan, "_SCANCODE_AVAILABLE", False)
+
     @pytest.mark.timeout(300)
     def test_nfr_review_repo_exits_0(self, runner: CliRunner, tmp_path: Path) -> None:
         result = runner.invoke(

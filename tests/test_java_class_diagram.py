@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from nfr_review.collectors.java_ast import JavaAstCollector
+from tests._mmdc import puppeteer_args
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "java-class-diagram"
 
@@ -262,7 +263,18 @@ def _assert_mmdc_parses(mermaid: str, label: str = "") -> None:
         inp.write_text(mermaid)
         cfg.write_text(json.dumps({"maxTextSize": 200_000}))
         result = subprocess.run(
-            [_MMDC, "-i", str(inp), "-o", str(out), "-b", "transparent", "-c", str(cfg)],
+            [
+                _MMDC,
+                "-i",
+                str(inp),
+                "-o",
+                str(out),
+                "-b",
+                "transparent",
+                "-c",
+                str(cfg),
+                *puppeteer_args(),
+            ],
             capture_output=True,
             timeout=30,
         )
