@@ -11,7 +11,7 @@ annotated-types==0.8.0    # via pydantic
 attrs==26.1.0             # via aiohttp
 click==8.5.1              # via nfr-review (pyproject.toml)
 frozenlist==1.8.0         # via aiohttp, aiosignal
-graphifyy==0.9.111         # via nfr-review (pyproject.toml)
+graphifyy==0.9.112         # via nfr-review (pyproject.toml)
 graphviz==0.21            # via nfr-review (pyproject.toml)
 idna==3.20                # via yarl
 multidict==7.2.1          # via aiohttp, yarl
@@ -19,8 +19,8 @@ networkx==3.6.1           # via graphifyy, nfr-review (pyproject.toml)
 numpy==2.4.6              # via graphifyy
 packaging==26.3           # via nfr-review (pyproject.toml)
 propcache==0.5.4          # via aiohttp, yarl
-pydantic==2.14.3          # via nfr-review (pyproject.toml)
-pydantic-core==2.50.4     # via pydantic
+pydantic==2.14.4          # via nfr-review (pyproject.toml)
+pydantic-core==2.50.5     # via pydantic
 pyyaml==6.0.3             # via graphifyy
 rapidfuzz==3.14.6         # via graphifyy
 resolvelib==1.2.1         # via nfr-review (pyproject.toml)
@@ -28,7 +28,7 @@ ruamel-yaml==0.19.1       # via nfr-review (pyproject.toml)
 tree-sitter==0.26.1       # via graphifyy, nfr-review (pyproject.toml)
 tree-sitter-bash==0.25.1  # via graphifyy
 tree-sitter-c==0.24.2     # via graphifyy
-tree-sitter-c-sharp==0.23.5  # via graphifyy, nfr-review (pyproject.toml)
+tree-sitter-c-sharp==0.24.0  # via graphifyy, nfr-review (pyproject.toml)
 tree-sitter-cpp==0.23.4   # via graphifyy, nfr-review (pyproject.toml)
 tree-sitter-dockerfile==0.2.0 ; (sys_platform == "darwin" and platform_machine == "arm64") or (sys_platform == "linux" and platform_machine == "x86_64")  # via nfr-review (pyproject.toml)
 tree-sitter-elixir==0.3.5  # via graphifyy
