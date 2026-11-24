@@ -7,6 +7,7 @@
 - Run tests: `python -m pytest -n auto tests/`
 - Lint: `ruff check src/ tests/`
 - Format: `ruff format src/ tests/`
+- Type check: `mypy src/`
 
 ## Auto-Mode Code Quality
 

@@ -1,0 +1,31 @@
+{
+  "name": "nfr-review",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "remoteEnv": {
+    "PUPPETEER_CONFIG": "${containerWorkspaceFolder}/.devcontainer/puppeteer.json"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  },
+  "workspaceFolder": "/workspaces/nfr-review"
+}
