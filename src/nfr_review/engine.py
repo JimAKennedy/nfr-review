@@ -134,6 +134,7 @@ class Engine:
             )
             elapsed = time.monotonic() - t0
             warnings.extend(grammar_warns)
+            warnings[:] = list(dict.fromkeys(warnings))
             if err:
                 logger.warning("%s", err, exc_info=False)
                 warnings.append(err)
@@ -173,6 +174,7 @@ class Engine:
 
         for name, produced, err, grammar_warns in ordered_results:
             warnings.extend(grammar_warns)
+            warnings[:] = list(dict.fromkeys(warnings))
             if err:
                 logger.warning("%s", err, exc_info=False)
                 warnings.append(err)

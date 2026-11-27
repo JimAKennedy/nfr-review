@@ -118,7 +118,7 @@ every slice below is `done` or `accepted`.
 |---|---|---|---|---|
 | G1 | `tree-sitter-dockerfile>=0.0.0a1` installs an empty placeholder on platforms lacking a 0.2.0 wheel | `pyproject.toml` | Marker matches the platforms with published 0.2 wheels; `pip install --dry-run` resolution recorded in evidence | `done` |
 | G2 | `AttributeError` added to the grammar-missing catch hides real bugs | `collectors/ast_common.py`, `collectors/dockerfile.py` | Case in `tests/test_missing_grammar_warning.py` raising `AttributeError` from the parser constructor asserts it propagates | `done` |
-| G3 | `grammar_warnings` accumulate on singleton collectors across runs | `collectors/ast_common.py`, `collectors/dockerfile.py`, `engine.py` | Case running the engine twice asserts one warning per run | `done` |
+| G3 | `grammar_warnings` accumulate on singleton collectors across runs; engine-level cross-collector dedup gap closed | `collectors/ast_common.py`, `collectors/dockerfile.py`, `engine.py` | Case running the engine twice asserts one warning per run; engine-level dedup added in `fix/report-fixes` | `done` |
 | T1 | Missing-grammar tests assert only `== []`; base-class warning never asserted | `tests/test_missing_grammar_warning.py` | The rewritten cases assert `grammar_warnings` content | `done` |
 
 ### Slice M001/S04 — Graphify opt-in and out of tree
